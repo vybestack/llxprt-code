@@ -1,6 +1,6 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -110,10 +110,10 @@ describe('Focused lifecycle review findings', () => {
       const config = createConfig(false);
       // Direct wrapper (no RetryOrchestrator) wrapping a provider that
       // throws synchronously from generateChatCompletion
-      const wrapperSettings1 = fixtureOwners.adopt(
+      const wrapperSettings1 = fixtureOwnersBorrowedSettings(
         config,
         new SettingsService(),
-      ).settingsOwner;
+      );
       const wrapper = Object.assign(
         new LoggingProviderWrapper(
           new SyncThrowProvider(),
@@ -150,10 +150,10 @@ describe('Focused lifecycle review findings', () => {
       const config = createConfig(false);
       const providerOwned = new SuccessProvider(SUCCESS_CHUNKS, 'provider');
       // Direct wrapper (no RetryOrchestrator)
-      const wrapperSettings2 = fixtureOwners.adopt(
+      const wrapperSettings2 = fixtureOwnersBorrowedSettings(
         config,
         new SettingsService(),
-      ).settingsOwner;
+      );
       const wrapper = Object.assign(
         new LoggingProviderWrapper(providerOwned, config, undefined, () =>
           captureProviderRequestDiagnostics(config, wrapperSettings2),
@@ -293,7 +293,7 @@ describe('Focused lifecycle review findings', () => {
       const errorEvents: unknown[] = [];
       const diagnostics = captureProviderRequestDiagnostics(
         config,
-        fixtureOwners.adopt(config, new SettingsService()).settingsOwner,
+        fixtureOwnersBorrowedSettings(config, new SettingsService()),
       );
       const recorder = new AttemptRecorder({
         providerName: 'test',

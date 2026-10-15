@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -84,7 +84,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
       config,
       undefined,
       undefined,
-      fixtureOwners.adopt(config, settingsService).settingsOwner,
+      fixtureOwnersBorrowedSettings(config, settingsService),
     );
   });
 

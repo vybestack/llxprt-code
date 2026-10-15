@@ -10,7 +10,13 @@ import {
   MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  installBorrowedConfigSettings,
+  installOwnedConfig,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createIsolatedRuntimeContext } from './index.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
@@ -26,17 +32,13 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 
-function createOwner(
-  settingsService: SettingsService,
-  sessionId: string,
-): ReturnType<typeof createProviderConfigFixture> {
-  return createProviderConfigFixture({
+function createConfig(sessionId: string): Config {
+  return acquireConfig({
     targetDir: process.cwd(),
     cwd: process.cwd(),
     sessionId,
     debugMode: false,
-    model: `${sessionId}-model`,
-    settingsService,
+    model: sessionId + '-model',
   });
 }
 
@@ -44,7 +46,9 @@ describe('CLI foreground provider ownership', () => {
   const credentials = useOwnedCredentials();
   it('keeps Config on the foreground owner instead of the admitted runtime', async () => {
     const settings = new SettingsService();
-    const { config, settingsOwner } = createOwner(settings, 'config-owner');
+    const configSettings = settings;
+    const config = createConfig('config-owner');
+    const settingsOwner = acquireSettings(config, configSettings);
     const bundle = await assembleCliProviderRuntime({
       credentialAuthority: credentials().authority,
       settingsOwner,
@@ -69,7 +73,9 @@ describe('CLI foreground provider ownership', () => {
 
   it('binds the same runtime bus, provider manager, OAuth manager, and file lifecycle to the Config', async () => {
     const settings = new SettingsService();
-    const { config: config } = createOwner(settings, 'bundle-owner');
+    const configSettings = settings;
+    const config = createConfig('bundle-owner');
+    acquireSettings(config, configSettings);
     const bundle = await assembleCliProviderRuntime({
       credentialAuthority: credentials().authority,
 
@@ -114,7 +120,9 @@ describe('CLI foreground provider ownership', () => {
       },
     );
     const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
-    const { config } = createOwner(settings, 'final-auth-owner');
+    const configSettings = settings;
+    const config = createConfig('final-auth-owner');
+    acquireSettings(config, configSettings);
     const final = await assembleCliProviderRuntime({
       credentialAuthority: credentials().authority,
 
@@ -159,8 +167,12 @@ describe('CLI foreground provider ownership', () => {
       config: undefined,
       runtimeId: 'same-cli-label',
     });
-    const { config: configA } = createOwner(settingsA, 'foreground-a');
-    const { config: configB } = createOwner(settingsB, 'foreground-b');
+    const configASettings = settingsA;
+    const configA = createConfig('foreground-a');
+    acquireSettings(configA, configASettings);
+    const configBSettings = settingsB;
+    const configB = createConfig('foreground-b');
+    acquireSettings(configB, configBSettings);
     settingsA.set('activeProvider', 'openai');
     settingsB.set('activeProvider', 'kimi');
     const runtimeB = await assembleCliProviderRuntime({
@@ -204,8 +216,12 @@ describe('CLI foreground provider ownership', () => {
       config: undefined,
       runtimeId: 'one-handle',
     });
-    const { config: owner } = createOwner(settings, 'handle-owner');
-    const { config: sibling } = createOwner(settings, 'handle-sibling');
+    const ownerSettings = settings;
+    const owner = createConfig('handle-owner');
+    acquireSettings(owner, ownerSettings);
+    const siblingSettings = settings;
+    const sibling = createConfig('handle-sibling');
+    acquireSettings(sibling, siblingSettings);
     const bound = await assembleCliProviderRuntime({
       credentialAuthority: credentials().authority,
 
@@ -239,11 +255,12 @@ describe('CLI foreground provider ownership', () => {
       credentials().authority,
       settings,
     );
-    const { config, settingsOwner } = createOwner(settings, 'retry-config');
-    const { config: sibling, settingsOwner: siblingSettings } = createOwner(
-      settings,
-      'retry-sibling',
-    );
+    const configSettings = settings;
+    const config = createConfig('retry-config');
+    const settingsOwner = acquireSettings(config, configSettings);
+    const siblingStore = settings;
+    const sibling = createConfig('retry-sibling');
+    const siblingSettings = acquireSettings(sibling, siblingStore);
     const trust = new WorkspaceTrustLifecycle({ localTrust: true });
     const filesystem = new WorkspaceFilesystemOwner({
       targetDir: directory,
@@ -361,11 +378,9 @@ describe('CLI foreground provider ownership', () => {
 
   it('does not replace an independent isolated Agent with the same label', async () => {
     const agent = (() => {
-      const {
-        config: capturedConfig16,
-        settingsService,
-        settingsOwner,
-      } = createOwner(new SettingsService(), 'shared-label');
+      const settingsService = new SettingsService();
+      const capturedConfig16 = createConfig('shared-label');
+      const settingsOwner = acquireSettings(capturedConfig16, settingsService);
       return createIsolatedRuntimeContext(
         {
           credentialAuthority: credentials().authority,
@@ -380,7 +395,9 @@ describe('CLI foreground provider ownership', () => {
     })();
     await agent.activate();
     const settings = new SettingsService();
-    const { config: config } = createOwner(settings, 'foreground-with-agent');
+    const configSettings = settings;
+    const config = createConfig('foreground-with-agent');
+    acquireSettings(config, configSettings);
     try {
       const assembled = await assembleCliProviderRuntime({
         credentialAuthority: credentials().authority,

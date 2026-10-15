@@ -1,4 +1,10 @@
-import { createProviderConfigFixture } from '../../runtime/__tests__/provider-config-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -187,17 +193,18 @@ function createHarness(
   timeoutMs = 5_000,
   runtimeKind: RuntimeKind = 'subagent',
 ): AuthHarness {
-  const {
-    settingsService: configSettingsService,
-    settingsOwner: configSettingsOwner,
-  } = createProviderConfigFixture({
+  const ownedConfig = acquireConfig({
     sessionId: 'escalation',
     targetDir: process.cwd(),
     cwd: process.cwd(),
     debugMode: false,
     model: 'gpt-5',
-    settingsService: new SettingsService(),
   });
+  const configSettingsService = new SettingsService();
+  const configSettingsOwner = acquireSettings(
+    ownedConfig,
+    configSettingsService,
+  );
   configSettingsService.set('auth.interactiveTimeoutMs', timeoutMs);
   const events: string[] = [];
   const tokenStore = new InMemoryTokenStore();

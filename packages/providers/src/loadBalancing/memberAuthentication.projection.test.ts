@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from '../__tests__/helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -50,7 +50,7 @@ function createProjectionFixture(
     config,
     runtime,
     undefined,
-    fixtureOwners.adopt(config, settings).settingsOwner,
+    fixtureOwnersBorrowedSettings(config, settings),
   );
   manager.bindProviderKeyStorage(keyStorage);
   const projections: GenerateChatOptions[] = [];

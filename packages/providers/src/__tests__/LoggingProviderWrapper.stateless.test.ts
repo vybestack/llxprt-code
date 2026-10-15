@@ -1,5 +1,9 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import {
+  installBorrowedConfigSettings,
+  installOwnedConfigSettings,
+} from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
+const fixtureOwnersOwnedSettings = installOwnedConfigSettings();
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * @plan PLAN-20251023-STATELESS-HARDENING.P07
@@ -102,10 +106,10 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     );
 
     const config = createConfigStub('test');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
 
@@ -135,10 +139,10 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
     const settings = new SettingsService();
     const config = createConfigStub('complete-runtime');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
 
@@ -171,10 +175,10 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
     const settings = new SettingsService();
     const config = createConfigStub('metadata-test');
-    const selectedOwner = fixtureOwners.adopt(
+    const selectedOwner = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
 
     // Set up runtime context resolver
     wrapper.setInvocationDataReader(() => ({
@@ -209,10 +213,10 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
   it('fails fast when config lost its prototype instead of repairing it @requirement:REQ-SP4-004', async () => {
     const provider = new StubProvider();
     const settings = new SettingsService();
-    const selectedOwner = fixtureOwners.config(
+    const selectedOwner = fixtureOwnersOwnedSettings(
       'negative-diagnostics',
       settings,
-    ).settingsOwner;
+    );
     const invalidConfig = Object.freeze({
       getConversationLogPath: () => '/tmp/prototype-lost',
     }) as unknown as Config;

@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -121,10 +121,10 @@ describe('safeGetDefaultModel regression', () => {
       const raw = createProviderWithoutDefaultModel('test-provider');
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      const wrapperSettings1 = fixtureOwners.adopt(
+      const wrapperSettings1 = fixtureOwnersBorrowedSettings(
         config,
         new SettingsService(),
-      ).settingsOwner;
+      );
       const wrapper = new LoggingProviderWrapper(raw, config, undefined, () =>
         captureProviderRequestDiagnostics(config, wrapperSettings1),
       );
@@ -135,10 +135,10 @@ describe('safeGetDefaultModel regression', () => {
       const raw = createProviderWithoutDefaultModel('test-provider');
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      const wrapperSettings2 = fixtureOwners.adopt(
+      const wrapperSettings2 = fixtureOwnersBorrowedSettings(
         config,
         new SettingsService(),
-      ).settingsOwner;
+      );
       const wrapper = new LoggingProviderWrapper(raw, config, undefined, () =>
         captureProviderRequestDiagnostics(config, wrapperSettings2),
       );
@@ -173,10 +173,10 @@ describe('safeGetDefaultModel regression', () => {
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
       const orchestrator = new RetryOrchestrator(raw);
-      const wrapperSettings3 = fixtureOwners.adopt(
+      const wrapperSettings3 = fixtureOwnersBorrowedSettings(
         config,
         new SettingsService(),
-      ).settingsOwner;
+      );
       const wrapper = new LoggingProviderWrapper(
         orchestrator,
         config,

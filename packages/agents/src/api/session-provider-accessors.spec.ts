@@ -12,7 +12,7 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
  */
 
 import { describe, expect, it, beforeEach, vi, type Mock } from 'bun:test';
-import { useRuntimeTestOwners } from '../../../providers/src/runtime/__tests__/runtime-owner-test-helpers.js';
+import { installOwnedConfigSettings } from '../../../providers/src/__tests__/helpers/session-settings-owner-fixture.js';
 import type {
   RuntimeProvider,
   RuntimeProviderManager,
@@ -45,7 +45,7 @@ import {
  * runtime accessor functions after extraction from runtimeSettings.ts.
  */
 describe('runtimeAccessors', () => {
-  const roots = useRuntimeTestOwners();
+  const rootsOwnedSettings = installOwnedConfigSettings();
   let mockConfig: SessionSettingsOwner;
   let declaredModel = 'gpt-4';
   let mockSettingsService: SettingsService;
@@ -54,10 +54,7 @@ describe('runtimeAccessors', () => {
     mockSettingsService = new SettingsService();
     mockSettingsService.set('activeProvider', 'openai');
     mockSettingsService.setProviderSetting('openai', 'model', 'gpt-4');
-    mockConfig = roots.config(
-      'owner-runtime',
-      mockSettingsService,
-    ).settingsOwner;
+    mockConfig = rootsOwnedSettings('owner-runtime', mockSettingsService);
     declaredModel = 'gpt-4';
 
     mockRuntimeProviderManager = {
@@ -88,7 +85,7 @@ describe('runtimeAccessors', () => {
     const settings = new SettingsService();
     settings.set('activeProvider', 'owner-provider');
     settings.setProviderSetting('owner-provider', 'model', 'owner-model');
-    const owner = roots.config('owner-runtime', settings).settingsOwner;
+    const owner = rootsOwnedSettings('owner-runtime', settings);
 
     expect(
       new SessionProviderReads(
@@ -112,8 +109,8 @@ describe('runtimeAccessors', () => {
     firstSettings.set('activeProvider', 'first-provider');
     const secondSettings = new SettingsService();
     secondSettings.set('activeProvider', 'second-provider');
-    const first = roots.config('same-label', firstSettings).settingsOwner;
-    const second = roots.config('same-label', secondSettings).settingsOwner;
+    const first = rootsOwnedSettings('same-label', firstSettings);
+    const second = rootsOwnedSettings('same-label', secondSettings);
     expect(
       new SessionProviderReads(
         first,
@@ -174,10 +171,10 @@ describe('runtimeAccessors', () => {
   });
 
   describe('settings round-trips on real owners', () => {
-    const owners = useRuntimeTestOwners();
+    const ownersOwnedSettings = installOwnedConfigSettings();
     it('sets, reads, and clears an ephemeral on only its supplied owner', () => {
-      const { settingsOwner: first } = owners.config();
-      const { settingsOwner: second } = owners.config();
+      const first = ownersOwnedSettings();
+      const second = ownersOwnedSettings();
       settingsControl(first).setEphemeralSetting('context-limit', 4096);
       settingsControl(second).setEphemeralSetting('context-limit', 8192);
       expect(first.readNamedParameter('context-limit')).toBe(4096);
@@ -188,8 +185,8 @@ describe('runtimeAccessors', () => {
     });
 
     it('returns the supplied owner ephemeral snapshot without including sibling writes', () => {
-      const { settingsOwner: first } = owners.config();
-      const { settingsOwner: second } = owners.config();
+      const first = ownersOwnedSettings();
+      const second = ownersOwnedSettings();
       settingsControl(first).setEphemeralSetting(
         'first-setting',
         'first-value',
@@ -211,8 +208,8 @@ describe('runtimeAccessors', () => {
       const second = new SettingsService();
       first.set('activeProvider', 'openai');
       second.set('activeProvider', 'openai');
-      const firstOwner = owners.config('params-first', first).settingsOwner;
-      const secondOwner = owners.config('params-second', second).settingsOwner;
+      const firstOwner = ownersOwnedSettings('params-first', first);
+      const secondOwner = ownersOwnedSettings('params-second', second);
       const firstReads = new SessionProviderReads(
         firstOwner,
         mockRuntimeProviderManager,

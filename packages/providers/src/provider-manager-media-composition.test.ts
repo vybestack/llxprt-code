@@ -1,3 +1,10 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from './__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,7 +21,7 @@ import {
 } from './BaseProvider.js';
 import { CredentialAuthority } from './auth/proxy/credential-store-factory.js';
 import { ProviderFileLifecycle } from './providerFilePolicy.js';
-import { createProviderConfigFixture } from './runtime/__tests__/provider-config-fixture.js';
+
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
   RequestMediaResolver,
@@ -119,13 +126,26 @@ class MediaFileProvider extends BaseProvider {
 describe('ProviderManager media/file composition', () => {
   it('uses selected collaborators through registration and runtime replacement instead of context services', async () => {
     const root = await mkdtemp(join(tmpdir(), 'llxprt-manager-media-'));
-    const selected = createProviderConfigFixture({
+    const selectedConfig = acquireConfig({
       sessionId: 'media-owner',
       targetDir: root,
       cwd: process.cwd(),
       model: 'media-model',
       debugMode: false,
     });
+    const selectedSettings = new SettingsService();
+    const selectedSettingsOwner = acquireSettings(
+      selectedConfig,
+      selectedSettings,
+    );
+    for (const [key, value] of Object.entries(
+      selectedConfig.getInitialSettings(),
+    ))
+      selectedSettings.set(key, value);
+    selectedSettingsOwner.initializeProviderSelection(
+      selectedConfig.getProvider(),
+      selectedConfig.getModel(),
+    );
     const selectedStore = new LocalMediaStore({
       rootDirectory: join(root, 'selected'),
       quotaBytes: 1024,
@@ -160,22 +180,22 @@ describe('ProviderManager media/file composition', () => {
       4,
       bindings,
       lifecycle,
-      selected.settingsService,
-      selected.config,
+      selectedSettings,
+      selectedConfig,
       runtime,
       new CredentialAuthority(),
-      selected.settingsOwner,
+      selectedSettingsOwner,
     );
     const foreignManager = new ProviderManager(
       foreignResolver,
       1,
       foreignBindings,
       foreignLifecycle,
-      selected.settingsService,
-      selected.config,
+      selectedSettings,
+      selectedConfig,
       { ...runtime },
       new CredentialAuthority(),
-      selected.settingsOwner,
+      selectedSettingsOwner,
     );
     try {
       const sharedProvider = new MediaFileProvider();
@@ -185,9 +205,9 @@ describe('ProviderManager media/file composition', () => {
       manager.setActiveProvider('openai');
       manager.setRuntimeContext(
         runtime,
-        selected.settingsOwner,
-        selected.settingsService,
-        selected.config,
+        selectedSettingsOwner,
+        selectedSettings,
+        selectedConfig,
       );
       const provider = manager.getActiveProvider();
       if (provider === undefined) throw new Error('Fixture provider missing');

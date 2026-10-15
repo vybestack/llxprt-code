@@ -1,3 +1,9 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from './helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +19,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 
 class HarnessProvider extends BaseProvider {
   lastOptions?: NormalizedGenerateChatOptions;
@@ -473,26 +478,39 @@ describe('ProviderManager stateless preparation ownership', () => {
 
 describe('ProviderManager selected workspace binding', () => {
   it('uses a separately selected Config directory instead of the context Config', async () => {
-    const selected = createProviderConfigFixture({
+    const selectedConfig = acquireConfig({
       sessionId: 'workspace-selected',
       targetDir: '/workspace-selected',
       cwd: process.cwd(),
       model: 'workspace-model',
       debugMode: false,
     });
+    const selectedSettings = new SettingsService();
+    const selectedSettingsOwner = acquireSettings(
+      selectedConfig,
+      selectedSettings,
+    );
+    for (const [key, value] of Object.entries(
+      selectedConfig.getInitialSettings(),
+    ))
+      selectedSettings.set(key, value);
+    selectedSettingsOwner.initializeProviderSelection(
+      selectedConfig.getProvider(),
+      selectedConfig.getModel(),
+    );
 
     const manager = new ProviderManager(
       undefined,
       undefined,
       undefined,
       undefined,
-      selected.settingsService,
-      selected.config,
+      selectedSettings,
+      selectedConfig,
       {
         runtimeId: 'same-label',
       },
       undefined,
-      selected.settingsOwner,
+      selectedSettingsOwner,
     );
     try {
       manager.registerProvider(new WorkspaceProvider());
