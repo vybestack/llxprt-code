@@ -23,8 +23,11 @@ import {
   clientArrayRows,
   forbidClientArrayRollback,
   recordClientProof,
-} from './client-array-test-helpers.js';
-import { boundedOwners, gate } from './conversation-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
+import {
+  boundedOwners,
+  gate,
+} from './__tests__/support/conversation-array-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 
 async function earliestPendingFailure(size: number): Promise<number> {

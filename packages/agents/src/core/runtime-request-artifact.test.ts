@@ -28,7 +28,7 @@ import {
   sendRuntimeArtifact,
   runtimeWriteFailure,
   runtimeRelease,
-} from './runtime-request-lifecycle-test-helpers.js';
+} from './__tests__/support/runtime-request-lifecycle-test-helpers.js';
 
 const root = sourceRootSetup();
 const eventSchema = z.object({ attributes: z.record(z.unknown()).optional() });

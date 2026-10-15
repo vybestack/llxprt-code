@@ -10,7 +10,7 @@ import {
   clientRows,
   forbidClientArrayRollback,
   withClientOracle,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 
 function registerRoute(size: number, set: boolean): void {

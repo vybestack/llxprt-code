@@ -17,7 +17,7 @@ import {
   conversationFor,
   forbidArrayRollback,
   recordArrayProof,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 
 function injectFailure(
   history: HistoryService,

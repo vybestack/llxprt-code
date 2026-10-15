@@ -7,8 +7,8 @@
 import { vi, type Mock } from 'bun:test';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import type { ChatSession } from './chatSession.js';
-import type { AgentClient } from './client.js';
+import type { ChatSession } from '../../chatSession.js';
+import type { AgentClient } from '../../client.js';
 
 export function make413Chat(
   overrides: Partial<ChatSession> = {},

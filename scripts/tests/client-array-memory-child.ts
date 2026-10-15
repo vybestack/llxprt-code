@@ -14,12 +14,12 @@ import {
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
-import { gate } from '../../packages/agents/src/core/conversation-array-core-test-helpers.js';
+import { gate } from '../../packages/agents/src/core/__tests__/support/conversation-array-core-test-helpers.js';
 import {
   clientArrayRows,
   forbidClientArrayRollback,
   withArrayClient,
-} from '../../packages/agents/src/core/client-array-test-helpers.js';
+} from '../../packages/agents/src/core/__tests__/support/client-array-test-helpers.js';
 import type { AgentClientContract } from '../../packages/core/src/core/clientContract.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 

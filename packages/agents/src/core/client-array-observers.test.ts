@@ -9,13 +9,13 @@ import {
 import {
   boundedOwners,
   expectBatchObserverOwners,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 import {
   clientArrayRows,
   forbidClientArrayRollback,
   recordClientProof,
   withArrayClient,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 
 function registerObserver(size: number, retain: boolean): void {
   describe('client batch observer ownership after admitted restore', () => {

@@ -14,7 +14,7 @@ import {
 import {
   conversationFor,
   forbidArrayRollback,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 import type { HistoryService } from '../../../core/src/services/history/HistoryService.js';
 
 async function outcome(

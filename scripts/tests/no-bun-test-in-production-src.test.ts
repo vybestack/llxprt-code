@@ -52,3 +52,42 @@ describe('production source does not import the test runner', () => {
       expect(TEST_SUPPORT.test(path), path).toBe(false);
   });
 });
+
+/**
+ * Lists the files `npm pack` would publish for a workspace package. The
+ * `files` allow-list in package.json is what keeps test code out of the
+ * tarball, so this checks the published result rather than the source tree.
+ */
+function publishedFiles(packageDir: string): string[] {
+  const result = Bun.spawnSync(
+    ['npm', 'pack', '--dry-run', '--ignore-scripts', '--json'],
+    { cwd: resolve(root, packageDir), stdout: 'pipe', stderr: 'pipe' },
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `npm pack --dry-run failed in ${packageDir}: ${result.stderr.toString()}`,
+    );
+  }
+  const [pack] = JSON.parse(result.stdout.toString()) as Array<{
+    files: Array<{ path: string }>;
+  }>;
+  return (pack?.files ?? []).map((file) => `${packageDir}/${file.path}`);
+}
+
+describe('published agents package does not ship test code', () => {
+  const files = publishedFiles('packages/agents');
+
+  it('has no test, test helper or __tests__ file in the npm tarball', () => {
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.filter((path) => TEST_SUPPORT.test(path))).toStrictEqual([]);
+  });
+
+  it('has no published file importing bun:test', () => {
+    const importers = files.filter(
+      (path) =>
+        /\.[cm]?[jt]sx?$/.test(path) &&
+        BUN_TEST_SPECIFIER.test(readFileSync(resolve(root, path), 'utf8')),
+    );
+    expect(importers).toStrictEqual([]);
+  });
+});

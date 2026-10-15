@@ -26,7 +26,7 @@ import * as overflowCases from './__tests__/support/client.sendMessageStream-ove
 import {
   installOverflowMockChat,
   installZeroCountGenerator,
-} from './client-send-stream-test-helpers.js';
+} from './__tests__/support/client-send-stream-test-helpers.js';
 import { AgentEventType } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';

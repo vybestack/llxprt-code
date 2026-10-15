@@ -23,7 +23,7 @@ import {
   forbidArrayRollback,
   gate,
   recordArrayProof,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 
 async function seedPending(
   fixture: DetachedFixture,

@@ -17,7 +17,7 @@ import {
   forbidArrayRollback,
   boundedOwners,
   recordArrayProof,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 import type { RowOwnershipStats } from '../../../core/src/recording/rowOwnership.js';
 
 for (const size of [512, 8192]) {

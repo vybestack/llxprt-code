@@ -10,7 +10,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { mediaRequestFixture } from './turn-media-request-test-helpers.js';
+import { mediaRequestFixture } from './__tests__/support/turn-media-request-test-helpers.js';
 import { sendTurnSource } from './turnSourceRequest.js';
 
 const UNDER_LIMIT = 100_000_000;

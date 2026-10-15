@@ -19,7 +19,7 @@ import { withDetachedFixture } from '../../packages/core/src/services/history/de
 import {
   conversationFor,
   forbidArrayRollback,
-} from '../../packages/agents/src/core/conversation-array-test-helpers.js';
+} from '../../packages/agents/src/core/__tests__/support/conversation-array-test-helpers.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../packages/core/src/storage/media-admission-service.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';

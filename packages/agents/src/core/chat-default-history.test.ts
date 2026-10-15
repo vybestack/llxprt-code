@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
-import { assertDefaultHistory } from './public-default-history-test-helpers.js';
+import { assertDefaultHistory } from './__tests__/support/public-default-history-test-helpers.js';
 import { ChatSession } from './chatSession.js';
 
 const cases = [512, 8192].flatMap((size) =>

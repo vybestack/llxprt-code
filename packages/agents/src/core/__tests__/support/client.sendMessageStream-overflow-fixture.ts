@@ -14,7 +14,7 @@ import {
   installOverflowMockChat,
   installZeroCountGenerator,
   setMockTokenLimit,
-} from '../../client-send-stream-test-helpers.js';
+} from './client-send-stream-test-helpers.js';
 import {
   AgentEventType,
   PerformCompressionResult,

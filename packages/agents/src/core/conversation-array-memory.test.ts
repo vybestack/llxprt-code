@@ -7,7 +7,7 @@ import {
   RETAINED_ALLOWANCE_BYTES,
   type PairedDelta,
 } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
-import { recordArrayProof } from './conversation-array-test-helpers.js';
+import { recordArrayProof } from './__tests__/support/conversation-array-test-helpers.js';
 
 const schema = z.object({
   size: z.number(),

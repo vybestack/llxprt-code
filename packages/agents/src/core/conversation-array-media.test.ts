@@ -15,7 +15,7 @@ import { rejectedValue } from '../../../core/src/services/history/chronology-rol
 import {
   conversationFor,
   forbidArrayRollback,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

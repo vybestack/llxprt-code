@@ -17,7 +17,7 @@ import {
   recordClientProof,
   withArrayClient,
   withClientOracle,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 
 function registerScale(size: number): void {
   describe('registerScale', () => {

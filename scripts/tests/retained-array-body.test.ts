@@ -17,7 +17,7 @@ import { withDetachedFixture } from '../../packages/core/src/services/history/de
 import {
   forbidClientArrayRollback,
   recordClientProof,
-} from '../../packages/agents/src/core/client-array-test-helpers.js';
+} from '../../packages/agents/src/core/__tests__/support/client-array-test-helpers.js';
 import { withRetainedClient } from '../../packages/agents/src/core/__tests__/support/retained-array-test-helpers.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../packages/core/src/storage/media-admission-service.js';

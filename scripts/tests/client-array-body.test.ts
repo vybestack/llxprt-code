@@ -18,7 +18,7 @@ import {
   forbidClientArrayRollback,
   recordClientProof,
   withArrayClient,
-} from '../../packages/agents/src/core/client-array-test-helpers.js';
+} from '../../packages/agents/src/core/__tests__/support/client-array-test-helpers.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../packages/core/src/storage/media-admission-service.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';

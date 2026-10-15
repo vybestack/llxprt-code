@@ -7,7 +7,7 @@ import { DebugLogger } from '../../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../../packages/core/src/services/history/historyProviderPipeline.js';
 import { sendTurnSource } from '../../../packages/agents/src/core/turnSourceRequest.js';
-import { mediaRequestFixture } from '../../../packages/agents/src/core/turn-media-request-test-helpers.js';
+import { mediaRequestFixture } from '../../../packages/agents/src/core/__tests__/support/turn-media-request-test-helpers.js';
 import { captureCuratedBody } from '../provider-curated-body-gemini.js';
 const logger = new DebugLogger('test:semantic-purge-body-oracle');
 /**

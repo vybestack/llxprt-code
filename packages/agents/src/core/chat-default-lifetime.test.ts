@@ -6,7 +6,7 @@ import {
 } from '../api/__tests__/helpers/public-history-fixture.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { ChatSession } from './chatSession.js';
-import { publicDefaultBounds } from './public-default-history-test-helpers.js';
+import { publicDefaultBounds } from './__tests__/support/public-default-history-test-helpers.js';
 
 for (const size of [512, 8192]) {
   for (const explicitFalse of [false, true]) {

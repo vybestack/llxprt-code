@@ -22,7 +22,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import * as turnHistory from './turnHistoryCommit.js';
 import { prepareAdmittedUserTurn } from './mediaAdmissionSeam.js';
-import { mediaRequestFixture } from './turn-media-request-test-helpers.js';
+import { mediaRequestFixture } from './__tests__/support/turn-media-request-test-helpers.js';
 
 async function initializeBaseline(
   {

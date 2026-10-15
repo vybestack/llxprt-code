@@ -5,7 +5,7 @@ import { withRetainedClient } from './__tests__/support/retained-array-test-help
 import {
   clientArrayRows,
   forbidClientArrayRollback,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 
 describe('retained array stamped values', () => {

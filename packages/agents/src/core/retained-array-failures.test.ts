@@ -17,7 +17,7 @@ import {
 import {
   clientArrayRows,
   forbidClientArrayRollback,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 const stages = [
   'tokenizer',
   'prepare',

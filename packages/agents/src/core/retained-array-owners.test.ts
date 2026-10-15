@@ -15,12 +15,15 @@ import {
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
-import { boundedOwners, gate } from './conversation-array-test-helpers.js';
+import {
+  boundedOwners,
+  gate,
+} from './__tests__/support/conversation-array-test-helpers.js';
 import {
   clientArrayRows,
   forbidClientArrayRollback,
   recordClientProof,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 
 async function assertPendingRollback(
   fixture: DetachedFixture,

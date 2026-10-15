@@ -29,7 +29,7 @@ import {
   requestText,
   stopped,
   toolCall,
-} from './subagent.issue3526-test-helpers.js';
+} from './__tests__/support/subagent.issue3526-test-helpers.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset,

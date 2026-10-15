@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createSessionSettingsFixture } from '../../../api/__tests__/helpers/session-settings-fixture.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnershipStats } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { ConversationManager } from './ConversationManager.js';
-import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+import type { ConversationManager } from '../../ConversationManager.js';
+import { installModelToolFixture } from '../model-tool-fixture.js';
 import { conversationWithOwners } from './conversation-array-core-test-helpers.js';
 
 export {

@@ -4,7 +4,7 @@ import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test
 import {
   runtimeRelease,
   runtimeWriteFailure,
-} from './runtime-request-lifecycle-test-helpers.js';
+} from './__tests__/support/runtime-request-lifecycle-test-helpers.js';
 
 const root = sourceRootSetup();
 describe('actual runtime fixture isolation', () => {

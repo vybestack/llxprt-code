@@ -11,7 +11,7 @@ import type { ChatSession } from '../../chatSession.js';
 import {
   make413Chat,
   enableFailedApiCallRetry,
-} from '../../client-send-stream-test-helpers.js';
+} from './client-send-stream-test-helpers.js';
 import { AgentEventType, PerformCompressionResult } from '../../turn.js';
 import { fromAsync } from '../client-test-helpers.js';
 

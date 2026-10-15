@@ -15,9 +15,9 @@ import {
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { createConfigParams } from './chatSession-runtime-helpers.js';
-import { ConversationManager } from './ConversationManager.js';
+import { TestRuntimeProviderManager } from '../../../test-utils/runtimeProviderManager.js';
+import { createConfigParams } from '../../chatSession-runtime-helpers.js';
+import { ConversationManager } from '../../ConversationManager.js';
 
 /**
  * Conversation-array helpers that need no test-runner hooks. The memory probe

@@ -14,7 +14,7 @@ import {
   conversationFor,
   forbidArrayRollback,
   recordArrayProof,
-} from './conversation-array-test-helpers.js';
+} from './__tests__/support/conversation-array-test-helpers.js';
 
 async function observerOwners(size: number, retain: boolean): Promise<boolean> {
   return withDetachedFixture(async ({ history, owners }) => {

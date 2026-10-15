@@ -20,7 +20,7 @@ import {
   clientRows,
   forbidClientArrayRollback,
   waitForNextMillisecond,
-} from './client-array-test-helpers.js';
+} from './__tests__/support/client-array-test-helpers.js';
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 function imageRows(): IContent[] {

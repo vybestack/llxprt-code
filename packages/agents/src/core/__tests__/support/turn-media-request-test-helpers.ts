@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { CompressionHandler } from '../compression/CompressionHandler.js';
-import { buildRuntimeContext } from './__tests__/chatSession-density-helpers.js';
+import { CompressionHandler } from '../../../compression/CompressionHandler.js';
+import { buildRuntimeContext } from '../chatSession-density-helpers.js';
 const provider: RuntimeProvider = {
   name: 'test-provider',
   getModels: async () => [],
