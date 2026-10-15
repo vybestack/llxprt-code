@@ -7,6 +7,7 @@
 import { createContext, useContext, useMemo, useRef } from 'react';
 import { createStableAppCommands } from './stableAppCommands.js';
 import type { ContinueTarget, EditorType } from '@vybestack/llxprt-code-core';
+import type { SubagentManagerDialogProps } from '../components/SubagentManagement/types.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type { CommandContext } from '../commands/types.js';
 import type { ProviderSwitchRecorder } from '../utils/recordActiveProviderSwitch.js';
@@ -32,6 +33,12 @@ export interface AppCommandData {
 export interface AppCommandBindings extends AppCommands, AppCommandData {}
 
 export interface AppCommands {
+  listSubagentDefinitions: SubagentManagerDialogProps['listSubagents'];
+  loadSubagentDefinition: SubagentManagerDialogProps['loadSubagent'];
+  saveSubagentDefinition: SubagentManagerDialogProps['saveSubagent'];
+  deleteSubagentDefinition: SubagentManagerDialogProps['deleteSubagent'];
+  listSubagentProfiles: SubagentManagerDialogProps['listProfiles'];
+  generateSubagentPrompt: SubagentManagerDialogProps['generatePrompt'];
   // Composer input commands
   handleUserInputSubmit: (value: string) => void;
   handleSteer: (text: string) => boolean;

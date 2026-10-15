@@ -53,6 +53,18 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
     },
     triggerWelcomeAuth: asyncNoop,
     recordModelSwitch: () => undefined,
+    listSubagentDefinitions: async () => [],
+    loadSubagentDefinition: async () => {
+      throw new Error('Queue test must not load definitions');
+    },
+    saveSubagentDefinition: asyncNoop,
+    deleteSubagentDefinition: async () => {
+      throw new Error('Queue test must not delete definitions');
+    },
+    listSubagentProfiles: async () => [],
+    generateSubagentPrompt: async () => {
+      throw new Error('Queue test must not generate prompts');
+    },
     handleThemeSelect: noop,
     handleThemeHighlight: noop,
     handleAuthSelect: asyncNoop,

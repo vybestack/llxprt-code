@@ -56,6 +56,7 @@ import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
 import {
   AppCommandsProvider,
   type AppCommandBindings,
+  type AppCommands,
 } from './contexts/AppCommandsContext.js';
 import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
@@ -205,6 +206,27 @@ function useAppInputRuntime(
  * Current domain bindings, including changing input snapshots. The provider
  * separates these snapshots from the stable view-facing command callbacks.
  */
+function subagentDialogCommands(
+  dialogs: Pick<
+    AppCommands,
+    | 'listSubagentDefinitions'
+    | 'loadSubagentDefinition'
+    | 'saveSubagentDefinition'
+    | 'deleteSubagentDefinition'
+    | 'listSubagentProfiles'
+    | 'generateSubagentPrompt'
+  >,
+) {
+  return {
+    listSubagentDefinitions: dialogs.listSubagentDefinitions,
+    loadSubagentDefinition: dialogs.loadSubagentDefinition,
+    saveSubagentDefinition: dialogs.saveSubagentDefinition,
+    deleteSubagentDefinition: dialogs.deleteSubagentDefinition,
+    listSubagentProfiles: dialogs.listSubagentProfiles,
+    generateSubagentPrompt: dialogs.generateSubagentPrompt,
+  };
+}
+
 export function buildAppCommands(
   dialogs: Pick<
     AppDialogsResult,
@@ -245,6 +267,7 @@ export function buildAppCommands(
     triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
     resumeBrowserTarget: input.resumeBrowserTarget,
     recordModelSwitch: dialogs.recordModelSwitch,
+    ...subagentDialogCommands(dialogs),
     handleThemeSelect: dialogs.handleThemeSelect,
     handleThemeHighlight: dialogs.handleThemeHighlight,
     handleAuthSelect: dialogs.handleAuthSelect,

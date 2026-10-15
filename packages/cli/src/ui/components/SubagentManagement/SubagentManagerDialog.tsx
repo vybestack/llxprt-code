@@ -5,13 +5,11 @@
  */
 
 import type React from 'react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../../colors.js';
 import { useSettingsProfileStore } from '../../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../../stores/useStoreSelector.js';
-import { useAppCommandData } from '../../contexts/AppCommandsContext.js';
-import type { CommandContext } from '../../commands/types.js';
 import type {
   SubagentDefinitionReads,
   SubagentDefinitionWrites,
@@ -34,7 +32,8 @@ import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 function useDataLoader(
   subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | (Pick<SubagentDefinitionReads, 'listSubagents' | 'loadSubagent'> &
+        Pick<SubagentDefinitionWrites, 'saveSubagent' | 'deleteSubagent'>)
     | undefined,
   profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined,
   initialSubagentName: string | undefined,
@@ -179,7 +178,8 @@ function useSelectHandlers(
 
 function useSaveHandler(
   subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | (Pick<SubagentDefinitionReads, 'listSubagents' | 'loadSubagent'> &
+        Pick<SubagentDefinitionWrites, 'saveSubagent' | 'deleteSubagent'>)
     | undefined,
   state: SubagentManagerState,
   setPendingProfile: (p: string | undefined) => void,
@@ -219,9 +219,10 @@ function useSaveHandler(
 
 function useCreateHandler(
   subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | (Pick<SubagentDefinitionReads, 'listSubagents' | 'loadSubagent'> &
+        Pick<SubagentDefinitionWrites, 'saveSubagent' | 'deleteSubagent'>)
     | undefined,
-  runtimeCommandContext: CommandContext | undefined,
+  generatePrompt: (input: string) => Promise<string>,
   onClose: () => void,
 ) {
   return useCallback(
@@ -235,29 +236,19 @@ function useCreateHandler(
         throw new Error('SubagentManager not available');
       let finalPrompt = systemPrompt;
       if (mode === 'auto') {
-        const config = runtimeCommandContext?.services.config;
-        if (config === null || config === undefined)
-          throw new Error(
-            'Configuration service unavailable. Set up the CLI before using auto mode.',
-          );
-        const { bindAutoPromptOperation } = await import(
-          '../../commands/subagentCommandHost.js'
-        );
-        finalPrompt = await bindAutoPromptOperation(
-          runtimeCommandContext?.services.agent ?? null,
-          config,
-        )(systemPrompt);
+        finalPrompt = await generatePrompt(systemPrompt);
       }
       await subagentManager.saveSubagent(name, profile, finalPrompt);
       onClose();
     },
-    [subagentManager, onClose, runtimeCommandContext],
+    [subagentManager, onClose, generatePrompt],
   );
 }
 
 function useProfileAttachHandler(
   subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | (Pick<SubagentDefinitionReads, 'listSubagents' | 'loadSubagent'> &
+        Pick<SubagentDefinitionWrites, 'saveSubagent' | 'deleteSubagent'>)
     | undefined,
   state: SubagentManagerState,
   setPendingProfile: (p: string | undefined) => void,
@@ -308,7 +299,8 @@ function useProfileAttachHandler(
 
 function useDeleteConfirmHandler(
   subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | (Pick<SubagentDefinitionReads, 'listSubagents' | 'loadSubagent'> &
+        Pick<SubagentDefinitionWrites, 'saveSubagent' | 'deleteSubagent'>)
     | undefined,
   state: SubagentManagerState,
   setState: React.Dispatch<React.SetStateAction<SubagentManagerState>>,
@@ -618,20 +610,46 @@ function ManagerDialogView(props: ManagerDialogViewProps) {
   );
 }
 
-export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
-  onClose,
-  initialView = SubagentView.MENU,
-  initialSubagentName,
-}) => {
+function useDefinitionOperations(
+  props: Pick<
+    SubagentManagerDialogProps,
+    | 'listSubagents'
+    | 'loadSubagent'
+    | 'saveSubagent'
+    | 'deleteSubagent'
+    | 'listProfiles'
+  >,
+) {
+  const {
+    listSubagents,
+    loadSubagent,
+    saveSubagent,
+    deleteSubagent,
+    listProfiles,
+  } = props;
+  const subagentManager = useMemo(
+    () => ({ listSubagents, loadSubagent, saveSubagent, deleteSubagent }),
+    [listSubagents, loadSubagent, saveSubagent, deleteSubagent],
+  );
+  const profileManager = useMemo(() => ({ listProfiles }), [listProfiles]);
+  return { subagentManager, profileManager };
+}
+
+export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = (
+  props,
+) => {
+  const {
+    onClose,
+    initialView = SubagentView.MENU,
+    initialSubagentName,
+    generatePrompt,
+  } = props;
   const settingsStore = useSettingsProfileStore();
   const activeProfileName = useStoreSelector(
     settingsStore.store,
     (s) => s.activeProfileName,
   );
-  const { commandContext } = useAppCommandData();
-  const runtimeCommandContext = commandContext as CommandContext | undefined;
-  const subagentManager = runtimeCommandContext?.services.subagentManager;
-  const profileManager = runtimeCommandContext?.services.profileManager;
+  const { subagentManager, profileManager } = useDefinitionOperations(props);
 
   const [state, setState] = useDialogState(initialView);
   const [pendingProfile, setPendingProfile] = useState<string | undefined>(
@@ -665,7 +683,7 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
   }, [goBack]);
   const handleCreate = useCreateHandler(
     subagentManager,
-    runtimeCommandContext,
+    generatePrompt,
     onClose,
   );
   const handleProfileAttach = useProfileAttachHandler(

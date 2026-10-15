@@ -281,6 +281,12 @@ function renderPayloadStoreDialog(
     case 'subagent':
       return (
         <SubagentManagerDialog
+          listSubagents={ctx.uiActions.listSubagentDefinitions}
+          loadSubagent={ctx.uiActions.loadSubagentDefinition}
+          saveSubagent={ctx.uiActions.saveSubagentDefinition}
+          deleteSubagent={ctx.uiActions.deleteSubagentDefinition}
+          listProfiles={ctx.uiActions.listSubagentProfiles}
+          generatePrompt={ctx.uiActions.generateSubagentPrompt}
           onClose={() => close('subagent')}
           initialView={active.payload.initialView ?? SubagentView.MENU}
           initialSubagentName={active.payload.initialName}

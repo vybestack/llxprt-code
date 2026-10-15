@@ -9,6 +9,8 @@ import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
+import { bindAutoPromptOperation } from '../../../commands/subagentCommandHost.js';
+import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
@@ -538,6 +540,16 @@ export function useAppDialogs(params: AppDialogsParams) {
   );
   const profiles = useDialogsProfiles(params);
   const { agent, recordingOwner, recordingIntegration } = params;
+  const generatePrompt = useMemo(
+    () => bindAutoPromptOperation(agent, params.config),
+    [agent, params.config],
+  );
+  const subagents = useSubagentDialogCommands(
+    agent.workspace.subagentDefinitions,
+    agent.workspace.subagentWrites,
+    agent.workspace.profileDefinitions,
+    generatePrompt,
+  );
   const recordModelSwitch = useMemo(
     () =>
       bindModelSwitchRecording(
@@ -560,6 +572,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     welcomeActions: auth.welcome.actions,
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
     recordModelSwitch,
+    ...subagents,
     onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
