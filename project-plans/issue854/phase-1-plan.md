@@ -5,8 +5,7 @@ Generated: 2026-09-17
 Total Phases: 1 (of the 5-phase design in issue-854-design.md; this plan covers Phase 1 only)
 Requirements: REQ-854-001, REQ-854-002, REQ-854-003, REQ-854-004, REQ-854-005
 
-Design source of truth: `project-plans/issue854/issue-854-design.md` (PDF twin:
-`issue-854-design.pdf`). Phase 1 is purely additive: it lands the on-disk
+Design source of truth: `project-plans/issue854/issue-854-design.md`. Phase 1 is purely additive: it lands the on-disk
 writer, the correlation stamps, and the core context-range API. No UI behavior
 changes, no eviction, no paging. Every piece is reachable and observable but
 nothing consumes the data yet (consumers arrive in phases 2–4).
