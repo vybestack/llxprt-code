@@ -11,7 +11,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createSessionModelCommand } from './runtime/session-model-command.js';
 
 import {
   type SessionSettingsOwner,
@@ -57,8 +56,6 @@ import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
-import { createRuntimeApi } from './ui/contexts/RuntimeContext.js';
-import { createRuntimeOwnerFeatures } from './runtime/createRuntimeOwnerFeatures.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import type { FindMcpResource } from './ui/hooks/atCommandProcessorHelpers.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
@@ -246,12 +243,9 @@ async function resolveSlashQuery(
   input: string,
   abortController: AbortController,
   config: Config,
-  settings: LoadedSettings,
   agent: Agent | undefined,
-  providerManager: Agent['providerManager'] | undefined,
   runtimeSettings: RunNonInteractiveParams['runtimeSettings'],
   trust: WorkspaceTrustReadPort | undefined,
-  oauthManager?: OAuthManager,
 ): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
@@ -264,32 +258,8 @@ async function resolveSlashQuery(
     input,
     abortController,
     config,
-    settings,
     agent,
-    agent
-      ? createRuntimeApi(
-          agent,
-          createRuntimeOwnerFeatures(
-            config,
-            agent.providerManager,
-            () => agent.workspace.getDirectories(),
-            createSessionModelCommand(agent),
-            runtimeSettings.owner,
-            runtimeSettings.store,
-            agent.workspace,
-            agent.modelParameters,
-            agent.settings,
-            agent.toolFormat,
-            agent.providerReads,
-            agent.auth.keys,
-          ),
-          agent.sessionClient.fetch,
-        )
-      : undefined,
-    providerManager,
     trust,
-    () => oauthManager,
-    runtimeSettings.owner,
   );
   if (
     slashCommandResult !== undefined &&
@@ -512,17 +482,14 @@ async function resolveAndStream(
     startTime: number;
   },
 ): Promise<void> {
-  const { config, input, settings } = params;
+  const { config, input } = params;
   const slashQuery = await resolveSlashQuery(
     input,
     options.abortController,
     config,
-    settings,
     params.agent,
-    params.providerManager,
     params.runtimeSettings,
     params.policyOwner?.trust,
-    params.oauthManager,
   );
   // #2378: reuse the composition-root Agent when supplied. The composition
   // root owns its lifecycle (registerCleanup disposes it), so a reused Agent

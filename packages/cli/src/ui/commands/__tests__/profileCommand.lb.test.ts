@@ -6,11 +6,12 @@
  * Tests for load balancer profile save/load with advanced failover ephemeral settings
  * Issue #489 Phase 7
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createProfileCommandForTest } from './profile-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import type { CommandContext, SlashCommand } from '../types.js';
+import type { SlashCommand } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../__tests__/regex.js';
@@ -22,7 +23,7 @@ const runtimeMocks = {
 };
 
 describe('profileCommand - load balancer save with protected settings', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let profileCommand: SlashCommand;
 
   beforeEach(() => {

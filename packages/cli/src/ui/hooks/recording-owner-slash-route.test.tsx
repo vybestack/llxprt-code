@@ -104,7 +104,9 @@ describe('interactive slash command recording route', () => {
         () => useSlashCommandProcessorCore(slashInputs(agent, 'agent')),
         { wrapper },
       );
-      expect(result.current.commandContext.recordingOwner).toBe('agent');
+      expect(Reflect.has(result.current.commandContext, 'recordingOwner')).toBe(
+        false,
+      );
       await waitFor(() => {
         expect(
           result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
@@ -135,7 +137,9 @@ describe('interactive slash command recording route', () => {
           result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
         ).toBe(true);
       });
-      expect(result.current.commandContext.recordingOwner).toBeUndefined();
+      expect(Reflect.has(result.current.commandContext, 'recordingOwner')).toBe(
+        false,
+      );
       await act(async () => {
         await result.current.handleSlashCommand('/chat save raw-default');
       });

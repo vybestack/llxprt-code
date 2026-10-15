@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -19,7 +20,7 @@ import {
   createCompressCommand,
   makePendingCompression,
 } from './compressCommand.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 
 type AgentCompressionResult = Awaited<ReturnType<Agent['compress']>>;
 
@@ -29,18 +30,18 @@ interface CapturedState {
 }
 
 function setupCapturingContext(): {
-  context: CommandContext;
+  context: CommandOwnerFixture;
   state: CapturedState;
 } {
   const state: CapturedState = { items: [], pendingItems: [] };
   const base = createMockCommandContext();
   base.ui.addItem = ((item: HistoryItemWithoutId) => {
     state.items.push(item);
-  }) as CommandContext['ui']['addItem'];
+  }) as CommandOwnerFixture['ui']['addItem'];
   base.ui.setPendingItem = ((item: HistoryItemWithoutId | null) => {
     state.pendingItems.push(item);
     base.ui.pendingItem = item;
-  }) as CommandContext['ui']['setPendingItem'];
+  }) as CommandOwnerFixture['ui']['setPendingItem'];
   return { context: base, state };
 }
 
@@ -68,7 +69,7 @@ function findErrorItem(
 }
 
 describe('compress command', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let state: CapturedState;
 
   beforeEach(() => {

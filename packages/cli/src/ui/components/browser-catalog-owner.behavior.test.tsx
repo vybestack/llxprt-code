@@ -3,12 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { useBrowserCatalogCommands } from '../hooks/useBrowserCatalogCommands.js';
 import { join } from 'node:path';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { CommandContext } from '../commands/types.js';
+
 import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
 import {
   AppCommandsProvider,
@@ -93,7 +94,7 @@ function CatalogView({
   context,
 }: {
   runtime: CliUiRuntime;
-  context: CommandContext;
+  context: CommandOwnerFixture;
 }) {
   const commands = useAppCommands();
   return renderSessionBrowserDialog(
@@ -111,7 +112,7 @@ function CatalogApplication({
   read,
 }: {
   runtime: CliUiRuntime;
-  context: CommandContext;
+  context: CommandOwnerFixture;
   read: BrowserCatalogReader;
 }) {
   const buffer = useTextBuffer({

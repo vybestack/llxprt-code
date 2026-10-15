@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { PolicyControl } from '../../../../agents/src/api/control/policyControl.js';
@@ -12,7 +14,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createPoliciesCommand } from './policiesCommand.js';
 import { bindPoliciesCommand } from './policiesCommandHost.js';
 import {
-  type CommandContext,
   type MessageActionReturn,
   type OpenDialogActionReturn,
   type SlashCommand,
@@ -45,7 +46,7 @@ function makePolicy(): PolicyControl {
 }
 
 describe('policiesCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let policiesCommand: SlashCommand;
   afterEach(async () => {
     for (const owner of ownedPolicies.splice(0)) await owner.dispose();
@@ -56,7 +57,7 @@ describe('policiesCommand', () => {
       services: {
         config: null,
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
     policiesCommand = createPoliciesCommand(
       bindPoliciesCommand(() => mockContext.services.agent ?? null),
     );

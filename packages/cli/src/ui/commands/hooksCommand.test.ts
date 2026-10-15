@@ -4,13 +4,15 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { registerHooksCommand } from '../../__tests__/hook-task-command-test-owner.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+
 import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -27,13 +29,13 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 describe('hooksCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let mockHooks: HookRegistryEntry[];
   const owners: Array<{ root: SessionHookOwner; config: Config }> = [];
   let root: SessionHookOwner;
   const makeContext = async (
     entries: HookRegistryEntry[],
-  ): Promise<CommandContext> => {
+  ): Promise<CommandOwnerFixture> => {
     const definitions = Object.fromEntries(
       Object.values(HookEventName).map((event) => [
         event,

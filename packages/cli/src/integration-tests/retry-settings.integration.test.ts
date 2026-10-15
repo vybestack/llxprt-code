@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -10,13 +11,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSetCommand } from '../ui/commands/setCommand.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
+import type { SlashCommand } from '../ui/commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 describe('retry settings integration tests', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let setCommand: SlashCommand;
   let config: Config;
   let settingsOwner: SessionSettingsOwner;

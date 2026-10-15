@@ -4,55 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { vi } from 'bun:test';
-import { DebugLogger, type Logger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { createCommands } from './command-history-result-fixture.js';
-import { createMockRuntimeApi } from '../ui/components/__tests__/StatsDisplay.testHelpers.js';
+import {
+  createMockCommandContext,
+  type CommandOwnerFixture,
+} from './mockCommandContext.js';
 import type { SlashCommandHandlerDeps } from '../ui/hooks/slashCommandHandlers.js';
+
+export type CommandHandlerFixture = Omit<
+  SlashCommandHandlerDeps,
+  'commandContext'
+> & { commandContext: CommandOwnerFixture };
 
 export function createHandlerDeps(
   addItem: ReturnType<typeof vi.fn>,
-  overrides: Partial<SlashCommandHandlerDeps> = {},
-): SlashCommandHandlerDeps {
+  overrides: Partial<CommandHandlerFixture> = {},
+): CommandHandlerFixture {
   return {
     commands: createCommands(undefined),
     config: null,
-    commandContext: {
-      runtimeApi: createMockRuntimeApi(),
-      refreshProviderAliases: vi.fn(async () => {}),
-      oauthControl:
-        {} as SlashCommandHandlerDeps['commandContext']['oauthControl'],
-      signal: new AbortController().signal,
-      services: {
-        config: null,
-        agent: null,
-        settings:
-          {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
-        git: undefined,
-        logger: new DebugLogger('test') as unknown as Logger,
-      },
-      ui: {
-        addItem,
-        clear: vi.fn(),
-        setDebugMessage: vi.fn(),
-        pendingItem: null,
-        setPendingItem: vi.fn(),
-        loadHistory: vi.fn(),
-        toggleCorgiMode: vi.fn(),
-        toggleDebugProfiler: vi.fn(),
-        toggleVimEnabled: vi.fn(),
-        setLlxprtMdFileCount: vi.fn(),
-        updateHistoryTokenCount: vi.fn(),
-        reloadCommands: vi.fn(),
-        extensionsUpdateState: new Map(),
-        dispatchExtensionStateUpdate: vi.fn(),
-        addConfirmUpdateExtensionRequest: vi.fn(),
-      },
-      session: {
-        stats:
-          {} as SlashCommandHandlerDeps['commandContext']['session']['stats'],
-        sessionShellAllowlist: new Set(),
-      },
-    },
+    commandContext: createMockCommandContext({ ui: { addItem } }),
     actions: {} as SlashCommandHandlerDeps['actions'],
     addItem,
     addMessage: vi.fn(),

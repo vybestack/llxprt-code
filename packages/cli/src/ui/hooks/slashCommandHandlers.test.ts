@@ -15,6 +15,9 @@ import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from '../../__tests__/command-handler-fixture.js';
+import type { CommandContext } from '../commands/types.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -33,13 +36,10 @@ import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { getProjectHash, LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import type { CommandContext } from '../commands/types.js';
+
 import { CommandKind } from '../commands/types.js';
 import { MessageType } from '../types.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { createSlashCommandCancellation } from './useSlashCommandCancellation.js';
 import { computeIsAwaitingSlashCommandConfirmation } from '../containers/AppContainer/hooks/useAppInput.js';
 import type { HistoryItemWithoutId } from '../types.js';
@@ -67,10 +67,10 @@ describe('slashCommandHandlers', () => {
       {
         ...deps,
         isMcpDiscoveryPending: () => agent.mcp.discoveryState() === 'pending',
-        commandContext: {
+        commandContext: Object.assign({}, deps.commandContext, {
           ...deps.commandContext,
           services: { ...deps.commandContext.services, agent },
-        },
+        }),
         addMessage: (message) => {
           if ('content' in message) messages.push(message.content);
         },
@@ -95,11 +95,11 @@ describe('slashCommandHandlers', () => {
       await processSlashCommand(
         {
           ...deps,
-          commandContext: {
+          commandContext: Object.assign({}, deps.commandContext, {
             ...deps.commandContext,
-            recordingOwner: 'agent',
+            recordingOwner: 'agent' as const,
             services: { ...deps.commandContext.services, agent },
-          },
+          }),
           commands: createCommands(() => ({
             type: 'message',
             messageType: 'error',
@@ -142,11 +142,14 @@ describe('slashCommandHandlers', () => {
       await processSlashCommand(
         {
           ...deps,
-          commandContext: {
-            ...deps.commandContext,
-            recordingOwner: 'agent',
-            services: { ...deps.commandContext.services, agent: next },
-          },
+          commandContext: Object.assign(
+            {},
+            {
+              ...deps.commandContext,
+              recordingOwner: 'agent' as const,
+              services: { ...deps.commandContext.services, agent: next },
+            },
+          ),
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
           resumeRawSession: null,
@@ -214,15 +217,18 @@ describe('slashCommandHandlers', () => {
                   ),
                 ),
               ],
-              commandContext: {
-                ...deps.commandContext,
-                recordingOwner: 'agent',
-                services: {
-                  ...deps.commandContext.services,
-                  agent,
-                  config: runtime,
+              commandContext: Object.assign(
+                {},
+                {
+                  ...deps.commandContext,
+                  recordingOwner: 'agent' as const,
+                  services: {
+                    ...deps.commandContext.services,
+                    agent,
+                    config: runtime,
+                  },
                 },
-              },
+              ),
             },
             `/directory add ${addedDirectory}`,
           );
@@ -797,7 +803,7 @@ describe('slashCommandHandlers', () => {
       deps.commandContext.services.agent = next;
       deps.commandContext.recordingOwner = 'agent';
       let loaded:
-        | Parameters<CommandContext['ui']['loadHistory']>[0]
+        | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
         | undefined;
       deps.commandContext.ui.loadHistory = (history) => {
         loaded = history;

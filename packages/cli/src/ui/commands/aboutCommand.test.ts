@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -16,7 +17,7 @@ import {
 } from 'bun:test';
 import { createAboutCommand } from './aboutCommand.js';
 import { bindAboutDetails } from './aboutCommandHost.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
@@ -34,7 +35,7 @@ void vi.mock('../../utils/version.js', () => ({
 
 describe('aboutCommand', () => {
   const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let aboutCommand: ReturnType<typeof createAboutCommand>;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
@@ -68,7 +69,7 @@ describe('aboutCommand', () => {
       ui: {
         addItem: vi.fn(),
       },
-    } as unknown as CommandContext);
+    } as unknown as CommandOwnerFixture);
 
     (
       versionUtils.getCliVersion as Mock<typeof versionUtils.getCliVersion>

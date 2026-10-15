@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -24,7 +25,7 @@ import * as os from 'node:os';
 import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { KeyCompletionOwner } from './key-completion-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext, MessageActionReturn } from './types.js';
+import type { MessageActionReturn } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
@@ -106,7 +107,7 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
 
 function createKeyCommandContext(
   ...args: Parameters<typeof createMockCommandContext>
-): CommandContext {
+): CommandOwnerFixture {
   const context = createMockCommandContext(...args);
   if (context.services.config) {
     context.services.config.getProviderKeys = () => mockStorage;
@@ -122,7 +123,7 @@ function createKeyCommandContext(
 
 let mockKeyring: KeyringAdapter & { store: Map<string, string> };
 let tempDir: string;
-let context: CommandContext;
+let context: CommandOwnerFixture;
 
 describe('/key subcommands', () => {
   beforeEach(async () => {

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import {
@@ -16,7 +17,6 @@ import type {
   CompleterFn,
   TokenInfo,
 } from '../commands/schema/types.js';
-import type { CommandContext } from '../commands/types.js';
 
 describe('fuzzyFilter', () => {
   describe('filterCompletions', () => {
@@ -147,7 +147,7 @@ describe('fuzzyFilter', () => {
   });
 
   describe('withFuzzyFilter', () => {
-    let mockContext: CommandContext;
+    let mockContext: CommandOwnerFixture;
     let mockTokens: TokenInfo;
 
     beforeEach(() => {
@@ -159,7 +159,7 @@ describe('fuzzyFilter', () => {
             },
           },
         },
-      } as unknown as CommandContext;
+      } as unknown as CommandOwnerFixture;
 
       mockTokens = {
         tokens: [],
@@ -212,7 +212,7 @@ describe('fuzzyFilter', () => {
             },
           },
         },
-      } as unknown as CommandContext;
+      } as unknown as CommandOwnerFixture;
 
       const baseCompleter: CompleterFn = async () => [
         { value: 'production' },
@@ -243,7 +243,7 @@ describe('fuzzyFilter', () => {
             },
           },
         },
-      } as unknown as CommandContext;
+      } as unknown as CommandOwnerFixture;
 
       const baseCompleter: CompleterFn = async () => [
         { value: 'production' },
@@ -293,7 +293,7 @@ describe('fuzzyFilter', () => {
     it('handles context without settings service gracefully', async () => {
       const contextWithoutSettings = {
         services: {},
-      } as unknown as CommandContext;
+      } as unknown as CommandOwnerFixture;
 
       const baseCompleter: CompleterFn = async () => [
         { value: 'production' },

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -19,7 +20,7 @@ import { assertDefined } from '../../__tests__/assertions.js';
 import { createChatCommand } from './chatCommand.js';
 import { bindChatRecordingOperations } from './chatCommandHost.js';
 import { createCompletionHandler } from './schema/index.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 
 const PROJECT_HASH = 'chat-command-checkpoints';
@@ -37,7 +38,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   let chatsDir: string;
   let recording: SessionRecordingService;
   let mediaStore: LocalMediaStore;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   // Registered the way the session host registers it, from the recording,
   // project and chat history the fixture currently provides.

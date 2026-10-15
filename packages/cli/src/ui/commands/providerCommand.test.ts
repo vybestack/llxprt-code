@@ -4,6 +4,7 @@ import { resolveActiveProviderForAlias } from '../../runtime/providerInspection.
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import {
   describe,
@@ -30,7 +31,7 @@ import type { Mock } from 'bun:test';
  * invokes `agent.setProvider(...)`, so a stub typed to that exact Mock surface
  * is a properly-typed test double (no `as never` / `as any`). The double is
  * cast to `Agent` via the established `as unknown as Agent` idiom at the
- * CommandContext boundary (see mockCommandContext.ts).
+ * CommandOwnerFixture boundary (see mockCommandContext.ts).
  */
 const realProviderAliasesModule = {
   ...(await import(
@@ -85,10 +86,10 @@ void vi.mock(
 // Import after mocks are set up
 import { createProviderCommand } from './providerCommand.js';
 import { bindProviderCommandOperations } from './providerCommandHost.js';
-import type { CommandContext } from './types.js';
+
 import { assertDefined } from '../../__tests__/assertions.js';
 
-function runProvider(context: CommandContext, args: string) {
+function runProvider(context: CommandOwnerFixture, args: string) {
   const command = createProviderCommand(
     bindProviderCommandOperations(
       context.runtimeApi,

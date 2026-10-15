@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -19,7 +20,7 @@ import { InputPrompt, type InputPromptProps } from './InputPrompt.js';
 import { useTextBuffer, type TextBuffer } from './shared/text-buffer.js';
 import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Mock } from 'bun:test';
@@ -139,7 +140,7 @@ describe('InputPrompt', () => {
   let mockInputHistory: ReturnType<typeof useInputHistory>;
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
-  let mockCommandContext: CommandContext;
+  let mockCommandContext: CommandOwnerFixture;
 
   const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
   const mockedUseCommandCompletion = useCommandCompletion as Mock<

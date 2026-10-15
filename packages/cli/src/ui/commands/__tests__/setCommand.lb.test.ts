@@ -6,10 +6,11 @@
  * Tests for load balancer ephemeral settings in setCommand
  * Issue #489 Phase 6
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../types.js';
+
 import { createSetCommandForTest } from '../../../__tests__/set-command-test-owner.js';
 
 const mockRuntime = {
@@ -22,7 +23,7 @@ const mockRuntime = {
 const setCommand = createSetCommandForTest(mockRuntime);
 
 describe('setCommand - load balancer settings', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     context = createMockCommandContext({ runtimeApi: mockRuntime });

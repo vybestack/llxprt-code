@@ -3,10 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 
 const mockRuntime = {
@@ -19,7 +20,7 @@ const mockRuntime = {
 
 const setCommand = createSetCommandForTest(mockRuntime);
 describe('setCommand user-agent ephemeral', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     context = createMockCommandContext({ runtimeApi: mockRuntime });

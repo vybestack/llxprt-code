@@ -11,6 +11,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { bindAutoPromptOperation } from './ui/commands/subagentCommandHost.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -45,6 +46,7 @@ import {
 } from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
 import type { CommandContext } from './ui/commands/types.js';
+
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
@@ -368,14 +370,21 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     expect(fromConfig as Mock<typeof fromConfig>).not.toHaveBeenCalled();
   });
 
-  it('rejects runtime access from a headless command without an Agent owner', async () => {
+  it('rejects a registered headless operation without an Agent owner', async () => {
+    const generatePrompt = bindAutoPromptOperation(null, null);
     mockGetCommands.mockReturnValue([
       {
         name: 'runtime',
         description: 'requires runtime state',
-        action: (context: CommandContext) => {
-          context.runtimeApi.getActiveModelName();
-          return { type: 'submit_prompt', content: 'unreachable' };
+        action: async (invocation: CommandContext) => {
+          expect(Reflect.has(invocation, 'services')).toBe(false);
+          expect(Reflect.has(invocation, 'runtimeApi')).toBe(false);
+          expect(Reflect.has(invocation, 'oauthControl')).toBe(false);
+          expect(Reflect.has(invocation, 'refreshProviderAliases')).toBe(false);
+          return {
+            type: 'submit_prompt',
+            content: await generatePrompt('Describe the workspace'),
+          };
         },
       },
     ]);
@@ -386,7 +395,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         input: '/runtime',
         prompt_id: 'headless-owner-required',
       }),
-    ).rejects.toThrow('Headless command requires an Agent-owned runtime API.');
+    ).rejects.toThrow('Session agent is unavailable');
   });
 
   it('runs a real /set command against the supplied headless Agent owner rather than another ambient runtime', async () => {

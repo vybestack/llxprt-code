@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
 
 import * as glob from 'glob';
 import { FileCommandLoader } from './FileCommandLoader.js';
@@ -35,7 +36,6 @@ import {
   ShellProcessor,
 } from './prompt-processors/shellProcessor.js';
 import { DefaultArgumentProcessor } from './prompt-processors/argumentProcessor.js';
-import type { CommandContext } from '../ui/commands/types.js';
 
 type PromptPipelineContent = Array<{ text: string }>;
 
@@ -113,7 +113,7 @@ describe('FileCommandLoader (processors)', () => {
       actualGlob,
     );
     mockShellProcess.mockImplementation(
-      (prompt: string, context: CommandContext) => {
+      (prompt: string, context: CommandOwnerFixture) => {
         const userArgsRaw = context.invocation?.args ?? '';
         const processedPrompt = prompt.replaceAll(
           SHORTHAND_ARGS_PLACEHOLDER,

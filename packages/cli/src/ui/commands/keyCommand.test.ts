@@ -3,11 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
 
 const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
@@ -15,7 +15,7 @@ const mockRuntime = {
 };
 
 describe('keyCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,7 +78,7 @@ describe('keyCommand', () => {
     const extendedContext = {
       ...context,
       checkPaymentModeChange,
-    } as CommandContext & { checkPaymentModeChange: () => void };
+    } as CommandOwnerFixture & { checkPaymentModeChange: () => void };
 
     await registerKeyCommand(context, {
       schedulePaymentModeCheck: extendedContext.checkPaymentModeChange,

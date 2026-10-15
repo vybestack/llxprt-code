@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -25,11 +26,11 @@ import { createClearCommand } from './clearCommand.js';
 import { bindClearSession } from './simpleCommandHost.js';
 import { createContinueCommandForTest } from './__tests__/continue-command-test-owner.js';
 import type { HistoryItemWithoutId } from '../types.js';
-import type { CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
-async function clearAction(context: CommandContext, args: string) {
+async function clearAction(context: CommandOwnerFixture, args: string) {
   const action = createClearCommand(
     bindClearSession(context.services.agent),
     context.ui.setDebugMessage,
@@ -40,7 +41,7 @@ async function clearAction(context: CommandContext, args: string) {
   assertDefined(action);
   return action(context, args);
 }
-async function runContinue(context: CommandContext, args: string) {
+async function runContinue(context: CommandOwnerFixture, args: string) {
   const action = createContinueCommandForTest(() => context).action;
   assertDefined(action);
   return action(context, args);
@@ -57,7 +58,7 @@ describe('clearCommand new session', () => {
   let directory: string;
   let built: Awaited<ReturnType<typeof buildCliStyleConfig>>;
   let agent: Agent;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let uiEvents: string[];
   let oldId: string;
   let oldPath: string;

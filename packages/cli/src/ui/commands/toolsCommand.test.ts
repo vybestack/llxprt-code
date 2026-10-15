@@ -3,13 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { createToolsCommand } from './toolsCommand.js';
 import { bindToolsCommand } from './toolsCommandHost.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -56,7 +57,7 @@ function createMockAgent(
   } as unknown as Agent;
 }
 
-function createCommand(context: CommandContext) {
+function createCommand(context: CommandOwnerFixture) {
   return createToolsCommand(
     bindToolsCommand(context.services.agent),
     context.ui.addItem,
@@ -113,7 +114,7 @@ describe('toolsCommand', () => {
     await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader [disabled]');
     expect(output).toContain('Code Editor [enabled]');
@@ -132,7 +133,7 @@ describe('toolsCommand', () => {
     await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader');
     expect(output).not.toContain('MCP Search');
@@ -150,7 +151,7 @@ describe('toolsCommand', () => {
     await createCommand(mockContext).action!(mockContext, 'disable mcp-search');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "mcp-search" not found');
@@ -172,7 +173,7 @@ describe('toolsCommand', () => {
 
     expect(settings.get('tools.disabled')).toStrictEqual(['file-reader']);
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain("Disabled tool 'File Reader'");
   });
@@ -211,7 +212,7 @@ describe('toolsCommand', () => {
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain("Enabled tool 'Code Editor'");
   });
@@ -228,7 +229,7 @@ describe('toolsCommand', () => {
     await createCommand(mockContext).action!(mockContext, 'disable missing');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "missing" not found');
@@ -285,12 +286,12 @@ describe('toolsCommand', () => {
     await createCommand(mockContext).action!(mockContext, 'enable file-reader');
 
     (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mockClear();
     await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader [enabled]');
     expect(output).toContain('Code Editor [enabled]');

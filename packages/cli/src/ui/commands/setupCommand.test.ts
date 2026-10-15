@@ -3,10 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { setupCommand } from './setupCommand.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 // Mock the welcome config module
@@ -19,7 +20,7 @@ import { saveWelcomeConfig } from '../../config/welcomeConfig.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('setupCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.clearAllMocks();

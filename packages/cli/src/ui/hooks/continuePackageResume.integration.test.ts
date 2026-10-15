@@ -1,3 +1,4 @@
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from '../../__tests__/command-handler-fixture.js';
 import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
 import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
@@ -63,10 +64,7 @@ import {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createContinueCommandForTest } from '../commands/__tests__/continue-command-test-owner.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message } from '../types.js';

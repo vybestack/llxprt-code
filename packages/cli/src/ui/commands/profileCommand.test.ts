@@ -3,13 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
 const definitionFixture = installDefinitionRuntimeFixture();
 import { createProfileCommandForTest } from './__tests__/profile-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import { testRegex } from '../../__tests__/regex.js';
 
 const runtimeMocks = {
@@ -38,7 +39,7 @@ const tokenStoreMocks = {
 };
 
 describe('profileCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let profileCommand: SlashCommand;
 
   beforeEach(async () => {

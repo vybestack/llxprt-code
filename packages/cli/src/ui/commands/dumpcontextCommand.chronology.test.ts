@@ -8,11 +8,12 @@
  * to stay byte-for-byte what the provider receives, because providers reject
  * unknown fields with HTTP 400.
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { createDumpcontextCommand } from './dumpcontextCommand.js';
 import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
@@ -41,7 +42,7 @@ const TRACE = [
   },
 ];
 
-function contextWithTrace(): CommandContext {
+function contextWithTrace(): CommandOwnerFixture {
   const historyService = {
     getAll: vi
       .fn()
@@ -60,7 +61,7 @@ function contextWithTrace(): CommandContext {
           })();
         },
       },
-      config: {} as unknown as CommandContext['services']['config'],
+      config: {} as unknown as CommandOwnerFixture['services']['config'],
     },
   });
   Object.defineProperty(context, 'runtimeApi', {

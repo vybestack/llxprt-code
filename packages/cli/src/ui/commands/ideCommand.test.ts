@@ -3,12 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { registerIdeCommand } from '../../__tests__/host-command-test-owner.js';
-import { type CommandContext } from './types.js';
+
 import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 import type { IdeState } from '../cliUiRuntime.js';
@@ -33,7 +34,7 @@ function commandSubcommands(
 }
 
 describe('ideCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockConfig: IdeState;
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
@@ -47,7 +48,7 @@ describe('ideCommand', () => {
           setValue: vi.fn(),
         },
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
 
     mockConfig = {
       getIdeMode: vi.fn(),

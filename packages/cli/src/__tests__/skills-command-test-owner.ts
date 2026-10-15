@@ -3,10 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from './mockCommandContext.js';
+
 import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
 import { bindSkillsCommand } from '../ui/commands/skillsCommandHost.js';
-import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
-export function registerSkillsCommand(owner: CommandContext): SlashCommand {
+import type { SlashCommand } from '../ui/commands/types.js';
+export function registerSkillsCommand(
+  owner: CommandOwnerFixture,
+): SlashCommand {
   return createSkillsCommand(
     bindSkillsCommand(
       owner.services.config?.skillOperations,

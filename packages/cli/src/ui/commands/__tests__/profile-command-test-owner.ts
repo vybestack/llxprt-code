@@ -3,13 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { bindProfileCommandOperations } from '../profileCommandHost.js';
 import { createProfileCommand } from '../profileCommand.js';
-import type { CommandContext, SlashCommand } from '../types.js';
+import type { SlashCommand } from '../types.js';
 
 export function createProfileCommandForTest(
-  context: CommandContext,
+  context: CommandOwnerFixture,
   recordProviderSwitch: (
     provider: string,
     model: string,

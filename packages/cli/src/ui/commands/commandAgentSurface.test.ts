@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import type {
@@ -26,10 +27,10 @@ import {
 } from '../../__tests__/credential-command-test-owner.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
-function buildContextWithAgent(agent: Partial<Agent>): CommandContext {
+function buildContextWithAgent(agent: Partial<Agent>): CommandOwnerFixture {
   return createMockCommandContext({
     services: { agent: agent as Agent },
   });
@@ -79,7 +80,7 @@ describe('compressCommand — agent surface', () => {
         agent: { compress: compressMock } as unknown as Agent,
         config: {
           getAgentClient,
-        } as unknown as CommandContext['services']['config'],
+        } as unknown as CommandOwnerFixture['services']['config'],
       },
     });
 

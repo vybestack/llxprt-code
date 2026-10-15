@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import {
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
@@ -24,7 +26,7 @@ import {
 } from 'bun:test';
 import { createMemoryCommand } from './memoryCommand.js';
 import { bindMemoryCommand } from './memoryCommandHost.js';
-import type { SlashCommand, CommandContext } from './types.js';
+import type { SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
@@ -58,11 +60,11 @@ void vi.mock('../../config/environmentLoader.js', () => ({
 }));
 
 describe('memoryCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   const getSubCommand = (
     name: 'show' | 'add' | 'refresh' | 'list',
-    context: CommandContext = mockContext,
+    context: CommandOwnerFixture = mockContext,
   ): SlashCommand => {
     const memoryCommand = createMemoryCommand(
       bindMemoryCommand(

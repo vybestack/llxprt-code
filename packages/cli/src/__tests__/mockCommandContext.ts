@@ -9,10 +9,58 @@ const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 
 import { vi } from 'bun:test';
 import type { CommandContext } from '../ui/commands/types.js';
+import type { RecordingSwapCallbacks } from '../services/performResume.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
+import type { RuntimeApi } from '../ui/contexts/RuntimeContext.js';
+import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
+import type { OAuthControl } from '../ui/contexts/OAuthControlContext.js';
+import type {
+  RecordingIntegration,
+  GitService,
+  Config,
+  Logger,
+  WorkspaceCheckpointOperations,
+  SubagentDefinitionReads,
+  SubagentDefinitionWrites,
+  ProfileDefinitionReads,
+} from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
-import type { GitService, Config, Logger } from '@vybestack/llxprt-code-core';
 import type { SessionStatsState } from '../ui/contexts/SessionContext.js';
 import { createMockRuntimeApi } from '../ui/components/__tests__/StatsDisplay.testHelpers.js';
+
+export interface CommandOwnerFixture extends CommandContext {
+  /** Explicitly selects Agent-owned recording; absent retains raw interactive wiring. */
+  recordingOwner?: 'agent';
+  // Recording integration for session recording
+  recordingIntegration?: RecordingIntegration;
+  /**
+   * Callbacks for swapping recording infrastructure during session resume.
+   * @plan PLAN-20260214-SESSIONBROWSER.P23
+   */
+  recordingSwapCallbacks?: RecordingSwapCallbacks;
+  runtimeApi: RuntimeApi;
+  refreshProviderAliases: ProviderAliasRefresh;
+  oauthControl: OAuthControl;
+  services: {
+    // Follow-up (#1569, abhipatel12): Ensure that config is never null.
+    config: CliUiRuntime | null;
+    /**
+     * The rich Agent facade adopted from the CLI runtime via fromConfig().
+     * Provides auth, mcp, tools, hooks, policy, tasks, session, profiles
+     * sub-surfaces so commands avoid deep runtime/core access.
+     * Null until bootstrap constructs it (or in non-interactive/test paths).
+     */
+    agent: Agent | null;
+    settings: LoadedSettings;
+    git:
+      | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
+      | undefined;
+    logger: Logger;
+    subagentManager?: SubagentDefinitionReads & SubagentDefinitionWrites;
+    profileManager?: Pick<ProfileDefinitionReads, 'listProfiles'>;
+  };
+}
 
 // A utility type to make all properties of an object, and its nested objects, partial.
 type DeepPartial<T> = T extends object
@@ -22,16 +70,18 @@ type DeepPartial<T> = T extends object
   : T;
 
 /**
- * Creates a deep, fully-typed mock of the CommandContext for use in tests.
+ * Creates a deep, fully-typed mock of the CommandOwnerFixture for use in tests.
  * All functions are pre-mocked with `vi.fn()`.
  *
  * @param overrides - A deep partial object to override any default mock values.
- * @returns A complete, mocked CommandContext object.
+ * @returns A complete, mocked CommandOwnerFixture object.
  */
-const buildDefaultMocks = (): CommandContext => ({
+const buildDefaultMocks = (): CommandOwnerFixture => ({
   runtimeApi: createMockRuntimeApi(),
   refreshProviderAliases: vi.fn(async () => {}),
-  oauthControl: { isAvailable: () => false } as CommandContext['oauthControl'],
+  oauthControl: {
+    isAvailable: () => false,
+  } as CommandOwnerFixture['oauthControl'],
   signal: new AbortController().signal,
   invocation: {
     raw: '',
@@ -60,7 +110,7 @@ const buildDefaultMocks = (): CommandContext => ({
     logger: {
       logMessage: vi.fn(),
     } as unknown as Logger, // Cast because Logger is a class.
-    // Follow-up (#1569): Add profileManager and subagentManager when CommandContext interface is updated.
+    // Follow-up (#1569): Add profileManager and subagentManager when CommandOwnerFixture interface is updated.
     // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
   },
   ui: {
@@ -80,7 +130,7 @@ const buildDefaultMocks = (): CommandContext => ({
     dispatchExtensionStateUpdate: vi.fn(),
     addConfirmUpdateExtensionRequest: vi.fn(),
     setExtensionsUpdateState: vi.fn(),
-  } as unknown as CommandContext['ui'],
+  } as unknown as CommandOwnerFixture['ui'],
   session: {
     sessionShellAllowlist: new Set<string>(),
     stats: {
@@ -102,12 +152,12 @@ const buildDefaultMocks = (): CommandContext => ({
 });
 
 export const createMockCommandContext = (
-  overrides: DeepPartial<CommandContext> = {},
-): CommandContext => {
-  const defaultMocks: CommandContext = buildDefaultMocks();
+  overrides: DeepPartial<CommandOwnerFixture> = {},
+): CommandOwnerFixture => {
+  const defaultMocks: CommandOwnerFixture = buildDefaultMocks();
 
   // Deep merge that preserves special objects (Dates, vitest mocks, etc.)
-  const merge = (target: unknown, source: unknown): CommandContext => {
+  const merge = (target: unknown, source: unknown): CommandOwnerFixture => {
     const output = { ...(target as Record<string, unknown>) };
 
     for (const key in source as Record<string, unknown>) {
@@ -131,7 +181,7 @@ export const createMockCommandContext = (
         }
       }
     }
-    return output as unknown as CommandContext;
+    return output as unknown as CommandOwnerFixture;
   };
 
   return merge(defaultMocks, overrides);
