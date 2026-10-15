@@ -62,6 +62,28 @@ describe('Agent session owner history restore and checkpoint names', () => {
     });
   }, 30000);
 
+  it('hands back the remaining history as a stream over the journal, not an array', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.setHistory([human('first'), ai('one')]);
+      await agent.session.setRecording({ enabled: true });
+      await agent.setHistory([
+        human('first'),
+        ai('one'),
+        human('second'),
+        ai('two'),
+      ]);
+
+      const { remainingHistory, itemsRemoved } =
+        await agent.session.restoreTurns(1);
+
+      expect(itemsRemoved).toBe(2);
+      expect(Array.isArray(remainingHistory)).toBe(false);
+      expect(
+        (await Array.fromAsync(remainingHistory)).map((row) => row.speaker),
+      ).toStrictEqual(['human', 'ai']);
+    });
+  }, 30000);
+
   it('restores recorded human turns, persists the rewind and continues recording on the same lock', async () => {
     await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
       await agent.setHistory([human('first'), ai('one')]);
@@ -76,7 +98,7 @@ describe('Agent session owner history restore and checkpoint names', () => {
       if (!path) throw new Error('Recording path missing');
       const result = await agent.session.restoreTurns(1);
       expect(result.itemsRemoved).toBe(2);
-      expect(result.remainingHistory).toHaveLength(2);
+      expect(await Array.fromAsync(result.remainingHistory)).toHaveLength(2);
       expect(await Array.fromAsync(agent.streamHistory())).toHaveLength(2);
       await agent.setHistory([human('first'), ai('one'), human('third')]);
       await agent.session.flushRecording();

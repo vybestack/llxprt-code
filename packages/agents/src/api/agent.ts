@@ -722,9 +722,13 @@ export interface AgentSessionControl {
     name: string,
     options?: { readonly overwrite?: boolean },
   ): Promise<CheckpointInfo>;
-  /** Durably removes the last N human-led turns and updates the live history. */
+  /**
+   * Durably removes the last N human-led turns and updates the live history.
+   * `remainingHistory` is a cold stream over the journal, so no history array
+   * is built. Consume it before the next history change.
+   */
   restoreTurns(turns: number): Promise<{
-    readonly remainingHistory: readonly AgentHistoryItem[];
+    readonly remainingHistory: AsyncIterable<AgentHistoryItem>;
     readonly itemsRemoved: number;
   }>;
   /** Reads live conversation history through the session owner. */

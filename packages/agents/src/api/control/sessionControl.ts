@@ -632,7 +632,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   async restoreTurns(turns: number): Promise<{
-    readonly remainingHistory: readonly IContent[];
+    readonly remainingHistory: AsyncIterable<IContent>;
     readonly itemsRemoved: number;
   }> {
     return this.runExclusive(async () => {

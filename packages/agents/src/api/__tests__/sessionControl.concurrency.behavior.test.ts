@@ -500,20 +500,18 @@ describe('SessionControl concurrency: resume and stop', () => {
         expect(readFileSync(secondPath, 'utf8')).not.toContain(
           firstRef.contentId,
         );
-        const firstRestored = await first.restoreTurns(1);
-        const secondRestored = await second.restoreTurns(1);
-        expect(JSON.stringify(firstRestored.remainingHistory)).toContain(
-          firstRef.contentId,
+        const firstRestored = JSON.stringify(
+          await Array.fromAsync((await first.restoreTurns(1)).remainingHistory),
         );
-        expect(JSON.stringify(firstRestored.remainingHistory)).not.toContain(
-          secondRef.contentId,
+        const secondRestored = JSON.stringify(
+          await Array.fromAsync(
+            (await second.restoreTurns(1)).remainingHistory,
+          ),
         );
-        expect(JSON.stringify(secondRestored.remainingHistory)).toContain(
-          secondRef.contentId,
-        );
-        expect(JSON.stringify(secondRestored.remainingHistory)).not.toContain(
-          firstRef.contentId,
-        );
+        expect(firstRestored).toContain(firstRef.contentId);
+        expect(firstRestored).not.toContain(secondRef.contentId);
+        expect(secondRestored).toContain(secondRef.contentId);
+        expect(secondRestored).not.toContain(firstRef.contentId);
       } finally {
         await first.dispose();
         await second.dispose();
