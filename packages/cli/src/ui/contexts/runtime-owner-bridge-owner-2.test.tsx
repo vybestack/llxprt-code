@@ -14,7 +14,9 @@ import {
 import {
   configureProviderRuntimeFactories,
   NodeFileSystem,
-  createProviderManager,
+  populateProviderManager,
+  createOwnedOAuthManager,
+  createOwnedTokenStoreClose,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
@@ -52,7 +54,6 @@ import {
   OwnerView,
   AliasRefreshView,
 } from './runtime-owner-bridge-views.fixture.js';
-import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
@@ -116,18 +117,26 @@ describe('interactive runtime owner bridge', () => {
     await rm(promptDirectory, { recursive: true, force: true });
   });
 
-  const firstCredentials = useOwnedCredentials();
-
-  const secondCredentials = useOwnedCredentials();
-
-  afterFixtureTest(() => {
+  const acquiredCleanup: Array<() => void | Promise<void>> = [];
+  afterFixtureTest(async () => {
     fixtureFilesystem = undefined;
+    await runCleanupSteps(acquiredCleanup.splice(0).reverse());
   });
+  const firstCredentials = useOwnedCredentials();
+  const secondCredentials = useOwnedCredentials();
   it('keeps alias commands and live provider status scoped across interleaved saves and sibling disposal', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'llxprt-alias-owner-'));
     const previousDataHome = process.env['LLXPRT_DATA_HOME'];
     const previousFakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
     process.env['LLXPRT_DATA_HOME'] = dataDir;
+    acquiredCleanup.push(() => {
+      if (previousDataHome === undefined) delete process.env.LLXPRT_DATA_HOME;
+      else process.env.LLXPRT_DATA_HOME = previousDataHome;
+      if (previousFakeResponses === undefined)
+        delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = previousFakeResponses;
+      rmSync(dataDir, { recursive: true, force: true });
+    });
 
     const firstCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
@@ -250,7 +259,7 @@ describe('interactive runtime owner bridge', () => {
       firstCallerOAuth.composeRetryOperations(provider),
     );
     firstCallerOwner.bindHooks();
-    const firstCallerClose = settleEngineRelease.bind(
+    const firstCallerReleaseResources = settleEngineRelease.bind(
       undefined,
       [
         () => firstCallerOwner.dispose(),
@@ -262,6 +271,10 @@ describe('interactive runtime owner bridge', () => {
       ],
       firstCallerPreviousReplay,
     );
+    let firstCallerClosing: Promise<void> | undefined;
+    const firstCallerClose = (): Promise<void> =>
+      (firstCallerClosing ??= firstCallerReleaseResources());
+    acquiredCleanup.push(firstCallerClose);
     try {
       await preparePreferredProviderCompletion(
         firstCallerConfig,
@@ -421,7 +434,7 @@ describe('interactive runtime owner bridge', () => {
       secondCallerOAuth.composeRetryOperations(provider),
     );
     secondCallerOwner.bindHooks();
-    const secondCallerClose = settleEngineRelease.bind(
+    const secondCallerReleaseResources = settleEngineRelease.bind(
       undefined,
       [
         () => secondCallerOwner.dispose(),
@@ -433,6 +446,10 @@ describe('interactive runtime owner bridge', () => {
       ],
       secondCallerPreviousReplay,
     );
+    let secondCallerClosing: Promise<void> | undefined;
+    const secondCallerClose = (): Promise<void> =>
+      (secondCallerClosing ??= secondCallerReleaseResources());
+    acquiredCleanup.push(secondCallerClose);
     try {
       await preparePreferredProviderCompletion(
         secondCallerConfig,
@@ -480,6 +497,7 @@ describe('interactive runtime owner bridge', () => {
       mcpRuntime: firstCallerMcp,
       sessionId: 'alias-owner-shared-label',
     });
+    acquiredCleanup.push(() => a.dispose());
     const b = await fromConfig({
       settingsOwner: secondCallerSettingsOwner,
       settingsService: secondCallerSettings,
@@ -489,53 +507,73 @@ describe('interactive runtime owner bridge', () => {
       mcpRuntime: secondCallerMcp,
       sessionId: 'alias-owner-shared-label',
     });
+    acquiredCleanup.push(() => b.dispose());
     delete process.env.LLXPRT_FAKE_RESPONSES;
     if (
       !(firstCallerManager instanceof ProviderManager) ||
       !(secondCallerManager instanceof ProviderManager)
     )
       throw new Error('Expected concrete fixture owners');
-    const runtimeId = 'alias-owner-shared-label';
-    const firstManager = createProviderManager(
-      firstCallerSettings,
-      { runtimeId },
+    const firstManager = firstCallerManager;
+    const firstAliasTokens = firstCredentials().authority.createTokenStore();
+    let firstAliasTransferred = false;
+    const firstAliasClose = createOwnedTokenStoreClose(firstAliasTokens);
+    firstCallerRelease.acquire('tokens', () =>
+      firstAliasTransferred ? undefined : firstAliasClose(),
+    );
+    const firstAliasOAuth = createOwnedOAuthManager(
+      firstAliasTokens,
+      undefined,
+      undefined,
       firstCallerConfig,
-      new CredentialAuthority(),
+      firstManager,
+      firstCallerSettings,
+    );
+    firstCallerRelease.acquire('oauth', () => firstAliasOAuth.dispose());
+    firstAliasTransferred = true;
+    populateProviderManager(
+      firstManager,
+      firstAliasOAuth,
+      firstAliasTokens,
+      firstCallerSettings,
       new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      firstCallerManager,
-      undefined,
+      firstCallerConfig,
       undefined,
       undefined,
       false,
-    ).manager;
-    const secondManager = createProviderManager(
-      secondCallerSettings,
-      { runtimeId },
+      false,
+      process.env.LLXPRT_FAKE_RESPONSES,
+    );
+    const secondManager = secondCallerManager;
+    const secondAliasTokens = secondCredentials().authority.createTokenStore();
+    let secondAliasTransferred = false;
+    const secondAliasClose = createOwnedTokenStoreClose(secondAliasTokens);
+    secondCallerRelease.acquire('tokens', () =>
+      secondAliasTransferred ? undefined : secondAliasClose(),
+    );
+    const secondAliasOAuth = createOwnedOAuthManager(
+      secondAliasTokens,
+      undefined,
+      undefined,
       secondCallerConfig,
-      new CredentialAuthority(),
+      secondManager,
+      secondCallerSettings,
+    );
+    secondCallerRelease.acquire('oauth', () => secondAliasOAuth.dispose());
+    secondAliasTransferred = true;
+    populateProviderManager(
+      secondManager,
+      secondAliasOAuth,
+      secondAliasTokens,
+      secondCallerSettings,
       new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      secondCallerManager,
-      undefined,
+      secondCallerConfig,
       undefined,
       undefined,
       false,
-    ).manager;
+      false,
+      process.env.LLXPRT_FAKE_RESPONSES,
+    );
     configureProviderRuntimeFactories(firstCallerConfig, firstManager);
     configureProviderRuntimeFactories(secondCallerConfig, secondManager);
     firstManager.setActiveProvider('openai');

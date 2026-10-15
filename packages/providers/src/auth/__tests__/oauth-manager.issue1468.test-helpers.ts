@@ -1,11 +1,3 @@
-import {
-  installOwnedConfig,
-  installBorrowedConfigSettings,
-} from '../../__tests__/helpers/session-settings-owner-fixture.js';
-const acquireSettings = installBorrowedConfigSettings();
-const acquireConfig = installOwnedConfig();
-import { readFixtureSessionAuthPolicy } from './session-auth-policy-fixture.js';
-
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -74,9 +66,7 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-
-import { OAuthManager } from '../oauth-manager.js';
+import '../oauth-manager.js';
 import type { OAuthToken, TokenStore } from '../types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 
@@ -167,30 +157,9 @@ export function createFakeOAuthSettings(): IOAuthSettingsProvider {
   };
 }
 
-export function createIssue1468Fixture(): {
-  tokenStore: MockTokenStore;
-  manager: OAuthManager;
-  settingsService: SettingsService;
-} {
-  const settingsService = new SettingsService();
-  const config = acquireConfig({
-    sessionId: 'issue1468',
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'gpt-5',
-  });
-  acquireSettings(config, settingsService);
-  const tokenStore = new MockTokenStore();
-  const settings = createFakeOAuthSettings();
-  const manager = new OAuthManager(tokenStore, settings, {
-    config,
-    readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
-  });
+export function resetIssue1468Mocks(): void {
   vi.clearAllMocks();
   mockFetchAnthropicUsage.mockReset();
-
-  return { tokenStore, manager, settingsService };
 }
 
 export function clearIssue1468Fixture(tokenStore: MockTokenStore): void {
