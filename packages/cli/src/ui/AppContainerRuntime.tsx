@@ -227,11 +227,13 @@ function subagentDialogCommands(
   };
 }
 
+type DialogViewCommands = Pick<
+  AppDialogsResult,
+  keyof AppCommandBindings & keyof AppDialogsResult
+>;
+
 export function buildAppCommands(
-  dialogs: Pick<
-    AppDialogsResult,
-    keyof AppCommandBindings & keyof AppDialogsResult
-  >,
+  dialogs: DialogViewCommands,
   input: Pick<
     AppInputResult,
     keyof AppCommandBindings & keyof AppInputResult
@@ -267,6 +269,7 @@ export function buildAppCommands(
     triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
     resumeBrowserTarget: input.resumeBrowserTarget,
     recordModelSwitch: dialogs.recordModelSwitch,
+    readPolicyRules: dialogs.readPolicyRules,
     ...subagentDialogCommands(dialogs),
     handleThemeSelect: dialogs.handleThemeSelect,
     handleThemeHighlight: dialogs.handleThemeHighlight,

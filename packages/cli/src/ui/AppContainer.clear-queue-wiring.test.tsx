@@ -53,6 +53,9 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
     },
     triggerWelcomeAuth: asyncNoop,
     recordModelSwitch: () => undefined,
+    readPolicyRules: async () => {
+      throw new Error('Queue test must not read policies');
+    },
     listSubagentDefinitions: async () => [],
     loadSubagentDefinition: async () => {
       throw new Error('Queue test must not load definitions');
