@@ -34,7 +34,8 @@ import {
  * `as unknown as Record<string, unknown>` cast boilerplate ~15 times.
  */
 async function makeFakeAgent(mockClient: Record<string, unknown>) {
-  return createFakeAgentFromMockClient(mockClient);
+  const owner = await createFakeAgentFromMockClient(mockClient);
+  return () => owner.getHistory();
 }
 
 function makeRestorableTool(
@@ -265,7 +266,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           tools,
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook1,
@@ -291,7 +292,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook2,
@@ -317,7 +318,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeNonRestorableTool()], // read_file — not restorable
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook3,
@@ -343,7 +344,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-          config,
+          () => config.getCheckpointingEnabled(),
           undefined, // no gitService
           mockHistory,
           agentForHook4,
@@ -377,7 +378,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook5,
@@ -408,7 +409,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook6,
@@ -446,7 +447,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           tools,
-          config,
+          () => config.getCheckpointingEnabled(),
           gitService as unknown as GitService,
           mockHistory,
           agentForHook7,
@@ -477,7 +478,7 @@ describe('useCheckpointPersistence', () => {
       renderHook(() =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
-          config,
+          () => config.getCheckpointingEnabled(),
           makeGitService() as unknown as GitService,
           mockHistory,
           agentForHook8,
@@ -506,7 +507,7 @@ describe('useCheckpointPersistence', () => {
     const { rerender } = renderHook(() =>
       useCheckpointPersistence(
         currentTools,
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
         mockHistory,
         agentForHook9,
@@ -545,7 +546,7 @@ describe('useCheckpointPersistence', () => {
     const { rerender } = renderHook(() =>
       useCheckpointPersistence(
         currentTools,
-        config,
+        () => config.getCheckpointingEnabled(),
         gitService as unknown as GitService,
         mockHistory,
         agentForHook10,
