@@ -46,6 +46,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
+import { sourceRootSetup } from '../../core/__tests__/support/prompt-envelope-source-test-helpers.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ import { ContextOverflowError } from '../contextOverflowError.js';
 // ---------------------------------------------------------------------------
 
 describe('P26: provider source enforcement characterization', () => {
+  const workspace = sourceRootSetup();
   beforeEach(facadeCallback0);
 
   it(
@@ -67,12 +69,12 @@ describe('P26: provider source enforcement characterization', () => {
 
   it(
     'uses the stateful Responses effective estimate and reprojects recomposed history before send',
-    facadeCallback3,
+    () => facadeCallback3(workspace()),
   );
 
   it(
     'preserves structured overflow metadata when real stateful reprojection remains over limit',
-    facadeCallback4,
+    () => facadeCallback4(workspace()),
   );
 
   it(
@@ -276,10 +278,10 @@ async function facadeCallback2(): Promise<void> {
   expect(harness.performCompression).toHaveBeenCalled();
 }
 
-async function facadeCallback3(): Promise<void> {
+async function facadeCallback3(workspace: string): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createPromptTokenizerFactory(),
+      createPromptTokenizerFactory(workspace),
       'stateful-responses-enforcement',
     );
 
@@ -380,10 +382,10 @@ async function facadeCallback3(): Promise<void> {
   expect(resultTexts).toContain('small wire delta');
 }
 
-async function facadeCallback4(): Promise<void> {
+async function facadeCallback4(workspace: string): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createAmplifyingPromptTokenizerFactory(),
+      createAmplifyingPromptTokenizerFactory(workspace),
       'stateful-responses-overflow',
     );
 

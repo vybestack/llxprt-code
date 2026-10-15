@@ -13,6 +13,11 @@ import type {
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
+import {
+  promptTextPieces,
+  SourceFamilyInput,
+} from '@vybestack/llxprt-code-providers/tokenizers/source-family-input.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { buildHandlerHarness } from './support/handler-harness.js';
@@ -126,47 +131,61 @@ export function buildCharacterizationHarness(
   };
 }
 
-export function createPromptTokenizerFactory(): RuntimeTokenizerFactory {
-  return {
-    getTokenizer: () => undefined,
-    estimatePrompt: async (request: RuntimePromptEstimateRequest) => ({
-      count: await request.legacyEstimate(),
-      method: 'calibrated',
-      family: 'stateful-enforcement-fixture',
-      estimatorVersion: '1',
-      assetRevision: 'fixture',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
+/**
+ * The Responses source route hands the factory a sealed disk prompt. The disk
+ * wrapper turns it into the family-registry input whose legacy estimate counts
+ * the spooled prompt text, so these fixtures only scale that count.
+ */
+export function createPromptTokenizerFactory(
+  workspaceDirectory: string,
+): RuntimeTokenizerFactory {
+  return withGpt56DiskSources(
+    {
+      getTokenizer: () => undefined,
+      estimatePrompt: async (request: RuntimePromptEstimateRequest) => ({
+        count: await request.legacyEstimate(),
+        method: 'calibrated',
+        family: 'stateful-enforcement-fixture',
+        estimatorVersion: '1',
+        assetRevision: 'fixture',
+        projectionRevision: request.projectionRevision,
+      }),
+    },
+    workspaceDirectory,
+  );
 }
 
-export function amplifiedProjectionLength(
+async function amplifiedProjectionLength(
   request: RuntimePromptEstimateRequest,
-): number {
-  const projection = request.finalizedProjection;
-  if (
-    typeof projection !== 'object' ||
-    projection === null ||
-    !('promptText' in projection) ||
-    typeof projection.promptText !== 'string'
-  ) {
-    throw new Error('Expected finalized prompt text');
+): Promise<number> {
+  const input = request.finalizedProjection;
+  if (!(input instanceof SourceFamilyInput)) {
+    throw new Error('Expected the source family input');
   }
-  return projection.promptText.length * 4;
+  let length = 0;
+  for await (const piece of promptTextPieces(input.projection)) {
+    length += piece.length;
+  }
+  return length * 4;
 }
 
-export function createAmplifyingPromptTokenizerFactory(): RuntimeTokenizerFactory {
-  return {
-    getTokenizer: () => undefined,
-    estimatePrompt: async (request) => ({
-      count: amplifiedProjectionLength(request),
-      method: 'exact',
-      family: 'amplified-stateful-fixture',
-      estimatorVersion: '1',
-      assetRevision: 'fixture',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
+export function createAmplifyingPromptTokenizerFactory(
+  workspaceDirectory: string,
+): RuntimeTokenizerFactory {
+  return withGpt56DiskSources(
+    {
+      getTokenizer: () => undefined,
+      estimatePrompt: async (request) => ({
+        count: await amplifiedProjectionLength(request),
+        method: 'exact',
+        family: 'amplified-stateful-fixture',
+        estimatorVersion: '1',
+        assetRevision: 'fixture',
+        projectionRevision: request.projectionRevision,
+      }),
+    },
+    workspaceDirectory,
+  );
 }
 
 export type StatefulPromptEstimate = PromptEnvelopeEstimate & {
