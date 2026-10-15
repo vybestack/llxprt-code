@@ -394,9 +394,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         'utf-8',
       );
 
-      const { result } = renderHook(() =>
-        useSessionBrowser(makeHookProps(chatsDir)),
-      );
+      const props = makeHookProps(chatsDir);
+      const { result } = renderHook(() => useSessionBrowser(props));
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
@@ -576,9 +575,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         'utf-8',
       );
 
-      const { result } = renderHook(() =>
-        useSessionBrowser(makeHookProps(chatsDir)),
-      );
+      const props = makeHookProps(chatsDir);
+      const { result } = renderHook(() => useSessionBrowser(props));
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);

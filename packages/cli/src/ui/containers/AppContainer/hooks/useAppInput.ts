@@ -653,7 +653,7 @@ function useInputFinish(
   core: ReturnType<typeof useInputCore>,
   stream: ReturnType<typeof useInputStream>,
 ) {
-  const { settings, setIdePromptAnswered } = p;
+  const { settings, setIdePromptAnswered, agent } = p;
   const { handleSlashCommand } = core;
   const {
     buffer,
@@ -681,8 +681,15 @@ function useInputFinish(
     stream.activeShellPtyId != null && !embeddedShellFocused,
     stream.lastOutputTime,
   );
+  const readApprovalMode = useCallback(() => agent.getApprovalMode(), [agent]);
+  const setApprovalMode = useCallback(
+    (mode: Parameters<typeof agent.setApprovalMode>[0]) =>
+      agent.setApprovalMode(mode),
+    [agent],
+  );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
-    agent: p.agent,
+    readApprovalMode,
+    setApprovalMode,
     addItem: p.turnStore.commands.addItem,
   });
   // Store mirrors: the stream/command projections the layout tree reads live
