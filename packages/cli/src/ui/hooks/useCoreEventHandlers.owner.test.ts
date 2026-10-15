@@ -38,18 +38,30 @@ describe('owner-backed UI feedback listener', () => {
         const recordingIntegrationRef = {
           current: { recordSessionEvent: rawWrite },
         };
-        const uiRuntime = { app: { getDebugMode: () => false } };
         const displayed: string[] = [];
+        const handleNewMessage = (message: ConsoleMessageItem) =>
+          displayed.push(message.content);
+        const readDebugMode = () => false;
+        const hookOptionsFor = (owner: Agent) =>
+          Object.assign(
+            { recordingIntegrationRef },
+            {
+              readDebugMode,
+              recordFeedback: (
+                severity: 'warning' | 'error',
+                message: string,
+              ) =>
+                owner.session.recordRecordingEvent({
+                  type: 'session_event',
+                  severity,
+                  message,
+                }),
+              handleNewMessage,
+            },
+          );
         const { rerender, unmount } = renderHook(
-          ({ owner }) =>
-            useCoreEventHandlers({
-              agent: owner,
-              recordingOwner: 'agent',
-              uiRuntime: uiRuntime as never,
-              recordingIntegrationRef: recordingIntegrationRef as never,
-              handleNewMessage: (message) => displayed.push(message.content),
-            }),
-          { initialProps: { owner: agent } },
+          ({ options }) => useCoreEventHandlers(options),
+          { initialProps: { options: hookOptionsFor(agent) } },
         );
         coreEvents.emitFeedback('warning', 'first owner feedback');
         await waitFor(async () => {
@@ -65,7 +77,7 @@ describe('owner-backed UI feedback listener', () => {
         await next.session.setRecording({ enabled: true });
         const nextPath = next.session.getRecording().path;
         if (!nextPath) throw new Error('Missing second recording path');
-        rerender({ owner: next });
+        rerender({ options: hookOptionsFor(next) });
         coreEvents.emitFeedback('error', 'second owner feedback');
         await waitFor(async () => {
           expect(await readFile(nextPath, 'utf8')).toContain(
@@ -90,19 +102,16 @@ describe('owner-backed UI feedback listener', () => {
 
   it('surfaces a recording writer failure as a UI error instead of dropping the flush promise', async () => {
     const writerFailure = new Error('disk full');
-    const failingAgent = {
-      session: {
-        recordRecordingEvent: () => Promise.reject(writerFailure),
-      },
-    } as unknown as Agent;
-    const uiRuntime = { app: { getDebugMode: () => false } };
+    const recordFeedback = () => Promise.reject(writerFailure);
+    const readDebugMode = () => false;
     const displayed: ConsoleMessageItem[] = [];
+    const handleNewMessage = (message: ConsoleMessageItem) =>
+      displayed.push(message);
     const { unmount } = renderHook(() =>
       useCoreEventHandlers({
-        agent: failingAgent,
-        recordingOwner: 'agent',
-        uiRuntime: uiRuntime as never,
-        handleNewMessage: (message) => displayed.push(message),
+        recordFeedback,
+        readDebugMode,
+        handleNewMessage,
       }),
     );
 
