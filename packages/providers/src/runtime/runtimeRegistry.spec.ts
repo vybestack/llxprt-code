@@ -1,38 +1,35 @@
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { beginCliRuntimeRegistration } from './cliForegroundRuntime.js';
-import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
-import { cleanupOwnedProviderFiles } from './ownedProviderFiles.js';
-
-function foreground(runtimeId: string) {
-  const settingsService = new SettingsService();
-  const { config: config } = createProviderConfigFixture({
-    sessionId: runtimeId,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'test-model',
-    settingsService,
-  });
-  const registration = beginCliRuntimeRegistration(settingsService, config, {
-    runtimeId,
-  });
-  return { config, registration };
-}
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+import type { Agent } from '../../../agents/src/api/agent.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  ProviderFileLifecycle,
+  resolveProviderFilePolicy,
+} from '../providerFilePolicy.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../agents/src/core/subagent-cleanup.js';
 
 function retainedFile(
-  owner: ReturnType<typeof foreground>,
+  files: ProviderFileLifecycle,
+  scopeId: string,
   deleteRemote: (fileId: string) => Promise<void>,
   mode: 'session' | 'workspace' = 'session',
 ) {
-  return owner.registration.providerFileLifecycle.retain({
+  return files.retain({
     cacheKey: 'owner-content',
     fileId: 'owner-file',
     bytes: 10,
@@ -43,251 +40,301 @@ function retainedFile(
     },
     policy: resolveProviderFilePolicy({
       configuredMode: mode,
-      configuredRetentionMs: 60_000,
+      configuredRetentionMs: 60000,
       configuredDeletion: mode === 'session' ? 'delete' : 'retain',
       providerFileReferences: true,
       zeroDataRetention: 'incompatible-while-retained',
       zeroDataRetentionRequired: false,
     }),
-    scopeId: mode === 'session' ? owner.registration.runtimeId : '/workspace/a',
+    scopeId: mode === 'session' ? scopeId : '/workspace/a',
     deleteRemote,
   });
 }
 
-describe('foreground provider-file ownership', () => {
-  it('refuses disposal while a session file is retained', async () => {
-    const owner = foreground('retained-owner');
-    const retained = await retainedFile(owner, async () => undefined);
-    try {
-      expect(() => owner.registration.dispose()).toThrow(
-        'provider-file lifecycle',
-      );
-      expect(
-        owner.registration.providerFileLifecycle.retainsScope(
-          'session',
-          owner.registration.runtimeId,
-        ),
-      ).toBe(true);
-    } finally {
-      await retained.lease.release();
-      await owner.registration.providerFileLifecycle.cleanupScope(
-        'session',
-        owner.registration.runtimeId,
-      );
-      owner.registration.dispose();
-      await owner.config.dispose();
-    }
+describe('foreground Agent provider-file ownership', () => {
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let first: Agent;
+  let second: Agent;
+  let firstConfig: Config;
+  let secondConfig: Config;
+  let observedSecondConfig: Config | undefined;
+  let firstDisposalFailure: unknown;
+  let firstFiles: ProviderFileLifecycle;
+  let secondFiles: ProviderFileLifecycle;
+  afterEach(async () => {
+    await runCleanupSteps(retiring.splice(0).reverse());
   });
-
-  it('awaits session file deletion on the owning lifecycle before disposal', async () => {
-    const owner = foreground('deleting-owner');
-    const deleted: string[] = [];
-    const retained = await retainedFile(owner, async (fileId) => {
-      await Promise.resolve();
-      deleted.push(fileId);
+  async function openFirst(runtimeId: string): Promise<void> {
+    const raw = await mkdtemp(join(tmpdir(), 'foreground-file-owner-'));
+    retiring.push(() => rm(raw, { recursive: true, force: true }));
+    try {
+      const directory = await realpath(raw);
+      const config = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model: 'test-model',
+        debugMode: false,
+      });
+      firstConfig = config;
+      retiring.push(() => config.dispose());
+      const settings = new SettingsService();
+      const owner = new SessionSettingsOwner(settings);
+      retiring.push(() => owner.dispose());
+      owner.bindTelemetry(config);
+      firstFiles = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      const agent = await fromConfig({
+        config,
+        settingsService: settings,
+        settingsOwner: owner,
+        credentialAuthority: credentials().authority,
+        sessionId: runtimeId,
+        providerFileLifecycle: firstFiles,
+      });
+      first = agent;
+      retiring.push(() =>
+        agent.dispose().catch((error: unknown) => {
+          if (error !== firstDisposalFailure) throw error;
+        }),
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(retiring.splice(0).reverse()),
+      );
+    }
+  }
+  async function openSecond(runtimeId: string): Promise<void> {
+    const raw = await mkdtemp(join(tmpdir(), 'foreground-file-peer-'));
+    retiring.push(() => rm(raw, { recursive: true, force: true }));
+    try {
+      const directory = await realpath(raw);
+      const config = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model: 'test-model',
+        debugMode: false,
+      });
+      secondConfig = config;
+      retiring.push(() => config.dispose());
+      const settings = new SettingsService();
+      const owner = new SessionSettingsOwner(settings);
+      retiring.push(() => owner.dispose());
+      owner.bindTelemetry(config);
+      secondFiles = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      const agent = await fromConfig({
+        config,
+        settingsService: settings,
+        settingsOwner: owner,
+        credentialAuthority: credentials().authority,
+        sessionId: runtimeId,
+        providerFileLifecycle: secondFiles,
+        prepareSessionTools: (config) => {
+          observedSecondConfig = config;
+        },
+      });
+      second = agent;
+      retiring.push(() => agent.dispose());
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(retiring.splice(0).reverse()),
+      );
+    }
+  }
+  it('joins disposal while a session file is retained without retiring its file scope early', async () => {
+    await openFirst('retained-owner');
+    const retained = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async () => {},
+    );
+    let settled = false;
+    const closing = first.dispose().then(() => {
+      settled = true;
     });
     try {
-      await retained.lease.release();
-      const result =
-        await owner.registration.providerFileLifecycle.cleanupScope(
-          'session',
-          owner.registration.runtimeId,
-        );
-      expect(result.failed).toBe(0);
-      expect(deleted).toStrictEqual(['owner-file']);
-      expect(() => owner.registration.dispose()).not.toThrow();
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      expect(firstFiles.retainsScope('session', first.getRuntimeId())).toBe(
+        true,
+      );
     } finally {
-      await owner.config.dispose();
+      await retained.lease.release();
+      await closing;
     }
   });
-
+  it('awaits session file deletion on the owning lifecycle before disposal', async () => {
+    await openFirst('deleting-owner');
+    const deleted: string[] = [];
+    const retained = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async (id) => {
+        await Promise.resolve();
+        deleted.push(id);
+      },
+    );
+    await retained.lease.release();
+    const result = await firstFiles.cleanupScope(
+      'session',
+      first.getRuntimeId(),
+    );
+    expect(result.failed).toBe(0);
+    expect(deleted).toStrictEqual(['owner-file']);
+    await expect(first.dispose()).resolves.toBeUndefined();
+  });
   it('keeps a failed file on its exact owner and retries deletion without touching a same-label sibling', async () => {
-    const owner = foreground('failed-owner');
-    const sibling = foreground('failed-owner');
+    await openFirst('failed-owner');
+    await openSecond('failed-owner');
     let unavailable = true;
     const deleted: string[] = [];
-    const retained = await retainedFile(owner, async (fileId) => {
-      if (unavailable) throw new Error('provider deletion unavailable');
-      deleted.push(fileId);
-    });
+    const retained = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async (id) => {
+        if (unavailable) throw new Error('provider deletion unavailable');
+        deleted.push(id);
+      },
+    );
     try {
       await retained.lease.release();
-      const result =
-        await owner.registration.providerFileLifecycle.cleanupScope(
-          'session',
-          owner.registration.runtimeId,
-        );
+      const result = await firstFiles.cleanupScope(
+        'session',
+        first.getRuntimeId(),
+      );
       expect(result.failed).toBe(1);
-      expect(
-        owner.registration.providerFileLifecycle.snapshot().deletionFailures,
-      ).toStrictEqual(
+      expect(firstFiles.snapshot().deletionFailures).toStrictEqual(
         expect.arrayContaining([
           expect.objectContaining({ fileId: 'owner-file' }),
         ]),
       );
-      expect(() => owner.registration.dispose()).toThrow(
-        'provider-file lifecycle',
-      );
+      const closing = first.dispose();
+      await closing.catch((error: unknown) => {
+        firstDisposalFailure = error;
+      });
+      await expect(closing).rejects.toThrow('Provider file cleanup incomplete');
       unavailable = false;
-      const retried =
-        await owner.registration.providerFileLifecycle.cleanupScope(
-          'session',
-          owner.registration.runtimeId,
-        );
+      const retried = await firstFiles.retryDeletions();
       expect(retried.failed).toBe(0);
       expect(deleted).toStrictEqual(['owner-file']);
-      owner.registration.dispose();
-      expect(sibling.registration.config).toBe(sibling.config);
+      expect(observedSecondConfig).toBe(secondConfig);
     } finally {
-      sibling.registration.dispose();
-      await owner.config.dispose();
-      await sibling.config.dispose();
+      unavailable = false;
+      await firstFiles.retryDeletions();
     }
   });
-
   it('waits for the last lease before finishing deferred deletion', async () => {
-    const owner = foreground('deferred-owner');
-    const deleted: string[] = [];
-    const retained = await retainedFile(owner, async (fileId) => {
-      deleted.push(fileId);
-    });
-    try {
-      const cleanup =
-        await owner.registration.providerFileLifecycle.cleanupScope(
-          'session',
-          owner.registration.runtimeId,
-        );
-      expect(cleanup.deferred).toBe(1);
-      await retained.lease.release();
-      await owner.registration.providerFileLifecycle.waitForScopeCleanup(
-        'session',
-        owner.registration.runtimeId,
-      );
-      expect(deleted).toStrictEqual(['owner-file']);
-      owner.registration.dispose();
-    } finally {
-      await owner.config.dispose();
-    }
-  });
-
-  it('does not delete retained workspace files when the session ends', async () => {
-    const owner = foreground('workspace-owner');
+    await openFirst('deferred-owner');
     const deleted: string[] = [];
     const retained = await retainedFile(
-      owner,
-      async (fileId) => {
-        deleted.push(fileId);
+      firstFiles,
+      first.getRuntimeId(),
+      async (id) => {
+        deleted.push(id);
+      },
+    );
+    const cleanup = await firstFiles.cleanupScope(
+      'session',
+      first.getRuntimeId(),
+    );
+    expect(cleanup.deferred).toBe(1);
+    await retained.lease.release();
+    await firstFiles.waitForScopeCleanup('session', first.getRuntimeId());
+    expect(deleted).toStrictEqual(['owner-file']);
+  });
+  it('does not delete retained workspace files when the session ends', async () => {
+    await openFirst('workspace-owner');
+    const deleted: string[] = [];
+    const retained = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async (id) => {
+        deleted.push(id);
       },
       'workspace',
     );
-    try {
-      await retained.lease.release();
-      await owner.registration.providerFileLifecycle.cleanupScope(
-        'session',
-        owner.registration.runtimeId,
-      );
-      owner.registration.dispose();
-      expect(deleted).toStrictEqual([]);
-    } finally {
-      await owner.config.dispose();
-    }
+    await retained.lease.release();
+    await firstFiles.cleanupScope('session', first.getRuntimeId());
+    await first.dispose();
+    expect(deleted).toStrictEqual([]);
   });
-
   it('separates lifecycles even when foreground owners use the same label', async () => {
-    const first = foreground('same-label');
-    const second = foreground('same-label');
-    const retained = await retainedFile(first, async () => undefined);
+    await openFirst('same-label');
+    await openSecond('same-label');
+    const retained = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async () => {},
+    );
+    let firstSettled = false;
+    const closing = first.dispose().then(() => {
+      firstSettled = true;
+    });
     try {
-      expect(first.registration.providerFileLifecycle).not.toBe(
-        second.registration.providerFileLifecycle,
-      );
-      expect(
-        second.registration.providerFileLifecycle.snapshot().retainedFiles,
-      ).toBe(0);
-      expect(() => second.registration.dispose()).not.toThrow();
-      expect(() => first.registration.dispose()).toThrow(
-        'provider-file lifecycle',
-      );
+      expect(firstFiles).not.toBe(secondFiles);
+      expect(secondFiles.snapshot().retainedFiles).toBe(0);
+      await expect(second.dispose()).resolves.toBeUndefined();
+      await Promise.resolve();
+      expect(firstSettled).toBe(false);
     } finally {
       await retained.lease.release();
-      await first.registration.providerFileLifecycle.cleanupScope(
-        'session',
-        first.registration.runtimeId,
-      );
-      first.registration.dispose();
-      await first.config.dispose();
-      await second.config.dispose();
+      await closing;
     }
   });
-  it('cleans only the requested Config lifecycle for two equal-label owners', async () => {
-    const first = foreground('shared-file-label');
-    const second = foreground('shared-file-label');
-    const firstDeleted: string[] = [];
-    const secondDeleted: string[] = [];
-    const firstFile = await retainedFile(first, async (id) => {
-      firstDeleted.push(id);
-    });
-    const secondFile = await retainedFile(second, async (id) => {
-      secondDeleted.push(id);
-    });
-    try {
-      await firstFile.lease.release();
-      await secondFile.lease.release();
-      await cleanupOwnedProviderFiles(
-        first.registration.providerFileLifecycle,
-        'shared-file-label',
-      );
-      expect(firstDeleted).toStrictEqual(['owner-file']);
-      expect(secondDeleted).toStrictEqual([]);
-      await cleanupOwnedProviderFiles(
-        second.registration.providerFileLifecycle,
-        'shared-file-label',
-      );
-      expect(secondDeleted).toStrictEqual(['owner-file']);
-    } finally {
-      await first.config.dispose();
-      await second.config.dispose();
-    }
+  it('cleans only the requested owner lifecycle for two equal-label owners', async () => {
+    await openFirst('shared-file-label');
+    await openSecond('shared-file-label');
+    const a: string[] = [];
+    const b: string[] = [];
+    const firstFile = await retainedFile(
+      firstFiles,
+      first.getRuntimeId(),
+      async (id) => {
+        a.push(id);
+      },
+    );
+    const secondFile = await retainedFile(
+      secondFiles,
+      second.getRuntimeId(),
+      async (id) => {
+        b.push(id);
+      },
+    );
+    await firstFile.lease.release();
+    await secondFile.lease.release();
+    await releaseAdoptedFileScope(firstFiles, first.getRuntimeId());
+    expect(a).toStrictEqual(['owner-file']);
+    expect(b).toStrictEqual([]);
+    await releaseAdoptedFileScope(secondFiles, second.getRuntimeId());
+    expect(b).toStrictEqual(['owner-file']);
   });
-
   it('rejects cleanup when a caller supplies no provider-file owner', async () => {
-    const { config: config } = createProviderConfigFixture({
-      sessionId: 'ownerless-file',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      settingsService: new SettingsService(),
-    });
-    try {
-      await expect(
-        Reflect.apply(cleanupOwnedProviderFiles, undefined, [
-          undefined,
-          'ownerless-file',
-        ]),
-      ).rejects.toThrow('cleanupScope');
-    } finally {
-      await config.dispose();
-    }
+    await expect(
+      Reflect.apply(releaseAdoptedFileScope, undefined, [
+        undefined,
+        'ownerless-file',
+      ]),
+    ).rejects.toThrow('cleanupScope');
   });
-
   it('disposed foreground authority cannot be used again while its same-label sibling remains owned', async () => {
-    const owner = foreground('disposed-owner');
-    const sibling = foreground('disposed-owner');
-    try {
-      owner.registration.dispose();
-      expect(owner.registration.config).toBeUndefined();
-      expect(() => owner.registration.adopt(owner.config)).toThrow('disposed');
-      expect(sibling.registration.config).toBe(sibling.config);
-    } finally {
-      sibling.registration.dispose();
-      await owner.config.dispose();
-      await sibling.config.dispose();
-    }
+    await openFirst('disposed-owner');
+    await openSecond('disposed-owner');
+    await first.dispose();
+    expect('providerManager' in firstConfig).toBe(false);
+    await expect(first.setProvider('openai')).rejects.toThrow(
+      'Session settings owner is closed',
+    );
+    expect(observedSecondConfig).toBe(secondConfig);
   });
-
   it('does not expose ambient runtime identity through its public factory', async () => {
-    const factory = await import('./runtimeContextFactory.js');
+    const factory = await import('../../../agents/src/api/index.js');
     expect(Object.keys(factory)).not.toContain('enterRuntimeScope');
   });
 });

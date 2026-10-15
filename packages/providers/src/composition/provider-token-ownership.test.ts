@@ -3,7 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { ProviderManager } from '../ProviderManager.js';
+import { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../agents/src/core/subagent-cleanup.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,26 +23,12 @@ import {
   InMemoryProviderKeyStorage,
   makeToken,
 } from '../auth/proxy/__tests__/credential-proxy-server-helpers.js';
-import { createProviderManager } from './providerManagerInstance.js';
+import {
+  createOwnedOAuthManager,
+  populateProviderManager,
+} from './providerManagerInstance.js';
+import { createOwnedTokenStoreClose } from './index.js';
 import { NodeFileSystem } from './IFileSystem.js';
-import { createIsolatedRuntimeContext } from '../runtime/runtimeActivationBindings.js';
-
-function root(
-  authority: CredentialAuthority,
-  runtimeId: string,
-): ReturnType<typeof createProviderManager> {
-  return createProviderManager(
-    new SettingsService(),
-    { runtimeId },
-    undefined,
-    authority,
-    new NodeFileSystem(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  );
-}
 
 class HeldTokenStore extends InMemoryTokenStore {
   private enter: () => void = () => {};
@@ -58,11 +50,6 @@ class HeldTokenStore extends InMemoryTokenStore {
     await this.released;
     return super.getToken(provider, bucket);
   }
-}
-
-async function retire(owner: ReturnType<typeof root>): Promise<void> {
-  await owner.oauthManager.dispose();
-  owner.manager.dispose();
 }
 
 async function proxy(
@@ -91,6 +78,132 @@ async function proxy(
 }
 
 describe('provider-manager key ownership', () => {
+  let aManager: ProviderManager;
+
+  const aRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeA();
+  });
+  async function closeA(): Promise<void> {
+    await runCleanupSteps(aRetiring.splice(0).reverse());
+  }
+  async function openA(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+      aManager = manager;
+      aRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      aRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+
+      aRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeA);
+    }
+  }
+
+  let bManager: ProviderManager;
+
+  const bRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeB();
+  });
+  async function closeB(): Promise<void> {
+    await runCleanupSteps(bRetiring.splice(0).reverse());
+  }
+  async function openB(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+      bManager = manager;
+      bRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      bRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+
+      bRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeB);
+    }
+  }
+
   it('routes the same key name to each root and keeps B usable after A disposal', async () => {
     const keysA = new InMemoryProviderKeyStorage();
     const keysB = new InMemoryProviderKeyStorage();
@@ -98,37 +211,346 @@ describe('provider-manager key ownership', () => {
     await keysB.saveKey('shared-name', 'root-b-secret');
     const hostA = await proxy(undefined, 'a'.repeat(64), keysA);
     const hostB = await proxy(undefined, 'b'.repeat(64), keysB);
-    const a = root(hostA.authority, 'same-label');
-    const b = root(hostB.authority, 'same-label');
+    await openA(hostA.authority, 'same-label');
+    await openB(hostB.authority, 'same-label');
     try {
-      expect(await a.manager.getProviderKeys().getKey('shared-name')).toBe(
+      expect(await aManager.getProviderKeys().getKey('shared-name')).toBe(
         'root-a-secret',
       );
-      expect(await b.manager.getProviderKeys().getKey('shared-name')).toBe(
+      expect(await bManager.getProviderKeys().getKey('shared-name')).toBe(
         'root-b-secret',
       );
-      await retire(a);
-      expect(await b.manager.getProviderKeys().getKey('shared-name')).toBe(
+      await closeA();
+      expect(await bManager.getProviderKeys().getKey('shared-name')).toBe(
         'root-b-secret',
       );
     } finally {
-      await Promise.all([retire(a), retire(b)]);
+      await Promise.all([closeA(), closeB()]);
       await Promise.all([hostA.close(), hostB.close()]);
     }
   });
 });
 
 describe('provider-manager token ownership', () => {
+  let aOAuth: OAuthManager;
+  const aRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeA();
+  });
+  async function closeA(): Promise<void> {
+    await runCleanupSteps(aRetiring.splice(0).reverse());
+  }
+  async function openA(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+
+      aRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      aRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+      aOAuth = oauth;
+      aRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeA);
+    }
+  }
+
+  let bOAuth: OAuthManager;
+  const bRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeB();
+  });
+  async function closeB(): Promise<void> {
+    await runCleanupSteps(bRetiring.splice(0).reverse());
+  }
+  async function openB(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+
+      bRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      bRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+      bOAuth = oauth;
+      bRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeB);
+    }
+  }
+
+  let parentOAuth: OAuthManager;
+  const parentRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeParent();
+  });
+  async function closeParent(): Promise<void> {
+    await runCleanupSteps(parentRetiring.splice(0).reverse());
+  }
+  async function openParent(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+
+      parentRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      parentRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+      parentOAuth = oauth;
+      parentRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeParent);
+    }
+  }
+
+  const replacementRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeReplacement();
+  });
+  async function closeReplacement(): Promise<void> {
+    await runCleanupSteps(replacementRetiring.splice(0).reverse());
+  }
+  async function openReplacement(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+
+      replacementRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      replacementRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+
+      replacementRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeReplacement);
+    }
+  }
+
+  let isolatedOAuth: OAuthManager;
+  const isolatedRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeIsolated();
+  });
+  async function closeIsolated(): Promise<void> {
+    await runCleanupSteps(isolatedRetiring.splice(0).reverse());
+  }
+  async function openIsolated(
+    authority: CredentialAuthority,
+    runtimeId: string,
+    config?: Config,
+  ): Promise<void> {
+    try {
+      const settings = new SettingsService();
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settings,
+        config,
+        { runtimeId },
+      );
+
+      isolatedRetiring.push(() => manager.dispose());
+      const keys = authority.createProviderKeyStorage();
+      manager.bindProviderKeyStorage(keys, () => keys.close());
+      const tokens = authority.createTokenStore();
+      let transferred = false;
+      isolatedRetiring.push(() =>
+        transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+      );
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        config,
+        manager,
+        settings,
+      );
+      isolatedOAuth = oauth;
+      isolatedRetiring.push(() => oauth.dispose());
+      transferred = true;
+      populateProviderManager(
+        manager,
+        oauth,
+        tokens,
+        settings,
+        new NodeFileSystem(),
+        config,
+        undefined,
+        undefined,
+        false,
+        true,
+        undefined,
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeIsolated);
+    }
+  }
+
   it('gives concurrently live roots different stores even for the same socket', async () => {
     const authority = new CredentialAuthority('/unconnected-test.sock');
-    const a = root(authority, 'a');
-    const b = root(authority, 'b');
+    await openA(authority, 'a');
+    await openB(authority, 'b');
     try {
-      const first = a.oauthManager.getTokenStore();
-      const second = b.oauthManager.getTokenStore();
+      const first = aOAuth.getTokenStore();
+      const second = bOAuth.getTokenStore();
       expect(first).not.toBe(second);
     } finally {
-      await Promise.all([retire(a), retire(b)]);
+      await Promise.all([closeA(), closeB()]);
     }
   });
 
@@ -136,20 +558,21 @@ describe('provider-manager token ownership', () => {
     const tokens = new HeldTokenStore();
     await tokens.saveToken('test', makeToken());
     const host = await proxy(tokens);
-    const a = root(host.authority, 'a');
-    const b = root(host.authority, 'b');
-    let replacement: ReturnType<typeof root> | undefined;
+    await openA(host.authority, 'a');
+    await openB(host.authority, 'b');
+    let replacementOpened = false;
     try {
-      const pending = b.oauthManager.getTokenStore().getToken('test');
+      const pending = bOAuth.getTokenStore().getToken('test');
       await tokens.entered;
-      await retire(a);
-      replacement = root(new CredentialAuthority('/replacement.sock'), 'a');
+      await closeA();
+      await openReplacement(new CredentialAuthority('/replacement.sock'), 'a');
+      replacementOpened = true;
       tokens.release();
       expect(await pending).toMatchObject({ token_type: 'Bearer' });
     } finally {
       tokens.release();
-      await retire(b);
-      if (replacement) await retire(replacement);
+      await closeB();
+      if (replacementOpened) await closeReplacement();
       await host.close();
     }
   });
@@ -158,25 +581,25 @@ describe('provider-manager token ownership', () => {
     const tokens = new HeldTokenStore();
     await tokens.saveToken('test', makeToken());
     const host = await proxy(tokens);
-    const a = root(host.authority, 'a');
-    const b = root(host.authority, 'b');
+    await openA(host.authority, 'a');
+    await openB(host.authority, 'b');
     try {
-      const pending = a.oauthManager
+      const pending = aOAuth
         .getTokenStore()
         .getToken('test')
         .catch((error: unknown) => error);
       await tokens.entered;
-      await a.oauthManager.dispose();
+      await aOAuth.dispose();
       const outcome = await pending;
       expect(outcome).toBeInstanceOf(Error);
       expect(outcome).toMatchObject({ message: 'Client closed' });
       tokens.release();
-      expect(
-        await b.oauthManager.getTokenStore().getToken('test'),
-      ).toMatchObject({ token_type: 'Bearer' });
+      expect(await bOAuth.getTokenStore().getToken('test')).toMatchObject({
+        token_type: 'Bearer',
+      });
     } finally {
       tokens.release();
-      await Promise.all([retire(a), retire(b)]);
+      await Promise.all([closeA(), closeB()]);
       await host.close();
     }
   });
@@ -188,21 +611,21 @@ describe('provider-manager token ownership', () => {
     await tokensB.saveToken('only-b', makeToken());
     const hostA = await proxy(tokensA, 'a'.repeat(64));
     const hostB = await proxy(tokensB, 'b'.repeat(64));
-    const a = root(hostA.authority, 'same-label');
-    const b = root(hostB.authority, 'same-label');
+    await openA(hostA.authority, 'same-label');
+    await openB(hostB.authority, 'same-label');
     try {
-      await expect(
-        b.oauthManager.getTokenStore().getToken('only-a'),
-      ).rejects.toThrow('Access denied');
-      expect(
-        await a.oauthManager.getTokenStore().getToken('only-a'),
-      ).toMatchObject({ token_type: 'Bearer' });
-      await a.oauthManager.dispose();
-      expect(
-        await b.oauthManager.getTokenStore().getToken('only-b'),
-      ).toMatchObject({ token_type: 'Bearer' });
+      await expect(bOAuth.getTokenStore().getToken('only-a')).rejects.toThrow(
+        'Access denied',
+      );
+      expect(await aOAuth.getTokenStore().getToken('only-a')).toMatchObject({
+        token_type: 'Bearer',
+      });
+      await aOAuth.dispose();
+      expect(await bOAuth.getTokenStore().getToken('only-b')).toMatchObject({
+        token_type: 'Bearer',
+      });
     } finally {
-      await Promise.all([retire(a), retire(b)]);
+      await Promise.all([closeA(), closeB()]);
       await Promise.all([hostA.close(), hostB.close()]);
     }
   });
@@ -211,33 +634,32 @@ describe('provider-manager token ownership', () => {
     const tokens = new InMemoryTokenStore();
     await tokens.saveToken('test', makeToken());
     const host = await proxy(tokens);
-    const parent = root(host.authority, 'same-label');
+    await openParent(host.authority, 'same-label');
+    const directory = mkdtempSync(join(tmpdir(), 'isolated-token-owner-'));
     const config = new Config({
       sessionId: 'same-label',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
+      targetDir: directory,
+      cwd: directory,
       model: 'test-model',
       debugMode: false,
     });
-    const isolated = createIsolatedRuntimeContext(
-      { config, credentialAuthority: host.authority },
-      new SettingsService(),
-    );
+    await openIsolated(host.authority, 'same-label', config);
     try {
-      const rootStore = parent.oauthManager.getTokenStore();
-      const childStore = isolated.oauthManager.getTokenStore();
+      const rootStore = parentOAuth.getTokenStore();
+      const childStore = isolatedOAuth.getTokenStore();
       expect(childStore).not.toBe(rootStore);
       expect(await childStore.getToken('test')).toMatchObject({
         token_type: 'Bearer',
       });
-      await isolated.cleanup();
+      await closeIsolated();
       expect(await rootStore.getToken('test')).toMatchObject({
         token_type: 'Bearer',
       });
     } finally {
-      await isolated.cleanup();
-      await retire(parent);
+      await closeIsolated();
+      await closeParent();
       await config.dispose();
+      rmSync(directory, { recursive: true, force: true });
       await host.close();
     }
   });

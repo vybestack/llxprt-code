@@ -1,14 +1,26 @@
-import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { describe, expect, it } from 'bun:test';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
-import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle, ProviderManager } from '../index.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../agents/src/core/subagent-cleanup.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
@@ -19,11 +31,13 @@ import {
   CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
 } from '../tokenizers/claude/claudeCalibrationAssets.js';
-import type { TiktokenModuleLoader } from '../tokenizers/o200kBaseCounter.js';
-import {
-  activateIsolatedRuntimeContext,
-  createIsolatedRuntimeContext,
-} from './index.js';
+import { TiktokenModuleLoader } from '../tokenizers/o200kBaseCounter.js';
+
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
   return operation.then(
@@ -74,44 +88,112 @@ function createEncodeFailingLoader(encodeFailure: Error): TiktokenModuleLoader {
 }
 
 describe('configureProviderRuntimeFactories', () => {
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let callerConfig: Config;
+  let settings: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
+  let callerManager: ProviderManager;
+  let callerTokenizer: RuntimeTokenizerFactory;
+
+  afterEach(async () => {
+    await runCleanupSteps(retiring.splice(0).reverse());
+  });
+  async function openCaller(
+    runtimeId: string,
+    model: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const rawDirectory = await mkdtemp(join(tmpdir(), 'provider-bus-owner-'));
+      retiring.push(() => rm(rawDirectory, { recursive: true, force: true }));
+      const directory = await realpath(rawDirectory);
+      const selectedConfig = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      callerConfig = selectedConfig;
+      retiring.push(() => selectedConfig.dispose());
+      const release = new AcquisitionRelease();
+      let acquisitionComplete = false;
+      retiring.push(() =>
+        acquisitionComplete ? release.close() : release.rollback(),
+      );
+      settings = new SettingsService();
+      const selectedSettingsOwner = new SessionSettingsOwner(settings);
+      settingsOwner = selectedSettingsOwner;
+      release.acquire('settings', () => selectedSettingsOwner.dispose());
+      settingsOwner.bindTelemetry(callerConfig);
+      const policy = new RuntimePolicyOwner(callerConfig);
+      release.acquire('policy', () => policy.dispose());
+      const bus = policy.session.messageBus;
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      for (const scope of new Set([runtimeId]))
+        release.acquire('files', () => releaseAdoptedFileScope(files, scope));
+      callerManager = acquirePreferredProviderManager(
+        callerConfig,
+        settings,
+        settingsOwner,
+        files,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      acquirePreferredOAuth(
+        undefined,
+        bus,
+        callerConfig,
+        settings,
+        callerManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+      );
+      callerTokenizer = configureProviderRuntimeFactories(
+        callerConfig,
+        callerManager,
+      ).tokenizerFactory;
+      await settingsOwner.startTelemetry(callerConfig);
+      callerManager.setRuntimeContext(
+        createProviderRuntimeContext({
+          runtimeId,
+          runtimeKind: 'agent',
+          metadata,
+        }),
+        settingsOwner,
+        settings,
+        callerConfig,
+      );
+      acquisitionComplete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(retiring.splice(0).reverse()),
+      );
+    }
+  }
+
+  async function closeCaller(): Promise<void> {
+    await runCleanupSteps(retiring.splice(0).reverse());
+  }
+
   /**
    * @plan:PLAN-20260603-ISSUE1584.P16a
    * @requirement:REQ-DEP-001
    */
   it('injects providers-backed content generator and tokenizer factories into CLI config', async () => {
-    const runtimeHandle = (() => {
-      const {
-        config: capturedConfig25,
-        settingsService: capturedConfig25SettingsService,
-        settingsOwner: capturedConfig25SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'provider-runtime-factory-injection',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'gpt-4.1',
-        debugMode: false,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          settingsOwner: capturedConfig25SettingsOwner,
-          runtimeId: 'provider-runtime-factory-injection',
-          config: capturedConfig25,
-          metadata: { source: 'issue1584-p16a' },
-          prepare: async () => {},
-        },
-        capturedConfig25SettingsService,
-      );
-    })();
-
-    await activateIsolatedRuntimeContext(runtimeHandle, {
-      runtimeId: runtimeHandle.runtimeId,
-      metadata: { source: 'issue1584-p16a' },
+    await openCaller('provider-runtime-factory-injection', 'gpt-4.1', {
+      source: 'issue1584-p16a',
     });
 
-    const config = runtimeHandle.config;
-    const manager = runtimeHandle.providerManager;
+    const config = callerConfig;
+    const manager = callerManager;
 
     configureProviderRuntimeFactories(config, manager);
 
@@ -157,38 +239,13 @@ describe('configureProviderRuntimeFactories', () => {
    * rather than through a locally built registry.
    */
   it('composes a separately calibrated estimator for each Claude 5 model', async () => {
-    const runtimeHandle = (() => {
-      const {
-        config: capturedConfig26,
-        settingsService: capturedConfig26SettingsService,
-        settingsOwner: capturedConfig26SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'provider-runtime-factory-claude5',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'claude-opus-5',
-        debugMode: false,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          settingsOwner: capturedConfig26SettingsOwner,
-          runtimeId: 'provider-runtime-factory-claude5',
-          config: capturedConfig26,
-          metadata: { source: 'issue2835' },
-          prepare: async () => {},
-        },
-        capturedConfig26SettingsService,
-      );
-    })();
-    await activateIsolatedRuntimeContext(runtimeHandle, {
-      runtimeId: runtimeHandle.runtimeId,
-      metadata: { source: 'issue2835' },
+    await openCaller('provider-runtime-factory-claude5', 'claude-opus-5', {
+      source: 'issue2835',
     });
-    const config = runtimeHandle.config;
-    configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
-    const tokenizerFactory = runtimeHandle.tokenizerFactory;
+
+    const config = callerConfig;
+    configureProviderRuntimeFactories(config, callerManager);
+    const tokenizerFactory = callerTokenizer;
     expect(tokenizerFactory).toBeDefined();
 
     expect(tokenizerFactory.claimsModel?.('claude-opus-5')).toBe(true);
@@ -241,45 +298,22 @@ describe('configureProviderRuntimeFactories', () => {
   });
 
   it('preserves an explicitly injected tokenizer factory as the authoritative runtime factory', async () => {
-    const runtimeHandle = (() => {
-      const {
-        config: capturedConfig27,
-        settingsService: capturedConfig27SettingsService,
-        settingsOwner: capturedConfig27SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'provider-runtime-injected-tokenizer-factory',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'gpt-5.6-sol',
-        debugMode: false,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
+    await openCaller(
+      'provider-runtime-injected-tokenizer-factory',
+      'gpt-5.6-sol',
+      {},
+    );
 
-          settingsOwner: capturedConfig27SettingsOwner,
-          runtimeId: 'provider-runtime-injected-tokenizer-factory',
-          config: capturedConfig27,
-          prepare: async () => {},
-        },
-        capturedConfig27SettingsService,
-      );
-    })();
-    await activateIsolatedRuntimeContext(runtimeHandle, {
-      runtimeId: runtimeHandle.runtimeId,
-    });
-    const config = runtimeHandle.config;
+    const config = callerConfig;
     const injectedFactory = createRuntimeTokenizerFactory();
-    runtimeHandle.providerManager.setTokenizerFactory?.(injectedFactory);
+    callerManager.setTokenizerFactory(injectedFactory);
 
     try {
-      configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
+      configureProviderRuntimeFactories(config, callerManager);
 
-      expect(runtimeHandle.providerManager.getTokenizerFactory?.()).toBe(
-        injectedFactory,
-      );
+      expect(callerManager.getTokenizerFactory()).toBe(injectedFactory);
     } finally {
-      await runtimeHandle.cleanup();
+      await closeCaller();
     }
   });
 

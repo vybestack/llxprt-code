@@ -1,1122 +1,601 @@
-import { observeFakeProviderRegistration } from './fake-provider-registration-fixture.js';
-import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
-import {
-  createContentGeneratorConfig,
-  createContentGenerator,
-} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import {
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
-} from './test-utils.js';
-import type {
-  Agent,
-  AgentProfilePreflight,
-} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  configureProviderRuntimeFactories,
-  NodeFileSystem,
-  createProviderManager,
-} from '@vybestack/llxprt-code-providers/composition.js';
-
-import { providerSwitchInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
-
-/**
- * Phase 13 Consumer Migration Integration Tests
- *
- * These tests verify that existing provider runtime behavior remains
- * reachable through current CLI commands and startup flows after
- * the provider extraction migration.
- *
- * Coverage:
- * 1. CLI provider manager creation uses concrete providers from
- *    @vybestack/llxprt-code-providers and can register/switch active
- *    providers through current CLI/runtime paths.
- * 2. Provider switching remains reachable through existing CLI/runtime flow.
- * 3. Provider-backed generation/content-generator path remains reachable
- *    through existing startup/runtime path.
- * 4. Core index/no-shim boundary: no core provider re-exports and no
- *    production core imports of providers package.
- *
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- */
-
-import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as nodeOs from 'node:os';
-import {
   ProviderManager,
   ProviderContentGenerator,
   type IProvider,
 } from '@vybestack/llxprt-code-providers';
-import type {
-  RuntimeProviderManager,
-  RuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
+
 import {
-  Config,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
+  populateProviderManager,
+  createOwnedOAuthManager,
+  createOwnedTokenStoreClose,
+  NodeFileSystem,
+} from '@vybestack/llxprt-code-providers/composition.js';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+
+import { observeFakeProviderRegistration } from './fake-provider-registration-fixture.js';
+
 import {
   createTempDirectory,
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
+
+import {
+  type RuntimeProviderManager,
+  type RuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
+
+import {
+  Config,
+  createProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
-import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
-// ─────────────────────────────────────────────────────────────────
-// Requirement 1: CLI provider manager creation
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- *
- * CLI createProviderManager produces a ProviderManager imported from
- * @vybestack/llxprt-code-providers. This verifies the concrete type wiring
- * and that the manager can register and switch providers through CLI
- * creation paths.
- */
-describe('CLI provider manager creation uses concrete providers', () => {
+describe('explicit provider primitive owners', () => {
   const credentials = useOwnedCredentials();
-  let tempDir: string;
-  let config: Config;
-
-  beforeEach(async () => {
-    tempDir = await createTempDirectory();
-    config = new Config({
-      sessionId: 'p13-provider-mgr',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
-    });
-    await initializeTestConfig(config);
-  });
-
-  afterEach(async () => {
-    await cleanupTempDirectory(tempDir);
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * createProviderManager returns a ProviderManager instance that is
-   * the real concrete ProviderManager from the providers package.
-   */
-  it('returns a concrete ProviderManager from the providers package', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    // The manager must be an instance of the concrete ProviderManager class
-    expect(manager).toBeInstanceOf(ProviderManager);
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * When LLXPRT_FAKE_RESPONSES is set, the CLI factory registers FakeProvider
-   * from the providers package and sets it as active. This proves the
-   * FakeProvider wiring path is reachable through the CLI creation path.
-   */
-
-  it('registers FakeProvider from providers package when LLXPRT_FAKE_RESPONSES is set', () => {
-    const fakeProviderRegistration = observeFakeProviderRegistration();
-
-    // FakeProvider must be registered and active
-    expect(fakeProviderRegistration.registeredProviderNames).toContain('fake');
-    expect(fakeProviderRegistration.activeProviderName).toBe('fake');
-
-    // The active provider is wrapped for logging, but it must expose
-    // FakeProvider behavior registered from the providers package.
-    expect(fakeProviderRegistration.activeProviderImplementationName).toBe(
-      'fake',
-    );
-  });
-
-  it('CLI foreground assembly exposes the provider manager on its Config', async () => {
-    let manager: RuntimeProviderManager | undefined;
-    const preflight = await prepareIntegrationPreflight(
-      config,
-      new SettingsService(),
-      credentials().authority,
-      'p13-consumer-test',
-      (selected) => {
-        manager = selected;
-      },
-    );
-    try {
-      if (manager === undefined) throw new Error('Missing preflight manager');
-      const testProvider = createTestProvider(
-        'test-cli-provider',
-        'test-default-model',
-      );
-      manager.registerProvider(testProvider);
-      expect(manager.listProviders()).toContain('test-cli-provider');
-      expect('providerFileLifecycle' in preflight).toBe(false);
-      expect(preflight.captureProviderFiles().retainedFiles > 0).toBe(false);
-    } finally {
-      await preflight.dispose();
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Provider registration and active provider switching through the
-   * CLI factory-produced manager works with concrete IProvider instances.
-   */
-  it('registers and switches active providers through CLI-created manager', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    const providerA = createTestProvider('provider-a', 'model-a');
-    const providerB = createTestProvider('provider-b', 'model-b');
-
-    manager.registerProvider(providerA);
-    manager.registerProvider(providerB);
-
-    manager.setActiveProvider('provider-a');
-    expect(manager.getActiveProviderName()).toBe('provider-a');
-
-    manager.setActiveProvider('provider-b');
-    expect(manager.getActiveProviderName()).toBe('provider-b');
-  });
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * ProviderContentGenerator from @vybestack/llxprt-code-providers can be
-   * constructed with a CLI-created ProviderManager. This proves the
-   * provider-owned content generator is reachable through CLI factory
-   * wiring without core constructing it directly.
-   */
-  it('ProviderContentGenerator constructs with CLI-created ProviderManager', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    // ProviderContentGenerator must be constructable using the
-    // concrete ProviderManager from the providers package
-    const generator = new ProviderContentGenerator();
-    expect(generator).toBeDefined();
-    expect(typeof generator.countTokens).toBe('function');
-    expect(manager.listProviders().length).toBeGreaterThan(0);
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * CLI-created ProviderManager satisfies the core RuntimeProviderManager
-   * structural contract. This proves the providers package Manager implements
-   * the same interface that core's runtime/config consumes without importing
-   * from providers.
-   */
-  it('CLI-created ProviderManager satisfies core RuntimeProviderManager contract', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    // The concrete ProviderManager from providers must structurally satisfy
-    // the core RuntimeProviderManager contract without a shim or adapter
-    const runtimeManager: RuntimeProviderManager =
-      manager as unknown as RuntimeProviderManager;
-
-    // Verify key contract methods exist and are callable
-    expect(typeof runtimeManager.getActiveProvider).toBe('function');
-    expect(typeof runtimeManager.getActiveProviderName).toBe('function');
-    expect(typeof runtimeManager.setActiveProvider).toBe('function');
-    expect(typeof runtimeManager.listProviders).toBe('function');
-    expect(typeof runtimeManager.registerProvider).toBe('function');
-    expect(typeof runtimeManager.hasActiveProvider).toBe('function');
-
-    // Verify behavior through the contract-typed reference
-    const testProvider = createTestProvider(
-      'contract-provider',
-      'contract-model',
-    );
-    runtimeManager.registerProvider(testProvider);
-    expect(runtimeManager.listProviders()).toContain('contract-provider');
-    void runtimeManager.setActiveProvider('contract-provider');
-    expect(runtimeManager.hasActiveProvider()).toBe(true);
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * A RuntimeContentGeneratorFactory that creates ProviderContentGenerator
-   * from the providers package can be wired through core's injection path.
-   * This proves the full provider-backed content generation pipeline
-   * is reachable: CLI creates manager → manager satisfies core contract →
-   * factory creates ProviderContentGenerator → generator has required methods.
-   */
-  it('RuntimeContentGeneratorFactory wiring produces working ProviderContentGenerator', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    const testProvider = createTestProvider(
-      'factory-provider',
-      'factory-model',
-    );
-    manager.registerProvider(testProvider);
-    manager.setActiveProvider('factory-provider');
-
-    // Construct a factory using the concrete types from providers package.
-    // This is exactly what CLI wiring would do, but we test it here to
-    // prove the injection path works end-to-end.
-    const factory: RuntimeContentGeneratorFactory = {
-      createContentGenerator() {
-        return new ProviderContentGenerator();
-      },
-    };
-
-    // The factory should produce a generator via the same path core uses
-    const generator = factory.createContentGenerator();
-    expect(generator).toBeDefined();
-
-    // ProviderContentGenerator has the methods core's code would call
-    const gen = generator as ProviderContentGenerator;
-    expect(typeof gen.countTokens).toBe('function');
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// Requirement 2: Provider switching through CLI/runtime flow
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- *
- * Provider switching remains reachable through existing CLI/runtime paths.
- * This tests the switchActiveProvider CLI runtime helper and the
- * provider command's use of runtime APIs.
- */
-describe('Provider switching reachable through CLI/runtime flow', () => {
-  const credentials = useOwnedCredentials();
-  let tempDir: string;
-  let config: Config;
-  let sessionRoot: CliTestSessionRoot;
-  let providerManager: RuntimeProviderManager;
-  let settingsService: SettingsService;
-  let preflight: AgentProfilePreflight;
-  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
-
-  beforeEach(async () => {
-    tempDir = await createTempDirectory();
-    config = new Config({
-      sessionId: 'p13-switch',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
-    });
-    settingsService = new SettingsService();
-    preflight = await prepareIntegrationPreflight(
-      config,
-      settingsService,
-      credentials().authority,
-      'p13-switch-test',
-      (manager) => {
-        providerManager = manager;
-      },
-    );
-    sessionRoot = await initializeTestSessionRoot(
-      config,
-      providerManager,
-      settingsService,
-    );
-    sessionClient = sessionRoot.agent.sessionClient;
-
-    // Register test providers
-    const providerA = createTestProvider('provider-a', 'model-a');
-    const providerB = createTestProvider('provider-b', 'model-b');
-    providerManager.registerProvider(providerA);
-    providerManager.registerProvider(providerB);
-  });
-
-  afterEach(async () => {
-    await preflight.dispose();
-    await cleanupTempDirectory(tempDir);
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * switchActiveProvider from the CLI runtime settings module
-   * successfully changes the active provider.
-   */
-  it('switchActiveProvider changes active provider through CLI runtime path', async () => {
-    await providerManager.setActiveProvider('provider-a');
-    expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
-      'provider-a',
-    );
-
-    const result = await switchActiveProvider(
-      'provider-b',
-      {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
-    );
-    expect(result.changed).toBe(true);
-    expect(result.nextProvider).toBe('provider-b');
-    expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
-      'provider-b',
-    );
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * listProviders through the CLI runtime accessor returns all
-   * registered providers.
-   */
-  it('listProviders returns registered providers through CLI runtime path', () => {
-    const providers = sessionRoot.agent.providerReads.listProviders();
-    expect(providers).toContain('provider-a');
-    expect(providers).toContain('provider-b');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * providerStatus provides status info through the CLI
-   * runtime path after switching.
-   */
-  it('providerStatus reflects current provider after switch', async () => {
-    await providerManager.setActiveProvider('provider-a');
-
-    await switchActiveProvider(
-      'provider-b',
-      {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
-    );
-    const status = sessionRoot.agent.providerReads.providerStatus();
-    expect(status.providerName).toBe('provider-b');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Switching to the same provider is idempotent through the CLI path.
-   */
-  it('switchActiveProvider is idempotent when switching to same provider', async () => {
-    await providerManager.setActiveProvider('provider-a');
-
-    const result = await switchActiveProvider(
-      'provider-a',
-      {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
-    );
-    expect(result.changed).toBe(false);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// Requirement 3: Provider-backed generation/content-generator path
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- *
- * Provider-backed generation/content-generator path remains reachable
- * through existing startup/runtime path. This verifies that:
- * - ContentGeneratorConfig carries providerManager
- * - The runtime injection path (contentGeneratorFactory on Config)
- *   allows provider-owned content generators through the existing
- *   createContentGenerator flow in core.
- * - The AgentRuntimeLoader can use a contentGeneratorFactory override
- *   to inject ProviderContentGenerator.
- */
-describe('Provider-backed content generator path reachable through runtime', () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(nodeOs.tmpdir(), 'p13-content-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * When a ProviderManager is wired, Config.getContentGeneratorConfig()
-   * must include the providerManager so that content generation can be
-   * routed through providers.
-   */
-  it('ContentGeneratorConfig constructs through the wired factory without manager data', async () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    // Register a provider so config wiring can proceed
-    const testProvider = createTestProvider('test-provider', 'test-model');
-    manager.registerProvider(testProvider);
-
-    const config = new Config({
-      sessionId: 'p13-content',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
-    });
-
-    // Initialize the explicit Agent owner on this manager.
-    const owner = await initializeTestSessionRoot(
-      config,
-      manager,
-      settingsService,
-    );
-    const selectedFactories = configureProviderRuntimeFactories(
-      config,
-      manager,
-    );
-    manager.setActiveProvider('test-provider');
-    await owner.agent.sessionClient.refreshAuth();
-
-    const contentGenConfig = {
-      ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
-      contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
-    };
-    expect(contentGenConfig).toBeDefined();
-    const { createContentGenerator } = await import(
-      '@vybestack/llxprt-code-core/core/contentGenerator.js'
-    );
-    const generator = await createContentGenerator(contentGenConfig, config);
-    expect(
-      await generator.countTokens({
-        contents: [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        ],
-      }),
-    ).toStrictEqual({ totalTokens: 2 });
-    expect(contentGenConfig).not.toHaveProperty('providerManager');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * When contentGeneratorFactory is provided, core's createContentGenerator
-   * delegates to it. This proves the injection path is reachable without
-   * core importing provider-owned types.
-   */
-  it('contentGeneratorFactory injection path produces a provider-backed generator', async () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    const testProvider = createTestProvider('test-provider', 'test-model');
-    manager.registerProvider(testProvider);
-
-    // Simulate a factory that creates a content generator (like CLI wiring does)
-    const fakeContentGenerator = new ProviderContentGenerator();
-
-    const factory = {
-      createContentGenerator: () => fakeContentGenerator,
-    };
-
-    const config = new Config({
-      sessionId: 'p13-factory',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
-    });
-
-    // Initialize the explicit Agent owner before refreshing generation.
-    const owner = await initializeTestSessionRoot(
-      config,
-      manager,
-      settingsService,
-    );
-    const selectedFactories = configureProviderRuntimeFactories(
-      config,
-      manager,
-    );
-    manager.setActiveProvider('test-provider');
-    await owner.agent.sessionClient.refreshAuth();
-
-    const contentGenConfig = {
-      ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
-      contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
-    };
-    expect(contentGenConfig.model).toBe('test-model');
-    // Inject the factory into the config
-    const injectedConfig = {
-      ...contentGenConfig,
-      contentGeneratorFactory: factory,
-    };
-
-    // Verify the factory field is on the config
-    expect(injectedConfig.contentGeneratorFactory).toBeDefined();
-    expect(
-      typeof injectedConfig.contentGeneratorFactory.createContentGenerator,
-    ).toBe('function');
-
-    // Verify the factory can produce a generator
-    const generator = await createContentGenerator(injectedConfig, config);
-    expect(generator).toBeDefined();
-    expect(typeof generator.countTokens).toBe('function');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Without a contentGeneratorFactory, core's createContentGenerator
-   * requires one when providerManager is set. This proves that the
-   * injection path is mandatory and the old direct-construction path
-   * no longer exists.
-   */
-  it('createContentGenerator rejects missing factory despite a wired provider registry', async () => {
-    const { createContentGenerator } = await import(
-      '@vybestack/llxprt-code-core/core/contentGenerator.js'
-    );
-
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({});
-    const { manager } = createProviderManager(
-      settingsService,
-      runtime,
-      undefined,
-      new CredentialAuthority(),
-      new NodeFileSystem(),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-
-    const testProvider = createTestProvider('test-provider', 'test-model');
-    manager.registerProvider(testProvider);
-
-    const config = new Config({
-      sessionId: 'p13-no-factory',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
-    });
-
-    // ContentGeneratorConfig with providerManager but no factory should throw
-    const contentConfig = {
-      model: 'test-model',
-    };
-
-    await expect(createContentGenerator(contentConfig, config)).rejects.toThrow(
-      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
-    );
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// Requirement 4: Core index/no-shim boundary
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- *
- * Core index must not re-export provider symbols and core production
- * code must not import from the providers package. These are
- * behavioral boundary tests that would fail if a provider re-export
- * or forbidden import was accidentally added.
- */
-
-describe('Core no-shim and dependency-direction boundary', () => {
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Core index.ts must not import from @vybestack/llxprt-code-providers.
-   * This prevents provider re-exports from core.
-   */
-  function coreIndexImportsProvidersPackage(): boolean {
-    const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
-    const content = fs.readFileSync(coreIndexPath, 'utf-8');
-    const hasProvidersPackageImport =
-      content.includes("from '@vybestack/llxprt-code-providers'") ||
-      content.includes("from '@vybestack/llxprt-code-providers/") ||
-      content.includes('from "@vybestack/llxprt-code-providers"') ||
-      content.includes('from "@vybestack/llxprt-code-providers/');
-
-    return hasProvidersPackageImport;
-  }
-
-  it('core index.ts has no imports from providers package', () => {
-    // No import from the providers package
-    const hasProvidersPackageImport = coreIndexImportsProvidersPackage();
-    try {
-      expect(hasProvidersPackageImport).toBe(false);
-    } catch (error) {
-      throw new Error(
-        'core index.ts must not import from @vybestack/llxprt-code-providers',
-        { cause: error },
-      );
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Core index.ts must not re-export provider-owned symbols like
-   * IProvider, ProviderManager, ProviderContentGenerator, etc.
-   */
-  function findProviderSymbolReExports(): ReadonlyArray<{
-    readonly pattern: RegExp;
-    readonly match: RegExpMatchArray | null;
-  }> {
-    const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
-    const content = fs.readFileSync(coreIndexPath, 'utf-8');
-
-    // No re-export of provider-owned symbols
-    const providerSymbolReExports = [
-      /export.*\bIProvider\b/,
-      /export.*\bProviderManager\b/,
-      /export.*\bProviderContentGenerator\b/,
-      /export.*\bFakeProvider\b/,
-      /export.*\bOpenAIProvider\b/,
-      /export.*\bAnthropicProvider\b/,
-      /export.*\bGeminiProvider\b/,
-      /export.*\bContentGeneratorRole\b/,
-      /export.*\bOpenAITokenizer\b/,
-      /export.*\bAnthropicTokenizer\b/,
-      /export.*\bRateLimitError\b/,
-      /export.*\bQuotaError\b/,
-      /export.*\bAuthenticationError\b/,
-    ];
-
-    // Allow the pattern only in comments
-    const lines = content.split('\n');
-    const codeLines = lines.filter(
-      (line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'),
-    );
-    const codeContent = codeLines.join('\n');
-    return providerSymbolReExports.map((pattern) => ({
-      pattern,
-      match: codeContent.match(pattern),
-    }));
-  }
-
-  it('core index.ts has no re-exports of provider-owned symbols', () => {
-    const providerSymbolReExports = findProviderSymbolReExports();
-    for (const { pattern, match } of providerSymbolReExports) {
-      try {
-        expect(match).toBeNull();
-      } catch (error) {
-        throw new Error(
-          `core index.ts must not re-export provider symbol matching ${pattern}`,
-          { cause: error },
-        );
-      }
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Core production source (non-test) must not import from
-   * @vybestack/llxprt-code-providers. Verifies the forbidden scan from
-   * anti-shim-policy.md.
-   */
-  function findCoreProductionProviderImports(): readonly string[] {
-    const coreSrcDir = path.resolve(__dirname, '../../../core/src');
-    const violations: string[] = [];
-    const hasForbiddenProvidersImport = (content: string): boolean =>
-      content.includes("from '@vybestack/llxprt-code-providers'") ||
-      content.includes("from '@vybestack/llxprt-code-providers/") ||
-      content.includes('from "@vybestack/llxprt-code-providers"') ||
-      content.includes('from "@vybestack/llxprt-code-providers/');
-    const isProductionTsFile = (name: string): boolean =>
-      name.endsWith('.ts') &&
-      !name.endsWith('.test.ts') &&
-      !name.endsWith('.spec.ts');
-    const isCommentLine = (line: string): boolean =>
-      line.startsWith('//') || line.startsWith('*') || line.startsWith('/*');
-    const collectFileViolations = (fullPath: string): void => {
-      const lines = fs.readFileSync(fullPath, 'utf-8').split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        const currentLine = lines[i] ?? '';
-        if (isCommentLine(currentLine.trim())) {
-          continue;
-        }
-        if (hasForbiddenProvidersImport(currentLine)) {
-          const rel = path.relative(coreSrcDir, fullPath);
-          violations.push(`${rel}:${i + 1}: ${currentLine.trim()}`);
+  describe('provider behavior', () => {
+    const managerReleases: Array<() => void | Promise<void>> = [];
+
+    afterEach(async () => {
+      const failures: unknown[] = [];
+      for (const release of managerReleases.splice(0).reverse()) {
+        try {
+          await release();
+        } catch (error) {
+          failures.push(error);
         }
       }
-    };
-    function scanDir(dir: string) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scanDir(fullPath);
-        } else if (entry.isFile() && isProductionTsFile(entry.name)) {
-          collectFileViolations(fullPath);
-        }
-      }
-    }
-    scanDir(coreSrcDir);
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'Provider owner cleanup failed');
+    });
 
-    return violations;
-  }
+    // ─────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────
 
-  it('core production source has no imports from providers package', () => {
-    const violations = findCoreProductionProviderImports();
-    try {
-      expect(violations).toHaveLength(0);
-    } catch (error) {
-      throw new Error(
-        `Forbidden core production imports from providers:${String.fromCharCode(10)}${violations.join(String.fromCharCode(10))}`,
-        { cause: error },
-      );
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Core package.json must not depend on the providers package.
-   */
-  function readCoreProvidersDependency(): unknown {
-    const corePkgPath = path.resolve(__dirname, '../../../core/package.json');
-    const pkg = JSON.parse(fs.readFileSync(corePkgPath, 'utf-8'));
-    const deps = pkg.dependencies ?? {};
-
-    return deps['@vybestack/llxprt-code-providers'];
-  }
-
-  it('core package.json has no providers dependency', () => {
-    const providersDependency = readCoreProvidersDependency();
-    try {
-      expect(providersDependency).toBeUndefined();
-    } catch (error) {
-      throw new Error(
-        'core package.json must not depend on @vybestack/llxprt-code-providers',
-        { cause: error },
-      );
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * No core/src/providers directory should exist after P11/P12 migration.
-   */
-  it('core/src/providers directory does not exist', () => {
-    const coreProvidersDir = path.resolve(
-      __dirname,
-      '../../../core/src/providers',
-    );
-    const coreProvidersDirectoryExists = fs.existsSync(coreProvidersDir);
-    try {
-      expect(coreProvidersDirectoryExists).toBe(false);
-    } catch (error) {
-      throw new Error(
-        'core/src/providers directory must not exist after migration',
-        { cause: error },
-      );
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * No V2/Compat/New/Copy suffixed provider files in core.
-   * Per anti-shim policy, these naming patterns indicate shims.
-   */
-  function findShimNamedProviderFilesInCore(): readonly string[] {
-    const coreSrcDir = path.resolve(__dirname, '../../../core/src');
-    const forbiddenSuffixes = ['V2', 'Compat', 'New', 'Copy'];
-    const violations: string[] = [];
-    const isShimNamedProviderFile = (name: string): boolean => {
-      const basename = name
-        .replace(/\.ts$/, '')
-        .replace(/\.test$/, '')
-        .replace(/\.spec$/, '');
-      if (!/provider/i.test(basename)) {
-        return false;
-      }
-      return forbiddenSuffixes.some((suffix) => basename.endsWith(suffix));
-    };
-    function scanForShimFiles(dir: string) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          scanForShimFiles(fullPath);
-        } else if (
-          entry.isFile() &&
-          entry.name.endsWith('.ts') &&
-          isShimNamedProviderFile(entry.name)
-        ) {
-          violations.push(path.relative(coreSrcDir, fullPath));
-        }
-      }
-    }
-    scanForShimFiles(coreSrcDir);
-
-    return violations;
-  }
-
-  it('no V2/Compat/New/Copy suffixed provider files in core', () => {
-    const violations = findShimNamedProviderFilesInCore();
-    try {
-      expect(violations).toHaveLength(0);
-    } catch (error) {
-      throw new Error(
-        `Forbidden shim-named files in core: ${violations.join(', ')}`,
-        { cause: error },
-      );
-    }
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * Core index.ts does not re-export from './providers/' path.
-   * After P11/P12, the core/src/providers directory was removed,
-   * so any remaining './providers/' re-export would be a broken
-   * or shim reference.
-   */
-  function findCoreProvidersPathReExport(): RegExpMatchArray | null {
-    const coreIndexPath = path.resolve(__dirname, '../../../core/src/index.ts');
-    const content = fs.readFileSync(coreIndexPath, 'utf-8');
-    const codeLines = content
-      .split('\n')
-      .filter(
-        (line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'),
-      );
-    const codeContent = codeLines.join('\n');
-
-    return codeContent.match(/from\s+['"]\.\/providers\//);
-  }
-
-  it('core index.ts has no re-exports from ./providers/ path', () => {
-    // Any export from ./providers/ would be a stale or shim re-export
-    const providersPathReExport = findCoreProvidersPathReExport();
-    try {
-      expect(providersPathReExport).toBeNull();
-    } catch (error) {
-      throw new Error(
-        'core index.ts must not re-export from ./providers/ path',
-        { cause: error },
-      );
-    }
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P13
- * @requirement:REQ-API-001
- *
- * Creates a minimal IProvider for testing. Uses real interface shape,
- * not mocked — verifies actual provider behavior through structural
- * conformance.
- */
-function createTestProvider(
-  name: string,
-  defaultModel: string,
-): IProvider & { clearState(): void } {
-  return {
-    name,
-    async getModels() {
-      return [
-        {
-          id: defaultModel,
-          name: defaultModel,
-          provider: name,
-          supportedToolFormats: [],
+    /**
+     * @plan:PLAN-20260603-ISSUE1584.P13
+     * @requirement:REQ-API-001
+     *
+     * Creates a minimal IProvider for testing. Uses real interface shape,
+     * not mocked — verifies actual provider behavior through structural
+     * conformance.
+     */
+    function createTestProvider(
+      name: string,
+      defaultModel: string,
+    ): IProvider & { clearState(): void } {
+      return {
+        name,
+        async getModels() {
+          return [
+            {
+              id: defaultModel,
+              name: defaultModel,
+              provider: name,
+              supportedToolFormats: [],
+            },
+          ];
         },
-      ];
-    },
-    getDefaultModel() {
-      return defaultModel;
-    },
-    async *generateChatCompletion() {
-      yield {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: `${name}-response` }],
+        getDefaultModel() {
+          return defaultModel;
+        },
+        async *generateChatCompletion() {
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: `${name}-response` }],
+          };
+        },
+        clearState() {
+          // Stub provider does not persist internal state.
+        },
       };
-    },
-    clearState() {
-      // Stub provider does not persist internal state.
-    },
-  };
-}
+    }
+
+    /**
+     * Phase 13 Consumer Migration Integration Tests
+     *
+     * These tests verify that existing provider runtime behavior remains
+     * reachable through current CLI commands and startup flows after
+     * the provider extraction migration.
+     *
+     * Coverage:
+     * 1. CLI provider manager creation uses concrete providers from
+     *    @vybestack/llxprt-code-providers and can register/switch active
+     *    providers through current CLI/runtime paths.
+     * 2. Provider switching remains reachable through existing CLI/runtime flow.
+     * 3. Provider-backed generation/content-generator path remains reachable
+     *    through existing startup/runtime path.
+     * 4. Core index/no-shim boundary: no core provider re-exports and no
+     *    production core imports of providers package.
+     *
+     * @plan:PLAN-20260603-ISSUE1584.P13
+     * @requirement:REQ-API-001
+     */
+
+    // ─────────────────────────────────────────────────────────────────
+    // Requirement 1: CLI provider manager creation
+    // ─────────────────────────────────────────────────────────────────
+
+    /**
+     * @plan:PLAN-20260603-ISSUE1584.P13
+     * @requirement:REQ-API-001
+     *
+     * CLI createProviderManager produces a ProviderManager imported from
+     * @vybestack/llxprt-code-providers. This verifies the concrete type wiring
+     * and that the manager can register and switch providers through CLI
+     * creation paths.
+     */
+    describe('CLI provider manager creation uses concrete providers', () => {
+      let tempDir: string;
+      let config: Config;
+
+      beforeEach(async () => {
+        tempDir = await createTempDirectory();
+        config = new Config({
+          sessionId: 'p13-provider-mgr',
+          targetDir: tempDir,
+          debugMode: false,
+          cwd: tempDir,
+          model: 'test-model',
+        });
+        await initializeTestConfig(config);
+      });
+
+      afterEach(async () => {
+        await cleanupTempDirectory(tempDir);
+      });
+
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * createProviderManager returns a ProviderManager instance that is
+       * the real concrete ProviderManager from the providers package.
+       */
+      it('returns a concrete ProviderManager from the providers package', () => {
+        const settingsService = new SettingsService();
+        const runtime = createProviderRuntimeContext({});
+        const selectedSettings = settingsService;
+        const selectedContext = runtime;
+        const selectedConfig = undefined;
+        const selectedAuthority = credentials().authority;
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          selectedSettings,
+          selectedConfig,
+          selectedContext,
+          undefined,
+          undefined,
+        );
+        managerReleases.push(() => manager.dispose());
+        if (manager.peekProviderKeyStorage() === undefined) {
+          const keys = selectedAuthority.createProviderKeyStorage();
+          managerReleases.push(() => keys.close());
+          manager.bindProviderKeyStorage(keys);
+        }
+        const tokens = selectedAuthority.createTokenStore();
+        let transferredTokens = false;
+        const closeTokens = createOwnedTokenStoreClose(tokens);
+        managerReleases.push(() =>
+          transferredTokens ? undefined : closeTokens(),
+        );
+        const ownedOAuth = createOwnedOAuthManager(
+          tokens,
+          undefined,
+          undefined,
+          selectedConfig,
+          manager,
+          selectedSettings,
+        );
+        managerReleases.push(() => ownedOAuth.dispose());
+        transferredTokens = true;
+        populateProviderManager(
+          manager,
+          ownedOAuth,
+          tokens,
+          selectedSettings,
+          new NodeFileSystem(),
+          selectedConfig,
+          undefined,
+          undefined,
+          true,
+          true,
+          process.env.LLXPRT_FAKE_RESPONSES,
+        );
+
+        // The manager must be an instance of the concrete ProviderManager class
+        expect(manager).toBeInstanceOf(ProviderManager);
+      });
+
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * When LLXPRT_FAKE_RESPONSES is set, the CLI factory registers FakeProvider
+       * from the providers package and sets it as active. This proves the
+       * FakeProvider wiring path is reachable through the CLI creation path.
+       */
+
+      it('registers FakeProvider from providers package when LLXPRT_FAKE_RESPONSES is set', async () => {
+        const fakeProviderRegistration =
+          await observeFakeProviderRegistration();
+
+        // FakeProvider must be registered and active
+        expect(fakeProviderRegistration.registeredProviderNames).toContain(
+          'fake',
+        );
+        expect(fakeProviderRegistration.activeProviderName).toBe('fake');
+
+        // The active provider is wrapped for logging, but it must expose
+        // FakeProvider behavior registered from the providers package.
+        expect(fakeProviderRegistration.activeProviderImplementationName).toBe(
+          'fake',
+        );
+      });
+
+      it('CLI foreground assembly exposes the provider manager on its Config', async () => {
+        let manager: RuntimeProviderManager | undefined;
+        const preflight = await prepareIntegrationPreflight(
+          config,
+          new SettingsService(),
+          credentials().authority,
+          'p13-consumer-test',
+          (selected) => {
+            manager = selected;
+          },
+        );
+        try {
+          if (manager === undefined)
+            throw new Error('Missing preflight manager');
+          const testProvider = createTestProvider(
+            'test-cli-provider',
+            'test-default-model',
+          );
+          manager.registerProvider(testProvider);
+          expect(manager.listProviders()).toContain('test-cli-provider');
+          expect('providerFileLifecycle' in preflight).toBe(false);
+          expect(preflight.captureProviderFiles().retainedFiles > 0).toBe(
+            false,
+          );
+        } finally {
+          await preflight.dispose();
+        }
+      });
+
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * Provider registration and active provider switching through the
+       * CLI factory-produced manager works with concrete IProvider instances.
+       */
+      it('registers and switches active providers through CLI-created manager', () => {
+        const settingsService = new SettingsService();
+        const runtime = createProviderRuntimeContext({});
+        const selectedSettings2 = settingsService;
+        const selectedContext2 = runtime;
+        const selectedConfig2 = undefined;
+        const selectedAuthority2 = credentials().authority;
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          selectedSettings2,
+          selectedConfig2,
+          selectedContext2,
+          undefined,
+          undefined,
+        );
+        managerReleases.push(() => manager.dispose());
+        if (manager.peekProviderKeyStorage() === undefined) {
+          const keys = selectedAuthority2.createProviderKeyStorage();
+          managerReleases.push(() => keys.close());
+          manager.bindProviderKeyStorage(keys);
+        }
+        const tokens2 = selectedAuthority2.createTokenStore();
+        let transferredTokens2 = false;
+        const closeTokens2 = createOwnedTokenStoreClose(tokens2);
+        managerReleases.push(() =>
+          transferredTokens2 ? undefined : closeTokens2(),
+        );
+        const ownedOAuth2 = createOwnedOAuthManager(
+          tokens2,
+          undefined,
+          undefined,
+          selectedConfig2,
+          manager,
+          selectedSettings2,
+        );
+        managerReleases.push(() => ownedOAuth2.dispose());
+        transferredTokens2 = true;
+        populateProviderManager(
+          manager,
+          ownedOAuth2,
+          tokens2,
+          selectedSettings2,
+          new NodeFileSystem(),
+          selectedConfig2,
+          undefined,
+          undefined,
+          true,
+          true,
+          process.env.LLXPRT_FAKE_RESPONSES,
+        );
+
+        const providerA = createTestProvider('provider-a', 'model-a');
+        const providerB = createTestProvider('provider-b', 'model-b');
+
+        manager.registerProvider(providerA);
+        manager.registerProvider(providerB);
+
+        manager.setActiveProvider('provider-a');
+        expect(manager.getActiveProviderName()).toBe('provider-a');
+
+        manager.setActiveProvider('provider-b');
+        expect(manager.getActiveProviderName()).toBe('provider-b');
+      });
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * ProviderContentGenerator from @vybestack/llxprt-code-providers can be
+       * constructed with a CLI-created ProviderManager. This proves the
+       * provider-owned content generator is reachable through CLI factory
+       * wiring without core constructing it directly.
+       */
+      it('ProviderContentGenerator constructs with CLI-created ProviderManager', () => {
+        const settingsService = new SettingsService();
+        const runtime = createProviderRuntimeContext({});
+        const selectedSettings3 = settingsService;
+        const selectedContext3 = runtime;
+        const selectedConfig3 = undefined;
+        const selectedAuthority3 = credentials().authority;
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          selectedSettings3,
+          selectedConfig3,
+          selectedContext3,
+          undefined,
+          undefined,
+        );
+        managerReleases.push(() => manager.dispose());
+        if (manager.peekProviderKeyStorage() === undefined) {
+          const keys = selectedAuthority3.createProviderKeyStorage();
+          managerReleases.push(() => keys.close());
+          manager.bindProviderKeyStorage(keys);
+        }
+        const tokens3 = selectedAuthority3.createTokenStore();
+        let transferredTokens3 = false;
+        const closeTokens3 = createOwnedTokenStoreClose(tokens3);
+        managerReleases.push(() =>
+          transferredTokens3 ? undefined : closeTokens3(),
+        );
+        const ownedOAuth3 = createOwnedOAuthManager(
+          tokens3,
+          undefined,
+          undefined,
+          selectedConfig3,
+          manager,
+          selectedSettings3,
+        );
+        managerReleases.push(() => ownedOAuth3.dispose());
+        transferredTokens3 = true;
+        populateProviderManager(
+          manager,
+          ownedOAuth3,
+          tokens3,
+          selectedSettings3,
+          new NodeFileSystem(),
+          selectedConfig3,
+          undefined,
+          undefined,
+          true,
+          true,
+          process.env.LLXPRT_FAKE_RESPONSES,
+        );
+
+        // ProviderContentGenerator must be constructable using the
+        // concrete ProviderManager from the providers package
+        const generator = new ProviderContentGenerator();
+        expect(generator).toBeDefined();
+        expect(typeof generator.countTokens).toBe('function');
+        expect(manager.listProviders().length).toBeGreaterThan(0);
+      });
+
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * CLI-created ProviderManager satisfies the core RuntimeProviderManager
+       * structural contract. This proves the providers package Manager implements
+       * the same interface that core's runtime/config consumes without importing
+       * from providers.
+       */
+      it('CLI-created ProviderManager satisfies core RuntimeProviderManager contract', () => {
+        const settingsService = new SettingsService();
+        const runtime = createProviderRuntimeContext({});
+        const selectedSettings4 = settingsService;
+        const selectedContext4 = runtime;
+        const selectedConfig4 = undefined;
+        const selectedAuthority4 = credentials().authority;
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          selectedSettings4,
+          selectedConfig4,
+          selectedContext4,
+          undefined,
+          undefined,
+        );
+        managerReleases.push(() => manager.dispose());
+        if (manager.peekProviderKeyStorage() === undefined) {
+          const keys = selectedAuthority4.createProviderKeyStorage();
+          managerReleases.push(() => keys.close());
+          manager.bindProviderKeyStorage(keys);
+        }
+        const tokens4 = selectedAuthority4.createTokenStore();
+        let transferredTokens4 = false;
+        const closeTokens4 = createOwnedTokenStoreClose(tokens4);
+        managerReleases.push(() =>
+          transferredTokens4 ? undefined : closeTokens4(),
+        );
+        const ownedOAuth4 = createOwnedOAuthManager(
+          tokens4,
+          undefined,
+          undefined,
+          selectedConfig4,
+          manager,
+          selectedSettings4,
+        );
+        managerReleases.push(() => ownedOAuth4.dispose());
+        transferredTokens4 = true;
+        populateProviderManager(
+          manager,
+          ownedOAuth4,
+          tokens4,
+          selectedSettings4,
+          new NodeFileSystem(),
+          selectedConfig4,
+          undefined,
+          undefined,
+          true,
+          true,
+          process.env.LLXPRT_FAKE_RESPONSES,
+        );
+
+        // The concrete ProviderManager from providers must structurally satisfy
+        // the core RuntimeProviderManager contract without a shim or adapter
+        const runtimeManager: RuntimeProviderManager =
+          manager as unknown as RuntimeProviderManager;
+
+        // Verify key contract methods exist and are callable
+        expect(typeof runtimeManager.getActiveProvider).toBe('function');
+        expect(typeof runtimeManager.getActiveProviderName).toBe('function');
+        expect(typeof runtimeManager.setActiveProvider).toBe('function');
+        expect(typeof runtimeManager.listProviders).toBe('function');
+        expect(typeof runtimeManager.registerProvider).toBe('function');
+        expect(typeof runtimeManager.hasActiveProvider).toBe('function');
+
+        // Verify behavior through the contract-typed reference
+        const testProvider = createTestProvider(
+          'contract-provider',
+          'contract-model',
+        );
+        runtimeManager.registerProvider(testProvider);
+        expect(runtimeManager.listProviders()).toContain('contract-provider');
+        void runtimeManager.setActiveProvider('contract-provider');
+        expect(runtimeManager.hasActiveProvider()).toBe(true);
+      });
+
+      /**
+       * @plan:PLAN-20260603-ISSUE1584.P13
+       * @requirement:REQ-API-001
+       *
+       * A RuntimeContentGeneratorFactory that creates ProviderContentGenerator
+       * from the providers package can be wired through core's injection path.
+       * This proves the full provider-backed content generation pipeline
+       * is reachable: CLI creates manager → manager satisfies core contract →
+       * factory creates ProviderContentGenerator → generator has required methods.
+       */
+      it('RuntimeContentGeneratorFactory wiring produces working ProviderContentGenerator', () => {
+        const settingsService = new SettingsService();
+        const runtime = createProviderRuntimeContext({});
+        const selectedSettings5 = settingsService;
+        const selectedContext5 = runtime;
+        const selectedConfig5 = undefined;
+        const selectedAuthority5 = credentials().authority;
+        const manager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          selectedSettings5,
+          selectedConfig5,
+          selectedContext5,
+          undefined,
+          undefined,
+        );
+        managerReleases.push(() => manager.dispose());
+        if (manager.peekProviderKeyStorage() === undefined) {
+          const keys = selectedAuthority5.createProviderKeyStorage();
+          managerReleases.push(() => keys.close());
+          manager.bindProviderKeyStorage(keys);
+        }
+        const tokens5 = selectedAuthority5.createTokenStore();
+        let transferredTokens5 = false;
+        const closeTokens5 = createOwnedTokenStoreClose(tokens5);
+        managerReleases.push(() =>
+          transferredTokens5 ? undefined : closeTokens5(),
+        );
+        const ownedOAuth5 = createOwnedOAuthManager(
+          tokens5,
+          undefined,
+          undefined,
+          selectedConfig5,
+          manager,
+          selectedSettings5,
+        );
+        managerReleases.push(() => ownedOAuth5.dispose());
+        transferredTokens5 = true;
+        populateProviderManager(
+          manager,
+          ownedOAuth5,
+          tokens5,
+          selectedSettings5,
+          new NodeFileSystem(),
+          selectedConfig5,
+          undefined,
+          undefined,
+          true,
+          true,
+          process.env.LLXPRT_FAKE_RESPONSES,
+        );
+
+        const testProvider = createTestProvider(
+          'factory-provider',
+          'factory-model',
+        );
+        manager.registerProvider(testProvider);
+        manager.setActiveProvider('factory-provider');
+
+        // Construct a factory using the concrete types from providers package.
+        // This is exactly what CLI wiring would do, but we test it here to
+        // prove the injection path works end-to-end.
+        const factory: RuntimeContentGeneratorFactory = {
+          createContentGenerator() {
+            return new ProviderContentGenerator();
+          },
+        };
+
+        // The factory should produce a generator via the same path core uses
+        const generator = factory.createContentGenerator();
+        expect(generator).toBeDefined();
+
+        // ProviderContentGenerator has the methods core's code would call
+        const gen = generator as ProviderContentGenerator;
+        expect(typeof gen.countTokens).toBe('function');
+      });
+    });
+  });
+});

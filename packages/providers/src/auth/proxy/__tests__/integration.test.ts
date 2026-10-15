@@ -1,5 +1,16 @@
 import { CredentialAuthority } from '../credential-store-factory.js';
-import { createProviderConfigFixture } from '../../../runtime/__tests__/provider-config-fixture.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle } from '../../../providerFilePolicy.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from '../../../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../../../agents/src/api/adoption-release.js';
+import { cleanupAfterFailure } from '../../../../../agents/src/core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,7 +34,7 @@ import {
   HostCredentialOwner,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import { createIsolatedRuntimeContext } from '../../../runtime/index.js';
+
 import {
   createAndStartProxy,
   stopProxy,
@@ -234,34 +245,66 @@ describe('proxy integration (phase 31)', () => {
   it('closes an owner-created proxy token store when its unused runtime is cleaned up', async () => {
     const started = await startServer();
     process.env.LLXPRT_CREDENTIAL_SOCKET = started.socketPath;
-    const { config: config, settingsService: configSettingsService } =
-      createProviderConfigFixture({
-        sessionId: 'proxy-owned-runtime',
-        targetDir: tmpDir,
-        cwd: tmpDir,
-        model: 'test-model',
-        debugMode: false,
+    const runtimeId = 'proxy-owned-runtime';
+    const config = new Config({
+      sessionId: runtimeId,
+      targetDir: tmpDir,
+      cwd: tmpDir,
+      model: 'test-model',
+      debugMode: false,
+    });
+    const release = new AcquisitionRelease();
+    let complete = false;
+    const close = () => (complete ? release.close() : release.rollback());
+    let store: TokenStore | undefined;
+    try {
+      const settings = new SettingsService();
+      const settingsOwner = new SessionSettingsOwner(settings);
+      release.acquire('settings', () => settingsOwner.dispose());
+      settingsOwner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
       });
-    const owner = createIsolatedRuntimeContext(
-      {
-        credentialAuthority: new CredentialAuthority(started.socketPath),
-
-        runtimeId: 'proxy-owned-runtime',
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      const authority = new CredentialAuthority(started.socketPath);
+      const manager = acquirePreferredProviderManager(
         config,
-      },
-      configSettingsService,
-    );
-    const store = owner.oauthManager.getTokenStore();
+        settings,
+        settingsOwner,
+        files,
+        runtimeId,
+        authority,
+        release,
+      );
+      const oauth = acquirePreferredOAuth(
+        undefined,
+        policy.session.messageBus,
+        config,
+        settings,
+        manager,
+        runtimeId,
+        undefined,
+        authority,
+        release,
+      );
+      store = oauth.getTokenStore();
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, close);
+    }
     if (!(store instanceof ProxyTokenStore)) {
       throw new Error('Expected proxy token store');
     }
     try {
       await store.listProviders();
       expect(isSocketConnected(store)).toBe(true);
-      await owner.cleanup();
+      await close();
       expect(isSocketConnected(store)).toBe(false);
     } finally {
-      await owner.cleanup();
+      await close();
       await config.dispose();
       store.getClient().close();
       await started.server.stop();

@@ -5,7 +5,7 @@
       "runtime-service-bag-parameter": 3
     },
     "agents": {
-      "runtime-service-bundle": 153,
+      "runtime-service-bundle": 152,
       "runtime-service-bag-parameter": 49
     },
     "cli": {
@@ -17,7 +17,7 @@
       "runtime-service-bundle": 0
     },
     "providers": {
-      "runtime-service-bundle": 27,
+      "runtime-service-bundle": 25,
       "runtime-service-bag-parameter": 12
     },
     "zed-acp": {

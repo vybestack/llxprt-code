@@ -20,7 +20,16 @@
  * settings file.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'bun:test';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { ProviderManager } from '../ProviderManager.js';
+import { OAuthManager } from '../auth/oauth-manager.js';
+import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
+import {
+  createOwnedOAuthManager,
+  populateProviderManager,
+} from '../composition/providerManagerInstance.js';
+import { createOwnedTokenStoreClose } from '../auth/proxy/credential-store-factory.js';
 
 // Mock os so Storage.getGlobalSettingsPath() resolves under a fake homedir.
 const realOsModule = { ...(await import('os')) };
@@ -50,7 +59,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
-import { createHeadlessProviderManager } from '../composition/headlessFactory.js';
+
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
@@ -58,6 +67,62 @@ import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters
 
 describe('headless provider-manager construction (issue #1594)', () => {
   let mockFileSystem: MockFileSystem;
+
+  const credentials = useOwnedCredentials();
+  let headlessManager: ProviderManager;
+  let headlessOAuth: OAuthManager;
+  const retiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await runCleanupSteps(retiring.splice(0).reverse());
+  });
+  function openManager(provider: string, model?: string): void {
+    const settings = new SettingsService();
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      undefined,
+      { runtimeId: 'headless', metadata: { stage: 'headless' } },
+    );
+    headlessManager = manager;
+    retiring.push(() => manager.dispose());
+    const keys = credentials().authority.createProviderKeyStorage();
+    manager.bindProviderKeyStorage(keys, () => keys.close());
+    const tokens = credentials().authority.createTokenStore();
+    let transferred = false;
+    retiring.push(() =>
+      transferred ? undefined : createOwnedTokenStoreClose(tokens)(),
+    );
+    const oauth = createOwnedOAuthManager(
+      tokens,
+      undefined,
+      undefined,
+      undefined,
+      manager,
+      settings,
+    );
+    headlessOAuth = oauth;
+    retiring.push(() => oauth.dispose());
+    transferred = true;
+    populateProviderManager(
+      manager,
+      oauth,
+      tokens,
+      settings,
+      mockFileSystem,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      true,
+      undefined,
+    );
+    if (model !== undefined)
+      settings.setProviderSetting(provider, 'model', model);
+    manager.setActiveProvider(provider);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -67,10 +132,8 @@ describe('headless provider-manager construction (issue #1594)', () => {
   });
 
   it('constructs a working manager for openai', () => {
-    const { manager } = createHeadlessProviderManager({
-      fileSystem: mockFileSystem,
-      provider: 'openai',
-    });
+    openManager('openai');
+    const manager = headlessManager;
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('openai');
@@ -78,10 +141,8 @@ describe('headless provider-manager construction (issue #1594)', () => {
   });
 
   it('constructs a working manager for anthropic', () => {
-    const { manager } = createHeadlessProviderManager({
-      fileSystem: mockFileSystem,
-      provider: 'anthropic',
-    });
+    openManager('anthropic');
+    const manager = headlessManager;
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('anthropic');
@@ -89,20 +150,15 @@ describe('headless provider-manager construction (issue #1594)', () => {
   });
 
   it('returns an OAuth manager alongside the provider manager', () => {
-    const { oauthManager } = createHeadlessProviderManager({
-      fileSystem: mockFileSystem,
-      provider: 'openai',
-    });
+    openManager('openai');
+    const oauthManager = headlessOAuth;
     expect(oauthManager).toBeDefined();
   });
 
   it('throws when an unregistered provider is requested', () => {
-    expect(() =>
-      createHeadlessProviderManager({
-        fileSystem: mockFileSystem,
-        provider: 'this-provider-does-not-exist',
-      }),
-    ).toThrow(/Provider .* not found/);
+    expect(() => openManager('this-provider-does-not-exist')).toThrow(
+      /Provider .* not found/,
+    );
   });
 
   it('applies the model option to the active provider', () => {
@@ -111,11 +167,8 @@ describe('headless provider-manager construction (issue #1594)', () => {
     // SettingsService.getProviderSettings(name) via BaseProvider. This proves
     // the option is functional (not a no-op) without needing network or keys.
     const requestedModel = 'gpt-4o';
-    const { manager } = createHeadlessProviderManager({
-      fileSystem: mockFileSystem,
-      provider: 'openai',
-      model: requestedModel,
-    });
+    openManager('openai', requestedModel);
+    const manager = headlessManager;
 
     const getCurrentModel = manager.getActiveProvider().getCurrentModel;
     expect(typeof getCurrentModel).toBe('function');
@@ -171,10 +224,8 @@ describe('headless provider-manager construction (issue #1594)', () => {
       }
     }
 
-    const { manager } = createHeadlessProviderManager({
-      fileSystem: mockFileSystem,
-      provider: 'openai',
-    });
+    openManager('openai');
+    const manager = headlessManager;
     manager.registerProvider(new InlineFakeProvider());
     manager.setActiveProvider('inline-fake');
 

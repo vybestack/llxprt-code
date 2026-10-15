@@ -1,54 +1,37 @@
-import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import { describe, expect, it } from 'bun:test';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
-import { createIsolatedRuntimeContext } from './runtimeContextFactory.js';
-import { createRuntimeActivationBindings } from './runtimeActivationBindings.js';
-
-function buildOwner(): ReturnType<typeof createProviderConfigFixture> {
-  return createProviderConfigFixture({
-    sessionId: 'binding-owner',
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'binding-model',
-  });
-}
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 describe('isolated runtime construction requirements', () => {
-  it('rejects a missing caller Config before building runtime collaborators', () => {
-    expect(() =>
-      Reflect.apply(createIsolatedRuntimeContext, undefined, [
-        { activationBindings: createRuntimeActivationBindings() },
+  const credentials = useOwnedCredentials();
+
+  it('rejects a missing caller Config before building runtime collaborators', async () => {
+    await expect(
+      Reflect.apply(fromConfig, undefined, [
+        { credentialAuthority: credentials().authority },
       ]),
-    ).toThrow(/caller-supplied Config/);
+    ).rejects.toThrow(/existing Config/);
   });
 
-  it('rejects missing activation bindings even after another owner activates', async () => {
-    const { config, settingsService, settingsOwner } = buildOwner();
-    const handle = createIsolatedRuntimeContext(
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        config,
-        settingsOwner,
-        activationBindings: createRuntimeActivationBindings(),
-      },
-      settingsService,
+  it('rejects missing credential authority while another preflight is live', async () => {
+    const owner = await prepareAgentPreflight(
+      { runtimeId: 'binding-owner' },
+      credentials().authority,
     );
     try {
-      await handle.activate();
-      expect(() =>
-        Reflect.apply(createIsolatedRuntimeContext, undefined, [{ config }]),
-      ).toThrow(/explicit activation bindings/);
+      await expect(
+        Reflect.apply(prepareAgentPreflight, undefined, [
+          { runtimeId: 'missing-authority' },
+        ]),
+      ).rejects.toThrow(/requires CredentialAuthority/);
     } finally {
-      await handle.cleanup();
-      await config.dispose();
+      await owner.dispose();
     }
   });
 });

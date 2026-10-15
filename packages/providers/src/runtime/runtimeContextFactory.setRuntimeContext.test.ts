@@ -1,45 +1,29 @@
-import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-
-/**
- * Behavioral test for the isolated-runtime activation wiring of
- * ProviderManager#setRuntimeContext.
- *
- * Verifies that activating an isolated runtime installs the scoped
- * ProviderRuntimeContext onto the provider manager via its public
- * setRuntimeContext method (no private-field cast). The unit under test is the
- * factory's activate closure; the ProviderManager is a real collaborator.
- *
- * Observable contract: after activation, prepareStatelessProviderInvocation()
- * (which reads this.runtime) succeeds WITHOUT throwing the "runtime" missing
- * field error — proving the scoped runtime was installed.
- */
-
 import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { type ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { ProviderManager } from '../ProviderManager.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import {
-  createIsolatedRuntimeContext,
-  type IsolatedRuntimeContextHandle,
-  type RuntimeActivationBindings,
-} from './runtimeContextFactory.js';
-
-const activationBindings: RuntimeActivationBindings = {
-  resetInfrastructure: () => {},
-  setRuntimeContext: () => {},
-  registerInfrastructure: () => {},
-  linkProviderManager: (config, manager) => {
-    configureProviderRuntimeFactories(config, manager);
-  },
-};
+  acquireAdoptedProviderManager,
+  activateAdoptedProviders,
+} from '../../../agents/src/api/adopted-provider-assembly.js';
+import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 
 class RuntimeAdmissionObserver extends ProviderManager {
   readonly admittedContexts: ProviderRuntimeContext[] = [];
@@ -53,176 +37,185 @@ class RuntimeAdmissionObserver extends ProviderManager {
 }
 
 describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP4-004', () => {
-  let handle: IsolatedRuntimeContextHandle | undefined;
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let config: Config;
+  let settings: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
 
   afterEach(async () => {
-    if (handle) {
-      await handle.cleanup();
-      handle = undefined;
-    }
+    await runCleanupSteps(retiring.splice(0).reverse());
   });
 
-  it('keeps the selected Config outside scoped runtime data across activations', async () => {
-    const root = createProviderConfigFixture({
-      sessionId: 'scoped-config-owner',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      model: 'scoped-model',
+  async function openConfig(sessionId: string, model: string): Promise<void> {
+    const rawDirectory = await mkdtemp(join(tmpdir(), 'runtime-admission-'));
+    retiring.push(() => rm(rawDirectory, { recursive: true, force: true }));
+    const directory = await realpath(rawDirectory);
+    const selectedConfig = new Config({
+      sessionId,
+      targetDir: directory,
+      cwd: directory,
+      model,
       debugMode: false,
     });
+    config = selectedConfig;
+    retiring.push(() => selectedConfig.dispose());
+    settings = new SettingsService();
+    const selectedSettings = new SessionSettingsOwner(settings);
+    settingsOwner = selectedSettings;
+    retiring.push(() => selectedSettings.dispose());
+    settingsOwner.bindTelemetry(config);
+    settingsOwner.initializeProviderSelection(config.getProvider(), model);
+  }
+
+  async function activateManager(
+    manager: ProviderManager,
+    runtimeId: string,
+  ): Promise<void> {
+    const policy = new RuntimePolicyOwner(config);
+    retiring.push(() => policy.dispose());
+    const release = new AcquisitionRelease();
+    retiring.push(() => release.close());
+    const oauth = acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      config,
+      settings,
+      manager,
+      runtimeId,
+      undefined,
+      credentials().authority,
+      release,
+    );
+    await activateAdoptedProviders(
+      config,
+      settings,
+      settingsOwner,
+      manager,
+      oauth,
+      runtimeId,
+      false,
+      configureProviderRuntimeFactories(config, manager).tokenizerFactory,
+    );
+  }
+
+  it('keeps the selected Config outside scoped runtime data across activations', async () => {
+    await openConfig('scoped-config-owner', 'scoped-model');
     const manager = new RuntimeAdmissionObserver(
       undefined,
       undefined,
       undefined,
       undefined,
-      root.settingsService,
+      settings,
       undefined,
       undefined,
-      new CredentialAuthority(),
-      root.settingsOwner,
+      credentials().authority,
+      settingsOwner,
     );
-    handle = createIsolatedRuntimeContext(
-      {
-        credentialAuthority: new CredentialAuthority(),
-        settingsOwner: root.settingsOwner,
-        activationBindings,
-        runtimeId: 'scoped-config-owner',
-        config: root.config,
-        providerManager: manager,
-      },
-      root.settingsService,
-    );
-    try {
-      await handle.activate({ runtimeId: 'first-activation' });
-      await handle.activate({ runtimeId: 'second-activation' });
-      expect(
-        manager.admittedContexts.map((runtime) => ({
-          runtimeId: runtime.runtimeId,
-          hasConfig: 'config' in runtime,
-        })),
-      ).toStrictEqual([
-        { runtimeId: 'first-activation', hasConfig: false },
-        { runtimeId: 'second-activation', hasConfig: false },
-      ]);
-      expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
-    } finally {
-      await handle.cleanup();
-      handle = undefined;
-      manager.dispose();
-      await root.settingsOwner.dispose();
-      await root.config.dispose();
-    }
+    retiring.push(() => manager.dispose());
+    await activateManager(manager, 'first-activation');
+    await activateManager(manager, 'second-activation');
+    expect(
+      manager.admittedContexts.map((runtime) => ({
+        runtimeId: runtime.runtimeId,
+        hasConfig: 'config' in runtime,
+      })),
+    ).toStrictEqual([
+      { runtimeId: 'first-activation', hasConfig: false },
+      { runtimeId: 'second-activation', hasConfig: false },
+    ]);
+    expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
   });
 
   it('installs the scoped runtime onto the provider manager via setRuntimeContext', async () => {
-    let capturedManager:
-      | IsolatedRuntimeContextHandle['providerManager']
-      | undefined;
-    handle = (() => {
-      const {
-        config: capturedConfig31,
-        settingsService: capturedConfig31SettingsService,
-        settingsOwner: capturedConfig31SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'setRuntimeContext-scoped',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'scoped-model',
-        debugMode: false,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          settingsOwner: capturedConfig31SettingsOwner,
-          activationBindings,
-          runtimeId: 'setRuntimeContext-scoped',
-          config: capturedConfig31,
-          metadata: { source: 'setRuntimeContext-wiring' },
-          prepare: async ({ providerManager }) => {
-            capturedManager = providerManager;
-          },
-        },
-        capturedConfig31SettingsService,
-      );
-    })();
-
-    try {
-      await handle.activate({
-        runtimeId: handle.runtimeId,
-        metadata: { source: 'setRuntimeContext-wiring' },
-      });
-
-      expect(capturedManager).toBeDefined();
-      // The scoped runtime was installed: prepareStatelessProviderInvocation
-      // reads this.runtime and must NOT throw the "runtime" missing error.
-      // Assert the method exists first and call it WITHOUT optional chaining so
-      // the not-throw assertion cannot pass trivially on an absent method.
-      expect(capturedManager!.prepareStatelessProviderInvocation).toBeDefined();
-      expect(() =>
-        capturedManager!.prepareStatelessProviderInvocation!(),
-      ).not.toThrow();
-    } finally {
-      await handle.cleanup();
-      handle = undefined;
-    }
+    await openConfig('setRuntimeContext-scoped', 'scoped-model');
+    const release = new AcquisitionRelease();
+    retiring.push(() => release.close());
+    const files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    release.acquire('files', () =>
+      releaseAdoptedFileScope(files, 'setRuntimeContext-scoped'),
+    );
+    const capturedManager = acquireAdoptedProviderManager(
+      undefined,
+      config,
+      settings,
+      settingsOwner,
+      files,
+      'setRuntimeContext-scoped',
+      credentials().authority,
+      release,
+    );
+    if (!(capturedManager instanceof ProviderManager))
+      throw new Error('Expected concrete acquired manager');
+    await activateManager(capturedManager, 'setRuntimeContext-scoped');
+    expect(capturedManager).toBeDefined();
+    expect(capturedManager.prepareStatelessProviderInvocation).toBeDefined();
+    expect(() =>
+      capturedManager.prepareStatelessProviderInvocation(),
+    ).not.toThrow();
   });
 
   it('installs the scoped runtime onto an ADOPTED provider manager via setRuntimeContext', async () => {
-    // Construct a REAL ProviderManager and pass it in via the adoption seam
-    // (providerManager option). The factory must call setRuntimeContext on
-    // THIS instance (not a fresh one), so prepareStatelessProviderInvocation
-    // — which reads this.runtime — succeeds after activation.
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
+    await openConfig('setRuntimeContext-adopted', 'adopted-model');
     const adoptedManager = new ProviderManager(
       undefined,
       undefined,
       undefined,
       undefined,
-      settingsService,
+      settings,
       config,
+      undefined,
+      credentials().authority,
+      settingsOwner,
     );
-
-    // Assign to the describe-scope `handle` (do NOT shadow with a local const)
-    // so the afterEach hook owns cleanup even if activation throws.
-    handle = (() => {
-      const {
-        config: capturedConfig32,
-        settingsService: capturedConfig32SettingsService,
-        settingsOwner: capturedConfig32SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'setRuntimeContext-adopted',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'adopted-model',
-        debugMode: false,
-        settingsService,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          settingsOwner: capturedConfig32SettingsOwner,
-          activationBindings,
-          runtimeId: 'setRuntimeContext-adopted',
-          config: capturedConfig32,
-          providerManager: adoptedManager,
-          prepare: async () => {},
-        },
-        capturedConfig32SettingsService,
-      );
-    })();
-
-    await handle.activate({
-      runtimeId: handle.runtimeId,
-      metadata: { source: 'setRuntimeContext-adopted' },
+    retiring.push(() => adoptedManager.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    retiring.push(() => policy.dispose());
+    const release = new AcquisitionRelease();
+    retiring.push(() => release.close());
+    const files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
     });
-
-    // The ADOPTED manager received the scoped runtime: identity holds AND
-    // prepareStatelessProviderInvocation does not throw the "runtime"
-    // missing error.
-    expect(handle.providerManager).toBe(adoptedManager);
+    release.acquire('files', () =>
+      releaseAdoptedFileScope(files, 'setRuntimeContext-adopted'),
+    );
+    const selected = acquireAdoptedProviderManager(
+      adoptedManager,
+      config,
+      settings,
+      settingsOwner,
+      files,
+      'setRuntimeContext-adopted',
+      credentials().authority,
+      release,
+    );
+    const oauth = acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      config,
+      settings,
+      adoptedManager,
+      'setRuntimeContext-adopted',
+      undefined,
+      credentials().authority,
+      release,
+    );
+    await activateAdoptedProviders(
+      config,
+      settings,
+      settingsOwner,
+      selected,
+      oauth,
+      'setRuntimeContext-adopted',
+      false,
+      configureProviderRuntimeFactories(config, adoptedManager)
+        .tokenizerFactory,
+    );
+    expect(selected).toBe(adoptedManager);
     expect(() =>
       adoptedManager.prepareStatelessProviderInvocation(),
     ).not.toThrow();

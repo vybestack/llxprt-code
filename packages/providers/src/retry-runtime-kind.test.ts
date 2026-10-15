@@ -1,5 +1,18 @@
-import { CredentialAuthority } from './auth/proxy/credential-store-factory.js';
-import { createProviderConfigFixture } from './runtime/__tests__/provider-config-fixture.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderManager, ProviderFileLifecycle } from './index.js';
+import { configureProviderRuntimeFactories } from './composition/index.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { acquirePreferredProviderManager } from '../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../agents/src/core/subagent-cleanup.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,36 +30,85 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
-import { assembleCliProviderRuntime } from './runtime/assembleCliProviderRuntime.js';
+
 describe('retry runtime kind', () => {
-  const configs: Config[] = [];
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let config: Config;
+  let settings: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
+  let manager: ProviderManager;
   afterEach(async () => {
-    await Promise.all(configs.splice(0).map((config) => config.dispose()));
+    await runCleanupSteps(retiring.splice(0).reverse());
   });
+  async function openManager(
+    runtimeId: string,
+    runtimeKind: RuntimeKind,
+  ): Promise<void> {
+    try {
+      const directory = await mkdtemp(join(tmpdir(), 'retry-kind-owner-'));
+      retiring.push(() => rm(directory, { recursive: true, force: true }));
+      const selected = new Config({
+        sessionId: 'same-label',
+        targetDir: directory,
+        cwd: directory,
+        model: 'test-model',
+        debugMode: false,
+      });
+      config = selected;
+      retiring.push(() => selected.dispose());
+      settings = new SettingsService();
+      const selectedSettings = new SessionSettingsOwner(settings);
+      settingsOwner = selectedSettings;
+      retiring.push(() => selectedSettings.dispose());
+      settingsOwner.bindTelemetry(config);
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      const release = new AcquisitionRelease();
+      let complete = false;
+      retiring.push(() => (complete ? release.close() : release.rollback()));
+      for (const scope of new Set([runtimeId, 'same-label']))
+        release.acquire('files', () => releaseAdoptedFileScope(files, scope));
+      manager = acquirePreferredProviderManager(
+        config,
+        settings,
+        settingsOwner,
+        files,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      configureProviderRuntimeFactories(config, manager);
+      manager.setRuntimeContext(
+        createProviderRuntimeContext({
+          runtimeId,
+          runtimeKind,
+          metadata: { source: 'cli-bootstrap' },
+        }),
+        settingsOwner,
+        settings,
+        config,
+      );
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        runCleanupSteps(retiring.splice(0).reverse()),
+      );
+    }
+  }
 
   function request(runtimeKind: RuntimeKind | undefined): {
     options: GenerateChatOptions;
     owner: ProviderRuntimeContext;
-    root: ReturnType<typeof createProviderConfigFixture>;
   } {
-    const settings = new SettingsService();
-    const root = createProviderConfigFixture({
-      sessionId: 'same-label',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      settingsService: settings,
-    });
-    const { config } = root;
-    configs.push(config);
     const owner = createProviderRuntimeContext({
       runtimeId: 'same-label',
       runtimeKind,
     });
     return {
       owner,
-      root,
       options: {
         contents: [],
         runtimeKind,
@@ -90,55 +152,32 @@ describe('retry runtime kind', () => {
     throw new Error('Expected bucket exhaustion');
   }
   it('preserves bootstrap recovery wording through CLI context and assembly', async () => {
-    const { options, root } = request(undefined);
-    const { config } = root;
-    const assembled = await assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService: root.settingsService,
-      settingsOwner: root.settingsOwner,
-      config,
-      runtimeId: 'bootstrap',
-      metadata: { source: 'cli-bootstrap' },
-    });
+    const { options } = request(undefined);
+    await openManager('bootstrap', 'cli-bootstrap');
     expect(
       (
         await exhaust({
           ...options,
-          runtimeKind: assembled.runtime.runtimeKind,
+          runtimeKind: manager.getAuthIdentity().runtimeKind,
         })
       ).message,
     ).toContain('interactive host session');
-    assembled.registration.dispose();
   });
   it('reads activation overrides through the owning provider manager at invocation time', async () => {
-    const { options, owner: runtime, root } = request('agent');
-    const { config } = root;
-    root.settingsOwner.writeUserParameter('retrywait', 0);
-    root.settingsOwner.writeUserParameter('auth-key', 'test-key');
-    const owner = await assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      runtimeId: 'retry-owner',
-      settingsService: root.settingsService,
-      settingsOwner: root.settingsOwner,
-      config,
-    });
-    owner.providerManager.setRetryOperationsFactory?.(() => ({
+    const { options, owner: runtime } = request('agent');
+    await openManager('retry-owner', 'cli-bootstrap');
+    settingsOwner.writeUserParameter('retrywait', 0);
+    settingsOwner.writeUserParameter('auth-key', 'test-key');
+    manager.setRetryOperationsFactory(() => ({
       tryBucketFailover: options.tryBucketFailover,
       readFailoverBuckets: options.readFailoverBuckets,
       readFailoverReasons: options.readFailoverReasons,
     }));
-    owner.providerManager.setRuntimeContext(
-      runtime,
-      root.settingsOwner,
-      root.settingsService,
-      config,
-    );
-    owner.providerManager.registerProvider(provider);
-    await owner.providerManager.setActiveProvider(provider.name);
+    manager.setRuntimeContext(runtime, settingsOwner, settings, config);
+    manager.registerProvider(provider);
+    manager.setActiveProvider(provider.name);
     const fail = async (): Promise<string> => {
-      const activeProvider = owner.providerManager.getActiveProvider();
+      const activeProvider = manager.getActiveProvider();
       if (!activeProvider) throw new Error('Missing fixture provider');
       try {
         for await (const content of activeProvider.generateChatCompletion({
@@ -154,32 +193,32 @@ describe('retry runtime kind', () => {
     };
     try {
       expect(await fail()).toContain('interactive host session');
-      owner.providerManager.setRuntimeContext(
+      manager.setRuntimeContext(
         {
           ...runtime,
           runtimeId: 'activated-owner',
           runtimeKind: 'cli-interactive',
         },
-        root.settingsOwner,
-        root.settingsService,
+        settingsOwner,
+        settings,
         config,
       );
       expect(await fail()).toContain(
         'auth dialog will open on your next message',
       );
-      owner.providerManager.setRuntimeContext(
+      manager.setRuntimeContext(
         {
           ...runtime,
           runtimeId: 'activated-owner',
           runtimeKind: 'subagent',
         },
-        root.settingsOwner,
-        root.settingsService,
+        settingsOwner,
+        settings,
         config,
       );
       expect(await fail()).toContain('interactive host session');
     } finally {
-      owner.registration.dispose();
+      await runCleanupSteps(retiring.splice(0).reverse());
     }
   });
 

@@ -22,6 +22,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { rejectCredentialTransports } from './helpers/credential-transport-fault.js';
 import {
   listProviders as staticListProviders,
   listTools as staticListTools,
@@ -95,6 +96,18 @@ describe('Static discovery helpers @plan:PLAN-20260617-COREAPI.P25 @requirement:
 
     // No duplicate tool names.
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('enumerates canonical provider data when credential transports cannot be acquired', () => {
+    const restore = rejectCredentialTransports();
+    try {
+      const names = staticListProviders().map((provider) => provider.name);
+      expect(names).toContain('openai');
+      expect(names).toContain('anthropic');
+      expect(names).not.toContain('gemini');
+    } finally {
+      restore();
+    }
   });
 
   it('listTools() is pure and stable across calls (runtime-free, deterministic) @plan:PLAN-20260617-COREAPI.P25 @requirement:REQ-017', () => {
