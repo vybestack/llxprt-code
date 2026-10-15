@@ -91,11 +91,13 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]['addItem']>;
   let mockConfig: Config;
   let contextLimit: number | undefined;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<
+    Parameters<typeof useAgentStream>[2]['handleSlashCommand']
+  >;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -106,7 +108,9 @@ describe('useAgentStream', () => {
     contextLimit = undefined;
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]['addItem']>(
+      () => 0,
+    );
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -225,26 +229,32 @@ describe('useAgentStream', () => {
     return renderHook(() =>
       useAgentStream(
         agentForHook1,
-        [],
-        mockAddItem,
         createStreamRuntimeForTest(mockConfig, {
           ephemeral: {
             getEphemeralSetting: (key) =>
               key === 'context-limit' ? contextLimit : undefined,
           },
         }),
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        shellModeActive,
-        () => 'vscode' as EditorType,
-        onAuthError,
-        performMemoryRefresh,
-        () => {},
-        onCancelSubmit,
-        setShellInputFocused,
-        80,
-        24,
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: mockLoadedSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError,
+          performMemoryRefresh,
+          onEditorClose: () => {},
+          onCancelSubmit,
+          setShellInputFocused,
+          terminalWidth: 80,
+          terminalHeight: 24,
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       ),
     );
   };
@@ -271,26 +281,32 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           agentForHook2,
-          [],
-          mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
             ephemeral: {
               getEphemeralSetting: (key) =>
                 key === 'context-limit' ? contextLimit : undefined,
             },
           }),
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
-          80,
-          24,
+          {
+            history: [],
+            addItem: mockAddItem,
+            settings: mockLoadedSettings,
+            onDebugMessage: mockOnDebugMessage,
+            handleSlashCommand: mockHandleSlashCommand,
+            shellModeActive: false,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: () => {},
+            setShellInputFocused: () => {},
+            terminalWidth: 80,
+            terminalHeight: 24,
+          },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
         ),
       );
 
@@ -474,26 +490,32 @@ describe('useAgentStream', () => {
       const { result } = renderHook(() =>
         useAgentStream(
           agentForHook3,
-          [],
-          mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
             ephemeral: {
               getEphemeralSetting: (key) =>
                 key === 'context-limit' ? contextLimit : undefined,
             },
           }),
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          onCancelSubmitSpy,
-          () => {},
-          80,
-          24,
+          {
+            history: [],
+            addItem: mockAddItem,
+            settings: mockLoadedSettings,
+            onDebugMessage: mockOnDebugMessage,
+            handleSlashCommand: mockHandleSlashCommand,
+            shellModeActive: false,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: onCancelSubmitSpy,
+            setShellInputFocused: () => {},
+            terminalWidth: 80,
+            terminalHeight: 24,
+          },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
         ),
       );
 
@@ -711,26 +733,32 @@ describe('useAgentStream', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         agentForHook4,
-        [],
-        mockAddItem,
         createStreamRuntimeForTest(mockConfig, {
           ephemeral: {
             getEphemeralSetting: (key) =>
               key === 'context-limit' ? contextLimit : undefined,
           },
         }),
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        vi.fn(),
-        vi.fn(),
-        () => {},
-        vi.fn(),
-        vi.fn(),
-        80,
-        24,
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: mockLoadedSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: vi.fn(),
+          performMemoryRefresh: vi.fn(),
+          onEditorClose: () => {},
+          onCancelSubmit: vi.fn(),
+          setShellInputFocused: vi.fn(),
+          terminalWidth: 80,
+          terminalHeight: 24,
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 
