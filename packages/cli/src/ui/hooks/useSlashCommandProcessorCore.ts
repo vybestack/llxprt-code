@@ -4,16 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createDiagnosticsCommand } from '../commands/diagnosticsCommand.js';
-import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
+import { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 
 import { useCommandRuntimeState } from './useCommandRuntimeState.js';
 import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
 import { useHostCommands } from './useHostCommands.js';
 import { useResourceCommands } from './useResourceCommands.js';
-import { join } from 'node:path';
-import { createPerfCommand } from '../commands/perfCommand.js';
 import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -27,7 +24,6 @@ import { useCredentialCommands } from './useCredentialCommands.js';
 import { useChatCommand } from './useChatCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
-import { createCopyCommand } from '../commands/copyCommand.js';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
@@ -49,15 +45,6 @@ import { createBugCommand } from '../commands/bugCommand.js';
 import { bindBugCommand } from '../commands/bugCommandHost.js';
 import { createPoliciesCommand } from '../commands/policiesCommand.js';
 import { bindPoliciesCommand } from '../commands/policiesCommandHost.js';
-import {
-  bindCopyCommandClipboard,
-  bindCopyCommandHistoryRead,
-} from '../commands/copyCommandHost.js';
-import { createCompressCommand } from '../commands/compressCommand.js';
-import { bindCompressCommand } from '../commands/compressCommandHost.js';
-import { createDumpcontextCommand } from '../commands/dumpcontextCommand.js';
-import { bindDumpcontextCommand } from '../commands/dumpcontextCommandHost.js';
-import { bindRestoreCommand } from '../commands/restoreCommandHost.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -151,74 +138,6 @@ interface SlashCommandProcessorState {
   setSessionShellAllowlist: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
-function useHistoryCommandOwners(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
-  runtimeApi: ReturnType<typeof useRuntimeApi>,
-  settings: LoadedSettings,
-  oauthControl: ReturnType<typeof useOAuthControl>,
-): Pick<
-  BuiltinCommandOwners,
-  | 'copyCommand'
-  | 'compressCommand'
-  | 'dumpcontextCommand'
-  | 'restoreCommand'
-  | 'perfCommand'
-  | 'diagnosticsCommand'
-> {
-  return useMemo(
-    () => ({
-      diagnosticsCommand: createDiagnosticsCommand(
-        bindDiagnosticsReads(config, settings, agent, runtimeApi, oauthControl),
-      ),
-      perfCommand: createPerfCommand({
-        snapshotCapability: config?.getPerfSnapshotCapability?.() ?? null,
-        tokenUsageDir: config
-          ? join(config.getProjectTempDir(), 'token-usage')
-          : undefined,
-        readHistory: () =>
-          agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
-      }),
-      copyCommand: createCopyCommand(
-        bindCopyCommandHistoryRead(
-          () => agent?.agentClient.hasChatInitialized() ?? false,
-          () => agent?.getHistory() ?? Promise.resolve([]),
-        ),
-        bindCopyCommandClipboard(),
-      ),
-      compressCommand: createCompressCommand(bindCompressCommand(agent)),
-      dumpcontextCommand: createDumpcontextCommand(
-        bindDumpcontextCommand({
-          readMode: () => runtimeApi.getSessionSetting('dumpcontext'),
-          writeMode: (mode) =>
-            runtimeApi.setSessionSetting('dumpcontext', mode),
-          readHistory: () => {
-            const history = agent?.agentClient.getHistoryService();
-            return history === undefined || history === null
-              ? null
-              : {
-                  messages: history.getAll(),
-                  chronology: history.getChronologyTrace(),
-                };
-          },
-          readProvider: () => runtimeApi.getProviderDumpMetadata(),
-          readOutputSettings: () => config?.getEphemeralSettings() ?? {},
-          readRuntimeConfig: () => config,
-        }),
-      ),
-      restoreCommand: bindRestoreCommand(
-        config,
-        agent,
-        config?.getCheckpointingEnabled() === true
-          ? config.checkpoints
-          : undefined,
-        () => settings.merged.enableFuzzyFiltering ?? true,
-      ),
-    }),
-    [agent, config, runtimeApi, settings, oauthControl],
-  );
-}
-
 function useTodoCommandOwner(
   todos: TodoContextValue | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
@@ -249,6 +168,7 @@ function useCommandState(
   settings: LoadedSettings,
   agent: Agent | null,
   addItem: UseHistoryManagerReturn['addItem'],
+  historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>,
   setMemoryFileCount: (count: number) => void,
   todoContext: TodoContextValue | undefined,
   reloadCommands: () => void,
@@ -300,13 +220,6 @@ function useCommandState(
     rawRecording,
     addItem,
     setMemoryFileCount,
-  );
-  const historyCommandOwners = useHistoryCommandOwners(
-    agent,
-    config,
-    runtimeApi,
-    settings,
-    useOAuthControl(),
   );
   const builtins = useBuiltinCommandOwners({
     chatCommand,
@@ -718,6 +631,15 @@ function useRegisteredCommands(
     args.settings,
     args.agent,
     args.addItem,
+    useHistoryCommandOwners(
+      args.agent,
+      args.config,
+      runtimeApi,
+      args.settings,
+      useOAuthControl(),
+      args.loadHistory,
+      args.addItem,
+    ),
     args.setLlxprtMdFileCount,
     args.todoContext,
     reloadRegisteredCommands,

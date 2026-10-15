@@ -16,13 +16,17 @@ import {
 import { createMcpCommand } from './mcpCommand.js';
 import { bindMcpCommand } from './mcpCommandHost.js';
 import type { SlashCommand } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 interface McpOwner {
   readonly command: SlashCommand;
   readonly authenticated: string[];
 }
 
-function mcpOwner(serverName: string): McpOwner {
+function mcpOwner(
+  serverName: string,
+  addItem: UseHistoryManagerReturn['addItem'],
+): McpOwner {
   const authenticated: string[] = [];
   const operations: McpAuthCommandOperations = {
     isConfigured: () => true,
@@ -36,7 +40,12 @@ function mcpOwner(serverName: string): McpOwner {
   return {
     authenticated,
     command: createMcpCommand(
-      createMcpAuthCommand(operations, () => true),
+      createMcpAuthCommand(
+        operations,
+        () => true,
+        addItem,
+        () => {},
+      ),
       bindMcpCommand(
         null,
         null,
@@ -69,10 +78,6 @@ async function registeredMcp(command: SlashCommand): Promise<SlashCommand> {
 
 describe('MCP auth command owner', () => {
   it('authenticates through the registered owner, not invocation services', async () => {
-    const left = mcpOwner('left');
-    const right = mcpOwner('right');
-    const mcp = await registeredMcp(left.command);
-    await registeredMcp(right.command);
     const reported: string[] = [];
     const context = createMockCommandContext({
       services: { agent: null, config: null },
@@ -84,6 +89,10 @@ describe('MCP auth command owner', () => {
         reloadCommands: () => {},
       },
     });
+    const left = mcpOwner('left', context.ui.addItem);
+    const right = mcpOwner('right', () => 0);
+    const mcp = await registeredMcp(left.command);
+    await registeredMcp(right.command);
     const auth = mcp.subCommands?.find((command) => command.name === 'auth');
     if (auth?.action === undefined) throw new Error('/mcp auth is unavailable');
 
@@ -97,7 +106,7 @@ describe('MCP auth command owner', () => {
   });
 
   it('lists OAuth servers from the registered owner', async () => {
-    const owner = mcpOwner('configured');
+    const owner = mcpOwner('configured', () => 0);
     const mcp = await registeredMcp(owner.command);
     const context = createMockCommandContext({
       services: { agent: null, config: null },

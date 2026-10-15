@@ -96,6 +96,8 @@ export function registerMcpCommand(context: CommandContext): SlashCommand {
         context.services.config,
       ),
       () => context.services.settings.merged.enableFuzzyFiltering ?? true,
+      (...input) => context.ui.addItem(...input),
+      () => context.ui.reloadCommands(),
     ),
     bindMcpCommand(
       context.services.config,

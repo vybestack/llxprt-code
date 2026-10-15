@@ -118,6 +118,8 @@ export function useCredentialCommands(
         createMcpAuthCommand(
           bindMcpAuthCommandOperations(agent, config),
           () => settings.merged.enableFuzzyFiltering ?? true,
+          addItem,
+          reloadCommands,
         ),
         bindMcpCommand(config, agent, addItem, reloadCommands),
       ),

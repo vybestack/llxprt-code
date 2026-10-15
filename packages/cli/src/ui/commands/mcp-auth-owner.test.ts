@@ -72,8 +72,11 @@ describe('CLI MCP authentication', () => {
     let work: ReturnType<typeof action> | undefined;
     let disposal: Promise<void> | undefined;
     try {
-      work = action(context, 'shared');
+      work = action(createMockCommandContext(), 'shared');
       await entered;
+      expect(JSON.stringify(messages)).toContain(
+        "Starting OAuth authentication for MCP server 'shared'",
+      );
       disposal = built.agent.dispose();
       expect(signal?.aborted).toBe(true);
       release();
