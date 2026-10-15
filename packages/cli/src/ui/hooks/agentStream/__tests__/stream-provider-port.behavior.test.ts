@@ -27,18 +27,11 @@ describe('CLI overflow guidance live provider port', () => {
     const { result, unmount } = renderHook(() =>
       useStreamEventHandlers({
         runtime: createStreamRuntimeForTest({ getModel: () => 'local' }),
-        agent: {
-          getProviderContextLimit: () => limit,
-          getProvider: () => 'local',
-          getModel: () => 'local',
-          getCurrentSequenceModel: () => null,
-          getActiveProfileName: () => null,
-          tools: { get: () => undefined },
-          mcp: {
-            findResource: () => undefined,
-            readResource: async () => ({}),
-          },
-        },
+        getProviderContextLimit: () => limit,
+        getContentPrefixIdentity: () => null,
+        getToolHandle: () => undefined,
+        findResource: () => undefined,
+        readResource: async () => ({}),
         settings,
         addItem: (item) => {
           history.push(item);
