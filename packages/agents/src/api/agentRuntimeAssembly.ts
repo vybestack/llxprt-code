@@ -424,6 +424,7 @@ export function assemblePreferredAgent(
   editorCallbacks: EditorCallbacks | undefined,
   schedulerHandles: AgentSchedulerHandle[],
   schedulerFactory: SchedulerConstruction,
+  executeShellCommand: AgentConfig['executeShellCommand'],
 ): Promise<Agent> {
   return new PreferredAgentAssembly(
     config,
@@ -449,6 +450,7 @@ export function assemblePreferredAgent(
     editorCallbacks,
     schedulerHandles,
     schedulerFactory,
+    executeShellCommand,
   ).assemble();
 }
 
@@ -493,6 +495,7 @@ class PreferredAgentAssembly {
     private readonly editorCallbacks: EditorCallbacks | undefined,
     private readonly schedulerHandles: AgentSchedulerHandle[],
     private readonly schedulerFactory: SchedulerConstruction,
+    private readonly executeShellCommand: AgentConfig['executeShellCommand'],
   ) {}
 
   async assemble(): Promise<Agent> {
@@ -604,6 +607,10 @@ class PreferredAgentAssembly {
           this.config.isInteractive(),
         this.mcpOptions.imageOperation,
       );
+      if (this.executeShellCommand !== undefined)
+        this.sessionClient.toolCatalog.bindShellExecution(
+          this.executeShellCommand,
+        );
       await this.initializeCreatedAgent();
     } catch (primaryError) {
       await cleanupFailedCreatedAgent(

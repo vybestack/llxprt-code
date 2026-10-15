@@ -37,6 +37,7 @@ export type McpAssemblyOptions = Pick<
   | 'lspOwnership'
   | 'definitionOwner'
   | 'definitionOwnership'
+  | 'filesystemService'
   | 'filesystemOwner'
   | 'filesystemOwnership'
 >;
@@ -109,5 +110,6 @@ export async function assembleMcpRuntime(
     options.trustCleanup,
     undefined,
     settingsOwner?.readMcpSettingsBinding(),
+    options.filesystemService,
   );
 }

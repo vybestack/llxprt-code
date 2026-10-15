@@ -221,6 +221,7 @@ async function createAgentWithHostGitHub(
     construction.editorCallbacks,
     injectedSchedulerHandles,
     schedulerFactory,
+    rawConfig.executeShellCommand,
   );
 }
 

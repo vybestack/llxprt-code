@@ -188,6 +188,7 @@ function uiWorkspace(
     checkpoints: checkpoints.operations,
     ...filesystem.ignore,
     ...filesystem.search,
+    ...filesystem.files,
     getDirectories: () => [...filesystem.paths.directories()],
     addDirectory: (directory) => filesystem.addDirectory(directory),
     containsPath: (filePath) => filesystem.paths.contains(filePath),

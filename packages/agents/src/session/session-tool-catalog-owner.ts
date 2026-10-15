@@ -7,6 +7,10 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CoreShellToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreShellToolHostAdapter.js';
+import { ShellTool } from '@vybestack/llxprt-code-tools';
+import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
+
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
 
@@ -94,6 +98,16 @@ export class SessionToolCatalogOwner {
       init?: RequestInit,
     ) => Promise<Response> = globalThis.fetch,
   ) {}
+
+  private shellExecution: IShellToolHost['executeShellCommand'] | undefined;
+  bindShellExecution(execute: IShellToolHost['executeShellCommand']): void {
+    this.admission.assertOpen();
+    if (this.initialization !== undefined || this.shellExecution !== undefined)
+      throw new Error(
+        'Shell execution must be composed once before tool initialization',
+      );
+    this.shellExecution = execute;
+  }
 
   private imageOperation: ImageOperationRunner | undefined;
   bindImageOperation(operation: ImageOperationRunner): void {
@@ -194,10 +208,38 @@ export class SessionToolCatalogOwner {
       this.imageOperation,
       telemetry,
       this.requestFetch,
-    ).then(({ registry, allPotentialTools }) =>
-      this.publishRegistry(registry, allPotentialTools, workspaceSelection),
-    );
+    ).then(({ registry, allPotentialTools }) => {
+      this.bindHostShell(registry, paths, summarize);
+      this.publishRegistry(registry, allPotentialTools, workspaceSelection);
+    });
     return this.initialization;
+  }
+
+  private bindHostShell(
+    registry: ToolRegistry,
+    paths: WorkspacePathOperations,
+    summarize: Parameters<typeof createToolRegistry>[9],
+  ): void {
+    if (
+      this.shellExecution === undefined ||
+      registry.getTool(ShellTool.Name) === undefined
+    )
+      return;
+    const bus = this.sessionBus;
+    if (bus === undefined)
+      throw new Error('Shell execution requires its session bus');
+    registry.registerTool(
+      new ShellTool(
+        new CoreShellToolHostAdapter(
+          this.config,
+          paths,
+          this.readExecutionPolicy,
+          summarize,
+          this.shellExecution,
+        ),
+        bus,
+      ),
+    );
   }
 
   private bindTaskRegistration(
