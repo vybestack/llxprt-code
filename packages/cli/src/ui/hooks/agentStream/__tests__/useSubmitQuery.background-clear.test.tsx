@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -49,7 +50,7 @@ void vi.mock('../streamUtils.js', () => ({
 }));
 
 function renderNotificationQueue(
-  agent: UseSubmitQueryDeps['agent'],
+  agent: Parameters<typeof submissionOperations>[0],
   queuedSubmissionsRef: UseSubmitQueryDeps['queuedSubmissionsRef'],
   drainSuppressedRef: UseSubmitQueryDeps['drainSuppressedRef'],
   runStreamRef: UseSubmitQueryDeps['runStreamRef'],
@@ -57,7 +58,7 @@ function renderNotificationQueue(
   const noop = (): void => {};
   const deps: UseSubmitQueryDeps = {
     runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-    agent,
+    ...submissionOperations(agent, undefined, undefined),
     addItem: () => 1,
     settings: createLoadedSettings(),
     onDebugMessage: noop,

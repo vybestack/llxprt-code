@@ -76,7 +76,13 @@ function renderProviderDialog(
   return renderHook(() =>
     useProviderDialog({
       addMessage,
-      dialogs,
+      listProviders: api.listProviders,
+      getActiveProviderName: api.getActiveProviderName,
+      setProvider: api.setProvider,
+      getActiveModelName: api.getActiveModelName,
+      recordProviderSwitch: () => {},
+      openProviderDialog: () => dialogs.provider.open({}),
+      closeProviderDialog: dialogs.provider.close,
     }),
   );
 }

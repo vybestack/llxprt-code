@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -242,7 +243,13 @@ function renderUseSubmitQuery(opts: {
 } {
   const hookDeps: UseSubmitQueryDeps = {
     runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...submissionOperations(
+      createMockAgentClient() as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: vi.fn().mockReturnValue(1),
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -286,9 +293,7 @@ function renderUseSubmitQuery(opts: {
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
+
     operationLifecycle: opts.operationLifecycle,
   };
 

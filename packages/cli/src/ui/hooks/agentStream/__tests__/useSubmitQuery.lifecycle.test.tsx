@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -149,9 +150,11 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       const rawFlush = vi.fn();
       const hookDeps = {
         ...buildLifecycleHookDeps(deps, harness.registry),
-        agent,
-        recordingOwner: 'agent' as const,
-        recordingIntegration: { flushAtTurnBoundary: rawFlush } as never,
+        ...submissionOperations(
+          agent,
+          { flushAtTurnBoundary: rawFlush } as never,
+          'agent' as const,
+        ),
       };
       const { result, unmount } = renderHook(() => useSubmitQuery(hookDeps));
       await act(async () => {
@@ -337,7 +340,13 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
 
     const hookDeps: UseSubmitQueryDeps = {
       runtime: createStreamRuntimeForTest(),
-      agent: createMockAgentClient() as unknown as Agent,
+      ...submissionOperations(
+        createMockAgentClient() as unknown as Agent,
+        {
+          flushAtTurnBoundary: vi.fn(),
+        } as unknown as RecordingIntegration,
+        undefined,
+      ),
       addItem: vi.fn().mockReturnValue(1),
       settings: {} as never,
       onDebugMessage: vi.fn(),
@@ -381,9 +390,7 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
       submitQueryRef: { current: null },
       isResponding: false,
       streamingState: StreamingState.Idle,
-      recordingIntegration: {
-        flushAtTurnBoundary: vi.fn(),
-      } as unknown as RecordingIntegration,
+
       // operationLifecycle intentionally omitted — perf disabled.
     };
 

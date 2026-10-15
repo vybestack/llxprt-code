@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -103,10 +104,16 @@ export function buildLifecycleHookDeps(
 ): UseSubmitQueryDeps {
   return {
     runtime: createStreamRuntimeForTest(),
-    agent: {
-      ...createMockAgentClient(),
-      metrics: new UiTelemetryService(),
-    } as unknown as Agent,
+    ...submissionOperations(
+      {
+        ...createMockAgentClient(),
+        metrics: new UiTelemetryService(),
+      } as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: vi.fn().mockReturnValue(1),
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -152,9 +159,7 @@ export function buildLifecycleHookDeps(
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
+
     operationLifecycle: registry,
   };
 }

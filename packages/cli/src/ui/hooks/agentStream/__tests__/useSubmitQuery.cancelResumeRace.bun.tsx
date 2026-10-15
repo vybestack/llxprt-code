@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -159,14 +160,14 @@ async function renderWithRealQueue(
 
       const submitDeps: UseSubmitQueryDeps = {
         runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-        agent,
+        ...submissionOperations(agent, undefined, undefined),
         addItem: handles.addItem,
         removeItems: vi.fn(),
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
         onAuthError: vi.fn(),
-        recordingIntegration: undefined,
+
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
         pendingResponse: new PendingResponseBuffer(undefined),
