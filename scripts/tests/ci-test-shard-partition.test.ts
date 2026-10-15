@@ -134,7 +134,7 @@ describe('Issue #854: shell tests run on the first scripts partition only', () =
     expect(condition).toBe(
       `matrix.shard == 'scripts' && startsWith(matrix.partition, '${FIRST_PARTITION_PREFIX}')`,
     );
-    expect(condition).not.toMatch(/\d+of\d+/);
+    expect(condition).not.toMatch(/[0-9]of[0-9]/);
   });
 
   it('matches exactly one scripts row today, the first one', () => {
