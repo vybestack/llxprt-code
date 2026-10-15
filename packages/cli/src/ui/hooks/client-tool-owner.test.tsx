@@ -403,7 +403,11 @@ describe('Agent-owned CLI client tools', () => {
     const display: unknown[] = [];
     const stream = renderHook(() =>
       useAgentEventStream({
-        agent: a.agent,
+        stream: (input, options) => a.agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          a.agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          a.agent.tools.setEditorCallbacks(callbacks),
         addItem: (item) => {
           display.push(item);
           return display.length;

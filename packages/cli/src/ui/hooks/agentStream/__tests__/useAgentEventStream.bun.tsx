@@ -47,7 +47,11 @@ function setupHook(agent: Agent) {
 
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
-      agent,
+      stream: (input, options) => agent.stream(input, options),
+      setDisplayCallbacks: (callbacks) =>
+        agent.tools.setDisplayCallbacks(callbacks),
+      setEditorCallbacks: (callbacks) =>
+        agent.tools.setEditorCallbacks(callbacks),
       addItem,
       processAgentEventRef,
       flushPendingHistoryItem,
@@ -131,7 +135,11 @@ describe('useAgentEventStream', () => {
     const routed: AgentEvent[] = [];
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        stream: (input, options) => agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          agent.tools.setEditorCallbacks(callbacks),
         addItem: vi.fn(),
         processAgentEventRef: {
           current: (e: AgentEvent, _ts: number) => routed.push(e),
@@ -186,7 +194,11 @@ describe('useAgentEventStream', () => {
     const routed: AgentEvent[] = [];
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        stream: (input, options) => agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          agent.tools.setEditorCallbacks(callbacks),
         addItem: vi.fn(),
         processAgentEventRef: {
           current: (e: AgentEvent, _ts: number) => routed.push(e),
@@ -246,7 +258,11 @@ describe('useAgentEventStream', () => {
     const onToolCallsUpdate = vi.fn();
     const { unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        stream: (input, options) => agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          agent.tools.setEditorCallbacks(callbacks),
         addItem: vi.fn(),
         processAgentEventRef: {
           current: null,

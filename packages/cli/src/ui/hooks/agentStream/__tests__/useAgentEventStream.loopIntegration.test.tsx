@@ -423,7 +423,11 @@ function setupHookWithAgent(agent: Agent): HookHarness {
   const onToolCallsUpdate = vi.fn();
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
-      agent,
+      stream: (input, options) => agent.stream(input, options),
+      setDisplayCallbacks: (callbacks) =>
+        agent.tools.setDisplayCallbacks(callbacks),
+      setEditorCallbacks: (callbacks) =>
+        agent.tools.setEditorCallbacks(callbacks),
       addItem,
       processAgentEventRef,
       flushPendingHistoryItem: vi.fn(),

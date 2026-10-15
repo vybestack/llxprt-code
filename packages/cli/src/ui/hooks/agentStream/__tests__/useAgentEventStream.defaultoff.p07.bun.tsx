@@ -85,7 +85,11 @@ describe('useAgentEventStream default-off P07 test lifecycle', () => {
       { current: null };
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        stream: (input, options) => agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          agent.tools.setEditorCallbacks(callbacks),
         addItem: vi.fn(),
         processAgentEventRef,
         flushPendingHistoryItem: vi.fn(),

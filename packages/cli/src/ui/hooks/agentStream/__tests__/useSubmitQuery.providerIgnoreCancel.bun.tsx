@@ -504,7 +504,11 @@ function renderHarness(options: {
       const queue = useQueuedSubmissions();
       const processAgentEventRef = useRef<AgentEventRouter | null>(null);
       const eventStream = useAgentEventStream({
-        agent: env.agent,
+        stream: (input, options) => env.agent.stream(input, options),
+        setDisplayCallbacks: (callbacks) =>
+          env.agent.tools.setDisplayCallbacks(callbacks),
+        setEditorCallbacks: (callbacks) =>
+          env.agent.tools.setEditorCallbacks(callbacks),
         addItem: handles.addItem,
         processAgentEventRef,
         flushPendingHistoryItem: handles.flushPendingHistoryItem,

@@ -244,7 +244,11 @@ function useOrchestration(
   state.processAgentEventRef.current = submitResult.processAgentEvent;
 
   const eventStream = useAgentEventStream({
-    agent,
+    stream: (input, options) => agent.stream(input, options),
+    setDisplayCallbacks: (callbacks) =>
+      agent.tools.setDisplayCallbacks(callbacks),
+    setEditorCallbacks: (callbacks) =>
+      agent.tools.setEditorCallbacks(callbacks),
     addItem,
     processAgentEventRef: state.processAgentEventRef,
     flushPendingHistoryItem: vi.fn(),
