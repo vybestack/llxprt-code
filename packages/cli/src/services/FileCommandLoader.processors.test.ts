@@ -139,14 +139,17 @@ describe('FileCommandLoader (processors)', () => {
           'prompt = "This is the instruction."\ndescription = "Default processor test"',
       });
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'model_led');
       expect(command).toBeDefined();
@@ -175,34 +178,40 @@ describe('FileCommandLoader (processors)', () => {
         'args_only.toml': `prompt = "Hello {{args}}"`,
       });
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       await loader.loadCommands(signal);
 
-      expect(ShellProcessor).toHaveBeenCalledWith('args_only');
+      expect(ShellProcessor).toHaveBeenCalledWith('args_only', null);
     });
     it('instantiates ShellProcessor if the trigger is present', async () => {
       getFsMock().mock({
         'shell.toml': `prompt = "Run this: ${SHELL_INJECTION_TRIGGER}echo hello}"`,
       });
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       await loader.loadCommands(signal);
 
-      expect(ShellProcessor).toHaveBeenCalledWith('shell');
+      expect(ShellProcessor).toHaveBeenCalledWith('shell', null);
     });
 
     it('does not instantiate ShellProcessor if no triggers ({{args}} or !{}) are present', async () => {
@@ -210,14 +219,17 @@ describe('FileCommandLoader (processors)', () => {
         'regular.toml': `prompt = "Just a regular prompt"`,
       });
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).not.toHaveBeenCalled();
@@ -229,14 +241,17 @@ describe('FileCommandLoader (processors)', () => {
       });
       mockShellProcess.mockResolvedValue('Run hello');
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shell');
       expect(command).toBeDefined();
@@ -265,14 +280,17 @@ describe('FileCommandLoader (processors)', () => {
       ]);
       mockShellProcess.mockRejectedValue(error);
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shell');
       expect(command).toBeDefined();
@@ -301,14 +319,17 @@ describe('FileCommandLoader (processors)', () => {
       const genericError = new Error('Something else went wrong');
       mockShellProcess.mockRejectedValue(genericError);
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shell');
       expect(command).toBeDefined();
@@ -349,14 +370,17 @@ describe('FileCommandLoader (processors)', () => {
           }) as unknown as DefaultArgumentProcessor,
       );
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'pipeline');
       expect(command).toBeDefined();
@@ -426,14 +450,17 @@ describe('FileCommandLoader (processors)', () => {
           }) as unknown as DefaultArgumentProcessor,
       );
 
-      const loader = new FileCommandLoader({
-        userCommandsDir: getFsMock().userCommandsDir,
-        projectCommandsDir: getFsMock().projectCommandsDir,
-        getProjectRoot: () => getFsMock().root,
-        getExtensions: () => [],
-        getFolderTrust: () => false,
-        isTrustedFolder: () => true,
-      });
+      const loader = new FileCommandLoader(
+        {
+          userCommandsDir: getFsMock().userCommandsDir,
+          projectCommandsDir: getFsMock().projectCommandsDir,
+          getProjectRoot: () => getFsMock().root,
+          getExtensions: () => [],
+          getFolderTrust: () => false,
+          isTrustedFolder: () => true,
+        },
+        null,
+      );
       const commands = await loader.loadCommands(signal);
       return commands.find((c) => c.name === 'at-file');
     }
@@ -475,7 +502,7 @@ describe('FileCommandLoader (processors)', () => {
         'test2.toml': 'prompt = "Prompt 2"',
       });
 
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(2);
@@ -495,7 +522,7 @@ describe('FileCommandLoader (processors)', () => {
         'test2.toml': 'prompt = "Prompt 2"',
       });
 
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(0);
@@ -525,7 +552,7 @@ describe('FileCommandLoader (processors)', () => {
         'test1.toml': 'prompt = "Prompt 1"',
       });
 
-      const loader = new FileCommandLoader(mockConfig);
+      const loader = new FileCommandLoader(mockConfig, null);
 
       // Mock glob to throw an AbortError
       const abortError = new DOMException('Aborted', 'AbortError');

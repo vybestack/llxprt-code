@@ -18,6 +18,7 @@ import {
 
 import { parseSlashCommand } from './utils/commands.js';
 import { CommandService } from './services/CommandService.js';
+import { bindShellPromptOperations } from './services/prompt-processors/shellPromptHost.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext, SlashCommand } from './ui/commands/types.js';
 import type { RuntimeApi } from './ui/contexts/RuntimeContext.js';
@@ -59,14 +60,17 @@ export const handleSlashCommand = async (
   if (authority === undefined)
     throw new Error('File commands require the workspace trust authority');
   const loaders = [
-    new FileCommandLoader({
-      userCommandsDir: config.userCommandsDir,
-      projectCommandsDir: config.projectCommandsDir,
-      getProjectRoot: () => config.getProjectRoot(),
-      getExtensions: () => config.getExtensions(),
-      getFolderTrust: () => config.getFolderTrust(),
-      isTrustedFolder: () => authority.isTrustedFolder(),
-    }),
+    new FileCommandLoader(
+      {
+        userCommandsDir: config.userCommandsDir,
+        projectCommandsDir: config.projectCommandsDir,
+        getProjectRoot: () => config.getProjectRoot(),
+        getExtensions: () => config.getExtensions(),
+        getFolderTrust: () => config.getFolderTrust(),
+        isTrustedFolder: () => authority.isTrustedFolder(),
+      },
+      bindShellPromptOperations(config),
+    ),
   ];
   const commandService = await CommandService.create(
     loaders,
