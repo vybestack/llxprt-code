@@ -5,6 +5,7 @@ import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/his
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import { getCompressionStrategy } from '../compressionStrategyFactory.js';
+import { isArrayStrategyDouble } from './support/array-strategy-double.js';
 
 const realDiskCompression = TopDownTruncationStrategy.prototype.compressDisk;
 
@@ -29,6 +30,8 @@ export function installPendingLegacyStrategyFixture(
     const strategy = getCompressionStrategy('top-down-truncation');
     if (primary || strategy instanceof TopDownTruncationStrategy)
       return realDiskCompression.call(this, context);
+    if (!isArrayStrategyDouble(strategy))
+      throw new Error('Expected an array strategy double');
     const result = await strategy.compress({
       ...context,
       history: [...context.history],

@@ -10,7 +10,7 @@ import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { ArrayStrategyDouble } from '../../compression/__tests__/support/array-strategy-double.js';
 import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 import {
   HookEventName,
@@ -142,7 +142,7 @@ describe('borrowed facade remaining hook producers', () => {
       tmpdir(),
       `recording-remaining-hooks-${randomUUID()}.jsonl`,
     );
-    const strategy: CompressionStrategy = {
+    const strategy: ArrayStrategyDouble = {
       name: 'one-shot',
       requiresLLM: false,
       trigger: { mode: 'threshold', defaultThreshold: 0.8 },

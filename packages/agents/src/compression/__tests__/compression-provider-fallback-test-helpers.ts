@@ -7,10 +7,8 @@ import * as compressionFactory from '../compressionStrategyFactory.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import {
-  EmptySummaryError,
-  type CompressionStrategy,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { ArrayStrategyDouble } from './support/array-strategy-double.js';
 
 interface CandidateControl {
   active: boolean;
@@ -42,7 +40,7 @@ function installFallbackStrategies(
     reason: 'already-under-target' as const,
     metadata,
   };
-  const strategy: CompressionStrategy = {
+  const strategy: ArrayStrategyDouble = {
     name: 'top-down-truncation',
     requiresLLM: false,
     trigger: { mode: 'threshold', defaultThreshold: 0.8 },

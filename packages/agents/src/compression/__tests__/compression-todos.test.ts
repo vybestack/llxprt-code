@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownViaDisk } from './support/topdown-disk-adapter.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -87,15 +87,14 @@ describe('HighDensityStrategy ignores activeTodos (REQ-HD-011.4)', () => {
 
 describe('TopDownTruncationStrategy ignores activeTodos (REQ-HD-011.4)', () => {
   it('compress result is unaffected by activeTodos', async () => {
-    const strategy = new TopDownTruncationStrategy();
     const contextWithout = makeContext({ activeTodos: undefined });
     const contextWith = makeContext({
       activeTodos:
         '- [pending] Fix the auth bug\n- [in_progress] Refactor DB layer',
     });
 
-    const resultWithout = await strategy.compress(contextWithout);
-    const resultWith = await strategy.compress(contextWith);
+    const resultWithout = await compressTopDownViaDisk(contextWithout);
+    const resultWith = await compressTopDownViaDisk(contextWith);
 
     expect(resultWith.metadata.strategyUsed).toBe('top-down-truncation');
     // activeTodos must not alter the structural outcome

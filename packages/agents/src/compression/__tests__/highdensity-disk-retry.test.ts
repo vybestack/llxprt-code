@@ -15,7 +15,7 @@ import {
 import { HighdensityFaultHistory } from './highdensity-disk-fault-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownArray } from './support/topdown-array-oracle.js';
 
 async function retry(size: number): Promise<number> {
   let created: HighdensityFaultHistory | undefined;
@@ -93,7 +93,7 @@ async function fallback(size: number): Promise<number> {
         undefined,
         logger,
       );
-      const expected = await new TopDownTruncationStrategy().compress({
+      const expected = await compressTopDownArray({
         ...metadata,
         history: buildCuratedHistory(logger, raw, false),
       });

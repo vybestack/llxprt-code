@@ -10,7 +10,7 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownArray } from './support/topdown-array-oracle.js';
 import { middleoutSetup, middleoutRow } from './middleout-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
@@ -70,7 +70,7 @@ async function oracle(
     new DebugLogger('test:hardlimit'),
     { targetTokenCount: 0 },
   );
-  const legacy = await new TopDownTruncationStrategy().compress({
+  const legacy = await compressTopDownArray({
     ...metadata,
     history: buildCuratedHistory(metadata.logger, raw, false),
     estimateTokens: async (rows) => rows.length,

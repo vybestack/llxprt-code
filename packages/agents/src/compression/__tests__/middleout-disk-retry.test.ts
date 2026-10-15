@@ -11,7 +11,7 @@ import {
   MiddleoutDiskHistory,
 } from './middleout-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownArray } from './support/topdown-array-oracle.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -93,7 +93,7 @@ async function fallback(size: number): Promise<number> {
         total += await history.estimateTokensForContents([curated[index]]);
         suffixTokens.set(curated[index].metadata?.chronology?.seq ?? 0, total);
       }
-      const result = await new TopDownTruncationStrategy().compress({
+      const result = await compressTopDownArray({
         ...metadata,
         history: curated,
         estimateTokens: async (rows) =>

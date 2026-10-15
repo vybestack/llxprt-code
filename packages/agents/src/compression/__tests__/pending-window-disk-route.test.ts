@@ -9,7 +9,7 @@ import {
 } from './pending-window-disk-helpers.js';
 import { middleoutRow } from './middleout-disk-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownArray } from './support/topdown-array-oracle.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -30,7 +30,7 @@ async function durableParity(size: number): Promise<number> {
       logger,
       { targetTokenCount: 0 },
     );
-    const legacy = await new TopDownTruncationStrategy().compress({
+    const legacy = await compressTopDownArray({
       ...metadata,
       history: buildCuratedHistory(
         logger,
