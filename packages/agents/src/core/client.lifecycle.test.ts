@@ -411,7 +411,6 @@ async function registerLifecycleCase2(): Promise<void> {
     historyService.add(content, 'test-model');
   }
   client['_storedHistoryService'] = historyService;
-  client['_previousHistory'] = undefined;
   client['chat'] = undefined;
   client.getHistory = AgentClient.prototype.getHistory.bind(client);
   vi.spyOn(client, 'streamHistory').mockRestore();
@@ -459,7 +458,6 @@ async function registerLifecycleCase3(): Promise<void> {
 
   // Assert
   expect(retainedHistory).toStrictEqual(history);
-  expect(client['_previousHistory']).toBeUndefined();
   expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
 }
 

@@ -445,10 +445,7 @@ function registerAdmissionCase3(): void {
         client.storeHistoryForLaterUse(inlineMediaHistory()),
       ).rejects.toThrow(/Media admission failed/);
 
-      expect({
-        previousHistory: client['_previousHistory'],
-        storedBytes: await store.getStoredByteLength(),
-      }).toStrictEqual({ previousHistory: undefined, storedBytes: 0 });
+      expect(await store.getStoredByteLength()).toBe(0);
     });
   });
 }
@@ -615,7 +612,6 @@ function registerAdmissionCase9(): void {
 
       await client.setHistory(history);
 
-      expect(client['_previousHistory']).toBeUndefined();
       const snapshot = await collectHistoryFixture(chat.getHistory());
       const local = snapshot[0]?.blocks[0];
       if (local.type !== 'media' || local.encoding !== 'reference') {

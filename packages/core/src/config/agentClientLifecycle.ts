@@ -93,8 +93,7 @@ export async function extractExistingState(
     return { history: undefined, historyService: null };
   }
 
-  // A client may carry restored conversation in `_previousHistory` (e.g. a
-  // prior --continue restoreHistory, or a previous rebuild's carried history)
+  // A client may carry restored conversation in its deferred history store
   // even before its chat/content generator are lazily initialized. The stream
   // defers capture until consumption and covers both active and deferred rows.
   const hasInitializedChat = hasCallableProperty(

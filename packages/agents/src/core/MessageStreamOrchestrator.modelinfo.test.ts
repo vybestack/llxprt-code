@@ -254,7 +254,6 @@ function buildOrchestrator(options: BuildOptions = {}): {
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
     startChat: vi.fn().mockResolvedValue(mockChat),
-    getPreviousHistory: vi.fn().mockReturnValue(undefined),
     setChat: vi.fn(),
     hasChat: vi.fn().mockReturnValue(true),
     getLastPromptId: () => state.lastPromptId,
@@ -383,37 +382,6 @@ describe('MessageStreamOrchestrator ModelInfo context and continuation (issue #1
     expect(infos).toHaveLength(1);
     expect(infos[0]?.profileName).toBe('profile-b');
     expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
-  });
-
-  it('restores all committed previous history when initializing the next chat', async () => {
-    const previousHistory: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'first user turn' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'first model response' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'second user turn' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'second model response' }],
-      },
-    ];
-    const { orchestrator } = buildOrchestrator();
-    const deps = orchestrator['deps'];
-    (deps.hasChat as Mock<typeof deps.hasChat>).mockReturnValue(false);
-    (
-      deps.getPreviousHistory as Mock<typeof deps.getPreviousHistory>
-    ).mockReturnValue(previousHistory);
-
-    await collectModelInfos(orchestrator, 'prompt-restore-history');
-
-    expect(deps.startChat).toHaveBeenCalledWith(previousHistory);
   });
 
   it('does not make a generic first-turn context decision before provider finalization', async () => {

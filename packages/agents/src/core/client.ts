@@ -104,7 +104,6 @@ import {
 
 import {
   clearClientHistoryForDisposal,
-  hasReferenceMedia,
   type DeferredHistoryDeps,
 } from './deferredHistorySource.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -125,7 +124,6 @@ export class AgentClient
   };
   private sessionTurnCount = 0;
   private sessionContentGeneratorConfig?: ContentGeneratorConfig;
-  private _previousHistory?: readonly IContent[];
   private _deferredHistoryAdmission?: RetainedHistoryAdmission;
   private _releaseDeferredSource?: () => Promise<void>;
   private streamedDeferredHistory = false;
@@ -303,7 +301,6 @@ export class AgentClient
       lazyInitialize: () => this.lazyInitialize(),
       startChat: (extraHistory?: readonly IContent[]) =>
         this.startChat(extraHistory),
-      getPreviousHistory: () => this._previousHistory,
       setChat: (chat) => {
         this.chat = chat;
       },
@@ -341,7 +338,6 @@ export class AgentClient
       return;
     }
     this._storedHistoryService = this.chat.getHistoryService();
-    this._previousHistory = undefined;
     this.chat = undefined;
     this._baseLlmClient = undefined;
   }
@@ -351,11 +347,7 @@ export class AgentClient
       this.handleModelChanged,
       this.handleModelProfileChanged,
     );
-    const hasChatHistoryMedia = hasReferenceMedia(this._previousHistory);
-    if (
-      this.chat !== undefined &&
-      (hasChatHistoryMedia === true || this.streamedDeferredHistory)
-    ) {
+    if (this.chat !== undefined && this.streamedDeferredHistory) {
       try {
         await clearClientHistoryForDisposal(
           this.chat,
@@ -378,7 +370,6 @@ export class AgentClient
     );
     if (failures.length === 0 && this.historyAdmissions.all.length === 0) {
       this._deferredHistoryAdmission = undefined;
-      this._previousHistory = undefined;
     }
     if (failures.length > 0) {
       throw new AggregateError(failures, 'Agent client disposal failed');
@@ -404,7 +395,6 @@ export class AgentClient
             this._storedHistoryService = candidate.journal;
             this._releaseDeferredSource = candidate.release;
             this.streamedDeferredHistory = true;
-            this._previousHistory = undefined;
             this._deferredHistoryAdmission = undefined;
             this.contentGenerator = undefined;
             this.chat = undefined;
@@ -537,7 +527,6 @@ export class AgentClient
 
   readonly streamHistory = createClientHistoryReader(
     () => this.chat,
-    () => this._previousHistory,
     () => this._storedHistoryService,
   );
 
@@ -576,9 +565,6 @@ export class AgentClient
       stored: () => this._storedHistoryService,
       setStored: (journal) => {
         this._storedHistoryService = journal;
-      },
-      clearPrevious: () => {
-        this._previousHistory = undefined;
       },
       markStreamed: () => {
         this.streamedDeferredHistory = true;
@@ -643,7 +629,7 @@ export class AgentClient
       this.tools,
       publicationDeclarations,
       this.chat,
-      () => this.startChat(this._previousHistory ?? []),
+      () => this.startChat([]),
       this.todoContinuationService,
     );
   }

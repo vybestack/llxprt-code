@@ -70,7 +70,6 @@ export interface MessageStreamDeps {
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
   startChat: (extraHistory?: readonly IContent[]) => Promise<ChatSession>;
-  getPreviousHistory: () => readonly IContent[] | undefined;
   setChat: (chat: ChatSession) => void;
   hasChat: () => boolean;
   complexityAnalyzer: ComplexityAnalyzer;
@@ -319,19 +318,9 @@ export class MessageStreamOrchestrator {
   }
 
   private async _ensureChatInitialized(): Promise<void> {
-    const { hasChat, getPreviousHistory, setChat, startChat, logger } =
-      this.deps;
+    const { hasChat, setChat, startChat } = this.deps;
     if (hasChat()) return;
-
-    const previousHistory = getPreviousHistory();
-    if (previousHistory && previousHistory.length > 0) {
-      logger.debug('Restoring previous history during prompt generation', {
-        historyLength: previousHistory.length,
-      });
-      setChat(await startChat(previousHistory));
-    } else {
-      setChat(await startChat());
-    }
+    setChat(await startChat());
   }
 
   private async *_preflight(

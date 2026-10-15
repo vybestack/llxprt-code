@@ -43,7 +43,6 @@ export interface DeferredHistoryPort {
   setRelease(release: (() => Promise<void>) | undefined): void;
   stored(): HistoryService | undefined;
   setStored(journal: HistoryService | undefined): void;
-  clearPrevious(): void;
   markStreamed(): void;
   resetIdeContext(): void;
 }
@@ -73,7 +72,6 @@ export async function setClientHistory(
     port.admission(),
     (rows) => replaceDeferredHistory(port, rows),
     () => {
-      port.clearPrevious();
       port.markStreamed();
     },
     stripThoughts,
@@ -97,7 +95,6 @@ export async function setHistoryFromSource(
     priorRelease: port.release(),
     publish: (journal, release) => {
       port.setRelease(release);
-      port.clearPrevious();
       port.setAdmission(undefined);
       if (port.chat() === undefined) {
         port.setStored(journal);
@@ -128,7 +125,6 @@ export async function storeHistoryForLaterUse(
     publish: (journal, release) => {
       port.setStored(journal);
       port.markStreamed();
-      port.clearPrevious();
       port.setAdmission(undefined);
       port.setRelease(release);
     },
@@ -146,7 +142,6 @@ export async function discardDeferredHistory(
       throw new AggregateError(failures, 'Deferred history cleanup failed');
   }
   port.setAdmission(undefined);
-  port.clearPrevious();
 }
 
 /**
@@ -167,7 +162,6 @@ function replaceDeferredHistory(
     options,
   ).then(async (next) => {
     const priorRelease = port.release();
-    port.clearPrevious();
     port.setAdmission(next.retained);
     port.setStored(next.journal);
     port.setRelease(undefined);
@@ -203,7 +197,6 @@ export async function startChatWithDeferredHistory(
   } catch (error: unknown) {
     if (deferredAdmission === undefined) throw error;
     port.setAdmission(undefined);
-    port.clearPrevious();
     return port.admissions.releaseAfterFailure(
       error,
       [deferredAdmission],
@@ -224,7 +217,6 @@ export async function startChatWithDeferredHistory(
     await chat.getHistoryService().settleMediaOwnership();
   } catch (error: unknown) {
     port.setAdmission(undefined);
-    port.clearPrevious();
     return port.admissions.releaseAfterFailure(
       error,
       [deferredAdmission],
@@ -233,7 +225,6 @@ export async function startChatWithDeferredHistory(
     );
   }
   port.setChat(chat);
-  port.clearPrevious();
   port.markStreamed();
   await releaseDeferredArray(
     port.admissions,

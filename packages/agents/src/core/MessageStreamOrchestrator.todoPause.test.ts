@@ -275,7 +275,6 @@ function makeDeps(
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
     startChat: vi.fn().mockResolvedValue(mockChat),
-    getPreviousHistory: vi.fn().mockReturnValue(undefined),
     setChat: vi.fn(),
     hasChat: vi.fn().mockReturnValue(true),
     complexityAnalyzer: {

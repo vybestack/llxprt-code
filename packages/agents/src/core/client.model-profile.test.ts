@@ -393,7 +393,6 @@ async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
       getHistoryService: () => history,
     };
     client['chat'] = mockChat as ChatSession;
-    client['_previousHistory'] = storedHistory;
     await client.initialize({
       model: 'new-model',
       apiKey: 'test-key',
@@ -689,7 +688,6 @@ describe('AgentClient (client.ts)', () => {
       });
       expect(client['_storedHistoryService']).toBe(historyService);
       expect(client.getHistoryService()).toBe(historyService);
-      expect(client['_previousHistory']).toBeUndefined();
     });
 
     it('defers chat invalidation until active streams finish', async () => {
@@ -699,14 +697,13 @@ describe('AgentClient (client.ts)', () => {
       expect(client['_storedHistoryService']).toBe(historyService);
     });
 
-    it('uses live chat history instead of a stale stored snapshot when reinitializing', async () => {
+    it('uses live chat history when reinitializing', async () => {
       const { liveHistory } = await verifyLiveHistory();
       const stored = client.getHistoryService();
       if (stored === null) throw new Error('Missing reinitialized history');
       expect(await readConfigHistory(stored.streamRawHistory())).toStrictEqual(
         liveHistory,
       );
-      expect(client['_previousHistory']).toBeUndefined();
     });
 
     it('preserves stored conversation history when refreshing tools before the next turn', async () => {

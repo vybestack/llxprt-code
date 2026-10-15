@@ -11,16 +11,6 @@ import type {
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import type { ChatSession } from './chatSession.js';
 
-export function hasReferenceMedia(history?: readonly IContent[]): boolean {
-  return (
-    history?.some((content) =>
-      content.blocks.some(
-        (block) => block.type === 'media' && block.encoding === 'reference',
-      ),
-    ) ?? false
-  );
-}
-
 export async function clearClientHistoryForDisposal(
   chat: ChatSession,
   streamed: boolean,
