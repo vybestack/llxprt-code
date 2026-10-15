@@ -53,8 +53,15 @@ import { ContextOverflowError } from '../contextOverflowError.js';
 // REQ-005.5c — provider source enforcement observable behavior
 // ---------------------------------------------------------------------------
 
+// Set per test from sourceRootSetup() so the tests that need a source root can
+// be passed to `it` directly, where jest/expect-expect sees their assertions.
+let sourceRoot = '';
+
 describe('P26: provider source enforcement characterization', () => {
   const workspace = sourceRootSetup();
+  beforeEach(() => {
+    sourceRoot = workspace();
+  });
   beforeEach(facadeCallback0);
 
   it(
@@ -69,12 +76,12 @@ describe('P26: provider source enforcement characterization', () => {
 
   it(
     'uses the stateful Responses effective estimate and reprojects recomposed history before send',
-    () => facadeCallback3(workspace()),
+    facadeCallback3,
   );
 
   it(
     'preserves structured overflow metadata when real stateful reprojection remains over limit',
-    () => facadeCallback4(workspace()),
+    facadeCallback4,
   );
 
   it(
@@ -278,10 +285,10 @@ async function facadeCallback2(): Promise<void> {
   expect(harness.performCompression).toHaveBeenCalled();
 }
 
-async function facadeCallback3(workspace: string): Promise<void> {
+async function facadeCallback3(): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createPromptTokenizerFactory(workspace),
+      createPromptTokenizerFactory(sourceRoot),
       'stateful-responses-enforcement',
     );
 
@@ -382,10 +389,10 @@ async function facadeCallback3(workspace: string): Promise<void> {
   expect(resultTexts).toContain('small wire delta');
 }
 
-async function facadeCallback4(workspace: string): Promise<void> {
+async function facadeCallback4(): Promise<void> {
   const { settings, config, providerRuntime, tokenizerFactory } =
     statefulRuntime(
-      createAmplifyingPromptTokenizerFactory(workspace),
+      createAmplifyingPromptTokenizerFactory(sourceRoot),
       'stateful-responses-overflow',
     );
 
