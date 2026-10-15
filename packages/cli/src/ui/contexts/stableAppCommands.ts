@@ -72,6 +72,8 @@ export function createStableAppCommands(
     handleFolderTrustSelect: (...args) =>
       latest.current.handleFolderTrustSelect(...args),
     triggerWelcomeAuth: (...args) => latest.current.triggerWelcomeAuth(...args),
+    resumeBrowserTarget: (...args) =>
+      latest.current.resumeBrowserTarget(...args),
     recordModelSwitch: (...args) => latest.current.recordModelSwitch(...args),
     handleThemeSelect: (...args) => latest.current.handleThemeSelect(...args),
     handleThemeHighlight: (...args) =>

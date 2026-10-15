@@ -54,6 +54,7 @@ export function createAppCommandBindings(
       resetAndReopen: unusedCommand,
     },
     triggerWelcomeAuth: unusedCommand,
+    resumeBrowserTarget: unusedCommand,
     recordModelSwitch: unusedCommand,
     handleThemeSelect: unusedCommand,
     handleThemeHighlight: unusedCommand,

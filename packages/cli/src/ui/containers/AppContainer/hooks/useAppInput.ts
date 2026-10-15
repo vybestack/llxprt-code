@@ -1,3 +1,11 @@
+import {
+  bindOwnerBrowserResume,
+  bindRawBrowserResume,
+  bindRawBrowserSession,
+} from '../../../components/browserResumeHost.js';
+import { resumeOwnerSession } from '../../../utils/ownerSessionUi.js';
+import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -745,11 +753,59 @@ export function useAppInput(params: AppInputParams) {
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
+  const {
+    agent,
+    slashCommandRuntime: config,
+    turnStore,
+    store,
+    recordingOwner,
+    recordingSwapCallbacks,
+  } = params;
+  const resumeBrowserTarget = useMemo(() => {
+    const close = () => store.commands.closeDialog('sessionBrowser');
+    if (recordingOwner === 'agent')
+      return bindOwnerBrowserResume(
+        (target) =>
+          resumeOwnerSession(
+            agent,
+            target.kind === 'session'
+              ? target.session.sessionId
+              : target.checkpointId,
+            resolveEmojiFilterMode(config),
+          ),
+        turnStore.commands.loadHistory,
+        turnStore.commands.addItem,
+        close,
+      );
+    const logger = new DebugLogger('llxprt:ui:dialogmanager');
+    return bindRawBrowserResume(
+      bindRawBrowserSession(
+        config,
+        () => agent.agentClient.getHistoryService(),
+        recordingSwapCallbacks,
+        logger,
+      ),
+      () => resolveEmojiFilterMode(config),
+      core.commandContext.ui.clear,
+      turnStore.commands.addItem,
+      close,
+      logger,
+    );
+  }, [
+    agent,
+    config,
+    turnStore,
+    store,
+    recordingOwner,
+    recordingSwapCallbacks,
+    core.commandContext.ui.clear,
+  ]);
   useInputStartup(params, core, stream);
   return {
     buffer: stream.buffer,
     commandContext: core.commandContext,
     generatePromptContent,
+    resumeBrowserTarget,
     inputHistoryStore: stream.inputHistoryStore,
     handleUserInputSubmit: stream.handleUserInputSubmit,
     handleSteer: stream.handleSteer,

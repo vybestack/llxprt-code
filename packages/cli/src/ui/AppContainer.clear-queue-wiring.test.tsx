@@ -110,6 +110,7 @@ function createHarness(initialQueueCommandsAvailable = true) {
       {
         buffer,
         commandContext: createMockCommandContext(),
+        resumeBrowserTarget: async () => ({ ok: true }),
         generatePromptContent: async () => {
           throw new Error(
             'Queue controls must not generate prompt completions',
