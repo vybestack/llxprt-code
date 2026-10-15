@@ -108,6 +108,7 @@ describe('registered command resume owner', () => {
           slashCommandLogger: new DebugLogger('resume-command'),
           beginSlashCommandAction: () => new AbortController(),
           endSlashCommandAction: () => {},
+          isMcpDiscoveryPending: () => false,
           recordCommandError: async () => {},
           loadCommandHistory: async () => {},
           resumeOwnedSession: bindCommandOwnerResume(

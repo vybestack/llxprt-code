@@ -60,6 +60,7 @@ export interface SlashCommandHandlerDeps {
     | ((action: PerformResumeActionReturn) => Promise<readonly string[]>)
     | null;
   recordCommandError: (message: string) => Promise<void>;
+  isMcpDiscoveryPending: () => boolean;
   loadCommandHistory: (
     result: Extract<ActionResult, { type: 'load_history' }>,
   ) => Promise<void>;
@@ -771,8 +772,7 @@ function addUnknownCommandMessage(
   deps: SlashCommandHandlerDeps,
   trimmed: string,
 ): void {
-  const isMcpLoading =
-    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending';
+  const isMcpLoading = deps.isMcpDiscoveryPending();
   deps.addMessage({
     type: MessageType.ERROR,
     content: isMcpLoading

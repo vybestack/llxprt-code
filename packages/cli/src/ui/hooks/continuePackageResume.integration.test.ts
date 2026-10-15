@@ -387,6 +387,7 @@ async function createHandlerDeps(
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     resumeOwnedSession: null,
+    isMcpDiscoveryPending: () => false,
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
   };

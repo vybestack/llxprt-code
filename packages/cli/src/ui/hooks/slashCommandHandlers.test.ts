@@ -109,6 +109,7 @@ describe('slashCommandHandlers', () => {
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       resumeOwnedSession: null,
+      isMcpDiscoveryPending: () => false,
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
       ...overrides,
@@ -128,6 +129,7 @@ describe('slashCommandHandlers', () => {
     await processSlashCommand(
       {
         ...deps,
+        isMcpDiscoveryPending: () => agent.mcp.discoveryState() === 'pending',
         commandContext: {
           ...deps.commandContext,
           services: { ...deps.commandContext.services, agent },
@@ -168,6 +170,7 @@ describe('slashCommandHandlers', () => {
           })),
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
           resumeOwnedSession: null,
+          isMcpDiscoveryPending: () => false,
           recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
             recordSessionEvent: rawWrite,
           }),
@@ -206,6 +209,7 @@ describe('slashCommandHandlers', () => {
             services: { ...deps.commandContext.services, agent: next },
           },
           resumeOwnedSession: null,
+          isMcpDiscoveryPending: () => false,
           recordCommandError: bindCommandErrorRecorder(
             next,
             'agent',
