@@ -170,11 +170,13 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 // --- END MOCKS ---
 
 describe('useAgentStream - ThinkingBlock Integration', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]['addItem']>;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<
+    Parameters<typeof useAgentStream>[2]['handleSlashCommand']
+  >;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -184,7 +186,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]['addItem']>(
+      () => 0,
+    );
 
     const contentGeneratorConfig = {
       model: 'test-model',
@@ -304,11 +308,13 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const { result, rerender } = renderHook(
       (props: {
         client: Parameters<typeof useAgentStream>[0];
-        history: Parameters<typeof useAgentStream>[1];
+        history: Parameters<typeof useAgentStream>[2]['history'];
         addItem: UseHistoryManagerReturn['addItem'];
         runtime: ReturnType<typeof createStreamRuntimeForTest>;
         onDebugMessage: (message: string) => void;
-        handleSlashCommand: Parameters<typeof useAgentStream>[6];
+        handleSlashCommand: Parameters<
+          typeof useAgentStream
+        >[2]['handleSlashCommand'];
         shellModeActive: boolean;
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
@@ -318,19 +324,25 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         }
         return useAgentStream(
           props.client,
-          props.history,
-          props.addItem,
           props.runtime,
-          mockSettings,
-          props.onDebugMessage,
-          props.handleSlashCommand,
-          props.shellModeActive,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
+          {
+            history: props.history,
+            addItem: props.addItem,
+            settings: mockSettings,
+            onDebugMessage: props.onDebugMessage,
+            handleSlashCommand: props.handleSlashCommand,
+            shellModeActive: props.shellModeActive,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: () => {},
+            setShellInputFocused: () => {},
+          },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
         );
       },
       {
@@ -662,19 +674,25 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const { result } = renderHook(() =>
       useAgentStream(
         agentForHook1,
-        [],
-        mockAddItem,
         createStreamRuntimeForTest(mockConfig),
-        settingsWithReasoning,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        () => {},
-        () => Promise.resolve(),
-        () => {},
-        () => {},
-        () => {},
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: settingsWithReasoning,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: () => {},
+          performMemoryRefresh: () => Promise.resolve(),
+          onEditorClose: () => {},
+          onCancelSubmit: () => {},
+          setShellInputFocused: () => {},
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 

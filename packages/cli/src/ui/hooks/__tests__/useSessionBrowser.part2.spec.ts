@@ -833,9 +833,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         contents: [makeContent('first message here')],
       });
 
-      const { result } = renderHook(() =>
-        useSessionBrowser(makeHookProps(chatsDir)),
-      );
+      const props = makeHookProps(chatsDir);
+      const { result } = renderHook(() => useSessionBrowser(props));
       for (const char of 'nomatchterm') {
         result.current.handleKeypress(char, makeKey(char));
       }

@@ -6,15 +6,11 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import { resolveEmojiFilterMode } from '../../utils/iContentToHistoryItems.js';
-import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from '../../utils/modelIdentity.js';
+
 import {
   type EditorType,
   type LiveOutputUpdate,
   type MessageBus,
-  type RecordingIntegration,
   type ToolCall,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
@@ -47,7 +43,22 @@ import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export interface AgentStreamOrchestrationDeps {
-  agent: Agent;
+  stream: Agent['stream'];
+  setDisplayCallbacks: Agent['tools']['setDisplayCallbacks'];
+  setEditorCallbacks: Agent['tools']['setEditorCallbacks'];
+  openClientChannel: Agent['tools']['openClientChannel'];
+  subscribeChildTools: Agent['tools']['subscribeChildTools'];
+  appendShellHistory: Agent['addHistory'];
+  injectSteer: Agent['injectSteer'];
+  cancelRunningAsyncTasks: () => void;
+  getProviderContextLimit: UseSubmitQueryDeps['getProviderContextLimit'];
+  getContentPrefixIdentity: UseSubmitQueryDeps['getContentPrefixIdentity'];
+  getToolHandle: UseSubmitQueryDeps['getToolHandle'];
+  findResource: UseSubmitQueryDeps['findResource'];
+  readResource: UseSubmitQueryDeps['readResource'];
+  setLastPromptTokenCount: UseSubmitQueryDeps['setLastPromptTokenCount'];
+  subscribeTaskNotifications: UseSubmitQueryDeps['subscribeTaskNotifications'];
+  flushRecording: UseSubmitQueryDeps['flushRecording'];
   addItem: UseHistoryManagerReturn['addItem'];
   removeItems?: RemoveHistoryItems;
   runtime: StreamRuntime;
@@ -66,8 +77,6 @@ export interface AgentStreamOrchestrationDeps {
   terminalWidth?: number;
   terminalHeight?: number;
   onEditorOpen: () => void;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
   runtimeMessageBus?: MessageBus;
   subagentManager?: UiSubagentManager;
   /**
@@ -134,11 +143,6 @@ export function useAgentStreamOrchestration(
     scheduler.toolCalls,
     st.turnCancelled,
   );
-  const cancelRunningAsyncTasks = useCallback(() => {
-    for (const task of args.agent.tasks.listRunning()) {
-      if (task.kind === 'subagent') void args.agent.tasks.cancel(task.id);
-    }
-  }, [args.agent]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -153,7 +157,7 @@ export function useAgentStreamOrchestration(
     st.setIsResponding,
     args.setShellInputFocused,
     st.drainSuppressedRef,
-    cancelRunningAsyncTasks,
+    args.cancelRunningAsyncTasks,
     args.cancelActiveSlashCommand,
   );
   // Refs to break the circular dependency between useSubmitQuery (which
@@ -174,7 +178,7 @@ export function useAgentStreamOrchestration(
   const scheduleNextQueuedSubmission =
     submitQueryResult.scheduleNextQueuedSubmission;
   const { sendAllQueuedSubmissions, steerAllQueuedSubmissions } =
-    useQueuedActions(st, args.agent, scheduleNextQueuedSubmission);
+    useQueuedActions(st, args.injectSteer, scheduleNextQueuedSubmission);
   // Populate the ref synchronously so the first render already has the real
   // function available for any synchronous consumer.
   processAgentEventRef.current = submitQueryResult.processAgentEvent;
@@ -224,11 +228,8 @@ function useToolSchedulerState(
     args.onEditorClose,
     args.onEditorOpen,
     args.addItem,
-    useCallback(() => args.agent.tools.openClientChannel(), [args.agent]),
-    useCallback<Agent['tools']['subscribeChildTools']>(
-      (callbacks) => args.agent.tools.subscribeChildTools(callbacks),
-      [args.agent],
-    ),
+    args.openClientChannel,
+    args.subscribeChildTools,
   );
   const [
     toolCalls,
@@ -282,11 +283,7 @@ function useShell(
       () => args.runtime.shell.getPtyTerminalHeight(),
       [args.runtime.shell],
     ),
-    appendShellHistory: useCallback(
-      (entry: Parameters<Agent['addHistory']>[0]) =>
-        args.agent.addHistory(entry),
-      [args.agent],
-    ),
+    appendShellHistory: args.appendShellHistory,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
     terminalHeight: args.terminalHeight,
@@ -324,22 +321,10 @@ function useEventStreamForAgent(
   processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>,
 ) {
   const lifecycle = args.operationLifecycle;
-  const { agent } = args;
-  const stream = useCallback<Agent['stream']>(
-    (input, options) => agent.stream(input, options),
-    [agent],
-  );
-  const setDisplayCallbacks = useCallback<
-    Agent['tools']['setDisplayCallbacks']
-  >((callbacks) => agent.tools.setDisplayCallbacks(callbacks), [agent]);
-  const setEditorCallbacks = useCallback<Agent['tools']['setEditorCallbacks']>(
-    (callbacks) => agent.tools.setEditorCallbacks(callbacks),
-    [agent],
-  );
   return useAgentEventStream({
-    stream,
-    setDisplayCallbacks,
-    setEditorCallbacks,
+    stream: args.stream,
+    setDisplayCallbacks: args.setDisplayCallbacks,
+    setEditorCallbacks: args.setEditorCallbacks,
     addItem: args.addItem,
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
@@ -379,7 +364,7 @@ function usePendingToolGroupDisplay(toolCalls: TrackedToolCall[]) {
 
 function useQueuedActions(
   st: ReturnType<typeof useStreamState>,
-  agent: Agent,
+  injectSteer: Agent['injectSteer'],
   scheduleNextQueuedSubmission: () => void,
 ) {
   const { drainSuppressedRef, queuedSubmissionsRef, clearSubmissions } = st;
@@ -392,9 +377,9 @@ function useQueuedActions(
     if (items.length === 0) return;
     const newline = String.fromCharCode(10);
     const text = items.map((s) => s.query).join(newline);
-    agent.injectSteer(text);
+    injectSteer(text);
     clearSubmissions();
-  }, [agent, queuedSubmissionsRef, clearSubmissions]);
+  }, [injectSteer, queuedSubmissionsRef, clearSubmissions]);
   return { sendAllQueuedSubmissions, steerAllQueuedSubmissions };
 }
 
@@ -445,56 +430,17 @@ function useBuildSubmitQueryDeps({
   streamingState,
   runStreamRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
-  const { agent, recordingOwner, recordingIntegration } = args;
-  const flushRecording = useCallback(async () => {
-    if (recordingOwner === 'agent') {
-      await agent.session.flushRecording();
-      return;
-    }
-    try {
-      await recordingIntegration?.flushAtTurnBoundary();
-    } catch {
-      /* non-fatal */
-    }
-  }, [agent, recordingOwner, recordingIntegration]);
-  const tools = agent.tools;
-  const mcp = agent.mcp;
   return {
     ...submissionState(st),
     runtime: args.runtime,
-    getProviderContextLimit: useCallback(
-      () => agent.getProviderContextLimit(),
-      [agent],
-    ),
-    getContentPrefixIdentity: useCallback(
-      () =>
-        defaultGetContentPrefixIdentity({
-          getProvider: () => agent.getProvider(),
-          getModel: () => agent.getModel(),
-          getCurrentSequenceModel: () => agent.getCurrentSequenceModel(),
-          getActiveProfileName: () => agent.getActiveProfileName(),
-        }),
-      [agent],
-    ),
-    getToolHandle: useCallback((name) => tools.get(name), [tools]),
-    findResource: useCallback(
-      (identifier) => mcp.findResource(identifier),
-      [mcp],
-    ),
-    readResource: useCallback(
-      (server, uri) => mcp.readResource(server, uri),
-      [mcp],
-    ),
-    setLastPromptTokenCount: useCallback(
-      (count) => agent.metrics.setLastPromptTokenCount(count),
-      [agent],
-    ),
-    subscribeTaskNotifications: useCallback(
-      (isBusy, triggerTurn) =>
-        agent.tasks.subscribeNotifications(isBusy, triggerTurn),
-      [agent],
-    ),
-    flushRecording,
+    getProviderContextLimit: args.getProviderContextLimit,
+    getContentPrefixIdentity: args.getContentPrefixIdentity,
+    getToolHandle: args.getToolHandle,
+    findResource: args.findResource,
+    readResource: args.readResource,
+    setLastPromptTokenCount: args.setLastPromptTokenCount,
+    subscribeTaskNotifications: args.subscribeTaskNotifications,
+    flushRecording: args.flushRecording,
     addItem: args.addItem,
     removeItems: args.removeItems,
     settings: args.settings,
@@ -545,20 +491,4 @@ function submissionState(st: BuildSubmitQueryDepsArgs['st']) {
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,
   };
-}
-
-/**
- * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
- * fresh runtime state at call time so a single stable reference can be reused.
- */
-function defaultGetContentPrefixIdentity(
-  identity: Parameters<typeof createCliModelIdentityRuntime>[0],
-): string | null {
-  try {
-    return resolveContentPrefixIdentity(
-      createCliModelIdentityRuntime(identity),
-    );
-  } catch {
-    return null;
-  }
 }
