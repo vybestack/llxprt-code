@@ -11,6 +11,7 @@ import {
   type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
+import type { HistoryLimits } from '../stores/turn/historyLedger.js';
 import { resumeHistoryWindow } from './streamHistoryItems.js';
 
 /**
@@ -22,6 +23,7 @@ export async function resumeOwnerSession(
   agent: Agent,
   ref: string,
   emojiFilterMode: EmojiFilterMode,
+  limits?: HistoryLimits,
 ): Promise<{
   readonly uiHistory: readonly HistoryItem[];
   readonly warnings: readonly string[];
@@ -31,6 +33,8 @@ export async function resumeOwnerSession(
     uiHistory = await resumeHistoryWindow(
       await agent.session.resume(ref),
       emojiFilterMode,
+      undefined,
+      limits,
     );
   } catch (error) {
     throw await nameUnreadableRecording(agent, ref, error);

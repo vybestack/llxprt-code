@@ -10,6 +10,7 @@ import { HistoryProjection } from './historyProjection.js';
 import {
   createHistoryLedger,
   projectHistory,
+  type HistoryLimits,
 } from '../stores/turn/historyLedger.js';
 
 export interface StreamHistoryOptions {
@@ -50,8 +51,9 @@ export async function resumeHistoryWindow(
   rows: AsyncIterable<IContent> | Iterable<IContent>,
   mode?: EmojiFilterMode,
   ownership?: RowOwnership,
+  limits?: HistoryLimits,
 ): Promise<HistoryItem[]> {
-  const ledger = createHistoryLedger(undefined, ownership);
+  const ledger = createHistoryLedger(limits, ownership);
   try {
     for await (const item of streamHistoryItems(rows, mode, ownership))
       ledger.append(item);

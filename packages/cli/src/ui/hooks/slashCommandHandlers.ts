@@ -54,6 +54,7 @@ import type {
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
 import { addResumeWarnings } from '../utils/resumeWarnings.js';
+import { historyLimitsFromSettings } from '../utils/historyLimitsFromSettings.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
@@ -652,17 +653,20 @@ async function performOwnerSessionResume(
   const agent = context.services.agent;
   if (agent === null) throw new Error('Session agent is unavailable');
   try {
+    const limits = historyLimitsFromSettings(context.services.settings);
     const replay =
       action.sessionPackage === undefined
         ? await resumeOwnerSession(
             agent,
             action.sessionRef,
             resolveEmojiFilterMode(deps.config),
+            limits,
           )
         : await importOwnerSession(
             agent,
             action.sessionPackage.packageDirectory,
             resolveEmojiFilterMode(deps.config),
+            limits,
           );
     context.ui.loadHistory([...replay.uiHistory]);
     addResumeWarnings(deps.addMessage, replay.warnings);
@@ -739,6 +743,8 @@ async function performSessionResume(
   const uiHistory = await resumeHistoryWindow(
     resumeResult.history,
     resolveEmojiFilterMode(deps.config),
+    undefined,
+    historyLimitsFromSettings(context.services.settings),
   );
   context.ui.clear();
   uiHistory.forEach((item, index) => {

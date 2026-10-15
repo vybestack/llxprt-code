@@ -55,7 +55,7 @@ const buildDefaultMocks = (): CommandContext => ({
       setEphemeralSetting: vi.fn(),
     } as unknown as Config),
     agent: null,
-    settings: { merged: {} } as LoadedSettings,
+    settings: { merged: { ui: {} } } as LoadedSettings,
     git: undefined as GitService | undefined,
     logger: {
       logMessage: vi.fn(),

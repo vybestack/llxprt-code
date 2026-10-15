@@ -113,6 +113,7 @@ describe('session browser resume with an unreadable recording present (issue #37
             agent: {
               agentClient: { getHistoryService: () => undefined },
             } as never,
+            settings: { merged: { ui: {} } } as never,
           },
           recordingSwapCallbacks: {
             getCurrentRecording: () => null,

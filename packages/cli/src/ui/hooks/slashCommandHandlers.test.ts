@@ -80,8 +80,9 @@ describe('slashCommandHandlers', () => {
         services: {
           config: null,
           agent: null,
-          settings:
-            {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
+          settings: {
+            merged: { ui: {} },
+          } as SlashCommandHandlerDeps['commandContext']['services']['settings'],
           git: undefined,
           logger: new DebugLogger('test') as unknown as Logger,
         },

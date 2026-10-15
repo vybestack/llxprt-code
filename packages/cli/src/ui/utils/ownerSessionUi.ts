@@ -11,6 +11,7 @@ import type {
   UnreadableRecording,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
+import type { HistoryLimits } from '../stores/turn/historyLedger.js';
 import { resumeHistoryWindow } from './streamHistoryItems.js';
 import { resumeOwnerSession as resumeSession } from './resumeOwnerSession.js';
 
@@ -25,12 +26,15 @@ export async function importOwnerSession(
   agent: Agent,
   packageDirectory: string,
   emojiFilterMode: EmojiFilterMode,
+  limits?: HistoryLimits,
 ): Promise<OwnerUiReplay> {
   await agent.session.importSession(packageDirectory);
   return {
     uiHistory: await resumeHistoryWindow(
       agent.streamHistory(),
       emojiFilterMode,
+      undefined,
+      limits,
     ),
     warnings: [],
   };
