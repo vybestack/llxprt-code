@@ -112,6 +112,7 @@ async function dispatchFailure(
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     resumeOwnedSession: null,
+    isMcpDiscoveryPending: () => false,
     recordCommandError: bindCommandErrorRecorder(owner, 'agent', undefined),
     loadCommandHistory: async () => {},
   };

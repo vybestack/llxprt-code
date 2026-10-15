@@ -169,6 +169,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       resumeOwnedSession: null,
+      isMcpDiscoveryPending: () => false,
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
     };

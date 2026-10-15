@@ -67,6 +67,7 @@ export function createDeps(
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     resumeOwnedSession: null,
+    isMcpDiscoveryPending: () => false,
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
     ...overrides,

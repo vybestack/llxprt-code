@@ -580,6 +580,7 @@ function buildHandlerDeps(
       args.recordingOwner,
       args.recordingIntegration,
     ),
+    isMcpDiscoveryPending: () => args.agent?.mcp.discoveryState() === 'pending',
     commands: state.commands,
     config: args.config,
     commandContext,

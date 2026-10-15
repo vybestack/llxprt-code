@@ -8,10 +8,17 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  createAgent,
+  type Agent,
+  type AgentConfig,
+} from '@vybestack/llxprt-code-agents';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
-export function useCommandOwners(): (label: string) => Promise<Agent> {
+export function useCommandOwners(): (
+  label: string,
+  mcpServers?: AgentConfig['mcpServers'],
+) => Promise<Agent> {
   const credentials = useOwnedCredentials();
   let root: string;
   let previousResponses: string | undefined;
@@ -58,7 +65,7 @@ export function useCommandOwners(): (label: string) => Promise<Agent> {
     }
   });
 
-  return async (label) => {
+  return async (label, mcpServers) => {
     const workingDir = join(root, label);
     await mkdir(workingDir);
     const agent = await createAgent({
@@ -72,7 +79,9 @@ export function useCommandOwners(): (label: string) => Promise<Agent> {
         forceConfirmations: false,
         includeProcessCwd: false,
       },
-      mcpEnabled: false,
+      mcpServers,
+      mcpEnabled: mcpServers !== undefined,
+      folderTrust: mcpServers === undefined ? undefined : true,
       lsp: false,
     });
     agents.push(agent);

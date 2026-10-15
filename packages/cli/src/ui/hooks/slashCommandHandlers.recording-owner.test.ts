@@ -110,6 +110,7 @@ describe('recording owner slash command construction', () => {
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       resumeOwnedSession: null,
+      isMcpDiscoveryPending: () => false,
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
       ...overrides,
