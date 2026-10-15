@@ -122,8 +122,13 @@ function extractText(contents: readonly IContent[]): string {
   return parts.join('\n');
 }
 
+/** A captured request whose streamed rows were collected while it was open. */
+type CapturedRequest = Omit<RuntimeGenerateChatOptions, 'contents'> & {
+  contents: IContent[];
+};
+
 function createOptionsCapturingProvider(
-  captured: RuntimeGenerateChatOptions[],
+  captured: CapturedRequest[],
   summaryText: string,
 ): IProvider {
   return {
@@ -311,7 +316,7 @@ describe('Compression memory exclusion (issue #3174)', () => {
 
   const observeStrategyRequestExcludesMemoryMCPKeepsTheStateSnapshotTemplateAndApplies =
     async () => {
-      const captured: RuntimeGenerateChatOptions[] = [];
+      const captured: CapturedRequest[] = [];
       const provider = createOptionsCapturingProvider(captured, VALID_SNAPSHOT);
       const context = buildCompressionContext({
         history: generateHistory(20),
@@ -323,12 +328,7 @@ describe('Compression memory exclusion (issue #3174)', () => {
 
       const request = captured[0];
       const sysInstr = request.systemInstruction;
-
-      const requestRows: IContent[] = [];
-      for await (const content of request.contents) {
-        requestRows.push(content);
-      }
-      const requestText = extractText(requestRows);
+      const requestText = extractText(request.contents);
 
       const summarizedHistory =
         result.kind === 'applied' ? result.newHistory : [];
