@@ -40,12 +40,14 @@ const modelCatalogue = {
 
 describe('Zed config options', () => {
   it('maps active-provider models and current settings to strict ACP selects', async () => {
+    const config = configFixture({
+      'reasoning.effort': 'high',
+      emojifilter: 'warn',
+    });
     const options = await buildZedConfigOptions(
-      {
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => 'alpha',
-      },
-      configFixture({ 'reasoning.effort': 'high', emojifilter: 'warn' }),
+      () => 'alpha',
+      modelCatalogue.listAvailableModels,
+      config.getEphemeralSetting.bind(config),
     );
 
     expect(
@@ -65,12 +67,11 @@ describe('Zed config options', () => {
   });
 
   it('omits the model selector when the agent has no current model', async () => {
+    const config = configFixture();
     const options = await buildZedConfigOptions(
-      {
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => '',
-      },
-      configFixture(),
+      () => '',
+      modelCatalogue.listAvailableModels,
+      config.getEphemeralSetting.bind(config),
     );
 
     expect(options.map(({ id }) => id)).toStrictEqual([
@@ -81,13 +82,13 @@ describe('Zed config options', () => {
 
   it('applies validated settings and returns the updated snapshot', async () => {
     const values: Record<string, unknown> = {};
+    const config = configFixture(values);
     const options = await applyZedConfigOption(
-      {
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => 'alpha',
-        setModel: async () => undefined,
-      },
-      configFixture(values),
+      () => 'alpha',
+      modelCatalogue.listAvailableModels,
+      async () => undefined,
+      config.getEphemeralSetting.bind(config),
+      config.setEphemeralSetting.bind(config),
       'emojifilter',
       'error',
     );
@@ -103,20 +104,16 @@ describe('Zed config options', () => {
     await expect(
       zedConfigOptionsForClient(
         undefined,
-        {
-          listAvailableModels: modelCatalogue.listAvailableModels,
-          getModel: () => 'alpha',
-        },
-        config,
+        () => 'alpha',
+        modelCatalogue.listAvailableModels,
+        config.getEphemeralSetting.bind(config),
       ),
     ).resolves.toStrictEqual({});
     const supported = await zedConfigOptionsForClient(
       { session: { configOptions: true } },
-      {
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => 'alpha',
-      },
-      config,
+      () => 'alpha',
+      modelCatalogue.listAvailableModels,
+      config.getEphemeralSetting.bind(config),
     );
     expect(supported.configOptions?.map(({ id }) => id)).toStrictEqual([
       'model',
@@ -126,11 +123,9 @@ describe('Zed config options', () => {
     await expect(
       zedConfigOptionsForClient(
         { session: { configOptions: false } },
-        {
-          listAvailableModels: modelCatalogue.listAvailableModels,
-          getModel: () => 'alpha',
-        },
-        config,
+        () => 'alpha',
+        modelCatalogue.listAvailableModels,
+        config.getEphemeralSetting.bind(config),
       ),
     ).resolves.toStrictEqual({});
   });
@@ -164,14 +159,13 @@ describe('Zed config options', () => {
     const config = configFixture();
     let currentModel = 'alpha';
     const result = await setZedConfigOption(
-      {
-        setModel: async (model: string) => {
-          currentModel = model;
-        },
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => currentModel,
+      () => currentModel,
+      modelCatalogue.listAvailableModels,
+      async (model: string) => {
+        currentModel = model;
       },
-      config,
+      config.getEphemeralSetting.bind(config),
+      config.setEphemeralSetting.bind(config),
       'model',
       'beta',
     );
@@ -183,15 +177,15 @@ describe('Zed config options', () => {
   });
 
   it('wraps model switch failures without exposing provider details', async () => {
+    const config = configFixture();
     const failure = applyZedConfigOption(
-      {
-        setModel: async () => {
-          throw new Error('secret provider diagnostic');
-        },
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => 'alpha',
+      () => 'alpha',
+      modelCatalogue.listAvailableModels,
+      async () => {
+        throw new Error('secret provider diagnostic');
       },
-      configFixture(),
+      config.getEphemeralSetting.bind(config),
+      config.setEphemeralSetting.bind(config),
       'model',
       'beta',
     );
@@ -207,12 +201,11 @@ describe('Zed config options', () => {
   it('publishes agent-side setting changes and removes listeners on teardown', async () => {
     const owner = new SessionSettingsOwner(new SettingsService());
     const sendUpdate = vi.fn(async () => undefined);
+    const config = configFixture();
     const stop = observeZedConfigOptions(
-      {
-        listAvailableModels: modelCatalogue.listAvailableModels,
-        getModel: () => 'alpha',
-      },
-      configFixture(),
+      () => 'alpha',
+      modelCatalogue.listAvailableModels,
+      config.getEphemeralSetting.bind(config),
       sendUpdate,
       vi.fn(),
       (listener) => owner.subscribeModelChanges(listener),

@@ -32,7 +32,11 @@ describe('ACP model selection without provider-manager authority', () => {
         model = next;
       },
     };
-    const initial = await buildZedConfigOptions(models, settings);
+    const initial = await buildZedConfigOptions(
+      models.getModel.bind(models),
+      models.listAvailableModels.bind(models),
+      settings.getEphemeralSetting.bind(settings),
+    );
     expect(initial[0]).toMatchObject({
       id: 'model',
       currentValue: 'retained',
@@ -43,8 +47,11 @@ describe('ACP model selection without provider-manager authority', () => {
       ],
     });
     const updated = await setZedConfigOption(
-      models,
-      settings,
+      models.getModel.bind(models),
+      models.listAvailableModels.bind(models),
+      models.setModel.bind(models),
+      settings.getEphemeralSetting.bind(settings),
+      settings.setEphemeralSetting.bind(settings),
       'model',
       'second',
     );
@@ -56,7 +63,15 @@ describe('ACP model selection without provider-manager authority', () => {
       ],
     });
     await expect(
-      setZedConfigOption(models, settings, 'model', 'unavailable'),
+      setZedConfigOption(
+        models.getModel.bind(models),
+        models.listAvailableModels.bind(models),
+        models.setModel.bind(models),
+        settings.getEphemeralSetting.bind(settings),
+        settings.setEphemeralSetting.bind(settings),
+        'model',
+        'unavailable',
+      ),
     ).rejects.toMatchObject({ code: -32602 });
   });
   it('retains public Agent model queries and provider responses while usage reads stay live', async () => {
@@ -94,18 +109,26 @@ describe('ACP model selection without provider-manager authority', () => {
           agent.setEphemeralSetting(key, value),
       };
       await agent.setModel('retained-model');
-      const options = await buildZedConfigOptions(modelReads, settings);
+      const options = await buildZedConfigOptions(
+        modelReads.getModel.bind(modelReads),
+        modelReads.listAvailableModels.bind(modelReads),
+        settings.getEphemeralSetting.bind(settings),
+      );
       expect(options[0]).toMatchObject({
         id: 'model',
         currentValue: 'retained-model',
       });
-      const firstLimit = resolveZedContextWindowSize(settings, () =>
-        port.getProviderContextLimit(),
+      const firstLimit = resolveZedContextWindowSize(
+        () => settings.getModel(),
+        (key) => settings.getEphemeralSetting(key),
+        () => port.getProviderContextLimit(),
       );
       limit *= 2;
       expect(
-        resolveZedContextWindowSize(settings, () =>
-          port.getProviderContextLimit(),
+        resolveZedContextWindowSize(
+          () => settings.getModel(),
+          (key) => settings.getEphemeralSetting(key),
+          () => port.getProviderContextLimit(),
         ),
       ).toBe(firstLimit * 2);
       const response = await agent.chat('Retain the ACP provider response');

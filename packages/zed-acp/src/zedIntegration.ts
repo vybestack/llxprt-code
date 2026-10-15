@@ -32,10 +32,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { randomUUID } from 'crypto';
 import { buildSessionModes } from './zed-helpers.js';
 
-import {
-  buildProjectedZedSession,
-  projectZedSessionSettings,
-} from './zed-session-ports.js';
+import { buildZedSession } from './zed-agent-setup.js';
 
 import {
   buildZedSessionAgent,
@@ -119,10 +116,15 @@ export class ZedAgent {
   authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     return authenticateZedAgent(this.definitions, methodId, this.application);
   }
-  async newSession({
-    cwd,
-    mcpServers: _mcpServers,
-  }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
+  private reportRecordingFailure(sessionId: string, error: unknown): void {
+    this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`);
+  }
+  private reportCleanupFailure(error: unknown): void {
+    this.logger.debug(() => `Session cleanup failed: ${error}`);
+  }
+  async newSession(
+    params: acp.NewSessionRequest,
+  ): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
       const {
@@ -130,24 +132,19 @@ export class ZedAgent {
         config: sessionConfig,
         terminals,
         files,
+        ignore,
         disposeConfig,
         settingsOwner,
-      } = await this.buildSessionAgent(sessionId, cwd);
+      } = await this.buildSessionAgent(sessionId, params.cwd);
       let session: Session;
       try {
         await enableZedSessionRecording(
           () => agent.session.setRecording({ enabled: true }),
-          (error) =>
-            this.logger.debug(
-              () => `Recording failed for ${sessionId}: ${error}`,
-            ),
+          this.reportRecordingFailure.bind(this, sessionId),
         );
-        session = await buildProjectedZedSession(
-          agent,
-          sessionConfig,
-          files,
-          settingsOwner.subscribeModelChanges.bind(settingsOwner),
-          (settings) =>
+        session = await buildZedSession(
+          () => agent.dispose(),
+          () =>
             new Session(
               sessionId,
               (input, options) => agent.stream(input, options),
@@ -168,14 +165,24 @@ export class ZedAgent {
               () => agent.memory.getFilePaths(),
               () => agent.profiles.list(),
               () => agent.tasks.list(),
-              settings,
+              sessionConfig.getProjectRoot.bind(sessionConfig),
+              sessionConfig.getMaxSessionTurns.bind(sessionConfig),
+              sessionConfig.getDebugMode.bind(sessionConfig),
+              sessionConfig.getFileFilteringOptions.bind(sessionConfig),
+              sessionConfig.getTargetDir.bind(sessionConfig),
+              sessionConfig.getEnableRecursiveFileSearch.bind(sessionConfig),
+              files.readTextFile.bind(files),
+              ignore.shouldIgnoreFile.bind(ignore),
+              ignore.getCoreIgnorePatterns.bind(ignore),
+              (key) => agent.getEphemeralSetting(key),
+              (key, value) => agent.setEphemeralSetting(key, value),
+              settingsOwner.subscribeModelChanges.bind(settingsOwner),
               this.connection,
               this.supportsConfigOptions(),
               terminals,
               disposeConfig,
             ),
-          (error) =>
-            this.logger.debug(() => `Session cleanup failed: ${error}`),
+          this.reportCleanupFailure.bind(this),
         );
       } catch (error) {
         await agent.dispose().catch(() => undefined);
@@ -189,7 +196,6 @@ export class ZedAgent {
         () => agent.getModel(),
         () => agent.listAvailableModels(),
         (key) => agent.getEphemeralSetting(key),
-        (key, value) => agent.setEphemeralSetting(key, value),
       );
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
@@ -202,7 +208,6 @@ export class ZedAgent {
     readModel: Agent['getModel'],
     listModels: Agent['listAvailableModels'],
     readSetting: Agent['getEphemeralSetting'],
-    writeSetting: Agent['setEphemeralSetting'],
   ): Promise<acp.NewSessionResponse> {
     try {
       await session.sendAvailableCommands();
@@ -214,11 +219,9 @@ export class ZedAgent {
     try {
       ({ configOptions } = await zedConfigOptionsForClient(
         this.clientCapabilities,
-        {
-          getModel: readModel,
-          listAvailableModels: listModels,
-        },
-        { getEphemeralSetting: readSetting, setEphemeralSetting: writeSetting },
+        readModel,
+        listModels,
+        readSetting,
       ));
     } catch (error) {
       await session.dispose();
@@ -348,6 +351,7 @@ export class ZedAgent {
       config: sessionConfig,
       terminals,
       files,
+      ignore,
       disposeConfig,
       settingsOwner,
     } = await this.buildSessionAgent(sessionId, cwd);
@@ -378,13 +382,18 @@ export class ZedAgent {
         () => agent.memory.getFilePaths(),
         () => agent.profiles.list(),
         () => agent.tasks.list(),
-        projectZedSessionSettings(
-          sessionConfig,
-          agent,
-          files,
-          agent.workspace,
-          settingsOwner.subscribeModelChanges.bind(settingsOwner),
-        ),
+        sessionConfig.getProjectRoot.bind(sessionConfig),
+        sessionConfig.getMaxSessionTurns.bind(sessionConfig),
+        sessionConfig.getDebugMode.bind(sessionConfig),
+        sessionConfig.getFileFilteringOptions.bind(sessionConfig),
+        sessionConfig.getTargetDir.bind(sessionConfig),
+        sessionConfig.getEnableRecursiveFileSearch.bind(sessionConfig),
+        files.readTextFile.bind(files),
+        ignore.shouldIgnoreFile.bind(ignore),
+        ignore.getCoreIgnorePatterns.bind(ignore),
+        (key) => agent.getEphemeralSetting(key),
+        (key, value) => agent.setEphemeralSetting(key, value),
+        settingsOwner.subscribeModelChanges.bind(settingsOwner),
         this.connection,
         this.supportsConfigOptions(),
         terminals,

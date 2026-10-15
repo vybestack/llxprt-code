@@ -5,12 +5,9 @@
  */
 
 import * as acp from '@agentclientprotocol/sdk';
-import type { ZedCommandAgent } from './zed-command-registry.js';
+import type { createZedCommandExecutor } from './zed-command-registry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import {
-  executeZedCommand,
-  type ZedCommandResult,
-} from './zed-command-registry.js';
+import type { ZedCommandResult } from './zed-command-registry.js';
 
 const logger = new DebugLogger('llxprt:zed-integration:prompt-command');
 
@@ -41,21 +38,19 @@ export function extractPromptText(
  * command), so the caller continues with ordinary model-streaming.
  *
  * @param prompt The raw ACP content blocks from the prompt request.
- * @param agent The session's real Agent.
+ * @param executeCommand The session-bound command executor.
  * @param sendUpdate Callback to stream an `agent_message_chunk`.
  */
 export async function tryHandleZedCommand(
   prompt: readonly acp.ContentBlock[],
-  agent: ZedCommandAgent,
+  executeCommand: ReturnType<typeof createZedCommandExecutor>,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
 ): Promise<{ response: acp.PromptResponse } | null> {
   const text = extractPromptText(prompt);
   if (text === null) {
     return null;
   }
-  const result: ZedCommandResult | null = await executeZedCommand(text, {
-    agent,
-  });
+  const result: ZedCommandResult | null = await executeCommand(text);
   if (result === null) {
     return null;
   }

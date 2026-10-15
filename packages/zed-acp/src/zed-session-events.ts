@@ -27,9 +27,8 @@ type HandleConfirmationFn = (
 ) => Promise<void>;
 
 export interface SessionStreamDeps {
-  readonly agent: Pick<Agent, 'stream'> & {
-    readonly tools: Pick<Agent['tools'], 'get'>;
-  };
+  readonly streamTurn: Agent['stream'];
+  readonly lookupTool: Agent['tools']['get'];
   readonly terminals: TerminalManager | null;
   readonly sendUpdate: SendUpdateFn;
   readonly sendUsage: SendUsageFn;
@@ -54,7 +53,7 @@ export async function consumeAgentStream(
   promptGeneration: number,
   batcher: StreamBatcher,
 ): Promise<acp.StopReason | null> {
-  const eventStream = deps.agent.stream(parts, {
+  const eventStream = deps.streamTurn(parts, {
     signal: pendingSend.signal,
     promptId,
     maxTurns: deps.maxTurns,
@@ -98,7 +97,7 @@ async function processStreamEvent(
     sendUpdate: deps.sendUpdate,
     sendUsage: deps.sendUsage,
     handleConfirmation: deps.handleConfirmation,
-    resolveToolKind: (toolName) => deps.agent.tools.get(toolName)?.kind,
+    resolveToolKind: (toolName) => deps.lookupTool(toolName)?.kind,
   });
   await trackTerminalEvent(event, deps);
   return stopReason;
@@ -119,7 +118,7 @@ async function trackTerminalEvent(
       event.type === 'tool-call' &&
       TerminalManager.isShellToolCall(
         event.call,
-        deps.agent.tools.get(event.call.name)?.kind,
+        deps.lookupTool(event.call.name)?.kind,
       )
     ) {
       await deps.terminals.observeToolCall(event.call);
