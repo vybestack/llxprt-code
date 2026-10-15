@@ -30,7 +30,8 @@ export function bindChatHistoryTail(
   chat.getHistoryService = (() => ({
     getLastContent: (): IContent | undefined => {
       tailReads += 1;
-      return readRows().at(-1);
+      const rows = readRows();
+      return rows[rows.length - 1];
     },
   })) as unknown as ChatSession['getHistoryService'];
   return { tailReads: () => tailReads };
