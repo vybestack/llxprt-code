@@ -26,7 +26,6 @@ import {
   ApiErrorEvent as LegacyApiErrorEvent,
 } from '../telemetry/types.js';
 import { randomUUID } from 'node:crypto';
-import { logBoundedRequestArtifact } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import type {
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
@@ -114,24 +113,11 @@ export function createTelemetryAdapter(
   const identity = (event: { promptId?: string; runtimeId?: string }): string =>
     event.promptId ?? event.runtimeId ?? 'runtime';
   return {
-    requestArtifactSchemaVersion: 3,
     logApiRequest: (event) => {
       if (telemetry.isEnabled()) {
         const key = identity(event);
         spans.get(key)?.end();
         spans.set(key, startApiRequestSpan(telemetry, config, event.model));
-      }
-      if (event.requestArtifact !== undefined) {
-        if (event.requestText !== undefined)
-          throw new Error('API request cannot contain both text and artifact');
-        return logBoundedRequestArtifact(
-          telemetry,
-          config.getSessionId(),
-          event.model,
-          identity(event),
-          event.requestArtifact,
-          event.signal,
-        );
       }
       return logApiRequest(
         config,

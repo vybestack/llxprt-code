@@ -6,7 +6,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { RequestArtifactReceiver } from './request-artifact-receiver.js';
 import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
 import {
   type ReadableSpan,
@@ -216,12 +215,6 @@ export class FileSpanExporter extends FileExporter implements SpanExporter {
 
 export class FileLogExporter extends FileExporter implements LogRecordExporter {
   readonly requestArtifactSchemaVersion = 4;
-  private readonly artifactReceiver = new RequestArtifactReceiver();
-
-  override shutdown(): Promise<void> {
-    this.artifactReceiver.clear();
-    return super.shutdown();
-  }
 
   export(
     logs: ReadableLogRecord[],
@@ -230,14 +223,12 @@ export class FileLogExporter extends FileExporter implements LogRecordExporter {
     // Per-record writes for the same cap-overshoot reason as spans.
     try {
       for (const log of logs) {
-        this.artifactReceiver.accept(log.attributes);
         this.writeToFile(this.serialize({ ...log, body: log.body }));
       }
       resultCallback({
         code: ExportResultCode.SUCCESS,
       });
     } catch (error) {
-      this.artifactReceiver.clear();
       resultCallback({
         code: ExportResultCode.FAILED,
         error: error as Error,

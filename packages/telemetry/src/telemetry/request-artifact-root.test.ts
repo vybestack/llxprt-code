@@ -15,7 +15,6 @@ import type {
 } from '@opentelemetry/sdk-logs';
 import { createRootTelemetry, type RootTelemetry } from './root-telemetry.js';
 import { ExportAcknowledgementMissingError } from './artifact-exporter.js';
-import { logBoundedRequestArtifact } from './bounded-request-artifact.js';
 import {
   assertRequestArtifactExporter,
   flushRequestArtifactTelemetry,
@@ -219,66 +218,6 @@ describe('request artifact telemetry owned by a RootTelemetry', () => {
           selected.events.record(() => ({ body: `record-${index}` }));
       }),
     ).rejects.toThrow('exceeds two records');
-  });
-
-  it('logs a plain api request event when bodies are not opted in', async () => {
-    const file = outfile();
-    const selected = await fileRoot(file);
-    const artifact = {
-      schema_version: 3,
-      serialization: 'independent-safe-json-rows-v1',
-      source: {
-        schema_version: 2,
-        artifact_id: 'a',
-        artifact_path: '/nonexistent/never-read',
-        content_offset: 0,
-        content_bytes: 2,
-        content_chars: 2,
-        content_sha256: 'a'.repeat(64),
-        row_count: 1,
-      },
-    } as const;
-
-    await logBoundedRequestArtifact(
-      selected,
-      'artifact-root-session',
-      'model-x',
-      'prompt-1',
-      artifact,
-    );
-    await selected.flush();
-
-    const written = readFileSync(file, 'utf8');
-    expect(written).toContain('API request to model-x.');
-    expect(written).not.toContain('chunk_data');
-  });
-
-  it('refuses bounded request artifacts while the root is disabled', async () => {
-    const selected = await fileRoot(outfile());
-    await selected.setEnabled(false);
-
-    await expect(
-      logBoundedRequestArtifact(
-        selected,
-        'artifact-root-session',
-        'model-x',
-        'prompt-1',
-        {
-          schema_version: 3,
-          serialization: 'legacy-request-text-v1',
-          source: {
-            schema_version: 2,
-            artifact_id: 'a',
-            artifact_path: '/nonexistent/never-read',
-            content_offset: 0,
-            content_bytes: 2,
-            content_chars: 2,
-            content_sha256: 'b'.repeat(64),
-            row_count: 1,
-          },
-        },
-      ),
-    ).rejects.toThrow('requires an active telemetry SDK');
   });
 
   it('releases root flush and close when an exporter stops making progress, without a second failure', async () => {

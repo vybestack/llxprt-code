@@ -7,12 +7,7 @@
 import type { LogRecord } from '@opentelemetry/api-logs';
 import type { RootTelemetry } from './root-telemetry.js';
 
-export {
-  logBoundedRequestArtifact,
-  type RuntimeRequestArtifact,
-} from './bounded-request-artifact.js';
 export type { RequestArtifactLogExporter } from './artifact-exporter.js';
-export { readRequestArtifact } from './request-artifact-reader.js';
 
 export function isTelemetrySdkInitialized(root: RootTelemetry): boolean {
   return root.isEnabled();

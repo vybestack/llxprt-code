@@ -18,7 +18,8 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createTelemetrySession } from './source-telemetry-session-fixture.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { logApiRequest } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
+import { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
@@ -58,10 +59,15 @@ export interface StrictReceipt {
   readonly closed: number;
   readonly activeReaders: number;
   readonly activeBodies: number;
+  /** The JSONL file the real FileLogExporter wrote, including chunk records. */
+  readonly logPath: string;
 }
 class ObservedFileExporter extends FileLogExporter {
   readonly events: Array<Record<string, unknown>> = [];
   readonly rejected: Array<{ names: unknown[]; error: string }> = [];
+  constructor(readonly logPath: string) {
+    super(logPath);
+  }
   override export(
     records: ReadableLogRecord[],
     callback: (result: ExportResult) => void,
@@ -380,6 +386,7 @@ async function captureStrictReceipt(
     closed: fixture.state.closed,
     activeReaders: fixture.state.active,
     activeBodies: activeRequestBodyCount(),
+    logPath: exporter.logPath,
   };
   await input.cleanup();
   await setup.config.dispose();
@@ -398,16 +405,13 @@ async function publishPreflight(
     signal,
   );
   try {
-    await createTelemetryAdapter(input.config, input.telemetry).logApiRequest({
-      model: 'gpt-5.6',
-      promptId: 'strict-preflight',
-      requestArtifact: {
-        schema_version: 3,
-        serialization: 'independent-safe-json-rows-v1',
-        source: artifact,
-      },
+    await logApiRequest(
+      input.config,
+      new ApiRequestEvent('gpt-5.6', 'strict-preflight', undefined, artifact),
+      input.telemetry,
       signal,
-    });
+      true,
+    );
   } finally {
     rmSync(artifact.artifact_path);
   }

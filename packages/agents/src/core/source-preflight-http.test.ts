@@ -3,7 +3,8 @@ import { settleInducedExportFailure } from './__tests__/support/induced-export-f
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { logApiRequest } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
+import { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
   FileMetricExporter,
@@ -103,19 +104,13 @@ async function publish(
       throw new Error('Missing projected estimate');
     input.estimates.push(prepared.estimate);
     try {
-      await createTelemetryAdapter(
+      await logApiRequest(
         input.setup.config,
+        new ApiRequestEvent('gpt-5.6', `preflight-${index}`, undefined, source),
         input.telemetry,
-      ).logApiRequest({
-        model: 'gpt-5.6',
-        promptId: `preflight-${index}`,
-        requestArtifact: {
-          schema_version: 3,
-          serialization: 'independent-safe-json-rows-v1',
-          source,
-        },
         signal,
-      });
+        true,
+      );
     } finally {
       await rm(source.artifact_path);
     }
