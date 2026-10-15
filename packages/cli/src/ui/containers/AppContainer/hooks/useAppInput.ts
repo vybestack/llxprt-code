@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useBrowserCatalogCommands } from '../../../hooks/useBrowserCatalogCommands.js';
+import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import {
   bindOwnerBrowserResume,
   bindRawBrowserResume,
@@ -6,11 +14,6 @@ import {
 import { resumeOwnerSession } from '../../../utils/ownerSessionUi.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 
 import {
@@ -42,7 +45,6 @@ import { submitOAuthCode } from '../../../oauth-submission.js';
 import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { PromptContentGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
-import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
@@ -745,11 +747,18 @@ function useInputStartup(
   });
 }
 
+function usePromptContentGenerator(client: {
+  generateContent: PromptContentGenerator;
+}): PromptContentGenerator {
+  return useMemo(
+    () =>
+      (...input: Parameters<PromptContentGenerator>) =>
+        client.generateContent(...input),
+    [client],
+  );
+}
+
 export function useAppInput(params: AppInputParams) {
-  const generatePromptContent = useMemo<PromptContentGenerator>(() => {
-    const { agentClient } = params.agent;
-    return (...input) => agentClient.generateContent(...input);
-  }, [params.agent]);
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
@@ -761,6 +770,13 @@ export function useAppInput(params: AppInputParams) {
     recordingOwner,
     recordingSwapCallbacks,
   } = params;
+  const { readBrowserCatalog, deleteBrowserTarget } = useBrowserCatalogCommands(
+    agent.session,
+    recordingOwner,
+    config,
+    recordingSwapCallbacks,
+    agent.agentClient.mediaStore,
+  );
   const resumeBrowserTarget = useMemo(() => {
     const close = () => store.commands.closeDialog('sessionBrowser');
     if (recordingOwner === 'agent')
@@ -804,8 +820,10 @@ export function useAppInput(params: AppInputParams) {
   return {
     buffer: stream.buffer,
     commandContext: core.commandContext,
-    generatePromptContent,
+    generatePromptContent: usePromptContentGenerator(params.agent.agentClient),
     resumeBrowserTarget,
+    readBrowserCatalog,
+    deleteBrowserTarget,
     inputHistoryStore: stream.inputHistoryStore,
     handleUserInputSubmit: stream.handleUserInputSubmit,
     handleSteer: stream.handleSteer,

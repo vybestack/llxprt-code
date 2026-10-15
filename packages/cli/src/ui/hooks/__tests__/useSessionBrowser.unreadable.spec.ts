@@ -7,6 +7,8 @@
  * recordings it skipped, with their reason, on the CLI debug log.
  */
 
+import { rawBrowserCatalog } from '../../../__tests__/browser-catalog-fixture.js';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -56,11 +58,17 @@ describe('useSessionBrowser with an unreadable recording present (issue #3732)',
     );
     await fs.writeFile(brokenPath, '', 'utf-8');
 
+    const catalog = rawBrowserCatalog(
+      chatsDir,
+      PROJECT_HASH,
+      'current-session',
+    );
     const { result, unmount } = renderHook(() =>
       useSessionBrowser({
         chatsDir,
         projectHash: PROJECT_HASH,
         currentSessionId: 'current-session',
+        ...catalog,
         onSelect: async () => ({ ok: false, error: 'not selected' }),
         onClose: () => {},
       }),

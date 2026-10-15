@@ -34,6 +34,21 @@ function createWelcomeCommands(
   };
 }
 
+function createBrowserCommands(
+  latest: CommandRef,
+): Pick<
+  AppCommands,
+  'resumeBrowserTarget' | 'readBrowserCatalog' | 'deleteBrowserTarget'
+> {
+  return {
+    resumeBrowserTarget: (...args) =>
+      latest.current.resumeBrowserTarget(...args),
+    readBrowserCatalog: () => latest.current.readBrowserCatalog(),
+    deleteBrowserTarget: (...args) =>
+      latest.current.deleteBrowserTarget(...args),
+  };
+}
+
 /**
  * Binds the view command surface for the available capabilities. Each invocation
  * reads the current handler from the latest render of its owning hook.
@@ -72,8 +87,7 @@ export function createStableAppCommands(
     handleFolderTrustSelect: (...args) =>
       latest.current.handleFolderTrustSelect(...args),
     triggerWelcomeAuth: (...args) => latest.current.triggerWelcomeAuth(...args),
-    resumeBrowserTarget: (...args) =>
-      latest.current.resumeBrowserTarget(...args),
+    ...createBrowserCommands(latest),
     listSubagentDefinitions: (...args) =>
       latest.current.listSubagentDefinitions(...args),
     loadSubagentDefinition: (...args) =>

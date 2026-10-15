@@ -57,6 +57,8 @@ export function createAppCommandBindings(
     resumeBrowserTarget: unusedCommand,
     recordModelSwitch: unusedCommand,
     readPolicyRules: unusedCommand,
+    readBrowserCatalog: unusedCommand,
+    deleteBrowserTarget: unusedCommand,
     listSubagentDefinitions: unusedCommand,
     loadSubagentDefinition: unusedCommand,
     saveSubagentDefinition: unusedCommand,

@@ -394,6 +394,8 @@ function renderUtilityStoreDialog(
         state.commandContext,
         state.handleSessionBrowserSelect,
         () => close('sessionBrowser'),
+        ctx.uiActions.readBrowserCatalog,
+        ctx.uiActions.deleteBrowserTarget,
       );
     case 'modelConfig':
       return (

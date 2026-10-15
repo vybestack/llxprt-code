@@ -1,4 +1,3 @@
-import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,6 +7,9 @@ import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-f
  * browser report recordings discovery skipped as unreadable, the same way the
  * raw recording path does.
  */
+
+import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
+import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -20,7 +22,10 @@ import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
-import { useSessionBrowser } from './useSessionBrowser.js';
+import {
+  type UseSessionBrowserProps,
+  useSessionBrowser,
+} from './useSessionBrowser.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
@@ -143,12 +148,27 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
         const next = await borrow();
 
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async () => ({ ok: false, error: 'not selected' }),
             onClose: () => {},
           }),

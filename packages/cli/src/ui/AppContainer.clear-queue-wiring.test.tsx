@@ -106,6 +106,9 @@ function createHarness(initialQueueCommandsAvailable = true) {
     return null;
   });
   CommandConsumer.displayName = 'CommandConsumer';
+  const readBrowserCatalog = async (): Promise<never> => {
+    throw new Error('Queue test must not read browser');
+  };
   let queue: ReturnType<typeof useQueuedSubmissions> | undefined;
   let revision = 0;
   function Harness() {
@@ -125,6 +128,10 @@ function createHarness(initialQueueCommandsAvailable = true) {
       {
         buffer,
         commandContext: createMockCommandContext(),
+        readBrowserCatalog,
+        deleteBrowserTarget: async () => {
+          throw new Error('Queue test must not delete browser');
+        },
         resumeBrowserTarget: async () => ({ ok: true }),
         generatePromptContent: async () => {
           throw new Error(
