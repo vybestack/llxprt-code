@@ -45,7 +45,7 @@ import {
   DEFAULT_COMPLETION_FRACTION,
   InvalidContextBudgetError,
 } from '../compressionBudgeting.js';
-import { resolveHeadAnchorSeq } from '../cacheAnchor.js';
+import { resolveHeadAnchorSeq } from './support/cacheAnchor.js';
 
 // ---------------------------------------------------------------------------
 // Test-local helpers: operational definition of a "cacheable prefix"

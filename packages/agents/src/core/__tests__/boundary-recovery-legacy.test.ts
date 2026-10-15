@@ -6,7 +6,7 @@ import {
   recoverPendingBoundary,
   resolvePendingBoundaryFromHook,
   snapshotContents,
-} from '../boundaryRecovery.js';
+} from './support/boundary-recovery-oracle.js';
 import {
   histUser,
   histAi,

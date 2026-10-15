@@ -2,7 +2,7 @@
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
+import { applyCompressionValuesWithAnchor } from '../../cache-anchor-values.js';
 
 async function publishValues(
   history: HistoryService,

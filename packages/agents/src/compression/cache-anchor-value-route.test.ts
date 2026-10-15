@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { applyCompressionWithAnchor } from './cacheAnchor.js';
+import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 import { detachedRow } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
   exactTokenizer,

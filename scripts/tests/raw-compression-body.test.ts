@@ -15,7 +15,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
-import { applyCompressionWithAnchor } from '../../packages/agents/src/compression/cacheAnchor.js';
+import { applyCompressionWithAnchor } from '../../packages/agents/src/compression/__tests__/support/cacheAnchor.js';
 import {
   CursorCompressionHistory,
   summaryRow,

@@ -9,7 +9,7 @@ import {
 import type { HookSnapshotRows } from '@vybestack/llxprt-code-core/hooks/hookOutputSnapshot.js';
 import { isSpeakerContent } from '@vybestack/llxprt-code-core/services/history/historyJournalGuards.js';
 import { ProviderNormalizationStorage } from '@vybestack/llxprt-code-core/services/history/provider-normalization-storage.js';
-import { contentProjectionKey } from './boundaryRecovery.js';
+import { contentProjectionKey } from './boundary-projection-key.js';
 
 type Stage = 'before' | 'after' | 'raw';
 

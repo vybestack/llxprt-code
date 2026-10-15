@@ -24,7 +24,7 @@ import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/ll
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { applyCompressionWithAnchor } from './cacheAnchor.js';
+import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 
 function human(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };

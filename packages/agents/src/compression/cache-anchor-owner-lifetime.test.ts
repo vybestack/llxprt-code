@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
-import { applyCompressionWithAnchor } from './cacheAnchor.js';
+import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 import {
   withDetachedFixture,
   detachedRows,

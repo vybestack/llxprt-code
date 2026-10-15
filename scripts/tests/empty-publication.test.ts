@@ -5,7 +5,7 @@ import {
   exactTokenizer,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
-import { applyCompressionWithAnchor } from '../../packages/agents/src/compression/cacheAnchor.js';
+import { applyCompressionWithAnchor } from '../../packages/agents/src/compression/__tests__/support/cacheAnchor.js';
 import { truncateLargestToolResponses } from '../../packages/agents/src/compression/toolResultTruncator.js';
 import {
   collect,

@@ -27,7 +27,7 @@ import {
   resolvePendingBoundaryFromHook,
   snapshotContents,
   snapshotMatches,
-} from '../boundaryRecovery.js';
+} from './support/boundary-recovery-oracle.js';
 import { applyRequestModifications } from '../streamRequestHelpers.js';
 import { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 

@@ -17,7 +17,7 @@ import { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.j
 import {
   resolvePendingBoundaryFromHook,
   snapshotContents,
-} from '../boundaryRecovery.js';
+} from './support/boundary-recovery-oracle.js';
 import { resolvePendingBoundarySnapshot } from '../boundary-recovery-snapshot.js';
 
 export function row(text: string): IContent {

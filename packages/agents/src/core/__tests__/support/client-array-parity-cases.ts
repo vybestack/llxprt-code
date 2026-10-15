@@ -17,7 +17,7 @@ import {
   forbidClientArrayRollback,
   withArrayClient,
 } from './client-array-test-helpers.js';
-import { LegacyArrayAdmissions } from '../../legacy-array-admission-oracle.js';
+import { LegacyArrayAdmissions } from './legacy-array-admission-oracle.js';
 
 async function legacyRestore(
   history: HistoryService,
