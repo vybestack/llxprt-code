@@ -16,6 +16,7 @@ import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
@@ -98,10 +99,15 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
           slashCommandLogger: new DebugLogger('test-slash'),
           beginSlashCommandAction: () => new AbortController(),
           endSlashCommandAction: () => {},
+          resumeOwnedSession: null,
           recordCommandError: async () => {},
           loadCommandHistory: async () => {},
         };
 
+        deps.resumeOwnedSession = bindFixtureOwnerResume(
+          deps.commandContext,
+          deps.config,
+        );
         await processSlashCommand(deps, `/continue ${sourceId}`);
 
         const visible = turnStore.store

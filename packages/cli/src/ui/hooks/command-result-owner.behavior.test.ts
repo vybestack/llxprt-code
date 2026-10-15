@@ -111,6 +111,7 @@ async function dispatchFailure(
     slashCommandLogger: new DebugLogger('owner-slash'),
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
+    resumeOwnedSession: null,
     recordCommandError: bindCommandErrorRecorder(owner, 'agent', undefined),
     loadCommandHistory: async () => {},
   };

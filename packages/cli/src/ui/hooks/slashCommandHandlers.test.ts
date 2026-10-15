@@ -9,6 +9,7 @@ const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import {
   bindFixtureHistoryLoader,
+  bindFixtureOwnerResume,
   createCommands,
 } from '../../__tests__/command-history-result-fixture.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
@@ -103,6 +104,7 @@ describe('slashCommandHandlers', () => {
             content: 'owner slash failure',
           })),
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
+          resumeOwnedSession: null,
           recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
             recordSessionEvent: rawWrite,
           }),
@@ -151,6 +153,7 @@ describe('slashCommandHandlers', () => {
               recordingOwner: 'agent',
               services: { ...deps.commandContext.services, agent: next },
             },
+            resumeOwnedSession: null,
             recordCommandError: bindCommandErrorRecorder(
               next,
               'agent',
@@ -826,6 +829,10 @@ describe('slashCommandHandlers', () => {
             }),
           },
         ];
+        deps.resumeOwnedSession = bindFixtureOwnerResume(
+          deps.commandContext,
+          deps.config,
+        );
         await processSlashCommand(deps, `/continue ${sourceId}`);
         expect(
           loaded?.some(

@@ -66,6 +66,7 @@ export function createDeps(
     slashCommandLogger: new DebugLogger('test-slash'),
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
+    resumeOwnedSession: null,
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
     ...overrides,

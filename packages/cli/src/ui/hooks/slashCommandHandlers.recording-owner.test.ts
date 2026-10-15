@@ -2,6 +2,7 @@ import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -108,6 +109,7 @@ describe('recording owner slash command construction', () => {
       slashCommandLogger: new DebugLogger('test-slash'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
+      resumeOwnedSession: null,
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
       ...overrides,
@@ -167,6 +169,10 @@ describe('recording owner slash command construction', () => {
             }),
           },
         ];
+        deps.resumeOwnedSession = bindFixtureOwnerResume(
+          deps.commandContext,
+          deps.config,
+        );
         await processSlashCommand(deps, `/continue ${sourceId}`);
         expect(
           loaded?.some(

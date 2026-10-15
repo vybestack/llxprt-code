@@ -110,6 +110,7 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
         slashCommandLogger: new DebugLogger('history-slash'),
         beginSlashCommandAction: () => new AbortController(),
         endSlashCommandAction: () => {},
+        resumeOwnedSession: null,
         recordCommandError: async () => {},
         loadCommandHistory: bindCommandHistoryLoader(
           (history) => owner.setHistory(history),

@@ -40,10 +40,7 @@ import type {
   RecordingSwapCallbacks,
   ResumeContext,
 } from '../../services/performResume.js';
-import {
-  importOwnerSession,
-  resumeOwnerSession,
-} from '../utils/ownerSessionUi.js';
+
 import type {
   HistoryItemWithoutId,
   IndividualToolCallDisplay,
@@ -59,6 +56,9 @@ export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
   config: CliUiRuntime | null;
   commandContext: CommandContext;
+  resumeOwnedSession:
+    | ((action: PerformResumeActionReturn) => Promise<readonly string[]>)
+    | null;
   recordCommandError: (message: string) => Promise<void>;
   loadCommandHistory: (
     result: Extract<ActionResult, { type: 'load_history' }>,
@@ -626,26 +626,12 @@ async function confirmAction(
 
 async function performOwnerSessionResume(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   action: PerformResumeActionReturn,
+  resume: NonNullable<SlashCommandHandlerDeps['resumeOwnedSession']>,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (agent === null) throw new Error('Session agent is unavailable');
+  const replay = resume(action);
   try {
-    const replay =
-      action.sessionPackage === undefined
-        ? await resumeOwnerSession(
-            agent,
-            action.sessionRef,
-            resolveEmojiFilterMode(deps.config),
-          )
-        : await importOwnerSession(
-            agent,
-            action.sessionPackage.packageDirectory,
-            resolveEmojiFilterMode(deps.config),
-          );
-    context.ui.loadHistory([...replay.uiHistory]);
-    addResumeWarnings(deps.addMessage, replay.warnings);
+    addResumeWarnings(deps.addMessage, await replay);
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -669,8 +655,8 @@ async function performSessionResume(
     });
     return { type: 'handled' };
   }
-  if (context.recordingOwner === 'agent') {
-    return performOwnerSessionResume(deps, context, action);
+  if (deps.resumeOwnedSession !== null) {
+    return performOwnerSessionResume(deps, action, deps.resumeOwnedSession);
   }
   if (!deps.recordingSwapCallbacks) {
     deps.addMessage({

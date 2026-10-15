@@ -1,3 +1,8 @@
+import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
+import {
+  resumeOwnerSession,
+  importOwnerSession,
+} from '../utils/ownerSessionUi.js';
 import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
@@ -546,6 +551,21 @@ function buildHandlerDeps(
   cancellation: SlashCommandCancellation,
 ): SlashCommandHandlerDeps {
   return {
+    resumeOwnedSession:
+      args.recordingOwner === 'agent'
+        ? bindCommandOwnerResume((action) => {
+            const agent = args.agent;
+            if (agent === null) throw new Error('Session agent is unavailable');
+            const mode = resolveEmojiFilterMode(args.config);
+            return action.sessionPackage === undefined
+              ? resumeOwnerSession(agent, action.sessionRef, mode)
+              : importOwnerSession(
+                  agent,
+                  action.sessionPackage.packageDirectory,
+                  mode,
+                );
+          }, args.loadHistory)
+        : null,
     loadCommandHistory: bindCommandHistoryLoader(
       async (history) => {
         if (!args.agent) throw new Error('Session agent is unavailable');
