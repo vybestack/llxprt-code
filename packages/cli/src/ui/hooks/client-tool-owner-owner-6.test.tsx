@@ -330,18 +330,18 @@ describe('Agent-owned CLI client tools', () => {
     });
     agents.push(agent);
     await agent.agentClient.startChat();
-    const runtime = {
-      scheduler: {},
-      session: { getSessionId: () => configCallerConfig.getSessionId() },
-      agent,
-    };
+    const openClientChannel = () => agent.tools.openClientChannel();
+    const subscribeChildTools: Agent['tools']['subscribeChildTools'] = (
+      callbacks,
+    ) => agent.tools.subscribeChildTools(callbacks);
     const completed: CompletedToolCall[][] = [];
     const hook = renderHook(() =>
       useReactToolScheduler(
         (_id, calls) => {
           completed.push(calls);
         },
-        runtime,
+        openClientChannel,
+        subscribeChildTools,
         noop,
         () => undefined,
         noop,

@@ -66,6 +66,10 @@ function fixtureCheckpoints(source: object): WorkspaceCheckpointOperations {
 }
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  OpenClientChannel,
+  SubscribeChildTools,
+} from '../../../../runtime/interactiveToolScheduler.js';
 import { createFakeAgent } from './helpers/createFakeAgent.js';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -138,7 +142,7 @@ function delegateVoid(
 
 const reactToolSchedulerRuntimeCache = new WeakMap<
   LegacyRuntimeSource,
-  Pick<StreamRuntime, 'session'> & { agent: Agent }
+  [OpenClientChannel, SubscribeChildTools]
 >();
 
 const DEFAULT_EMPTY_SOURCE: LegacyRuntimeSource = {};
@@ -545,7 +549,7 @@ export function createStreamRuntimeForTest(
   };
 }
 
-export function createReactToolSchedulerRuntimeForTest(
+export function createToolSchedulerOperationsForTest(
   source: LegacyRuntimeSource = DEFAULT_EMPTY_SOURCE,
   factory: (
     callbacks: SchedulerCallbacks,
@@ -556,25 +560,25 @@ export function createReactToolSchedulerRuntimeForTest(
   // useReactToolScheduler memoizes by callback identity; for no-overrides scheduler
   // tests, return a stable runtime per source object to avoid test-only resubscribe
   // loops while still allowing per-test freshness through explicit overrides.
-): Pick<StreamRuntime, 'session'> & { agent: Agent } {
+): [OpenClientChannel, SubscribeChildTools] {
   if (Object.keys(overrides).length === 0) {
     const cached = reactToolSchedulerRuntimeCache.get(source);
     if (cached) {
       return cached;
     }
-    const runtime = createStreamRuntimeForTest(source, overrides);
-    const result = {
-      session: runtime.session,
-      agent: createSchedulerTestAgent(factory),
-    };
+    const agent = createSchedulerTestAgent(factory);
+    const result: [OpenClientChannel, SubscribeChildTools] = [
+      () => agent.tools.openClientChannel(),
+      (callbacks) => agent.tools.subscribeChildTools(callbacks),
+    ];
     reactToolSchedulerRuntimeCache.set(source, result);
     return result;
   }
-  const runtime = createStreamRuntimeForTest(source, overrides);
-  return {
-    session: runtime.session,
-    agent: createSchedulerTestAgent(factory),
-  };
+  const agent = createSchedulerTestAgent(factory);
+  return [
+    () => agent.tools.openClientChannel(),
+    (callbacks) => agent.tools.subscribeChildTools(callbacks),
+  ];
 }
 
 function createSchedulerTestAgent(

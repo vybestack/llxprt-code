@@ -532,14 +532,18 @@ describe('Mounted CLI child execution ownership', () => {
     });
     const completed: Array<{ primary: boolean; calls: CompletedToolCall[] }> =
       [];
-    const runtime = { agent };
+    const openClientChannel = () => agent.tools.openClientChannel();
+    const subscribeChildTools: Agent['tools']['subscribeChildTools'] = (
+      callbacks,
+    ) => agent.tools.subscribeChildTools(callbacks);
     const hook = mounted
       ? renderHook(() =>
           useReactToolScheduler(
             (_id, calls, options) => {
               completed.push({ primary: options.isPrimary, calls });
             },
-            runtime,
+            openClientChannel,
+            subscribeChildTools,
             noop,
             () => undefined,
             noop,
@@ -608,7 +612,12 @@ describe('Mounted CLI child execution ownership', () => {
       onEditorOpenRef: { current: noop },
       setLastToolOutputTime: noop,
     };
-    const hook = renderHook(() => useChildToolDisplay(a.agent, refs, noop));
+    const subscribeChildTools: Agent['tools']['subscribeChildTools'] = (
+      callbacks,
+    ) => a.agent.tools.subscribeChildTools(callbacks);
+    const hook = renderHook(() =>
+      useChildToolDisplay(subscribeChildTools, refs, noop),
+    );
     const run = a.run();
     await a.started.promise;
     a.finish.release();
