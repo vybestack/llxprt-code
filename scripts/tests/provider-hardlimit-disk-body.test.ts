@@ -12,10 +12,7 @@ import {
   type IContent,
 } from '../../packages/core/src/services/history/IContent.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
-import {
-  providerFarFixtureRow,
-  providerPendingFixture,
-} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
+import { providerFarFixtureRow } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { runDiskProviderFallback } from '../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
@@ -24,6 +21,12 @@ import { middleoutSetup } from '../../packages/agents/src/compression/__tests__/
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
+import {
+  heavyPendingFixture,
+  toolBlockTokens,
+  untrimmedFarCallTokens,
+  weightedTokenizer,
+} from './heavy-far-response-support.js';
 
 const logger = new DebugLogger('test:actual-hardlimit-body');
 const cases = [512, 8192].flatMap((size) =>
@@ -77,7 +80,15 @@ async function oracle(
   const expectedPending = accepted
     ? pending
     : [
-        { ...pending[0], blocks: [createTruncationStub(response, 1)] },
+        {
+          ...pending[0],
+          blocks: [
+            createTruncationStub(
+              response,
+              await toolBlockTokens(history, response),
+            ),
+          ],
+        },
         pending[1],
       ];
   const expectedRaw = accepted
@@ -88,26 +99,6 @@ async function oracle(
     expectedPending,
     logger,
   );
-}
-
-function hasUntrimmedFarCall(rows: IContent[]): boolean {
-  return rows.some((row) =>
-    row.blocks.some(
-      (block) =>
-        block.type === 'tool_response' &&
-        block.callId === 'far-call' &&
-        block.providerMetadata?.contextTruncated !== true,
-    ),
-  );
-}
-
-function overLimit(
-  accepted: boolean,
-  attempted: boolean,
-  rows: IContent[],
-): boolean {
-  if (accepted) return !attempted;
-  return hasUntrimmedFarCall(rows);
 }
 
 function enforceFor(
@@ -148,11 +139,11 @@ function enforceFor(
     },
     // An accepted candidate fits once installed; a rejected one only fits
     // after last-resort tool-response truncation.
-    estimateRows: async (rows) =>
-      rows.length +
-      (overLimit(accepted, attempted, rows)
-        ? history.getTotalTokens() + 200000
-        : 0),
+    estimateRows: async (rows) => {
+      if (!accepted)
+        return rows.length + (await untrimmedFarCallTokens(history, rows));
+      return rows.length + (attempted ? 0 : history.getTotalTokens() + 200000);
+    },
   });
 }
 async function verify(
@@ -168,11 +159,13 @@ async function verify(
         contextLimit: 30000,
         compressionThreshold: 0.8,
       });
+      // The setup installs the exact tokenizer; the far response needs weight.
+      history.setTokenizerFactory(weightedTokenizer());
       history.syncTotalTokens(
         await history.estimateTokensForContents(history.streamRawHistory()),
       );
       await history.waitForTokenUpdates();
-      const pending = providerPendingFixture();
+      const pending = heavyPendingFixture();
       const expectedRows = await oracle(
         size,
         history,

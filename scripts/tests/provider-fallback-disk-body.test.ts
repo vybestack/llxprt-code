@@ -6,21 +6,23 @@ import { describe, it, expect } from 'bun:test';
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../../packages/core/src/services/history/IContent.js';
-import {
-  providerFarFixtureRow,
-  providerPendingFixture,
-} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
+import { providerFarFixtureRow } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
+import {
+  heavyPendingFixture,
+  toolBlockTokens,
+  untrimmedFarCallTokens,
+  weightedTokenizer,
+} from './heavy-far-response-support.js';
 
 const logger = new DebugLogger('test:fallback-body');
 const cases = [512, 8192].flatMap((size) =>
@@ -36,30 +38,11 @@ const cases = [512, 8192].flatMap((size) =>
   ),
 );
 
-function hasUntrimmedFarCall(rows: IContent[]): boolean {
-  return rows.some((row) =>
-    row.blocks.some(
-      (block) =>
-        block.type === 'tool_response' &&
-        block.callId === 'far-call' &&
-        block.providerMetadata?.contextTruncated !== true,
-    ),
-  );
-}
-
-function overLimit(
-  accepted: boolean,
-  attempted: boolean,
-  rows: IContent[],
-): boolean {
-  if (accepted) return !attempted;
-  return hasUntrimmedFarCall(rows);
-}
-
 function fallbackOracle(
   size: number,
   accepted: boolean,
   pending: IContent[],
+  farTokens: number,
 ): IContent[] {
   const raw = accepted
     ? invalidateResponsesStatefulChain([
@@ -72,7 +55,7 @@ function fallbackOracle(
   const oraclePending = accepted
     ? pending
     : [
-        { ...pending[0], blocks: [createTruncationStub(response, 1)] },
+        { ...pending[0], blocks: [createTruncationStub(response, farTokens)] },
         pending[1],
       ];
   const oracleRaw = accepted ? raw : raw.filter((row) => row.blocks.length > 0);
@@ -92,14 +75,21 @@ async function verifyFallbackBody(
   await withSuffixFixture(
     size,
     async (history) => {
-      history.setTokenizerFactory(exactTokenizer());
-      const pending = providerPendingFixture();
+      history.setTokenizerFactory(weightedTokenizer());
+      const pending = heavyPendingFixture();
+      const farBlock = pending[0].blocks[0];
+      if (farBlock.type !== 'tool_response') throw new Error('Invalid fixture');
       let attempted = false;
       const candidate: IContent[] = [
         providerFarFixtureRow(0),
         providerFarFixtureRow(2),
       ];
-      const expectedRows = fallbackOracle(size, accepted, pending);
+      const expectedRows = fallbackOracle(
+        size,
+        accepted,
+        pending,
+        await toolBlockTokens(history, farBlock),
+      );
       const actualRows = await enforceWithHandler({
         history,
         runtimeContext: buildRuntimeContext(history, {
@@ -122,9 +112,14 @@ async function verifyFallbackBody(
         },
         // An accepted candidate fits once installed; a rejected one only fits
         // after last-resort tool-response truncation.
-        estimateRows: async (contents) =>
-          contents.length +
-          (overLimit(accepted, attempted, contents) ? 200000 : 0),
+        estimateRows: async (contents) => {
+          if (!accepted)
+            return (
+              contents.length +
+              (await untrimmedFarCallTokens(history, contents))
+            );
+          return contents.length + (attempted ? 0 : 200000);
+        },
       });
       const actual = await captureCuratedBody(
         provider,

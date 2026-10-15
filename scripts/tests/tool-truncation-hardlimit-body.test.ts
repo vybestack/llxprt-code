@@ -7,18 +7,19 @@ import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import type { RuntimeTokenizerFactory } from '../../packages/core/src/runtime/contracts/RuntimeTokenizerFactory.js';
-import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
-import {
-  providerFarFixtureRow,
-  providerPendingFixture,
-} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
+import { providerFarFixtureRow } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
+import {
+  heavyPendingFixture,
+  toolBlockTokens,
+  untrimmedFarCallTokens,
+  weightedTokenizer,
+} from './heavy-far-response-support.js';
 
 class FallbackCaptureHistory extends HistoryService {
   override replaceToolResponseBlock(): Promise<boolean> {
@@ -26,61 +27,11 @@ class FallbackCaptureHistory extends HistoryService {
   }
 }
 const logger = new DebugLogger('test:tool-hardlimit-bytes');
-// Ordinary fixture blocks count one token, as under exactTokenizer. A block
-// over the heavy threshold counts by length, so the far response has a real
-// weight the last-resort pass can measure and shed.
-const HEAVY_BLOCK_CHARACTERS = 10_000;
-function weightedTokenizer(): RuntimeTokenizerFactory {
-  const exact = exactTokenizer();
-  return {
-    ...exact,
-    getTokenizer: (...args) => {
-      const tokenizer = exact.getTokenizer(...args);
-      return {
-        ...tokenizer,
-        countTokens: async (text: string): Promise<number> =>
-          text.length > HEAVY_BLOCK_CHARACTERS ? Math.ceil(text.length / 4) : 1,
-      };
-    },
-  };
-}
-// The last-resort pass ranks tool responses by their real token weight and
-// refuses to replace anything unless replacing them can reach the limit, so
-// the fixture's far response must weigh what the estimator charges for it.
-function heavyPendingFixture(): IContent[] {
-  const [response, ...rest] = providerPendingFixture();
-  const block = response.blocks[0];
-  if (block.type !== 'tool_response')
-    throw new Error('Invalid pending fixture');
-  return [
-    {
-      ...response,
-      blocks: [
-        {
-          ...block,
-          result: { far: 'answered after all history segments '.repeat(5000) },
-        },
-      ],
-    },
-    ...rest,
-  ];
-}
 async function finalizedCount(
   history: HistoryService,
   contents: IContent[],
 ): Promise<number> {
-  let rowTokens = contents.length;
-  for (const row of contents)
-    for (const block of row.blocks)
-      if (
-        block.type === 'tool_response' &&
-        block.callId === 'far-call' &&
-        block.providerMetadata?.contextTruncated !== true
-      )
-        rowTokens += await history.estimateTokensForContents([
-          { speaker: 'tool', blocks: [block] },
-        ]);
-  return rowTokens;
+  return contents.length + (await untrimmedFarCallTokens(history, contents));
 }
 async function hardlimitBodies(
   size: number,
@@ -110,9 +61,7 @@ async function hardlimitBodies(
       const block = pending[0].blocks[0];
       if (block.type !== 'tool_response')
         throw new Error('Invalid pending fixture');
-      const farTokens = await history.estimateTokensForContents([
-        { speaker: 'tool', blocks: [block] },
-      ]);
+      const farTokens = await toolBlockTokens(history, block);
       const expectedPending = [
         { ...pending[0], blocks: [createTruncationStub(block, farTokens)] },
         pending[1],
