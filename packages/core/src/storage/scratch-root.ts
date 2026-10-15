@@ -54,6 +54,32 @@ export function removeScratchRoot(): void {
   fs.rmSync(owned, { recursive: true, force: true });
 }
 
+/**
+ * Removes a scratch directory whose complete contents the caller created:
+ * the named files, then the directory itself. It issues plain unlink and
+ * rmdir calls instead of a recursive walk, so a failure reports its real
+ * errno (Bun 1.3.x reports several recursive-walk failures as EFAULT) and an
+ * entry the caller did not create is an error rather than silently deleted.
+ * A missing path is not an error: `removeScratchRoot` may have already
+ * removed the whole root.
+ */
+export function removeScratchDir(
+  directory: string,
+  files: readonly string[],
+): void {
+  for (const file of files)
+    ignoreMissing(() => fs.unlinkSync(join(directory, file)));
+  ignoreMissing(() => fs.rmdirSync(directory));
+}
+
+function ignoreMissing(remove: () => void): void {
+  try {
+    remove();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);

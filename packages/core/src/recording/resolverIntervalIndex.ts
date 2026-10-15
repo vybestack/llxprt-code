@@ -2,7 +2,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { SurvivorInterval } from './journalResolver.js';
-import { getScratchRoot } from '../storage/scratch-root.js';
+import { getScratchRoot, removeScratchDir } from '../storage/scratch-root.js';
 
 interface IndexedInterval extends SurvivorInterval {
   readonly purge: boolean;
@@ -10,6 +10,7 @@ interface IndexedInterval extends SurvivorInterval {
 }
 
 const WIDTH = 48;
+const INTERVALS_FILE = 'intervals';
 
 export class ResolverIntervalIndex {
   private readonly directory: string;
@@ -22,12 +23,12 @@ export class ResolverIntervalIndex {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-resolver-'));
     try {
       this.fd = fs.openSync(
-        path.join(this.directory, 'intervals'),
+        path.join(this.directory, INTERVALS_FILE),
         'wx+',
         0o600,
       );
     } catch (error) {
-      fs.rmSync(this.directory, { recursive: true, force: true });
+      removeScratchDir(this.directory, []);
       throw error;
     }
   }
@@ -110,7 +111,7 @@ export class ResolverIntervalIndex {
     try {
       fs.closeSync(this.fd);
     } finally {
-      fs.rmSync(this.directory, { recursive: true, force: true });
+      removeScratchDir(this.directory, [INTERVALS_FILE]);
     }
   }
 }

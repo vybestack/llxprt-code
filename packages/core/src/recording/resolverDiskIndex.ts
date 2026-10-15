@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getScratchRoot } from '../storage/scratch-root.js';
+import { getScratchRoot, removeScratchDir } from '../storage/scratch-root.js';
 
 export interface IndexedRow {
   readonly seq: number;
@@ -18,6 +18,7 @@ export interface IndexedRow {
   readonly invalidateResponses?: boolean;
 }
 const WIDTH = 96;
+const ROWS_FILE = 'rows';
 
 export class ResolverDiskIndex {
   private readonly directory: string;
@@ -29,9 +30,9 @@ export class ResolverDiskIndex {
   constructor(root = getScratchRoot()) {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-resolver-'));
     try {
-      this.fd = fs.openSync(path.join(this.directory, 'rows'), 'wx+', 0o600);
+      this.fd = fs.openSync(path.join(this.directory, ROWS_FILE), 'wx+', 0o600);
     } catch (error) {
-      fs.rmSync(this.directory, { recursive: true, force: true });
+      removeScratchDir(this.directory, []);
       throw error;
     }
   }
@@ -115,7 +116,7 @@ export class ResolverDiskIndex {
     try {
       fs.closeSync(this.fd);
     } finally {
-      fs.rmSync(this.directory, { recursive: true, force: true });
+      removeScratchDir(this.directory, [ROWS_FILE]);
     }
   }
 }

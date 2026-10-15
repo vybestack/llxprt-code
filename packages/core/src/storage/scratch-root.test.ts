@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
   existsSync,
@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   realpathSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -16,6 +17,7 @@ import {
   createScratchDir,
   createScratchDirSync,
   getScratchRoot,
+  removeScratchDir,
   removeScratchRoot,
   sweepDeadScratchRoots,
 } from './scratch-root.js';
@@ -180,5 +182,101 @@ describe('sweep at scratch root creation', () => {
     } finally {
       chmodSync(blocked, 0o700);
     }
+  });
+});
+
+describe('sweep while another process owns a live root', () => {
+  const parents: string[] = [];
+  afterEach(() => {
+    for (const parent of parents.splice(0))
+      rmSync(parent, { recursive: true, force: true });
+  });
+
+  it('keeps the root and its contents of a running process, then reclaims it once that process is gone', async () => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'scratch-live-')));
+    parents.push(tmp);
+    const script = `
+      import { writeFileSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { createScratchDirSync, getScratchRoot } from ${JSON.stringify(MODULE)};
+      const dir = createScratchDirSync('llxprt-resolver-');
+      writeFileSync(join(dir, 'rows'), 'live');
+      process.stdout.write(getScratchRoot() + '\\n');
+      process.stdin.resume();
+    `;
+    const child = spawn('bun', ['-e', script], {
+      env: { ...process.env, TMPDIR: tmp },
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const exited = new Promise<void>((resolve) => child.once('exit', resolve));
+    try {
+      const childRoot = await new Promise<string>((resolve, reject) => {
+        let output = '';
+        child.stdout.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+          if (output.includes('\n')) resolve(output.trim());
+        });
+        child.once('error', reject);
+        child.once('exit', () => reject(new Error('child exited early')));
+      });
+      expect(dirname(childRoot)).toBe(tmp);
+
+      expect(sweepDeadScratchRoots(tmp)).toStrictEqual([]);
+      expect(existsSync(childRoot)).toBe(true);
+
+      child.kill('SIGKILL');
+      await exited;
+      expect(sweepDeadScratchRoots(tmp)).toStrictEqual([basename(childRoot)]);
+      expect(existsSync(childRoot)).toBe(false);
+    } finally {
+      child.kill('SIGKILL');
+      await exited;
+    }
+  });
+});
+
+describe('removeScratchDir', () => {
+  const parents: string[] = [];
+  afterEach(() => {
+    for (const parent of parents.splice(0))
+      rmSync(parent, { recursive: true, force: true });
+  });
+
+  function parent(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'scratch-rmdir-test-'));
+    parents.push(dir);
+    return dir;
+  }
+
+  it('removes the named files and the directory', () => {
+    const dir = join(parent(), 'owned');
+    mkdirSync(dir);
+    writeFileSync(join(dir, 'rows'), 'x');
+
+    removeScratchDir(dir, ['rows']);
+
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it('accepts a directory or file that is already gone', () => {
+    const missing = join(parent(), 'gone');
+    const half = join(parent(), 'half');
+    mkdirSync(half);
+
+    expect(() => removeScratchDir(missing, ['rows'])).not.toThrow();
+    expect(() => removeScratchDir(half, ['rows'])).not.toThrow();
+    expect(existsSync(half)).toBe(false);
+  });
+
+  it('reports an entry the caller did not create instead of deleting it', () => {
+    const dir = join(parent(), 'owned');
+    mkdirSync(dir);
+    writeFileSync(join(dir, 'rows'), 'x');
+    writeFileSync(join(dir, 'stranger'), 'y');
+
+    expect(() => removeScratchDir(dir, ['rows'])).toThrow(
+      expect.objectContaining({ code: 'ENOTEMPTY' }),
+    );
+    expect(existsSync(join(dir, 'stranger'))).toBe(true);
   });
 });
