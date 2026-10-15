@@ -54,8 +54,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
-  waitForCondition,
   waitForConditionInRealTime,
+  waitForConditionOnEventLoop,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
 const realEnvironmentContextModule = {
@@ -419,7 +419,7 @@ describe('subagent.ts', () => {
       // Reach the stall before moving the clock. A real event-loop yield is
       // only reliable while the fake clock is still, so this gate has to come
       // first; without it the advance races the stream start on slower hosts.
-      expect(await waitForCondition(() => stallReached)).toBe(true);
+      expect(await waitForConditionOnEventLoop(() => stallReached)).toBe(true);
 
       // Hold the stall open in real time to show the idle watchdog never
       // fires. The fake clock is not used for this: draining the pipeline to
@@ -558,7 +558,7 @@ describe('subagent.ts', () => {
           resultSettled = true;
         });
 
-      expect(await waitForCondition(() => gapReached)).toBe(true);
+      expect(await waitForConditionInRealTime(() => gapReached)).toBe(true);
 
       // The stream stalls after its first chunk, so the env-driven 50ms
       // watchdog fires. Were the 20s config value being used instead, the

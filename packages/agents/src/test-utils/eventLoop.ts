@@ -65,6 +65,40 @@ export async function waitForCondition(
   return condition();
 }
 
+/**
+ * Default wall-clock budget, in milliseconds, for
+ * {@link waitForConditionOnEventLoop}.
+ */
+const DEFAULT_EVENT_LOOP_TIMEOUT_MS = 5_000;
+
+/**
+ * Yields to the real event loop until `condition` holds, or until `timeoutMs`
+ * of wall-clock time has elapsed.
+ *
+ * Use this while fake timers are installed and the condition depends on work
+ * that has to cross real macrotask boundaries (a scope starting its stream).
+ * {@link waitForCondition} bounds the wait by turn count, and a loaded machine
+ * can burn through thousands of turns in a few milliseconds before that work
+ * is scheduled. {@link waitForConditionInRealTime} cannot be used here: it
+ * sleeps on a real `setTimeout`, and Bun never fires one while fake timers are
+ * installed.
+ *
+ * Returns whether the condition was met, so callers assert on the result.
+ */
+export async function waitForConditionOnEventLoop(
+  condition: () => boolean,
+  timeoutMs: number = DEFAULT_EVENT_LOOP_TIMEOUT_MS,
+): Promise<boolean> {
+  const deadline = performance.now() + timeoutMs;
+  while (performance.now() < deadline) {
+    if (condition()) {
+      return true;
+    }
+    await flushEventLoop();
+  }
+  return condition();
+}
+
 /** Real `setTimeout`, captured before any test installs fake timers. */
 const realSetTimeout = globalThis.setTimeout;
 

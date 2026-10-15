@@ -669,14 +669,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       recording.recordContent(makeContent('checkpoint body'));
       await recording.createCheckpoint('release-cut-branch');
       try {
-        const { result } = renderHook(() =>
-          useSessionBrowser(
-            makeHookProps(chatsDir, {
-              currentSessionId: 'different-current-session',
-              activeRecording: recording,
-            }),
-          ),
-        );
+        const props = makeHookProps(chatsDir, {
+          currentSessionId: 'different-current-session',
+          activeRecording: recording,
+        });
+        const { result } = renderHook(() => useSessionBrowser(props));
         await waitFor(() => {
           expect(result.current.sessions.length).toBe(2);
           expect(
@@ -833,9 +830,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         contents: [makeContent('first message here')],
       });
 
-      const { result } = renderHook(() =>
-        useSessionBrowser(makeHookProps(chatsDir)),
-      );
+      const props = makeHookProps(chatsDir);
+      const { result } = renderHook(() => useSessionBrowser(props));
       for (const char of 'nomatchterm') {
         result.current.handleKeypress(char, makeKey(char));
       }
