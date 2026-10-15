@@ -10,7 +10,6 @@ import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { ApprovalMode, coreEvents } from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
 import { useKeypress } from './useKeypress.js';
@@ -58,7 +57,9 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.AUTO_EDIT);
     const { result } = renderHook(() =>
       useAutoAcceptIndicator({
-        agent: agentStub as unknown as Agent,
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
         addItem: vi.fn(),
       }),
     );
@@ -70,7 +71,9 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
     const { result } = renderHook(() =>
       useAutoAcceptIndicator({
-        agent: agentStub as unknown as Agent,
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
         addItem: vi.fn(),
       }),
     );
@@ -82,7 +85,9 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
     const { result } = renderHook(() =>
       useAutoAcceptIndicator({
-        agent: agentStub as unknown as Agent,
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
         addItem: vi.fn(),
       }),
     );
@@ -94,7 +99,9 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
     const { result } = renderHook(() =>
       useAutoAcceptIndicator({
-        agent: agentStub as unknown as Agent,
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
         addItem: vi.fn(),
       }),
     );
@@ -158,7 +165,9 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
     renderHook(() =>
       useAutoAcceptIndicator({
-        agent: agentStub as unknown as Agent,
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
         addItem: vi.fn(),
       }),
     );
@@ -216,11 +225,13 @@ describe('useAutoAcceptIndicator', () => {
   it('should update indicator when the agent value changes externally (useEffect dependency)', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
     const { result, rerender } = renderHook(
-      (props: { agent: Agent; addItem: () => void }) =>
+      (props: Parameters<typeof useAutoAcceptIndicator>[0]) =>
         useAutoAcceptIndicator(props),
       {
         initialProps: {
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: vi.fn(),
         },
       },
@@ -230,7 +241,8 @@ describe('useAutoAcceptIndicator', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.AUTO_EDIT);
 
     rerender({
-      agent: agentStub as unknown as Agent,
+      readApprovalMode: () => agentStub.getApprovalMode(),
+      setApprovalMode: (mode: ApprovalMode) => agentStub.setApprovalMode(mode),
       addItem: vi.fn(),
     });
     // Observable behavior: after the agent's reported mode changes and the
@@ -243,7 +255,11 @@ describe('useAutoAcceptIndicator', () => {
   it('clears the indicator unconditionally when an untrusted event follows the mode downgrade', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.YOLO);
     const { result } = renderHook(() =>
-      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+      useAutoAcceptIndicator({
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
+      }),
     );
 
     agentStub.setApprovalMode(ApprovalMode.DEFAULT);
@@ -258,7 +274,11 @@ describe('useAutoAcceptIndicator', () => {
   it('restores the agent approval mode when folder trust is regained', () => {
     agentStub.getApprovalMode.mockReturnValue(ApprovalMode.AUTO_EDIT);
     const { result } = renderHook(() =>
-      useAutoAcceptIndicator({ agent: agentStub as unknown as Agent }),
+      useAutoAcceptIndicator({
+        readApprovalMode: () => agentStub.getApprovalMode(),
+        setApprovalMode: (mode: ApprovalMode) =>
+          agentStub.setApprovalMode(mode),
+      }),
     );
 
     act(() => {
@@ -286,7 +306,9 @@ describe('useAutoAcceptIndicator', () => {
       const mockAddItem = vi.fn();
       const { result } = renderHook(() =>
         useAutoAcceptIndicator({
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: mockAddItem,
         }),
       );
@@ -316,7 +338,9 @@ describe('useAutoAcceptIndicator', () => {
       const mockAddItem = vi.fn();
       const { result } = renderHook(() =>
         useAutoAcceptIndicator({
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: mockAddItem,
         }),
       );
@@ -355,7 +379,9 @@ describe('useAutoAcceptIndicator', () => {
       const mockAddItem = vi.fn();
       renderHook(() =>
         useAutoAcceptIndicator({
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: mockAddItem,
         }),
       );
@@ -380,7 +406,9 @@ describe('useAutoAcceptIndicator', () => {
       const mockAddItem = vi.fn();
       renderHook(() =>
         useAutoAcceptIndicator({
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: mockAddItem,
         }),
       );
@@ -411,7 +439,9 @@ describe('useAutoAcceptIndicator', () => {
       const mockAddItem = vi.fn();
       renderHook(() =>
         useAutoAcceptIndicator({
-          agent: agentStub as unknown as Agent,
+          readApprovalMode: () => agentStub.getApprovalMode(),
+          setApprovalMode: (mode: ApprovalMode) =>
+            agentStub.setApprovalMode(mode),
           addItem: mockAddItem,
         }),
       );

@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { ApprovalMode, type Agent } from '@vybestack/llxprt-code-agents';
+import { ApprovalMode } from '@vybestack/llxprt-code-agents';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { useKeypress } from './useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
@@ -13,19 +13,21 @@ import type { HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 
 export interface UseAutoAcceptIndicatorArgs {
-  agent: Agent;
+  readApprovalMode: () => ApprovalMode;
+  setApprovalMode: (mode: ApprovalMode) => void;
   addItem?: (item: HistoryItemWithoutId, timestamp: number) => void;
   onApprovalModeChange?: (mode: ApprovalMode) => void;
   isActive?: boolean;
 }
 
 export function useAutoAcceptIndicator({
-  agent,
+  readApprovalMode,
+  setApprovalMode,
   addItem,
   onApprovalModeChange,
   isActive = true,
 }: UseAutoAcceptIndicatorArgs): ApprovalMode {
-  const currentMode = agent.getApprovalMode();
+  const currentMode = readApprovalMode();
   const [showAutoAcceptIndicator, setShowAutoAcceptIndicator] =
     useState(currentMode);
 
@@ -36,14 +38,14 @@ export function useAutoAcceptIndicator({
   useEffect(() => {
     const handleFolderTrustChanged = (trusted: boolean): void => {
       setShowAutoAcceptIndicator(
-        trusted ? agent.getApprovalMode() : ApprovalMode.DEFAULT,
+        trusted ? readApprovalMode() : ApprovalMode.DEFAULT,
       );
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, handleFolderTrustChanged);
     return () => {
       coreEvents.off(CoreEvent.FolderTrustChanged, handleFolderTrustChanged);
     };
-  }, [agent]);
+  }, [readApprovalMode]);
 
   useKeypress(
     (key) => {
@@ -51,19 +53,19 @@ export function useAutoAcceptIndicator({
 
       if (keyMatchers[Command.TOGGLE_YOLO](key)) {
         nextApprovalMode =
-          agent.getApprovalMode() === ApprovalMode.YOLO
+          readApprovalMode() === ApprovalMode.YOLO
             ? ApprovalMode.DEFAULT
             : ApprovalMode.YOLO;
       } else if (keyMatchers[Command.TOGGLE_AUTO_EDIT](key)) {
         nextApprovalMode =
-          agent.getApprovalMode() === ApprovalMode.AUTO_EDIT
+          readApprovalMode() === ApprovalMode.AUTO_EDIT
             ? ApprovalMode.DEFAULT
             : ApprovalMode.AUTO_EDIT;
       }
 
       if (nextApprovalMode !== undefined) {
         try {
-          agent.setApprovalMode(nextApprovalMode);
+          setApprovalMode(nextApprovalMode);
           // Update local state immediately for responsiveness
           setShowAutoAcceptIndicator(nextApprovalMode);
           // Notify callback if provided
