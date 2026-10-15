@@ -12,7 +12,7 @@
  * @pseudocode recording-integration.md lines 100-108
  */
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   type EditorType,
   type MessageBus,
@@ -114,12 +114,18 @@ function useAgentStreamReturn(
     orchestration.pendingToolCallGroupDisplay,
   );
 
+  const readHistory = useCallback(() => agent.getHistory(), [agent]);
+  const checkpoint = runtime.checkpoint;
+  const isCheckpointingEnabled = useCallback(
+    () => checkpoint.getCheckpointingEnabled(),
+    [checkpoint],
+  );
   useCheckpointPersistence(
     orchestration.toolCalls,
-    runtime,
+    isCheckpointingEnabled,
     orchestration.st.gitService,
     history,
-    agent,
+    readHistory,
     runtime.projectCheckpointsDir,
     onDebugMessage,
   );

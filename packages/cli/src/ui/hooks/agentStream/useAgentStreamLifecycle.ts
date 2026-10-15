@@ -188,13 +188,17 @@ export function useShellCommandSetup({
     },
     [setIsResponding],
   );
+  const appendShellHistory = useCallback(
+    (entry: Parameters<Agent['addHistory']>[0]) => agent.addHistory(entry),
+    [agent],
+  );
   return useShellCommandProcessor(
     addItem,
     setPendingHistoryItem,
     onExec,
     onDebugMessage,
     shellRuntime,
-    agent,
+    appendShellHistory,
     setShellInputFocused,
     terminalWidth,
     terminalHeight,
