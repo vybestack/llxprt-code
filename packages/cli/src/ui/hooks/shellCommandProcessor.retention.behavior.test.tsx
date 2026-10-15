@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { shellExecutionReads } from './__tests__/shell-execution-reads.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import * as fs from 'node:fs';
@@ -49,7 +50,7 @@ function ShellHarness({
       onExecPromise(command);
     },
     () => {},
-    config,
+    ...shellExecutionReads(config),
     (entry) => agent.addHistory(entry),
     () => {},
     120,
