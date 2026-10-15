@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { describe, expect, it } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
@@ -26,7 +27,9 @@ describe('CLI overflow guidance live provider port', () => {
     );
     const { result, unmount } = renderHook(() =>
       useStreamEventHandlers({
-        runtime: createStreamRuntimeForTest({ getModel: () => 'local' }),
+        ...streamPolicyOperations(
+          createStreamRuntimeForTest({ getModel: () => 'local' }),
+        ),
         getProviderContextLimit: () => limit,
         getContentPrefixIdentity: () => null,
         getToolHandle: () => undefined,

@@ -432,7 +432,49 @@ function useBuildSubmitQueryDeps({
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
     ...submissionState(st),
-    runtime: args.runtime,
+    readSessionId: useCallback(
+      () => args.runtime.session.getSessionId(),
+      [args.runtime.session],
+    ),
+    subscribeMcpUpdates: useCallback(
+      (listener: () => void) => args.runtime.events.onMcpClientUpdate(listener),
+      [args.runtime.events],
+    ),
+    ...useTurnResetOperations(args.runtime.bucketFailover),
+    atCommandConfig: args.runtime.files,
+    logUserPrompt: useCallback(
+      (event: Parameters<UseSubmitQueryDeps['logUserPrompt']>[0]) =>
+        args.runtime.settings.logUserPrompt(event),
+      [args.runtime.settings],
+    ),
+    getModel: useCallback(
+      () => args.runtime.model.getModel(),
+      [args.runtime.model],
+    ),
+    getProvider: useCallback(
+      () => args.runtime.model.getProvider(),
+      [args.runtime.model],
+    ),
+    readSelectedProvider: useCallback(
+      () => args.runtime.settings.readSelectedProvider(),
+      [args.runtime.settings],
+    ),
+    readCitations: useCallback(
+      () => args.runtime.settings.readCitations(),
+      [args.runtime.settings],
+    ),
+    readProfileName: useCallback(
+      () => args.runtime.settings.readProfileName(),
+      [args.runtime.settings],
+    ),
+    readContextLimit: useCallback(
+      () => args.runtime.ephemeral.getEphemeralSetting('context-limit'),
+      [args.runtime.ephemeral],
+    ),
+    getMaxSessionTurns: useCallback(
+      () => args.runtime.sessionLimits.getMaxSessionTurns(),
+      [args.runtime.sessionLimits],
+    ),
     getProviderContextLimit: args.getProviderContextLimit,
     getContentPrefixIdentity: args.getContentPrefixIdentity,
     getToolHandle: args.getToolHandle,
@@ -456,6 +498,19 @@ function useBuildSubmitQueryDeps({
     runStreamRef,
     subagentManager: args.subagentManager,
     operationLifecycle: args.operationLifecycle,
+  };
+}
+
+function useTurnResetOperations(failover: StreamRuntime['bucketFailover']) {
+  return {
+    resetBuckets: useCallback(() => failover.resetBuckets?.(), [failover]),
+    resetBucketSession: useCallback(
+      () => failover.resetBucketSession?.(),
+      [failover],
+    ),
+    ensureBucketsAuthenticated: useCallback(async () => {
+      await failover.ensureBucketsAuthenticated?.();
+    }, [failover]),
   };
 }
 

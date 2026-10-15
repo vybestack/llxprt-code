@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -242,7 +243,8 @@ function renderUseSubmitQuery(opts: {
   unmount: () => void;
 } {
   const hookDeps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest(),
+    ...{ runtime: createStreamRuntimeForTest() },
+    ...streamPolicyOperations(createStreamRuntimeForTest()),
     ...submissionOperations(
       createMockAgentClient() as unknown as Agent,
       {

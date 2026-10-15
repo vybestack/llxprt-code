@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Shared behavioral fixtures for useSubmitQuery operation-lifecycle integration
@@ -103,7 +104,8 @@ export function buildLifecycleHookDeps(
   registry: OperationLifecycleRegistry,
 ): UseSubmitQueryDeps {
   return {
-    runtime: createStreamRuntimeForTest(),
+    ...{ runtime: createStreamRuntimeForTest() },
+    ...streamPolicyOperations(createStreamRuntimeForTest()),
     ...submissionOperations(
       {
         ...createMockAgentClient(),

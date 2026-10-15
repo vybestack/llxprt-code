@@ -37,7 +37,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       error,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -65,7 +67,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       error,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -86,7 +90,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       error,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -107,7 +113,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       error,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );
@@ -128,7 +136,9 @@ describe('handleSubmissionError', () => {
     const result = handleSubmissionError(
       error,
       mockAddItem,
-      mockConfig,
+      () => mockConfig.model.getProvider(),
+      () => mockConfig.settings.readSelectedProvider(),
+      () => mockConfig.model.getModel(),
       mockOnAuthError,
       Date.now(),
     );

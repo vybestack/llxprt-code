@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Regression tests for issue #2516: "With MCP servers configured, ordinary
@@ -141,7 +142,8 @@ function renderUseSubmitQuery(
   mcpOverrides?: Parameters<typeof createStreamRuntimeForTest>[1],
 ) {
   const hookDeps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest({}, mcpOverrides),
+    ...{ runtime: createStreamRuntimeForTest({}, mcpOverrides) },
+    ...streamPolicyOperations(createStreamRuntimeForTest({}, mcpOverrides)),
     ...submissionOperations(
       createMockAgentClient() as unknown as Agent,
       {

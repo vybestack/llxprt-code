@@ -23,6 +23,7 @@ import { submissionOperations } from './submission-operations.js';
  * lifecycle (real `useStreamEventHandlers`, real `dispatchAgentEvent`). Only
  * leaf infrastructure (`turnPreparation`, `SessionContext`) is stubbed.
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
@@ -194,9 +195,15 @@ async function createUseSubmitQueryDeps(
   const queueOperations =
     overrides.queueOperations ?? createQueueOperations(queuedSubmissionsRef);
   const stableDeps = {
-    runtime:
+    ...{
+      runtime:
+        overrides.runtime ??
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    },
+    ...streamPolicyOperations(
       overrides.runtime ??
-      createStreamRuntimeForTest({}, createMockOverrides()),
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
     ...submissionOperations(await createMockAgent(), undefined, undefined),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),

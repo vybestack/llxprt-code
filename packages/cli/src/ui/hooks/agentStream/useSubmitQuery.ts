@@ -33,7 +33,7 @@ import { useStreamEventHandlers } from './useStreamEventHandlers.js';
 import { dispatchAgentEvent } from './agentEventDispatcher.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
 import type { QueuedSubmission } from './types.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 import { observeAgentEvent } from '../../../observation/jspWiring.js';
 
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
@@ -63,7 +63,30 @@ export type SubmissionExecutor = (
 ) => Promise<SubmissionDisposition>;
 
 export interface UseSubmitQueryDeps {
-  runtime: StreamRuntime;
+  readSessionId: () => string;
+  subscribeMcpUpdates: (listener: () => void) => () => void;
+  resetBuckets: () => void;
+  resetBucketSession: () => void;
+  ensureBucketsAuthenticated: () => Promise<void>;
+  atCommandConfig: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['atCommandConfig'];
+  logUserPrompt: Parameters<typeof useStreamEventHandlers>[0]['logUserPrompt'];
+  getModel: Parameters<typeof useStreamEventHandlers>[0]['getModel'];
+  getProvider: Parameters<typeof useStreamEventHandlers>[0]['getProvider'];
+  readSelectedProvider: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readSelectedProvider'];
+  readCitations: Parameters<typeof useStreamEventHandlers>[0]['readCitations'];
+  readProfileName: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readProfileName'];
+  readContextLimit: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['readContextLimit'];
+  getMaxSessionTurns: Parameters<
+    typeof useStreamEventHandlers
+  >[0]['getMaxSessionTurns'];
   getProviderContextLimit: Agent['getProviderContextLimit'];
   getContentPrefixIdentity: () => string | null;
   getToolHandle: Agent['tools']['get'];
@@ -183,7 +206,15 @@ function useSubmissionEventHandlers(
   deps: UseSubmitQueryDeps,
 ): ReturnType<typeof useStreamEventHandlers> {
   return useStreamEventHandlers({
-    runtime: deps.runtime,
+    atCommandConfig: deps.atCommandConfig,
+    logUserPrompt: deps.logUserPrompt,
+    getModel: deps.getModel,
+    getProvider: deps.getProvider,
+    readSelectedProvider: deps.readSelectedProvider,
+    readCitations: deps.readCitations,
+    readProfileName: deps.readProfileName,
+    readContextLimit: deps.readContextLimit,
+    getMaxSessionTurns: deps.getMaxSessionTurns,
     getProviderContextLimit: deps.getProviderContextLimit,
     getContentPrefixIdentity: deps.getContentPrefixIdentity,
     getToolHandle: deps.getToolHandle,
@@ -345,7 +376,7 @@ function useSubmitQueryEffects(
   const {
     submitQueryRef,
     streamingState,
-    runtime,
+    subscribeMcpUpdates,
     subscribeTaskNotifications,
     enqueueSubmission,
   } = deps;
@@ -360,13 +391,11 @@ function useSubmitQueryEffects(
   }, [streamingState, scheduleNextQueuedSubmission]);
 
   useEffect(() => {
-    const unsubscribe = runtime.events.onMcpClientUpdate(
-      scheduleNextQueuedSubmission,
-    );
+    const unsubscribe = subscribeMcpUpdates(scheduleNextQueuedSubmission);
     return () => {
       unsubscribe();
     };
-  }, [runtime, scheduleNextQueuedSubmission]);
+  }, [subscribeMcpUpdates, scheduleNextQueuedSubmission]);
 
   useEffect(() => {
     const isAgentBusy = () => streamingState !== StreamingState.Idle;
@@ -780,8 +809,7 @@ function initTurn(
   deps.loopDetectedRef.current = false;
 
   const resolvedPromptId =
-    promptId ??
-    deps.runtime.session.getSessionId() + '########' + getPromptCount();
+    promptId ?? deps.readSessionId() + '########' + getPromptCount();
 
   const trimmedStr = typeof query === 'string' ? query.trim() : '';
 

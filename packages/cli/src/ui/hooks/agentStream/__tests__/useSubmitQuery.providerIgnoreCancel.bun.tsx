@@ -6,6 +6,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
@@ -526,7 +527,10 @@ function renderHarness(options: {
       runStreamRef.current = eventStream.runStream;
 
       const submitDeps: UseSubmitQueryDeps = {
-        runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+        ...{ runtime: createStreamRuntimeForTest({}, createMockOverrides()) },
+        ...streamPolicyOperations(
+          createStreamRuntimeForTest({}, createMockOverrides()),
+        ),
         ...submissionOperations(
           env.agent,
           options.recordingIntegration,

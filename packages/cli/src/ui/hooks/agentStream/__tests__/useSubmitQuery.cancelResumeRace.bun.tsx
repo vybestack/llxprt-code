@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Behavioral tests for issue #3169 — "Fresh prompt can remain queued during
@@ -159,7 +160,10 @@ async function renderWithRealQueue(
       const queue = useQueuedSubmissions();
 
       const submitDeps: UseSubmitQueryDeps = {
-        runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+        ...{ runtime: createStreamRuntimeForTest({}, createMockOverrides()) },
+        ...streamPolicyOperations(
+          createStreamRuntimeForTest({}, createMockOverrides()),
+        ),
         ...submissionOperations(agent, undefined, undefined),
         addItem: handles.addItem,
         removeItems: vi.fn(),
