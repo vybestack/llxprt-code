@@ -65,7 +65,7 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
   }
 
   async function getCompletions(input: string): Promise<readonly string[]> {
-    const handler = createCompletionHandler(getProviderSchema());
+    const handler = createCompletionHandler(getProviderSchema(), true);
     const parts = input.split(' ');
     // The first token after '/auth' is the provider, followed by the action.
     // We drive the completion handler with the args already consumed.

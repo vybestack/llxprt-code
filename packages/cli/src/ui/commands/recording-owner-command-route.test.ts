@@ -31,7 +31,7 @@ function registeredChat(
   swap?: RecordingSwapCallbacks,
 ): SlashCommand {
   const { result, unmount } = renderHook(() =>
-    useChatCommand(agent, null, mode, undefined, swap),
+    useChatCommand(agent, null, mode, undefined, swap, () => true),
   );
   const command = result.current;
   unmount();

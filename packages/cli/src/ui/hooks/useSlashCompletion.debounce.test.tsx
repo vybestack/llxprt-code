@@ -97,6 +97,7 @@ describe('useSlashCompletion — schema completion debounce (issue #2620)', () =
         onChange: () => {},
       });
       const completion = useSlashCompletion(
+        true,
         textBuffer,
         testDirs,
         testRootDir,
@@ -196,6 +197,7 @@ describe('useSlashCompletion — schema completion debounce (issue #2620)', () =
         onChange: () => {},
       });
       const completion = useSlashCompletion(
+        true,
         textBuffer,
         testDirs,
         testRootDir,

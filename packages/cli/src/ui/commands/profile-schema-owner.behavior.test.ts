@@ -10,11 +10,14 @@ import { createProfileSchemas } from './profileSchemas.js';
 
 describe('profile schema owner', () => {
   it('completes saved profiles from the schema owner, not invocation runtime', async () => {
-    const schemas = createProfileSchemas({
-      listProfiles: async () => ['owner-profile'],
-      getActiveProviderName: () => 'owner-provider',
-      listBuckets: async () => ['owner-bucket'],
-    });
+    const schemas = createProfileSchemas(
+      {
+        listProfiles: async () => ['owner-profile'],
+        getActiveProviderName: () => 'owner-provider',
+        listBuckets: async () => ['owner-bucket'],
+      },
+      () => true,
+    );
     const profile = schemas.profileLoadSchema[0];
     if (profile.kind !== 'value' || profile.completer === undefined)
       throw new Error('Profile load completer is unavailable');
@@ -41,11 +44,14 @@ describe('profile schema owner', () => {
   });
 
   it('completes default-profile and bucket arguments from the schema owner', async () => {
-    const schemas = createProfileSchemas({
-      listProfiles: async () => ['owner-profile'],
-      getActiveProviderName: () => 'owner-provider',
-      listBuckets: async (provider) => [`${provider}-bucket-a`, 'bucket-b'],
-    });
+    const schemas = createProfileSchemas(
+      {
+        listProfiles: async () => ['owner-profile'],
+        getActiveProviderName: () => 'owner-provider',
+        listBuckets: async (provider) => [`${provider}-bucket-a`, 'bucket-b'],
+      },
+      () => true,
+    );
     const invocation = createMockCommandContext({
       runtimeApi: {
         listSavedProfiles: async () => ['invocation-profile'],

@@ -133,49 +133,16 @@ describe('fuzzyFilter', () => {
 
   describe('getFuzzyEnabled', () => {
     it('returns true when setting is true', () => {
-      const ctx = {
-        services: {
-          settings: {
-            merged: {
-              enableFuzzyFiltering: true,
-            },
-          },
-        },
-      } as unknown as CommandContext;
-      expect(getFuzzyEnabled(ctx)).toBe(true);
+      expect(getFuzzyEnabled(true)).toBe(true);
     });
-
     it('returns false when setting is false', () => {
-      const ctx = {
-        services: {
-          settings: {
-            merged: {
-              enableFuzzyFiltering: false,
-            },
-          },
-        },
-      } as unknown as CommandContext;
-      expect(getFuzzyEnabled(ctx)).toBe(false);
+      expect(getFuzzyEnabled(false)).toBe(false);
     });
-
     it('returns true when setting is undefined (default)', () => {
-      const ctx = {
-        services: {
-          settings: {
-            merged: {
-              enableFuzzyFiltering: undefined,
-            },
-          },
-        },
-      } as unknown as CommandContext;
-      expect(getFuzzyEnabled(ctx)).toBe(true);
+      expect(getFuzzyEnabled(undefined)).toBe(true);
     });
-
-    it('returns true when settings is undefined', () => {
-      const ctx = {
-        services: {},
-      } as unknown as CommandContext;
-      expect(getFuzzyEnabled(ctx)).toBe(true);
+    it('returns true without a supplied filtering policy', () => {
+      expect(getFuzzyEnabled(undefined)).toBe(true);
     });
   });
 
@@ -212,7 +179,10 @@ describe('fuzzyFilter', () => {
     it('wraps completer function and applies fuzzy filtering', async () => {
       const baseCompleter = createTestCompleter();
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, 'dev', mockTokens);
 
       expect(result.length).toBeGreaterThan(0);
@@ -223,7 +193,10 @@ describe('fuzzyFilter', () => {
     it('returns all items when partial is empty', async () => {
       const baseCompleter = createTestCompleter();
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, '', mockTokens);
 
       expect(result).toHaveLength(3);
@@ -247,7 +220,10 @@ describe('fuzzyFilter', () => {
         { value: 'dev-profile' },
       ];
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, 'dev', mockTokens);
 
       expect(result.length).toBe(2);
@@ -274,7 +250,10 @@ describe('fuzzyFilter', () => {
         { value: 'staging' },
       ];
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, 'prd', mockTokens);
 
       // Should still do fuzzy matching
@@ -284,7 +263,10 @@ describe('fuzzyFilter', () => {
     it('handles completer that returns empty array', async () => {
       const baseCompleter: CompleterFn = async () => [];
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, 'test', mockTokens);
 
       expect(result).toStrictEqual([]);
@@ -296,7 +278,10 @@ describe('fuzzyFilter', () => {
         { value: 'development', description: 'Development env' },
       ];
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(mockContext, 'dev', mockTokens);
 
       expect(result.length).toBeGreaterThan(0);
@@ -315,7 +300,10 @@ describe('fuzzyFilter', () => {
         { value: 'development' },
       ];
 
-      const wrappedCompleter = withFuzzyFilter(baseCompleter);
+      const wrappedCompleter = withFuzzyFilter(
+        baseCompleter,
+        () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      );
       const result = await wrappedCompleter(
         contextWithoutSettings,
         'prd',

@@ -81,7 +81,7 @@ describe('registered subagent owner', () => {
       systemPrompt: 'Review ownership and disposal',
     });
     expect(await otherDefinitions.listSubagents()).toStrictEqual([]);
-    const completion = await createCompletionHandler(edit.schema)(
+    const completion = await createCompletionHandler(edit.schema, true)(
       invocation,
       { args: '', completedArgs: [], partialArg: '', commandPathLength: 2 },
       '/subagent edit ',

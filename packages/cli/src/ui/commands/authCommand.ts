@@ -126,7 +126,10 @@ function requireOAuthRuntime<
   }
 }
 
-function createCompleters(control: AuthCommandOperations): {
+function createCompleters(
+  control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
+): {
   readonly providerCompleter: CompleterFn;
   readonly bucketCompleter: CompleterFn;
   readonly logoutCompleter: CompleterFn;
@@ -142,7 +145,7 @@ function createCompleters(control: AuthCommandOperations): {
     } catch {
       return [];
     }
-  });
+  }, readFuzzyFiltering);
 
   /** Completer for bucket names for a given provider */
   const bucketCompleter: CompleterFn = withFuzzyFilter(
@@ -161,6 +164,7 @@ function createCompleters(control: AuthCommandOperations): {
         return [];
       }
     },
+    readFuzzyFiltering,
   );
 
   /** Completer for logout command (buckets + --all flag) */
@@ -183,6 +187,7 @@ function createCompleters(control: AuthCommandOperations): {
         return [];
       }
     },
+    readFuzzyFiltering,
   );
 
   return { providerCompleter, bucketCompleter, logoutCompleter };
@@ -284,9 +289,10 @@ function buildProfileSchemaEntries(bucketCompleter: CompleterFn): SchemaNode[] {
  */
 function buildAuthCommandSchema(
   control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
 ): CommandArgumentSchema {
   const { providerCompleter, bucketCompleter, logoutCompleter } =
-    createCompleters(control);
+    createCompleters(control, readFuzzyFiltering);
   return [
     {
       kind: 'value',
@@ -852,13 +858,14 @@ export class AuthCommandExecutor {
 
 export function createAuthCommand(
   control: AuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand {
   return {
     name: 'auth',
     description: 'Manage OAuth authentication for providers',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    schema: buildAuthCommandSchema(control),
+    schema: buildAuthCommandSchema(control, readFuzzyFiltering),
     action: async (_context, args) => {
       if (isCancelSubcommand(args)) {
         return cancelInteractiveAuthentication(control);

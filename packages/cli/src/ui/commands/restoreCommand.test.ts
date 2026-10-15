@@ -36,6 +36,7 @@ describe('restoreCommand', () => {
       config,
       mockContext.services.agent,
       mockContext.services.git,
+      () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
     );
   }
 
@@ -268,7 +269,7 @@ describe('restoreCommand', () => {
       const command = registerRestore(composeFixtureRuntime(mockConfig));
       assertDefined(command?.schema);
 
-      const handler = createCompletionHandler(command.schema);
+      const handler = createCompletionHandler(command.schema, true);
       const result = await handler(
         mockContext,
         {

@@ -72,9 +72,12 @@ export function registerLogoutCommand(
 }
 
 export function registerAuthCommand(
-  owners: Pick<CommandContext, 'oauthControl'>,
+  owners: Pick<CommandContext, 'oauthControl' | 'services'>,
 ): SlashCommand {
-  return createAuthCommand(owners.oauthControl);
+  return createAuthCommand(
+    owners.oauthControl,
+    () => owners.services.settings.merged.enableFuzzyFiltering ?? true,
+  );
 }
 
 export function registerQuotaCommand(
@@ -92,6 +95,7 @@ export function registerMcpCommand(context: CommandContext): SlashCommand {
         context.services.agent,
         context.services.config,
       ),
+      () => context.services.settings.merged.enableFuzzyFiltering ?? true,
     ),
     bindMcpCommand(
       context.services.config,

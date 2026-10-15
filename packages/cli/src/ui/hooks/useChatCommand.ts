@@ -29,11 +29,15 @@ export function useChatCommand(
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegration: RecordingIntegration | undefined,
   recordingSwapCallbacks: RecordingSwapCallbacks | undefined,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand {
   return useMemo(
     () =>
       recordingOwner === 'agent'
-        ? createChatOwnerCommand(bindChatOwnerOperations(agent, config))
+        ? createChatOwnerCommand(
+            bindChatOwnerOperations(agent, config),
+            readFuzzyFiltering,
+          )
         : createChatCommand(
             bindChatRecordingOperations({
               agent,
@@ -41,6 +45,7 @@ export function useChatCommand(
               recordingIntegration,
               recordingSwapCallbacks,
             }),
+            readFuzzyFiltering,
           ),
     [
       agent,
@@ -48,6 +53,7 @@ export function useChatCommand(
       recordingOwner,
       recordingIntegration,
       recordingSwapCallbacks,
+      readFuzzyFiltering,
     ],
   );
 }

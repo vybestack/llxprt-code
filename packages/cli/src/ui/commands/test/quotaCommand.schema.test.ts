@@ -44,7 +44,7 @@ describe('quotaCommand schema completion', () => {
    * Invoke the reset completion handler and return the full result object.
    */
   async function getResetResult(partialArg: string): Promise<CompletionResult> {
-    const handler = createCompletionHandler(getResetSchema());
+    const handler = createCompletionHandler(getResetSchema(), true);
     return handler(
       mockContext,
       {

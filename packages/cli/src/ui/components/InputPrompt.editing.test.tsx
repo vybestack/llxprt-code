@@ -249,6 +249,7 @@ describe('InputPrompt', () => {
     );
 
     props = {
+      enableFuzzyFiltering: true,
       buffer: mockBuffer,
       onSubmit: vi.fn(),
       userMessages: [],
@@ -719,6 +720,7 @@ describe('InputPrompt', () => {
 
       await waitFor(() => {
         expect(mockedUseCommandCompletion).toHaveBeenCalledWith(
+          props.enableFuzzyFiltering,
           mockBuffer,
           path.join('test', 'project', 'src'),
           mockSlashCommands,

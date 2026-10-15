@@ -26,6 +26,7 @@ describe('registered chat command ownership', () => {
             ...createUnconfiguredBuiltinOwners(),
             chatCommand: createChatOwnerCommand(
               bindChatOwnerOperations(agent, null),
+              () => true,
             ),
           },
           null,
@@ -170,7 +171,10 @@ describe('registered chat command ownership', () => {
   it('fails visibly when the registering host has no session owner', async () => {
     const decoy = await owner('decoy');
     await materialize(decoy, 'decoy');
-    const command = createChatOwnerCommand(bindChatOwnerOperations(null, null));
+    const command = createChatOwnerCommand(
+      bindChatOwnerOperations(null, null),
+      () => true,
+    );
     const saved = await run(command, 'save', 'orphan', decoy);
     expect(saved.result).toStrictEqual({
       type: 'message',

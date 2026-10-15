@@ -98,7 +98,7 @@ describe('setCommand schema integration', () => {
       temperature: 0.7,
       max_tokens: 1000,
     });
-    handler = createCompletionHandler(commandSchema);
+    handler = createCompletionHandler(commandSchema, true);
   });
 
   describe('literal subcommand selection', () => {

@@ -115,6 +115,7 @@ async function restoreFromDirectory(
 
 export function createRestoreCommand(
   operations: RestoreCommandOperations,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand | null {
   if (!operations.enabled) return null;
 
@@ -139,7 +140,7 @@ export function createRestoreCommand(
         } catch {
           return [];
         }
-      }),
+      }, readFuzzyFiltering),
     },
   ];
 

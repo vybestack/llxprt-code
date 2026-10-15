@@ -138,7 +138,7 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  slashCompletionMock.mockImplementation((buffer) => {
+  slashCompletionMock.mockImplementation((_enableFuzzyFiltering, buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(
@@ -253,6 +253,7 @@ describe('useCommandCompletion', () => {
       it('should initialize with default state', () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(''),
             testRootDir,
             [],
@@ -278,6 +279,7 @@ describe('useCommandCompletion', () => {
         const { result } = renderHook(() => {
           const textBuffer = useTextBufferForTest('@file');
           const completion = useCommandCompletion(
+            true,
             textBuffer,
             testRootDir,
             [],
@@ -311,6 +313,7 @@ describe('useCommandCompletion', () => {
       it('should reset all state to default values', () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('@files'),
             testRootDir,
             [],
@@ -339,6 +342,7 @@ describe('useCommandCompletion', () => {
         const text = '@src/a\\ file.txt';
         renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(text),
             testRootDir,
             [],
@@ -365,6 +369,7 @@ describe('useCommandCompletion', () => {
 
         renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest(text, cursorOffset),
             testRootDir,
             [],
@@ -414,6 +419,7 @@ describe('useCommandCompletion', () => {
           const { result } = renderHook(() => {
             const textBuffer = useTextBufferForTest('/');
             const completion = useCommandCompletion(
+              true,
               textBuffer,
               testRootDir,
               [],
@@ -457,6 +463,7 @@ describe('useCommandCompletion', () => {
 
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -478,6 +485,7 @@ describe('useCommandCompletion', () => {
         setupMocks({ slashSuggestions: [] });
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -498,6 +506,7 @@ describe('useCommandCompletion', () => {
       it('should navigate up through suggestions with wrap-around', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -524,6 +533,7 @@ describe('useCommandCompletion', () => {
       it('should navigate down through suggestions with wrap-around', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -553,6 +563,7 @@ describe('useCommandCompletion', () => {
       it('should handle navigation with multiple suggestions', async () => {
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],
@@ -590,6 +601,7 @@ describe('useCommandCompletion', () => {
 
         const { result } = renderHook(() =>
           useCommandCompletion(
+            true,
             useTextBufferForTest('/'),
             testRootDir,
             [],

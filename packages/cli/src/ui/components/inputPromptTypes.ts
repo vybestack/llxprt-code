@@ -12,6 +12,7 @@ import type { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 export interface InputPromptProps {
+  enableFuzzyFiltering: boolean;
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
   /**

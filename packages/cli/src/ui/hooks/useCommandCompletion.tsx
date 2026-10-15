@@ -329,6 +329,7 @@ function buildNonSlashReturn(
 }
 
 export function useCommandCompletion(
+  enableFuzzyFiltering: boolean,
   buffer: TextBuffer,
   cwd: string,
   slashCommands: readonly SlashCommand[],
@@ -364,6 +365,7 @@ export function useCommandCompletion(
   });
 
   const slashCompletionResults = useSlashCompletion(
+    enableFuzzyFiltering,
     buffer,
     dirs,
     cwd,

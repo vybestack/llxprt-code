@@ -88,7 +88,7 @@ describe('toolkeyfileCommand', () => {
       const schema = toolkeyfileCommand.schema;
       assertDefined(schema);
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(
         context,
         {
@@ -110,7 +110,7 @@ describe('toolkeyfileCommand', () => {
       const schema = toolkeyfileCommand.schema;
       assertDefined(schema);
 
-      const handler = createCompletionHandler(schema);
+      const handler = createCompletionHandler(schema, true);
       const result = await handler(
         context,
         {

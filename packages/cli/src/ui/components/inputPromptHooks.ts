@@ -192,6 +192,7 @@ type InputPromptState = Pick<
   | 'config'
   | 'slashCommands'
   | 'commandContext'
+  | 'enableFuzzyFiltering'
   | 'shellModeActive'
   | 'setShellModeActive'
   | 'onEscapePromptChange'
@@ -241,14 +242,21 @@ const useCompletionState = ({
   config,
   slashCommands,
   commandContext,
+  enableFuzzyFiltering,
   shellModeActive,
 }: Pick<
   InputPromptState,
-  'buffer' | 'config' | 'slashCommands' | 'commandContext' | 'shellModeActive'
+  | 'buffer'
+  | 'config'
+  | 'slashCommands'
+  | 'commandContext'
+  | 'shellModeActive'
+  | 'enableFuzzyFiltering'
 >): CompletionState => {
   const [reverseSearchActive, setReverseSearchActive] = useState(false);
   const shellHistory = useShellHistory(config.historyFilePath);
   const completion = useCommandCompletion(
+    enableFuzzyFiltering,
     buffer,
     config.getTargetDir(),
     slashCommands,
