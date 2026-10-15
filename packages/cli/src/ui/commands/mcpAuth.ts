@@ -30,6 +30,7 @@ export interface McpAuthCommandOperations {
 
 function createMcpAuthSchema(
   operations: McpAuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
 ): CommandArgumentSchema {
   return [
     {
@@ -49,7 +50,7 @@ function createMcpAuthSchema(
           value: name,
           description: 'Configured MCP server',
         }));
-      }),
+      }, readFuzzyFiltering),
     },
   ];
 }
@@ -132,12 +133,13 @@ async function performMcpOAuth(
 
 export function createMcpAuthCommand(
   operations: McpAuthCommandOperations,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand {
   return {
     name: 'auth',
     description: 'Authenticate with an OAuth-enabled MCP server',
     kind: CommandKind.BUILT_IN,
-    schema: createMcpAuthSchema(operations),
+    schema: createMcpAuthSchema(operations, readFuzzyFiltering),
     autoExecute: true,
     action: async (
       context: CommandContext,

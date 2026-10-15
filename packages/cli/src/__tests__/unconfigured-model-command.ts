@@ -224,7 +224,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
       updateBaseUrl: unavailable,
     }),
     logoutCommand: createLogoutCommand({ logout: unavailable }),
-    authCommand: createAuthCommand(unavailableAuthControl()),
+    authCommand: createAuthCommand(unavailableAuthControl(), () => true),
     quotaCommand: createQuotaCommand({
       oauthControl: unavailableQuotaOAuthControl(),
       fetch: unavailable,
@@ -232,12 +232,15 @@ export function createUnconfiguredCredentialCommands(): Pick<
       fetchQuotaLines: unavailable,
     }),
     mcpCommand: createMcpCommand(
-      createMcpAuthCommand({
-        isConfigured: () => false,
-        configuredServers: () => [],
-        authenticationRequiredServers: async () => [],
-        authenticate: unavailable,
-      }),
+      createMcpAuthCommand(
+        {
+          isConfigured: () => false,
+          configuredServers: () => [],
+          authenticationRequiredServers: async () => [],
+          authenticate: unavailable,
+        },
+        () => true,
+      ),
       bindMcpCommand(
         null,
         null,
@@ -262,11 +265,14 @@ function createUnconfiguredProfileCommand() {
     throw new Error('Profile command is unavailable');
   };
   return createProfileCommand({
-    schemas: createProfileSchemas({
-      listProfiles: async () => [],
-      getActiveProviderName: () => undefined,
-      listBuckets: async () => [],
-    }),
+    schemas: createProfileSchemas(
+      {
+        listProfiles: async () => [],
+        getActiveProviderName: () => undefined,
+        listBuckets: async () => [],
+      },
+      () => true,
+    ),
     saveModelProfile: unavailable,
     saveLoadBalancerProfile: unavailable,
     loadProfile: unavailable,
@@ -282,20 +288,23 @@ export function createUnconfiguredChatCommand(): SlashCommand {
   const unavailable = (): never => {
     throw new Error('Chat operations are unavailable in this registry fixture');
   };
-  return createChatOwnerCommand({
-    listCheckpoints: unavailable,
-    createCheckpoint: unavailable,
-    resume: unavailable,
-    deleteCheckpoint: unavailable,
-    renameCheckpoint: unavailable,
-    getHistory: unavailable,
-    clearHistory: unavailable,
-    restoreTurns: unavailable,
-    nameCurrentSession: unavailable,
-    getRecordingPath: unavailable,
-    getModel: unavailable,
-    getEmojiFilterMode: unavailable,
-  });
+  return createChatOwnerCommand(
+    {
+      listCheckpoints: unavailable,
+      createCheckpoint: unavailable,
+      resume: unavailable,
+      deleteCheckpoint: unavailable,
+      renameCheckpoint: unavailable,
+      getHistory: unavailable,
+      clearHistory: unavailable,
+      restoreTurns: unavailable,
+      nameCurrentSession: unavailable,
+      getRecordingPath: unavailable,
+      getModel: unavailable,
+      getEmojiFilterMode: unavailable,
+    },
+    () => true,
+  );
 }
 
 function unconfiguredReadCommands() {

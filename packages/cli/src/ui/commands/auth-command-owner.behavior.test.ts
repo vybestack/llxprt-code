@@ -64,7 +64,7 @@ async function registeredAuth(control: AuthCommandOperations) {
       new BuiltinCommandLoader(
         {
           ...createUnconfiguredBuiltinOwners(),
-          authCommand: createAuthCommand(control),
+          authCommand: createAuthCommand(control, () => true),
         },
         null,
       ),
@@ -118,9 +118,9 @@ describe('auth command owner', () => {
     const right = oauthOwner(['personal', 'team']);
     const decoy = decoyInvocation();
     const suggest = async (control: AuthCommandOperations) => {
-      const schema = createAuthCommand(control).schema;
+      const schema = createAuthCommand(control, () => true).schema;
       if (schema === undefined) throw new Error('/auth has no schema');
-      const result = await createCompletionHandler(schema)(
+      const result = await createCompletionHandler(schema, true)(
         decoy,
         {
           args: '',

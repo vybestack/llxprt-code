@@ -201,12 +201,15 @@ function bindSchema(
 
 export function createProfileSchemas(
   operations: ProfileSchemaOperations,
+  readFuzzyFiltering: () => boolean,
 ): ProfileSchemas {
-  const profileCompleter: CompleterFn = withFuzzyFilter(async () =>
-    (await operations.listProfiles()).map((profile) => ({
-      value: profile,
-      description: profileSuggestionDescription,
-    })),
+  const profileCompleter: CompleterFn = withFuzzyFilter(
+    async () =>
+      (await operations.listProfiles()).map((profile) => ({
+        value: profile,
+        description: profileSuggestionDescription,
+      })),
+    readFuzzyFiltering,
   );
   const loadBalancerMemberCompleter: CompleterFn = withFuzzyFilter(
     async (_context, _partial, tokens) => {
@@ -218,6 +221,7 @@ export function createProfileSchemas(
           description: 'Add to load balancer',
         }));
     },
+    readFuzzyFiltering,
   );
   const bucketNameCompleter: CompleterFn = withFuzzyFilter(
     async (_context, _partial, tokens) => {
@@ -231,15 +235,18 @@ export function createProfileSchemas(
           description: 'Add bucket to profile',
         }));
     },
+    readFuzzyFiltering,
   );
-  const defaultProfileCompleter: CompleterFn = withFuzzyFilter(async () =>
-    ['none', ...(await operations.listProfiles())].map((option) => ({
-      value: option,
-      description:
-        option === 'none'
-          ? 'Clear default profile'
-          : profileSuggestionDescription,
-    })),
+  const defaultProfileCompleter: CompleterFn = withFuzzyFilter(
+    async () =>
+      ['none', ...(await operations.listProfiles())].map((option) => ({
+        value: option,
+        description:
+          option === 'none'
+            ? 'Clear default profile'
+            : profileSuggestionDescription,
+      })),
+    readFuzzyFiltering,
   );
 
   const profileCompleterFor = (name: string): CompleterFn | undefined => {

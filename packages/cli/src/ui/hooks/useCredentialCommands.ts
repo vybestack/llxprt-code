@@ -10,6 +10,7 @@ import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { SlashCommand } from '../commands/types.js';
 import { createAuthCommand } from '../commands/authCommand.js';
 import { createBaseurlCommand } from '../commands/baseurlCommand.js';
 import {
@@ -106,10 +107,7 @@ export function useCredentialCommands(
     () => createKeyCommand(bindKeyCommandOperations(api, config)),
     [api, config],
   );
-  const authCommand = useMemo(
-    () => createAuthCommand(oauthControl),
-    [oauthControl],
-  );
+  const authCommand = useAuthOwnerCommand(oauthControl, settings);
   const quotaCommand = useMemo(
     () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
     [api, oauthControl],
@@ -117,10 +115,13 @@ export function useCredentialCommands(
   const mcpCommand = useMemo(
     () =>
       createMcpCommand(
-        createMcpAuthCommand(bindMcpAuthCommandOperations(agent, config)),
+        createMcpAuthCommand(
+          bindMcpAuthCommandOperations(agent, config),
+          () => settings.merged.enableFuzzyFiltering ?? true,
+        ),
         bindMcpCommand(config, agent, addItem, reloadCommands),
       ),
-    [agent, config, addItem, reloadCommands],
+    [agent, config, addItem, reloadCommands, settings],
   );
   const profileCommand = useMemo(
     () =>
@@ -134,6 +135,48 @@ export function useCredentialCommands(
     [agent, api, oauthControl, recordProviderSwitch, settings],
   );
   const toolkeyCommands = useMemo(createToolkeyCommands, []);
+  return useMemoCredentialRegistry({
+    baseurlCommand,
+    logoutCommand,
+    keyfileCommand,
+    keyCommand,
+    authCommand,
+    quotaCommand,
+    mcpCommand,
+    profileCommand,
+    ...toolkeyCommands,
+  });
+}
+
+function useAuthOwnerCommand(
+  oauthControl: ReturnType<typeof useOAuthControl>,
+  settings: LoadedSettings,
+): SlashCommand {
+  return useMemo(
+    () =>
+      createAuthCommand(
+        oauthControl,
+        () => settings.merged.enableFuzzyFiltering ?? true,
+      ),
+    [oauthControl, settings],
+  );
+}
+
+function useMemoCredentialRegistry(
+  commands: CredentialCommands,
+): CredentialCommands {
+  const {
+    baseurlCommand,
+    logoutCommand,
+    keyfileCommand,
+    keyCommand,
+    authCommand,
+    quotaCommand,
+    mcpCommand,
+    profileCommand,
+    toolkeyCommand,
+    toolkeyfileCommand,
+  } = commands;
   return useMemo(
     () => ({
       baseurlCommand,
@@ -144,7 +187,8 @@ export function useCredentialCommands(
       quotaCommand,
       mcpCommand,
       profileCommand,
-      ...toolkeyCommands,
+      toolkeyCommand,
+      toolkeyfileCommand,
     }),
     [
       baseurlCommand,
@@ -155,7 +199,8 @@ export function useCredentialCommands(
       quotaCommand,
       mcpCommand,
       profileCommand,
-      toolkeyCommands,
+      toolkeyCommand,
+      toolkeyfileCommand,
     ],
   );
 }

@@ -165,6 +165,7 @@ describe('/key subcommands', () => {
     );
     const handler = createCompletionHandler(
       registerKeyCommand(context).schema!,
+      true,
     );
     const result = await handler(context, undefined, fullLine);
     return result.suggestions.map((s) => s.value);
@@ -673,6 +674,7 @@ describe('/key subcommands', () => {
       const { createCompletionHandler } = await import('./schema/index.js');
       const handler = createCompletionHandler(
         registerKeyCommand(sibling).schema!,
+        true,
       );
       const result = await handler(sibling, undefined, '/key load ');
       expect(result.suggestions.map((entry) => entry.value)).toStrictEqual([

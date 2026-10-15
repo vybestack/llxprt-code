@@ -96,6 +96,7 @@ describe('useSlashCompletion schema gating', () => {
       ({ text }) => {
         const textBuffer = useTextBufferForTest(text);
         return useSlashCompletion(
+          true,
           textBuffer,
           [],
           '/',

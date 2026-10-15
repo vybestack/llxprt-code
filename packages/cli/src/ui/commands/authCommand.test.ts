@@ -570,7 +570,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     it('@given auth command @when checking properties @then has correct OAuth description', async () => {
       // Import the actual command to test its properties
       const { createAuthCommand } = await import('./authCommand.js');
-      const authCommand = createAuthCommand(mockOAuthManager);
+      const authCommand = createAuthCommand(mockOAuthManager, () => true);
       expect(authCommand.name).toBe('auth');
       expect(authCommand.description).toBe(
         'Manage OAuth authentication for providers',

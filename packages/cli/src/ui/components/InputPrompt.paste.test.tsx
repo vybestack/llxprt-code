@@ -266,6 +266,7 @@ describe('InputPrompt', () => {
     );
 
     props = {
+      enableFuzzyFiltering: true,
       buffer: mockBuffer,
       onSubmit: vi.fn(),
       userMessages: [],

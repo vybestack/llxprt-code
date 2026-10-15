@@ -69,6 +69,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest(''),
             testDirs,
             testRootDir,
@@ -104,6 +105,7 @@ describe('useSlashCompletion', () => {
         // Test with regular text (not a command)
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('hello world'),
             testDirs,
             testRootDir,
@@ -131,6 +133,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/help'),
             testDirs,
             testRootDir,
@@ -170,6 +173,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest(''),
             testDirs,
             testRootDir,
@@ -193,6 +197,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest(''),
             testDirs,
             testRootDir,
@@ -220,6 +225,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/h'),
             testDirs,
             testRootDir,
@@ -250,6 +256,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/h'),
             testDirs,
             testRootDir,
@@ -281,6 +288,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/'),
             testDirs,
             testRootDir,
@@ -329,6 +337,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/command'),
             testDirs,
             testRootDir,

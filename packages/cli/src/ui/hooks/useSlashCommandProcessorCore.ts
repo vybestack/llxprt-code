@@ -212,6 +212,7 @@ function useHistoryCommandOwners(
         config?.getCheckpointingEnabled() === true
           ? config.checkpoints
           : undefined,
+        () => settings.merged.enableFuzzyFiltering ?? true,
       ),
     }),
     [agent, config, runtimeApi, settings, oauthControl],
@@ -276,7 +277,6 @@ function useCommandState(
       [runtimeApi],
     ),
   );
-  const setCommand = useSetCommand(settings);
   const credentialCommands = useCredentialCommands(
     agent,
     settings,
@@ -291,6 +291,7 @@ function useCommandState(
     recordingOwner,
     rawRecording,
     recordingSwapCallbacks,
+    useCallback(() => settings.merged.enableFuzzyFiltering ?? true, [settings]),
   );
   const workspaceCommands = useWorkspaceCommandOwners(
     config,
@@ -313,7 +314,7 @@ function useCommandState(
     historyCommandOwners,
     modelCommand,
     toolFormatCommand,
-    setCommand,
+    setCommand: useSetCommand(settings),
     provider,
     todoCommand: useTodoCommandOwner(todoContext, addItem),
     subagentCommand: useSubagentCommand(agent, config, settings, addItem),

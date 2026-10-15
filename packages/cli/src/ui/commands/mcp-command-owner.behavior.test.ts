@@ -30,6 +30,7 @@ describe('registered MCP command owner', () => {
             mcpCommand: createMcpCommand(
               createMcpAuthCommand(
                 bindMcpAuthCommandOperations(owner, context.services.config),
+                () => true,
               ),
               bindMcpCommand(
                 context.services.config,

@@ -114,6 +114,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume my-ch'),
             testDirs,
             testRootDir,
@@ -180,6 +181,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume '),
             testDirs,
             testRootDir,
@@ -228,6 +230,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('/chat resume '),
             testDirs,
             testRootDir,
@@ -256,6 +259,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@s'),
             testDirs,
             testRootDir,
@@ -290,6 +294,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@src/comp'),
             testDirs,
             testRootDir,
@@ -316,6 +321,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@.'),
             testDirs,
             testRootDir,
@@ -348,6 +354,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@d'),
             testDirs,
             testRootDir,
@@ -374,6 +381,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -408,6 +416,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -439,6 +448,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@d'),
             testDirs,
             testRootDir,
@@ -473,6 +483,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@'),
             testDirs,
             testRootDir,
@@ -506,6 +517,7 @@ describe('useSlashCompletion', () => {
 
         const { result } = renderHook(() =>
           useSlashCompletion(
+            true,
             useTextBufferForTest('@t'),
             testDirs,
             testRootDir,

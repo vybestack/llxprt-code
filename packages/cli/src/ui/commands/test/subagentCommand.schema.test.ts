@@ -76,7 +76,7 @@ const invoke = async (
 
   assertDefined(saveCommand?.schema);
 
-  const handler = createCompletionHandler(saveCommand.schema);
+  const handler = createCompletionHandler(saveCommand.schema, true);
   return handler(context, input, fullLine);
 };
 
@@ -193,7 +193,7 @@ const invokeSub = async (
 
   assertDefined(sub?.schema);
 
-  const handler = createCompletionHandler(sub.schema);
+  const handler = createCompletionHandler(sub.schema, true);
   return handler(createContext(), input, fullLine);
 };
 
@@ -253,7 +253,7 @@ describe('subagent name completer edge cases @issue:1115', () => {
 
     const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
     assertDefined(subagentNameSchema);
-    const handler = createCompletionHandler(subagentNameSchema);
+    const handler = createCompletionHandler(subagentNameSchema, true);
     const result = await handler(
       ctx,
       {
@@ -275,7 +275,7 @@ describe('subagent name completer edge cases @issue:1115', () => {
 
     const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
     assertDefined(subagentNameSchema);
-    const handler = createCompletionHandler(subagentNameSchema);
+    const handler = createCompletionHandler(subagentNameSchema, true);
     const result = await handler(
       ctx,
       {
@@ -302,7 +302,7 @@ describe('subagent name completer edge cases @issue:1115', () => {
 
     const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
     assertDefined(subagentNameSchema);
-    const handler = createCompletionHandler(subagentNameSchema);
+    const handler = createCompletionHandler(subagentNameSchema, true);
     const result = await handler(
       ctx,
       {

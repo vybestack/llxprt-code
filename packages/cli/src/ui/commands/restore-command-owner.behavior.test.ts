@@ -43,12 +43,15 @@ describe('registered restore command owner', () => {
           toolCall: { name: 'read_file', args: { file_path: 'notes.txt' } },
         }),
       );
-      const command = createRestoreCommand({
-        enabled: true,
-        checkpointDirectory,
-        setClientHistory: (history) => owner.setHistory(history),
-        restoreProjectSnapshot: undefined,
-      });
+      const command = createRestoreCommand(
+        {
+          enabled: true,
+          checkpointDirectory,
+          setClientHistory: (history) => owner.setHistory(history),
+          restoreProjectSnapshot: undefined,
+        },
+        () => true,
+      );
       if (!command?.action) throw new Error('Restore command is unavailable');
       const registry = await CommandService.create(
         [

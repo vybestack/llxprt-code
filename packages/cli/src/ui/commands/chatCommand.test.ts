@@ -49,6 +49,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
         recordingIntegration: context.recordingIntegration,
         recordingSwapCallbacks: context.recordingSwapCallbacks,
       }),
+      () => true,
     );
 
   const command = (name: string): SlashCommand => {
@@ -65,7 +66,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   ): Promise<string[]> => {
     const schema = command(commandName).schema;
     assertDefined(schema);
-    const handler = createCompletionHandler(schema);
+    const handler = createCompletionHandler(schema, true);
     const result = await handler(
       context,
       {

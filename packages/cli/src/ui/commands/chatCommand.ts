@@ -123,6 +123,7 @@ const checkpointSuggestionDescription = 'Saved conversation checkpoint';
 
 function createChatTagSchema(
   operations: ChatRecordingOperations,
+  readFuzzyFiltering: () => boolean,
 ): CommandArgumentSchema {
   return [
     {
@@ -135,7 +136,7 @@ function createChatTagSchema(
           value: chat.name,
           description: checkpointSuggestionDescription,
         }));
-      }),
+      }, readFuzzyFiltering),
     },
   ];
 }
@@ -685,6 +686,7 @@ function createDebugAction(
 
 export function createChatCommand(
   operations: ChatRecordingOperations,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand {
   return composeChatCommand(
     {
@@ -698,6 +700,6 @@ export function createChatCommand(
       name: createNameAction(operations),
       debug: createDebugAction(operations),
     },
-    createChatTagSchema(operations),
+    createChatTagSchema(operations, readFuzzyFiltering),
   );
 }

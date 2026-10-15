@@ -13,16 +13,20 @@ export function bindRestoreCommand(
   config: CliUiRuntime | null,
   agent: Agent | null,
   git: CommandContext['services']['git'],
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand | null {
-  return createRestoreCommand({
-    enabled: config?.getCheckpointingEnabled() === true,
-    checkpointDirectory: config?.projectCheckpointsDir,
-    setClientHistory: (history) => {
-      if (!agent) throw new Error('Session agent is unavailable');
-      return agent.setHistory(history);
+  return createRestoreCommand(
+    {
+      enabled: config?.getCheckpointingEnabled() === true,
+      checkpointDirectory: config?.projectCheckpointsDir,
+      setClientHistory: (history) => {
+        if (!agent) throw new Error('Session agent is unavailable');
+        return agent.setHistory(history);
+      },
+      restoreProjectSnapshot: git
+        ? (commitHash) => git.restoreProjectFromSnapshot(commitHash)
+        : undefined,
     },
-    restoreProjectSnapshot: git
-      ? (commitHash) => git.restoreProjectFromSnapshot(commitHash)
-      : undefined,
-  });
+    readFuzzyFiltering,
+  );
 }

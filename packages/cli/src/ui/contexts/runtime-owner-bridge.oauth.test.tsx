@@ -114,7 +114,7 @@ describe('interactive runtime owner bridge OAuth status', () => {
       ).not.toBe(true);
       // The command is registered against the right owner. The invocation
       // carries the left owner's control, which must not be consulted.
-      const authCommand = createAuthCommand(rightControl);
+      const authCommand = createAuthCommand(rightControl, () => true);
       if (!authCommand.action) throw new Error('auth command has no action');
       const invocationContext = createMockCommandContext({
         oauthControl: leftControl,

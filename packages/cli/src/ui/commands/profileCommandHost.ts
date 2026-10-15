@@ -26,7 +26,7 @@ import type { ProfileCommandOperations } from './profileCommand.js';
 export interface ProfileCommandHost {
   readonly agent: Agent | null;
   readonly runtimeApi: RuntimeApi;
-  readonly settings: Pick<LoadedSettings, 'setValue'>;
+  readonly settings: Pick<LoadedSettings, 'setValue' | 'merged'>;
   readonly oauthControl: Pick<OAuthControl, 'listBuckets'>;
   readonly recordProviderSwitch: (
     provider: string,
@@ -42,14 +42,17 @@ export function bindProfileCommandOperations(
     agent === null
       ? listRuntimeProfiles(runtimeApi)
       : agent.workspace.profileDefinitions.listProfiles();
-  const schemas = createProfileSchemas({
-    listProfiles,
-    getActiveProviderName: () =>
-      agent?.getProvider() ??
-      runtimeApi.providerStatus().providerName ??
-      undefined,
-    listBuckets: oauthControl.listBuckets,
-  });
+  const schemas = createProfileSchemas(
+    {
+      listProfiles,
+      getActiveProviderName: () =>
+        agent?.getProvider() ??
+        runtimeApi.providerStatus().providerName ??
+        undefined,
+      listBuckets: oauthControl.listBuckets,
+    },
+    () => settings.merged.enableFuzzyFiltering ?? true,
+  );
 
   return {
     schemas,

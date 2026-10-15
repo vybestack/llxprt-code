@@ -326,6 +326,7 @@ function createDebugAction(operations: ChatOwnerOperations): ChatAction {
 
 export function createChatOwnerCommand(
   operations: ChatOwnerOperations,
+  readFuzzyFiltering: () => boolean,
 ): SlashCommand {
   return composeChatCommand(
     {
@@ -344,11 +345,13 @@ export function createChatOwnerCommand(
         kind: 'value',
         name: 'tag',
         description: 'Select saved checkpoint',
-        completer: withFuzzyFilter(async () =>
-          (await operations.listCheckpoints()).map((entry) => ({
-            value: entry.name,
-            description: 'Saved conversation checkpoint',
-          })),
+        completer: withFuzzyFilter(
+          async () =>
+            (await operations.listCheckpoints()).map((entry) => ({
+              value: entry.name,
+              description: 'Saved conversation checkpoint',
+            })),
+          readFuzzyFiltering,
         ),
       },
     ],

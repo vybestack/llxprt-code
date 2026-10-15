@@ -41,15 +41,6 @@ export interface UseSlashCompletionReturn {
 }
 
 type RuntimeExtensionConfig = Partial<Pick<CliUiRuntime, 'isExtensionEnabled'>>;
-type RuntimeCommandContext = Omit<CommandContext, 'services'> & {
-  services?: { config?: RuntimeExtensionConfig | null };
-};
-
-function getExtCfg(
-  ctx: CommandContext,
-): RuntimeExtensionConfig | null | undefined {
-  return (ctx as RuntimeCommandContext).services?.config;
-}
 
 function computeCmdIdx(
   row: number,
@@ -140,6 +131,7 @@ function useMemoInput(
 }
 
 function useSetupEffect(
+  enableFuzzyFiltering: boolean,
   buf: TextBuffer,
   cmds: readonly SlashCommand[],
   ctx: CommandContext,
@@ -159,6 +151,7 @@ function useSetupEffect(
   useEffect(
     () =>
       handleCompletionEffect(
+        enableFuzzyFiltering,
         mi,
         cmdIdx,
         col,
@@ -175,6 +168,7 @@ function useSetupEffect(
         setters,
       ),
     [
+      enableFuzzyFiltering,
       mi,
       cmdIdx,
       col,
@@ -194,6 +188,7 @@ function useSetupEffect(
 }
 
 function useSlashCompletionSetup(
+  enableFuzzyFiltering: boolean,
   buffer: TextBuffer,
   slashCommands: readonly SlashCommand[],
   commandContext: CommandContext,
@@ -212,7 +207,7 @@ function useSlashCompletionSetup(
 ) {
   const refs = useStateRefs();
   const [cursorRow, cursorCol] = buffer.cursor;
-  const extCfg = getExtCfg(commandContext);
+  const extCfg = config;
   const cmdIdx = useMemo(
     () => computeCmdIdx(cursorRow, cursorCol, buffer.lines),
     [cursorRow, cursorCol, buffer.lines],
@@ -256,6 +251,7 @@ function useSlashCompletionSetup(
   );
 
   useSetupEffect(
+    enableFuzzyFiltering,
     buffer,
     slashCommands,
     commandContext,
@@ -351,6 +347,7 @@ function useCommandLookup(
 }
 
 export function useSlashCompletion(
+  enableFuzzyFiltering: boolean,
   buffer: TextBuffer,
   dirs: readonly string[],
   cwd: string,
@@ -380,6 +377,7 @@ export function useSlashCompletion(
   const [activeHint, setActiveHint] = React.useState<string>('');
 
   const { cmdIdx, refs, cursorRow } = useSlashCompletionSetup(
+    enableFuzzyFiltering,
     buffer,
     slashCommands,
     commandContext,

@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  installWorkspaceRuntimeHook,
-  installWorkspaceRuntimeFixture,
-} from '../../__tests__/workspace-runtime-fixture.js';
-const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { installWorkspaceRuntimeHook } from '../../__tests__/workspace-runtime-fixture.js';
 const useFixtureRuntime = installWorkspaceRuntimeHook();
 
 /**
@@ -87,16 +83,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Mock the extension as enabled
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: (name: string) => name === 'my-ext',
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/my');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -143,16 +140,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Mock the extension as disabled
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: (_name: string) => false,
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/my');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -211,6 +209,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
           return {
             textBuffer,
             completion: useSlashCompletion(
+              true,
               textBuffer,
               testDirs,
               testRootDir,
@@ -273,16 +272,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // All extensions disabled
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: () => false,
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -342,6 +342,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
           return {
             textBuffer,
             completion: useSlashCompletion(
+              true,
               textBuffer,
               testDirs,
               testRootDir,
@@ -416,16 +417,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Extension disabled
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: () => false,
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/myext ');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -483,16 +485,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Enable only ext-1
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: (name: string) => name === 'ext-1',
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/e');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -529,16 +532,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...extensionCommands];
 
       // Extension disabled
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: () => false,
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/exactmatch');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,
@@ -580,16 +584,17 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
 
       const allCommands = [...builtinCommands, ...extensionCommands];
 
-      mockCommandContext.services.config = composeFixtureRuntime({
-        ...mockCommandContext.services.config,
+      mockConfig = {
+        ...mockConfig,
         isExtensionEnabled: () => true,
-      } as unknown as Config);
+      } as unknown as Config;
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/');
         return {
           textBuffer,
           completion: useSlashCompletion(
+            true,
             textBuffer,
             testDirs,
             testRootDir,

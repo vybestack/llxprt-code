@@ -24,7 +24,10 @@ const ai = (text: string) => ({
 
 // Registers /chat the way the session host does: bound to this one owner.
 function ownerActions(agent: Agent) {
-  const chat = createChatOwnerCommand(bindChatOwnerOperations(agent, null));
+  const chat = createChatOwnerCommand(
+    bindChatOwnerOperations(agent, null),
+    () => true,
+  );
   return (name: string) => {
     const handler = chat.subCommands?.find((cmd) => cmd.name === name)?.action;
     if (!handler) throw new Error(`Missing /chat ${name}`);

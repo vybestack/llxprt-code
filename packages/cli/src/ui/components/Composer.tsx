@@ -92,7 +92,7 @@ function useComposerSelectors() {
  */
 export const Composer = ({
   config,
-  settings: _settings,
+  settings,
   onSuggestionsVisibilityChange,
 }: ComposerProps) => {
   const commands = useAppCommands();
@@ -114,6 +114,7 @@ export const Composer = ({
 
   return (
     <InputPrompt
+      enableFuzzyFiltering={settings.merged.enableFuzzyFiltering ?? true}
       buffer={data.buffer}
       inputWidth={inputWidth}
       suggestionsWidth={suggestionsWidth}

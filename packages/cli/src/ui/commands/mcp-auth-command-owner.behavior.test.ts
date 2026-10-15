@@ -36,7 +36,7 @@ function mcpOwner(serverName: string): McpOwner {
   return {
     authenticated,
     command: createMcpCommand(
-      createMcpAuthCommand(operations),
+      createMcpAuthCommand(operations, () => true),
       bindMcpCommand(
         null,
         null,

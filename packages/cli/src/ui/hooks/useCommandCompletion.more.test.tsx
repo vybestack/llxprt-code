@@ -138,7 +138,7 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  slashCompletionMock.mockImplementation((buffer) => {
+  slashCompletionMock.mockImplementation((_enableFuzzyFiltering, buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(
@@ -241,6 +241,7 @@ describe('useCommandCompletion', () => {
     return renderHook(() => {
       const textBuffer = useTextBufferForTest(text, cursorOffset);
       const completion = useCommandCompletion(
+        true,
         textBuffer,
         testRootDir,
         [],
@@ -272,6 +273,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/mem');
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -302,6 +304,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('@src/fi');
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -335,6 +338,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest(text, cursorOffset);
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -367,6 +371,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('@src/comp');
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -399,6 +404,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('@src\\comp');
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -435,6 +441,7 @@ describe('useCommandCompletion', () => {
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('// This is a line comment');
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -465,6 +472,7 @@ describe('useCommandCompletion', () => {
           '/* This is a block comment */',
         );
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -495,6 +503,7 @@ describe('useCommandCompletion', () => {
           'This is regular text that should trigger completion',
         );
         const completion = useCommandCompletion(
+          true,
           textBuffer,
           testRootDir,
           [],
@@ -616,9 +625,10 @@ describe('useCommandCompletion', () => {
       renderCommandCompletionHook(text);
 
       await waitFor(() => {
-        // useSlashCompletion now takes positional args; 6th arg is reverseSearchActive
+        // useSlashCompletion now takes positional args; 7th arg is reverseSearchActive
         // false means slash completion is enabled
         expect(useSlashCompletion).toHaveBeenLastCalledWith(
+          true,
           expect.anything(), // buffer
           expect.anything(), // dirs
           expect.anything(), // cwd

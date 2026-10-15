@@ -30,6 +30,7 @@ describe('/set timeout settings autocomplete (issue #1050)', () => {
       clearActiveModelParam: (key) => ctx.runtimeApi.clearActiveModelParam(key),
       isFuzzyFilteringEnabled: () => true,
     }),
+    true,
   );
 
   beforeEach(() => {
