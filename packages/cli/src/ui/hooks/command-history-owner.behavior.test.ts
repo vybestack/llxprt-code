@@ -112,6 +112,8 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
         endSlashCommandAction: () => {},
         resumeOwnedSession: null,
         isMcpDiscoveryPending: () => false,
+        resumeRawSession: null,
+        replayResumedHistory: () => {},
         recordCommandError: async () => {},
         loadCommandHistory: bindCommandHistoryLoader(
           (history) => owner.setHistory(history),

@@ -68,6 +68,8 @@ export function createDeps(
     endSlashCommandAction: () => {},
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
+    resumeRawSession: null,
+    replayResumedHistory: () => {},
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
     ...overrides,

@@ -3,7 +3,12 @@ import {
   resumeOwnerSession,
   importOwnerSession,
 } from '../utils/ownerSessionUi.js';
-import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
+import {
+  bindCommandHistoryLoader,
+  bindResumedHistoryReplay,
+} from './commandHistoryLoaderHost.js';
+import { bindCommandRawResume } from './commandRawResumeHost.js';
+import { performResume } from '../../services/performResume.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
@@ -595,8 +600,22 @@ function buildHandlerDeps(
       args.store.commands.setConfirmationRequest(request);
     },
     recordingIntegration: args.recordingIntegration,
-    recordingSwapCallbacks: args.recordingSwapCallbacks,
-    sessionPersistence: args.config?.sessionPersistence,
+    resumeRawSession: bindCommandRawResume(
+      args.config,
+      args.config?.sessionPersistence,
+      () => {
+        if (!args.agent) throw new Error('Session agent is unavailable');
+        return args.agent.agentClient.getHistoryService();
+      },
+      args.recordingSwapCallbacks,
+      slashCommandLogger,
+      performResume,
+    ),
+    replayResumedHistory: bindResumedHistoryReplay(
+      () => resolveEmojiFilterMode(args.config),
+      commandContext.ui.clear,
+      args.addItem,
+    ),
     confirmationLogger,
     slashCommandLogger,
     beginSlashCommandAction: cancellation.beginSlashCommandAction,

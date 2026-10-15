@@ -1,3 +1,5 @@
+import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -113,7 +115,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
         throw new Error('Package validation is not used by this test');
       },
     });
-    return {
+    const deps: SlashCommandHandlerDeps = {
       commands: [continueCommand],
       config: {
         getEphemeralSetting: () => 'auto',
@@ -135,13 +137,6 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
           },
         },
       }),
-      sessionPersistence: {
-        mediaStore: new LocalMediaStore({
-          rootDirectory: join(root, 'media'),
-          quotaBytes: 1024,
-        }),
-        forRecording: () => undefined,
-      } as never,
       actions: {} as never,
       addItem,
       addMessage: (message) => {
@@ -155,24 +150,37 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       setPendingItem: vi.fn(),
       setSessionShellAllowlist: vi.fn(),
       setConfirmationRequest: vi.fn(),
-      recordingSwapCallbacks: {
-        getCurrentRecording: () => null,
-        getCurrentIntegration: () => null,
-        getCurrentLockHandle: () => null,
-        setRecording: (recording, _integration, lock) => {
-          committed = recording;
-          committedLock = lock;
-        },
-      },
       confirmationLogger: new DebugLogger('test-confirmation'),
       slashCommandLogger: new DebugLogger('test-slash'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       resumeOwnedSession: null,
       isMcpDiscoveryPending: () => false,
+      resumeRawSession: null,
+      replayResumedHistory: () => {},
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
     };
+    const persistence = {
+      mediaStore: new LocalMediaStore({
+        rootDirectory: join(root, 'media'),
+        quotaBytes: 1024,
+      }),
+      forRecording: () => undefined,
+    } as never;
+
+    const callbacks: RecordingSwapCallbacks = {
+      getCurrentRecording: () => null,
+      getCurrentIntegration: () => null,
+      getCurrentLockHandle: () => null,
+      setRecording: (recording, _integration, lock) => {
+        committed = recording;
+        committedLock = lock;
+      },
+    };
+
+    installFixtureRawResume(deps, persistence, callbacks);
+    return deps;
   }
 
   it('leaves the skipped-recording warning visible next to the restored conversation', async () => {

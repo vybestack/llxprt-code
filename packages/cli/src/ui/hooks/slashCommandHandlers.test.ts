@@ -1,3 +1,8 @@
+import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+} from '../../services/performResume.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -107,6 +112,8 @@ describe('slashCommandHandlers', () => {
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
+          resumeRawSession: null,
+          replayResumedHistory: () => {},
           recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
             recordSessionEvent: rawWrite,
           }),
@@ -157,6 +164,8 @@ describe('slashCommandHandlers', () => {
             },
             resumeOwnedSession: null,
             isMcpDiscoveryPending: () => false,
+            resumeRawSession: null,
+            replayResumedHistory: () => {},
             recordCommandError: bindCommandErrorRecorder(
               next,
               'agent',
@@ -650,8 +659,8 @@ describe('slashCommandHandlers', () => {
         agentClient: owner.agentClient,
         providerManager: owner.providerManager,
       });
-      deps.recordingSwapCallbacks = {} as never;
-      deps.sessionPersistence = {
+      const callbacks = {} as never;
+      const persistence = {
         mediaStore: new LocalMediaStore({
           rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
           quotaBytes: 1024,
@@ -661,7 +670,7 @@ describe('slashCommandHandlers', () => {
         },
       };
       // Injected instead of vi.mock: bun module mocks leak across test files.
-      deps.performResumeFn = performResumeMock;
+      installFixtureRawResume(deps, persistence, callbacks, performResumeMock);
       deps.commands = [
         {
           name: 'resumecmd',
@@ -727,7 +736,7 @@ describe('slashCommandHandlers', () => {
         deps.config = composeFixtureRuntime(config);
         deps.commandContext.services.config = composeFixtureRuntime(config);
         deps.commandContext.services.agent = agent;
-        deps.recordingSwapCallbacks = {
+        const callbacks: RecordingSwapCallbacks = {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
@@ -735,8 +744,7 @@ describe('slashCommandHandlers', () => {
             throw new Error('Mocked resume must not swap recordings');
           },
         };
-        deps.sessionPersistence = persistence;
-        deps.performResumeFn = async (_sessionRef, context) => {
+        const resume: typeof performResume = async (_sessionRef, context) => {
           const bytes = await context.mediaStore?.readVerified(reference);
           if (bytes === undefined) throw new Error('Missing owner media store');
           return {
@@ -760,6 +768,7 @@ describe('slashCommandHandlers', () => {
             ],
           };
         };
+        installFixtureRawResume(deps, persistence, callbacks, resume);
         deps.commands = [
           {
             name: 'continue',

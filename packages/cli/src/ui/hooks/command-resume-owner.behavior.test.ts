@@ -120,6 +120,8 @@ describe('registered command resume owner', () => {
             beginSlashCommandAction: () => new AbortController(),
             endSlashCommandAction: () => {},
             isMcpDiscoveryPending: () => false,
+            resumeRawSession: null,
+            replayResumedHistory: () => {},
             recordCommandError: async () => {},
             loadCommandHistory: async () => {},
             resumeOwnedSession: bindCommandOwnerResume(

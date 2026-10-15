@@ -111,6 +111,8 @@ describe('recording owner slash command construction', () => {
       endSlashCommandAction: () => {},
       resumeOwnedSession: null,
       isMcpDiscoveryPending: () => false,
+      resumeRawSession: null,
+      replayResumedHistory: () => {},
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
       ...overrides,
