@@ -1,20 +1,23 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 type ToolConfirmation = Extract<AgentEvent, { type: 'tool-confirmation' }>;
 
@@ -53,6 +56,7 @@ interface CommandInput {
 }
 
 describe('borrowed facade tool hook owner routing', () => {
+  useRecordingPrompts();
   it('retains A and B at deferred confirmation and reads the current recording path when each tool executes', async () => {
     const evidenceDir = join(process.cwd(), 'tmp', 'recording-tool-hook-owner');
     const output = join(
@@ -67,7 +71,14 @@ describe('borrowed facade tool hook owner routing', () => {
     await mkdir(evidenceDir, { recursive: true });
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent: a, borrow }) => {
+        async (
+          a,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const b = await borrow();
           expect(a.getMessageBus()).toBe(b.getMessageBus());
           expect(a.agentClient).toBeDefined();

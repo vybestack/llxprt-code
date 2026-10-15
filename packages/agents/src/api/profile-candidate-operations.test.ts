@@ -1,25 +1,405 @@
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService, Profile } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import { toConfigParameters } from './agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './__tests__/helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from './preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from './adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './__tests__/helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from './runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
+import { executeProviderActivation } from './providerActivationExecutor.js';
+import { assembleProviderSwitch } from './providerSwitchAssembly.js';
+import { assembleModelSelection } from './model-selection.js';
+import { AgentConfig } from './config-types.js';
+import { applyProfileCascade } from './profileApplication.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { applyProfileCascade } from './profileApplication.js';
-import { assembleModelSelection } from './model-selection.js';
-import { buildCliStyleConfig } from './__tests__/helpers/buildCliStyleConfig.js';
-import { assembleProviderSwitch } from './providerSwitchAssembly.js';
-import type { Profile } from '@vybestack/llxprt-code-settings';
 
 describe('profile candidate operations', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const firstCredentials = useOwnedCredentials();
+  const secondCredentials = useOwnedCredentials();
+
   it('holds named-key preparation without changing either root and leaves its sibling usable after failure', async () => {
-    const first = await buildCliStyleConfig('plain-text.jsonl', {
+    const firstCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('__tests__/fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    const firstCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const firstCallerOverrides: Readonly<Partial<AgentConfig>> = {
       model: 'first',
       sessionId: 'same-label',
+    };
+    const firstCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...firstCallerOverrides,
+      workingDir: firstCallerDirectory,
+    };
+    const firstCallerParameters = {
+      ...toConfigParameters(firstCallerSelection),
+      ...{},
+    };
+    firstCallerParameters.interactive = true;
+
+    firstCallerParameters.includeDirectories = [
+      ...(firstCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const firstCallerConfig = new Config(firstCallerParameters);
+    const firstCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const firstCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      firstCallerConfig.getInitialSettings(),
+    ))
+      firstCallerSettings.set(key, value);
+    const firstCallerPolicy = new RuntimePolicyOwner(firstCallerConfig);
+    injectConfirmationForcingPolicy(firstCallerPolicy.session.confirmation);
+    const firstCallerMcp = await buildTestMcpRuntime(
+      firstCallerConfig,
+      firstCallerPolicy.session.messageBus,
+      firstCallerOverrides,
+      undefined,
+      firstCallerPolicy,
+      undefined,
+    );
+    const firstCallerRuntimeId = 'caller-' + randomUUID();
+    const firstCallerRelease = new AcquisitionRelease();
+    const firstCallerSettingsOwner = new SessionSettingsOwner(
+      firstCallerSettings,
+    );
+    firstCallerRelease.acquire('settings', () =>
+      firstCallerSettingsOwner.dispose(),
+    );
+    firstCallerSettingsOwner.initializeProviderSelection(
+      firstCallerConfig.getProvider(),
+      firstCallerConfig.getModel(),
+    );
+    firstCallerSettingsOwner.bindTelemetry(firstCallerConfig);
+    const firstCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
     });
-    const second = await buildCliStyleConfig('plain-text.jsonl', {
+    for (const scope of [
+      firstCallerRuntimeId,
+      firstCallerConfig.getSessionId(),
+    ])
+      firstCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(firstCallerFiles, scope),
+      );
+    const firstCallerManager = acquirePreferredProviderManager(
+      firstCallerConfig,
+      firstCallerSettings,
+      firstCallerSettingsOwner,
+      firstCallerFiles,
+      firstCallerRuntimeId,
+      firstCredentials().authority,
+      firstCallerRelease,
+    );
+    const {
+      tokenizerFactory: firstCallerTokenizer,
+      contentGeneratorFactory: firstCallerContent,
+    } = configureProviderRuntimeFactories(
+      firstCallerConfig,
+      firstCallerManager,
+    );
+    const firstCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerConfig,
+      firstCallerSettings,
+      firstCallerManager,
+      firstCallerRuntimeId,
+      firstCallerMcp.profileDefinitions,
+      firstCredentials().authority,
+      firstCallerRelease,
+    );
+    const firstCallerMedia = new SessionMediaOwner(
+      firstCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    const firstCallerOwner = await SessionClientOwner.create(
+      firstCallerConfig,
+      assembleTaskSchemaPolicy(firstCallerSettings),
+      firstCallerManager,
+      firstCallerFactories.agentClientFactory,
+      firstCallerMedia.store,
+      firstCallerMcp.readInstructions,
+      firstCallerMcp.workspacePaths,
+      firstCallerSettingsOwner,
+      firstCallerContent,
+      firstCallerTokenizer,
+    );
+    firstCallerOwner.bindMcpRuntime(firstCallerMcp);
+    firstCallerOwner.bindProviderFiles(firstCallerFiles, (provider) =>
+      firstCallerOAuth.composeRetryOperations(provider),
+    );
+    firstCallerOwner.bindHooks();
+    const firstCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => firstCallerOwner.dispose(),
+        () => firstCallerRelease.close(),
+        () => firstCallerMedia.dispose(),
+        () => firstCallerMcp.dispose(),
+        () => firstCallerConfig.dispose(),
+        () => rm(firstCallerDirectory, { recursive: true, force: true }),
+      ],
+      firstCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        firstCallerConfig,
+        firstCallerSettings,
+        firstCallerSettingsOwner,
+        firstCallerManager,
+        firstCallerOAuth,
+        firstCallerRuntimeId,
+        firstCallerTokenizer,
+      );
+      await firstCallerMcp.initialize();
+      const activation = await executeProviderActivation(
+        firstCallerConfig,
+        firstCallerSelection.activation ?? {
+          provider: firstCallerConfig.getProvider(),
+          model: firstCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          firstCallerConfig,
+          firstCallerSettings,
+          firstCallerManager,
+          firstCallerOAuth,
+          () => 'agent',
+          () => firstCallerOwner.refreshAuth(),
+          firstCallerSettingsOwner,
+        ),
+        firstCallerSettings,
+        firstCallerManager,
+        (method) => firstCallerOwner.refreshAuth(method),
+        assembleModelSelection(firstCallerSettingsOwner),
+      );
+      requireCallerActivation(activation);
+      await firstCallerOwner.initializeTools();
+      await firstCallerOwner.getAgentClient().startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, firstCallerClose);
+    }
+
+    const secondCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('__tests__/fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    const secondCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const secondCallerOverrides: Readonly<Partial<AgentConfig>> = {
       model: 'second',
       sessionId: 'same-label',
+    };
+    const secondCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...secondCallerOverrides,
+      workingDir: secondCallerDirectory,
+    };
+    const secondCallerParameters = {
+      ...toConfigParameters(secondCallerSelection),
+      ...{},
+    };
+    secondCallerParameters.interactive = true;
+
+    secondCallerParameters.includeDirectories = [
+      ...(secondCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const secondCallerConfig = new Config(secondCallerParameters);
+    const secondCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const secondCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      secondCallerConfig.getInitialSettings(),
+    ))
+      secondCallerSettings.set(key, value);
+    const secondCallerPolicy = new RuntimePolicyOwner(secondCallerConfig);
+    injectConfirmationForcingPolicy(secondCallerPolicy.session.confirmation);
+    const secondCallerMcp = await buildTestMcpRuntime(
+      secondCallerConfig,
+      secondCallerPolicy.session.messageBus,
+      secondCallerOverrides,
+      undefined,
+      secondCallerPolicy,
+      undefined,
+    );
+    const secondCallerRuntimeId = 'caller-' + randomUUID();
+    const secondCallerRelease = new AcquisitionRelease();
+    const secondCallerSettingsOwner = new SessionSettingsOwner(
+      secondCallerSettings,
+    );
+    secondCallerRelease.acquire('settings', () =>
+      secondCallerSettingsOwner.dispose(),
+    );
+    secondCallerSettingsOwner.initializeProviderSelection(
+      secondCallerConfig.getProvider(),
+      secondCallerConfig.getModel(),
+    );
+    secondCallerSettingsOwner.bindTelemetry(secondCallerConfig);
+    const secondCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
     });
+    for (const scope of [
+      secondCallerRuntimeId,
+      secondCallerConfig.getSessionId(),
+    ])
+      secondCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(secondCallerFiles, scope),
+      );
+    const secondCallerManager = acquirePreferredProviderManager(
+      secondCallerConfig,
+      secondCallerSettings,
+      secondCallerSettingsOwner,
+      secondCallerFiles,
+      secondCallerRuntimeId,
+      secondCredentials().authority,
+      secondCallerRelease,
+    );
+    const {
+      tokenizerFactory: secondCallerTokenizer,
+      contentGeneratorFactory: secondCallerContent,
+    } = configureProviderRuntimeFactories(
+      secondCallerConfig,
+      secondCallerManager,
+    );
+    const secondCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerConfig,
+      secondCallerSettings,
+      secondCallerManager,
+      secondCallerRuntimeId,
+      secondCallerMcp.profileDefinitions,
+      secondCredentials().authority,
+      secondCallerRelease,
+    );
+    const secondCallerMedia = new SessionMediaOwner(
+      secondCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    const secondCallerOwner = await SessionClientOwner.create(
+      secondCallerConfig,
+      assembleTaskSchemaPolicy(secondCallerSettings),
+      secondCallerManager,
+      secondCallerFactories.agentClientFactory,
+      secondCallerMedia.store,
+      secondCallerMcp.readInstructions,
+      secondCallerMcp.workspacePaths,
+      secondCallerSettingsOwner,
+      secondCallerContent,
+      secondCallerTokenizer,
+    );
+    secondCallerOwner.bindMcpRuntime(secondCallerMcp);
+    secondCallerOwner.bindProviderFiles(secondCallerFiles, (provider) =>
+      secondCallerOAuth.composeRetryOperations(provider),
+    );
+    secondCallerOwner.bindHooks();
+    const secondCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => secondCallerOwner.dispose(),
+        () => secondCallerRelease.close(),
+        () => secondCallerMedia.dispose(),
+        () => secondCallerMcp.dispose(),
+        () => secondCallerConfig.dispose(),
+        () => rm(secondCallerDirectory, { recursive: true, force: true }),
+      ],
+      secondCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        secondCallerConfig,
+        secondCallerSettings,
+        secondCallerSettingsOwner,
+        secondCallerManager,
+        secondCallerOAuth,
+        secondCallerRuntimeId,
+        secondCallerTokenizer,
+      );
+      await secondCallerMcp.initialize();
+      const activation = await executeProviderActivation(
+        secondCallerConfig,
+        secondCallerSelection.activation ?? {
+          provider: secondCallerConfig.getProvider(),
+          model: secondCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          secondCallerConfig,
+          secondCallerSettings,
+          secondCallerManager,
+          secondCallerOAuth,
+          () => 'agent',
+          () => secondCallerOwner.refreshAuth(),
+          secondCallerSettingsOwner,
+        ),
+        secondCallerSettings,
+        secondCallerManager,
+        (method) => secondCallerOwner.refreshAuth(method),
+        assembleModelSelection(secondCallerSettingsOwner),
+      );
+      requireCallerActivation(activation);
+      await secondCallerOwner.initializeTools();
+      await secondCallerOwner.getAgentClient().startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, secondCallerClose);
+    }
+
     let release: (value: string | null) => void = () => {
       throw new Error('Gate is not initialized');
     };
@@ -33,35 +413,40 @@ describe('profile candidate operations', () => {
       entered = resolve;
     });
     const apply = (
-      owner: typeof first,
+      config: Config,
+      settingsService: SettingsService,
+      settingsOwner: SessionSettingsOwner,
+      providerManager: ReturnType<typeof acquirePreferredProviderManager>,
+      sessionClient: SessionClientOwner,
+      mcpRuntime: McpRuntimeOwner,
       profile: Profile,
       readKey: (name: string) => Promise<string | null>,
     ): ReturnType<typeof applyProfileCascade> =>
       applyProfileCascade(
         profile,
         {},
-        owner.settingsService,
-        owner.providerManager,
-        owner.mcpRuntime.profileDefinitions,
+        settingsService,
+        providerManager,
+        mcpRuntime.profileDefinitions,
         assembleProviderSwitch(
-          owner.config,
-          owner.settingsService,
-          owner.providerManager,
+          config,
+          settingsService,
+          providerManager,
           null,
           () => undefined,
-          () => owner.sessionClient.refreshAuth(),
-          owner.settingsOwner,
+          () => sessionClient.refreshAuth(),
+          settingsOwner,
         ),
-        assembleModelSelection(owner.settingsOwner),
+        assembleModelSelection(settingsOwner),
         {
-          readEndpoint: () => owner.settingsOwner.readSelectedEndpoint(),
+          readEndpoint: () => settingsOwner.readSelectedEndpoint(),
           applyParameter: (key, value) =>
-            owner.settingsOwner.writeUserParameter(key, value),
+            settingsOwner.writeUserParameter(key, value),
         },
         readKey,
       );
     try {
-      const before = first.settingsService.exportForStateSnapshot();
+      const before = firstCallerSettings.exportForStateSnapshot();
       const profile: Profile = {
         version: 1,
         provider: 'fake',
@@ -69,17 +454,31 @@ describe('profile candidate operations', () => {
         modelParams: {},
         ephemeralSettings: { 'auth-key-name': 'first-key' },
       };
-      const pending = apply(first, profile, async () => {
-        entered();
-        return held;
-      });
+      const pending = apply(
+        firstCallerConfig,
+        firstCallerSettings,
+        firstCallerSettingsOwner,
+        firstCallerManager,
+        firstCallerOwner,
+        firstCallerMcp,
+        profile,
+        async () => {
+          entered();
+          return held;
+        },
+      );
       const observed = pending.catch((error: unknown) => error);
       await started;
-      expect(first.settingsService.exportForStateSnapshot()).toStrictEqual(
+      expect(firstCallerSettings.exportForStateSnapshot()).toStrictEqual(
         before,
       );
       await apply(
-        second,
+        secondCallerConfig,
+        secondCallerSettings,
+        secondCallerSettingsOwner,
+        secondCallerManager,
+        secondCallerOwner,
+        secondCallerMcp,
         {
           ...profile,
           model: 'sibling-selected',
@@ -91,21 +490,43 @@ describe('profile candidate operations', () => {
           throw new Error('Unexpected key read');
         },
       );
-      expect(second.settingsOwner.readSelectedModel()).toBe('sibling-selected');
+      expect(secondCallerSettingsOwner.readSelectedModel()).toBe(
+        'sibling-selected',
+      );
       release(null);
       expect(await observed).toBeInstanceOf(Error);
-      expect(first.settingsService.exportForStateSnapshot()).toStrictEqual(
+      expect(firstCallerSettings.exportForStateSnapshot()).toStrictEqual(
         before,
       );
-      expect(second.settingsOwner.readSelectedEndpoint()).toBe(
+      expect(secondCallerSettingsOwner.readSelectedEndpoint()).toBe(
         'https://sibling.example',
       );
-      await first.cleanup();
-      expect(second.settingsOwner.readSelectedModel()).toBe('sibling-selected');
+      await firstCallerClose();
+      expect(secondCallerSettingsOwner.readSelectedModel()).toBe(
+        'sibling-selected',
+      );
     } finally {
       release(null);
-      await first.cleanup();
-      await second.cleanup();
+      await firstCallerClose();
+      await secondCallerClose();
     }
   });
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

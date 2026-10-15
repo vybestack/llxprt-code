@@ -1,3 +1,26 @@
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { act } from 'react';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
+import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
+import { readFile } from 'node:fs/promises';
+import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { Agent } from '@vybestack/llxprt-code-agents';
+import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
+import { createDeferred } from './createDeferred.js';
+import {
+  createLifecycleDeps,
+  createMockAgentClient,
+  createLifecyclePerfHarness,
+  buildLifecycleHookDeps,
+  type LifecycleDeps,
+} from './lifecyclePerfFixtures.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,26 +40,6 @@
  * (runStream, prepareQueryForAgent, event handlers) — the lifecycle, sink, and
  * retention are real.
  */
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { act } from 'react';
-import { renderHook, waitFor } from '../../../../__tests__/render.js';
-import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
-import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
-import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { readFile } from 'node:fs/promises';
-import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
-import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
-import { createDeferred } from './createDeferred.js';
-import {
-  createLifecycleDeps,
-  createMockAgentClient,
-  createLifecyclePerfHarness,
-  buildLifecycleHookDeps,
-  type LifecycleDeps,
-} from './lifecyclePerfFixtures.js';
 
 // ─── Module mocks ───────────────────────────────────────────────────────────
 
@@ -116,6 +119,7 @@ function drainAndRead() {
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () => {
+  useRecordingPrompts();
   beforeEach(async () => {
     await harness.setup();
     // Reset preparation rejection controls between tests.
@@ -130,7 +134,7 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     await harness.cleanup();
   });
   it('completes a submitted turn and flushes only its Agent owner recording', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);

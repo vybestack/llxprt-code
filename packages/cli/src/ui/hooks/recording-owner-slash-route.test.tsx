@@ -1,20 +1,13 @@
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
-const metrics = new UiTelemetryService();
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => createMockRuntimeApi(),
-}));
 import { readFile } from 'node:fs/promises';
-import React, { act } from 'react';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { act } from 'react';
+import { Agent } from '@vybestack/llxprt-code-agents';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
 import { ProviderAliasRefreshProvider } from '../contexts/ProviderAliasRefreshContext.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
@@ -25,11 +18,21 @@ import {
   createMockSettings,
   waitFor,
 } from '../../__tests__/render.js';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   useSlashCommandProcessorCore,
   type UseSlashCommandProcessorCoreArgs,
 } from './useSlashCommandProcessorCore.js';
+
+const metrics = new UiTelemetryService();
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+void vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => createMockRuntimeApi(),
+}));
 
 function wrapper({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
@@ -92,8 +95,9 @@ function slashInputs(
 }
 
 describe('interactive slash command recording route', () => {
+  useRecordingPrompts();
   it('selects the owner handler through the real processor and command context', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);
@@ -119,7 +123,7 @@ describe('interactive slash command recording route', () => {
   }, 30000);
 
   it('keeps the raw command registry and context when no owner mode is supplied', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);

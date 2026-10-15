@@ -137,6 +137,7 @@ const SUITES_NEEDING_REAL_ALIASES = [
   'test/providers/providerAliases.test.ts',
   'src/ui/commands/providerCommand.test.ts',
   'src/ui/contexts/runtime-owner-bridge.test.tsx',
+  'src/ui/contexts/runtime-owner-bridge-owner-2.test.tsx',
 ];
 // argv carries native separators, so on Windows the path arrives as
 // `test\providers\providerAliases.test.ts` and a raw endsWith against the

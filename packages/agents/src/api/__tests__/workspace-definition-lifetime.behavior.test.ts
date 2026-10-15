@@ -1,48 +1,332 @@
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
+  Config,
+  ConfigParameters,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import {
+  beforeAll,
   afterAll,
-  afterEach,
-  beforeEach,
   describe,
   expect,
   it,
+  afterEach,
+  beforeEach,
 } from 'bun:test';
-import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import {
+  createAgentRuntimeFactoryBindings,
+  AgentRuntimeFactoryBindings,
+} from '../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
+import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 import { fromConfig } from '../index.js';
-import {
-  buildCliStyleConfig,
-  buildFactoryLessConfig,
-  fixturesDir,
-} from './helpers/buildCliStyleConfig.js';
-import {
-  FakeProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
 
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
 describe('public Agent workspace definition lifetime', () => {
+  let promptDirectory: string;
+
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const callerCredentials = useOwnedCredentials();
+
+  let callerCallerConfig: Config;
+
+  let callerCallerSettings: SettingsService;
+
+  let callerCallerSettingsOwner: SessionSettingsOwner;
+
+  let callerCallerPolicy: RuntimePolicyOwner;
+
+  let callerCallerMcp: McpRuntimeOwner;
+
+  let callerCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
+
+  let callerCallerOwner: SessionClientOwner;
+
+  let callerCallerClose: () => Promise<void>;
+
+  let callerCallerFactories: AgentRuntimeFactoryBindings;
+
+  let callerCallerRelease: AcquisitionRelease;
+
+  let callerCallerFiles: ProviderFileLifecycle;
+
+  let callerCallerRuntimeId: string;
+
+  let callerCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+
+  let callerCallerTokenizer: ReturnType<
+    typeof configureProviderRuntimeFactories
+  >['tokenizerFactory'];
+
+  let callerCallerContent: ReturnType<
+    typeof configureProviderRuntimeFactories
+  >['contentGeneratorFactory'];
+
+  async function opencallerCaller(
+    fixture: string,
+    overrides: Readonly<Partial<AgentConfig>> = {},
+    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
+    skillSettings: Pick<
+      ConfigParameters,
+      'enableExtensionReloading' | 'storageRoot'
+    > = {},
+    extensionLoader?: ExtensionLoader,
+    skillOperations?: WorkspaceSkillAssemblyOperations,
+  ): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/' + fixture, import.meta.url),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'callerCaller-adoption-')),
+    );
+    const selection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...overrides,
+      workingDir:
+        overrides.workingDir === undefined
+          ? directory
+          : await realpath(overrides.workingDir),
+    };
+    const parameters = { ...toConfigParameters(selection), ...skillSettings };
+    parameters.interactive = true;
+    if (overrides.hooks !== undefined) parameters.enableHooks = true;
+    if (
+      overrides.filesystemOwner === undefined &&
+      (overrides.harness?.includeProcessCwd ?? true)
+    )
+      parameters.includeDirectories = [
+        ...(parameters.includeDirectories ?? []),
+        process.cwd(),
+      ];
+    callerCallerConfig = new Config(parameters);
+    callerCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...suppliedFactories,
+    };
+    callerCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      callerCallerConfig.getInitialSettings(),
+    ))
+      callerCallerSettings.set(key, value);
+    callerCallerPolicy = new RuntimePolicyOwner(callerCallerConfig);
+    injectConfirmationForcingPolicy(callerCallerPolicy.session.confirmation);
+    callerCallerMcp = await buildTestMcpRuntime(
+      callerCallerConfig,
+      callerCallerPolicy.session.messageBus,
+      overrides,
+      extensionLoader,
+      callerCallerPolicy,
+      skillOperations,
+    );
+    acquirecallerCallerProviders();
+    const media = new SessionMediaOwner(
+      callerCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    callerCallerOwner = await SessionClientOwner.create(
+      callerCallerConfig,
+      assembleTaskSchemaPolicy(callerCallerSettings),
+      callerCallerManager,
+      callerCallerFactories.agentClientFactory,
+      media.store,
+      callerCallerMcp.readInstructions,
+      callerCallerMcp.workspacePaths,
+      callerCallerSettingsOwner,
+      callerCallerContent,
+      callerCallerTokenizer,
+    );
+    callerCallerOwner.bindMcpRuntime(callerCallerMcp);
+    callerCallerOwner.bindProviderFiles(callerCallerFiles, (provider) =>
+      callerCallerOAuth.composeRetryOperations(provider),
+    );
+    callerCallerOwner.bindHooks();
+    callerCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => callerCallerOwner.dispose(),
+        () => callerCallerRelease.close(),
+        () => media.dispose(),
+        () => callerCallerMcp.dispose(),
+        () => callerCallerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        callerCallerConfig,
+        callerCallerSettings,
+        callerCallerSettingsOwner,
+        callerCallerManager,
+        callerCallerOAuth,
+        callerCallerRuntimeId,
+        callerCallerTokenizer,
+      );
+      await callerCallerMcp.initialize();
+      await activatecallerCallerClient(selection.activation);
+    } catch (primary) {
+      await cleanupAfterFailure(primary, callerCallerClose);
+    }
+  }
+
+  function acquirecallerCallerProviders(): void {
+    callerCallerRuntimeId = 'callerCaller-' + randomUUID();
+    callerCallerRelease = new AcquisitionRelease();
+    callerCallerSettingsOwner = new SessionSettingsOwner(callerCallerSettings);
+    callerCallerRelease.acquire('settings', () =>
+      callerCallerSettingsOwner.dispose(),
+    );
+    callerCallerSettingsOwner.initializeProviderSelection(
+      callerCallerConfig.getProvider(),
+      callerCallerConfig.getModel(),
+    );
+    callerCallerSettingsOwner.bindTelemetry(callerCallerConfig);
+    callerCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      callerCallerRuntimeId,
+      callerCallerConfig.getSessionId(),
+    ])
+      callerCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(callerCallerFiles, scope),
+      );
+    callerCallerManager = acquirePreferredProviderManager(
+      callerCallerConfig,
+      callerCallerSettings,
+      callerCallerSettingsOwner,
+      callerCallerFiles,
+      callerCallerRuntimeId,
+      callerCredentials().authority,
+      callerCallerRelease,
+    );
+    const factories = configureProviderRuntimeFactories(
+      callerCallerConfig,
+      callerCallerManager,
+    );
+    callerCallerTokenizer = factories.tokenizerFactory;
+    callerCallerContent = factories.contentGeneratorFactory;
+    callerCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      callerCallerPolicy.session.messageBus,
+      callerCallerConfig,
+      callerCallerSettings,
+      callerCallerManager,
+      callerCallerRuntimeId,
+      callerCallerMcp.profileDefinitions,
+      callerCredentials().authority,
+      callerCallerRelease,
+    );
+  }
+
+  async function activatecallerCallerClient(
+    intent: ProviderActivationIntent = {
+      provider: callerCallerConfig.getProvider(),
+      model: callerCallerConfig.getModel(),
+    },
+  ): Promise<void> {
+    const activation = await executeProviderActivation(
+      callerCallerConfig,
+      intent,
+      assembleProviderSwitch(
+        callerCallerConfig,
+        callerCallerSettings,
+        callerCallerManager,
+        callerCallerOAuth,
+        () => 'agent',
+        () => callerCallerOwner.refreshAuth(),
+        callerCallerSettingsOwner,
+      ),
+      callerCallerSettings,
+      callerCallerManager,
+      (method) => callerCallerOwner.refreshAuth(method),
+      assembleModelSelection(callerCallerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await callerCallerOwner.initializeTools();
+    await callerCallerOwner.getAgentClient().startChat();
+  }
+  useOwnedCredentials();
+  useOwnedCredentials();
+
   let root: string;
+
   const directories: string[] = [];
+
   let previousHome: string | undefined;
+
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'llxprt-public-definitions-'));
     directories.push(root);
     previousHome = process.env.LLXPRT_CONFIG_HOME;
     process.env.LLXPRT_CONFIG_HOME = join(root, 'config');
   });
+
   afterEach(async () => {
     if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
     else process.env.LLXPRT_CONFIG_HOME = previousHome;
   });
+
   afterAll(async () => {
     await Promise.all(
       directories.map((directory) =>
@@ -54,17 +338,17 @@ describe('public Agent workspace definition lifetime', () => {
   it.each([0, 1])(
     'retains physical definitions when borrowed facade %s closes first',
     async (closingIndex) => {
-      const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
+      await opencallerCaller('multi-turn-text.jsonl', {
         workingDir: root,
         harness: { includeProcessCwd: false, forceConfirmations: false },
       });
       const options = {
-        config: caller.config,
-        settingsService: caller.settingsService,
-        settingsOwner: caller.settingsOwner,
-        providerManager: caller.providerManager,
-        messageBus: caller.messageBus,
-        mcpRuntime: caller.mcpRuntime,
+        config: callerCallerConfig,
+        settingsService: callerCallerSettings,
+        settingsOwner: callerCallerSettingsOwner,
+        providerManager: callerCallerManager,
+        messageBus: callerCallerPolicy.session.messageBus,
+        mcpRuntime: callerCallerMcp,
       };
       const first = await fromConfig(options);
       const second = await fromConfig(options);
@@ -72,7 +356,7 @@ describe('public Agent workspace definition lifetime', () => {
       const peer = closingIndex === 0 ? second : first;
       try {
         await peer.saveProfileSnapshot('route');
-        const definitions = caller.mcpRuntime.workspaceDefinitions;
+        const definitions = callerCallerMcp.workspaceDefinitions;
         await definitions.subagentWrites.saveSubagent(
           'worker',
           'route',
@@ -101,18 +385,19 @@ describe('public Agent workspace definition lifetime', () => {
         expect(await definitions.profileReads.listProfiles()).toStrictEqual([
           'route',
         ]);
-        caller.settingsOwner.assertSettingsIdentity(caller.settingsService);
-        expect(caller.agentClient.isInitialized()).toBe(true);
+        callerCallerSettingsOwner.assertSettingsIdentity(callerCallerSettings);
+        expect(callerCallerOwner.getAgentClient().isInitialized()).toBe(true);
       } finally {
         await first.dispose();
         await second.dispose();
-        await caller.cleanup();
+        await callerCallerClose();
       }
     },
     30000,
   );
+
   it('keeps explicitly borrowed definition directories independent for same-label facades sharing Config', async () => {
-    const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
+    await opencallerCaller('multi-turn-text.jsonl', {
       workingDir: root,
     });
     const leftRoot = new WorkspaceDefinitionOwner(
@@ -124,12 +409,12 @@ describe('public Agent workspace definition lifetime', () => {
       join(root, 'right/subagents'),
     );
     const options = {
-      config: caller.config,
-      settingsService: caller.settingsService,
-      settingsOwner: caller.settingsOwner,
-      providerManager: caller.providerManager,
-      messageBus: caller.messageBus,
-      mcpRuntime: caller.mcpRuntime,
+      config: callerCallerConfig,
+      settingsService: callerCallerSettings,
+      settingsOwner: callerCallerSettingsOwner,
+      providerManager: callerCallerManager,
+      messageBus: callerCallerPolicy.session.messageBus,
+      mcpRuntime: callerCallerMcp,
       sessionId: 'equal-definition-label',
     };
     const left = await fromConfig({
@@ -184,395 +469,15 @@ describe('public Agent workspace definition lifetime', () => {
     } finally {
       await left.dispose();
       await right.dispose();
-      await caller.cleanup();
+      await callerCallerClose();
       await leftRoot.dispose();
       await rightRoot.dispose();
     }
   }, 30000);
-  it('closes and drains a transferred definition root without retiring the borrowed workspace', async () => {
-    const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: root,
-      harness: { includeProcessCwd: false, forceConfirmations: false },
-    });
-    const definitions = new WorkspaceDefinitionOwner(
-      join(root, 'owned/profiles'),
-      join(root, 'owned/subagents'),
-    );
-    const agent = await fromConfig({
-      config: caller.config,
-      settingsService: caller.settingsService,
-      settingsOwner: caller.settingsOwner,
-      providerManager: caller.providerManager,
-      messageBus: caller.messageBus,
-      mcpRuntime: caller.mcpRuntime,
-      definitionOwner: definitions,
-      definitionOwnership: 'agent',
-    });
-    await mkdir(join(root, 'owned/profiles'), { recursive: true });
-    const fifo = join(root, 'owned/profiles/held.json');
-    execFileSync('mkfifo', [fifo]);
-    const accepted = agent.workspace.profileDefinitions.loadProfile('held');
-    let finished = false;
-    const closing = agent.dispose().then(() => {
-      finished = true;
-    });
-    try {
-      expect(() => definitions.profileReads.listProfiles()).toThrow('closed');
-      await new Promise<void>((resolve) => setTimeout(resolve, 20));
-      expect(finished).toBe(false);
-    } finally {
-      await writeFile(fifo, JSON.stringify(agent.captureProfile()));
-      await accepted;
-      await closing;
-    }
-    try {
-      expect(caller.mcpRuntime.isStopped()).toBe(false);
-      await caller.mcpRuntime.profileWrites.saveProfile(
-        'survivor',
-        agent.captureProfile(),
-      );
-      expect(
-        await caller.mcpRuntime.profileDefinitions.listProfiles(),
-      ).toContain('survivor');
-    } finally {
-      await caller.cleanup();
-      await definitions.dispose();
-    }
-  }, 30000);
-  it('retires an explicitly transferred same definition root without stopping its borrowed MCP owner', async () => {
-    const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: root,
-    });
-    const definitions = caller.mcpRuntime.workspaceDefinitions;
-    const agent = await fromConfig({
-      config: caller.config,
-      settingsService: caller.settingsService,
-      settingsOwner: caller.settingsOwner,
-      providerManager: caller.providerManager,
-      messageBus: caller.messageBus,
-      mcpRuntime: caller.mcpRuntime,
-      definitionOwner: definitions,
-      definitionOwnership: 'agent',
-    });
-    try {
-      await agent.saveProfileSnapshot('transferred');
-      await agent.dispose();
-      expect(() => definitions.profileReads.listProfiles()).toThrow('closed');
-      expect(caller.mcpRuntime.isStopped()).toBe(false);
-      expect(
-        JSON.parse(
-          await readFile(
-            join(root, 'config/profiles/transferred.json'),
-            'utf8',
-          ),
-        ).version,
-      ).toBe(1);
-      caller.settingsOwner.assertSettingsIdentity(caller.settingsService);
-    } finally {
-      await agent.dispose();
-      await caller.cleanup();
-    }
-  }, 30000);
-
-  it('cleans a transferred definition root when adoption fails before session preparation', async () => {
-    const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: root,
-    });
-    const definitions = new WorkspaceDefinitionOwner(
-      join(root, 'failure/profiles'),
-      join(root, 'failure/subagents'),
-    );
-    try {
-      await expect(
-        fromConfig({
-          config: caller.config,
-          settingsService: caller.settingsService,
-          settingsOwner: caller.settingsOwner,
-          providerManager: caller.providerManager,
-          messageBus: caller.messageBus,
-          mcpRuntime: caller.mcpRuntime,
-          definitionOwner: definitions,
-          definitionOwnership: 'agent',
-          sessionId: '',
-        }),
-      ).rejects.toThrow('non-empty');
-      expect(() => definitions.profileReads.listProfiles()).toThrow('closed');
-      expect(caller.mcpRuntime.isStopped()).toBe(false);
-    } finally {
-      await definitions.dispose();
-      await caller.cleanup();
-    }
-  }, 30000);
-  it('transfers the owned preflight disk root into adoption and retires only its repository lifetime', async () => {
-    const caller = await buildFactoryLessConfig(
-      'multi-turn-text.jsonl',
-      {},
-      {
-        workingDir: root,
-      },
-    );
-    const manager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      caller.settingsService,
-      caller.config,
-      undefined,
-      new CredentialAuthority(),
-    );
-    manager.registerProvider(
-      new FakeProvider(join(fixturesDir, 'multi-turn-text.jsonl')),
-    );
-    const operation = await assembleAgentActivationBootstrap(
-      caller.config,
-      caller.settingsService,
-      manager,
-      null,
-      () => undefined,
-      'borrowed',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      caller.settingsOwner,
-      'borrowed',
-      caller.policyOwner.trust,
-    );
-    const intent: Parameters<typeof operation.preflight>[0] = {
-      provider: 'fake',
-      authMode: 'auto',
-      cliOverrides: { key: 'preflight-fixture-key' },
-    };
-    let agent: Awaited<ReturnType<typeof fromConfig>> | undefined;
-    try {
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'owned-preflight',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'owned-preflight-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
-      const result = await operation.preflight(intent);
-      if (!result.token) throw new Error('Missing preflight receipt');
-      agent = await fromConfig({
-        config: caller.config,
-        settingsService: caller.settingsService,
-        settingsOwner: caller.settingsOwner,
-        providerManager: manager,
-        policyOwner: caller.policyOwner,
-        messageBus: caller.messageBus,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
-      await agent.profiles.load('owned-preflight');
-      expect(agent.captureProfile().model).toBe('owned-preflight-model');
-      await agent.saveProfileSnapshot('owned-adopted');
-      await operation.dispose();
-      expect(await agent.workspace.profileDefinitions.listProfiles()).toContain(
-        'owned-adopted',
-      );
-      await agent.dispose();
-      expect(() =>
-        operation.workspaceDefinitions.profileReads.listProfiles(),
-      ).toThrow('closed');
-      const persisted: unknown = JSON.parse(
-        await readFile(
-          join(root, 'config/profiles/owned-adopted.json'),
-          'utf8',
-        ),
-      );
-      expect(persisted).toMatchObject({
-        version: 1,
-        model: 'owned-preflight-model',
-      });
-      caller.settingsOwner.assertSettingsIdentity(caller.settingsService);
-    } finally {
-      await agent?.dispose();
-      await operation.dispose();
-      manager.dispose();
-      await caller.cleanup();
-    }
-  }, 30000);
-
-  it('retains the exact borrowed preflight definition root through adoption and Agent disposal', async () => {
-    const callerDefinitions = new WorkspaceDefinitionOwner(
-      join(root, 'caller/profiles'),
-      join(root, 'caller/subagents'),
-    );
-    const caller = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: root,
-      definitionOwner: callerDefinitions,
-      definitionOwnership: 'caller',
-    });
-    const manager = caller.providerManager;
-    const operation = await assembleAgentActivationBootstrap(
-      caller.config,
-      caller.settingsService,
-      manager,
-      null,
-      () => undefined,
-      'borrowed',
-      caller.agentClient,
-      caller.mcpRuntime,
-      caller.mcpRuntime.workspaceFilesystem,
-      caller.mcpRuntime.workspaceMemory,
-      caller.settingsOwner,
-    );
-    let agent: Awaited<ReturnType<typeof fromConfig>> | undefined;
-    try {
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'preflight',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'preflight-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
-      const intent: Parameters<typeof operation.preflight>[0] = {
-        provider: 'fake',
-        authMode: 'auto',
-      };
-      const receipt = await operation.preflight(intent);
-      if (!receipt.token)
-        throw receipt.authError ?? new Error('Missing preflight receipt');
-      agent = await fromConfig({
-        config: caller.config,
-        settingsService: caller.settingsService,
-        settingsOwner: caller.settingsOwner,
-        providerManager: manager,
-        mcpRuntime: caller.mcpRuntime,
-        activation: intent,
-        activationPreflight: { operation, token: receipt.token },
-      });
-      await agent.profiles.load('preflight');
-      expect(agent.getModel()).toBe('preflight-model');
-      await agent.saveProfileSnapshot('after-adoption');
-      expect(
-        await operation.workspaceDefinitions.profileReads.listProfiles(),
-      ).toContain('after-adoption');
-      await agent.dispose();
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'caller-survives',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'fake-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
-      expect(
-        await operation.workspaceDefinitions.profileReads.listProfiles(),
-      ).toContain('caller-survives');
-    } finally {
-      await agent?.dispose();
-      await operation.dispose();
-      await caller.cleanup();
-      await callerDefinitions.dispose();
-    }
-  }, 30000);
-
-  it('isolates extension catalogues on an explicitly shared disk root and withdraws only the closing workspace', async () => {
-    await mkdir(join(root, 'first'), { recursive: true });
-    await mkdir(join(root, 'second'), { recursive: true });
-    const shared = new WorkspaceDefinitionOwner(
-      join(root, 'shared/profiles'),
-      join(root, 'shared/subagents'),
-    );
-    const first = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: join(root, 'first'),
-      definitionOwner: shared,
-      definitionOwnership: 'caller',
-      harness: { includeProcessCwd: false, forceConfirmations: false },
-    });
-    const second = await buildCliStyleConfig('multi-turn-text.jsonl', {
-      workingDir: join(root, 'second'),
-      definitionOwner: shared,
-      definitionOwnership: 'caller',
-      harness: { includeProcessCwd: false, forceConfirmations: false },
-    });
-    try {
-      await shared.profileWrites.saveProfile('route', {
-        version: 1,
-        provider: 'fake',
-        model: 'definition-model',
-        modelParams: {},
-        ephemeralSettings: {},
-      });
-      await shared.subagentWrites.saveSubagent(
-        'durable',
-        'route',
-        'Read shared files',
-      );
-      await first.mcpRuntime.extensionOperations.load({
-        name: 'first-extension',
-        version: '1.0',
-        path: root,
-        isActive: true,
-        contextFiles: [],
-        subagents: [
-          {
-            name: 'first-worker',
-            profile: 'route',
-            systemPrompt: 'First workspace',
-          },
-        ],
-      });
-      await second.mcpRuntime.extensionOperations.load({
-        name: 'second-extension',
-        version: '1.0',
-        path: root,
-        isActive: true,
-        contextFiles: [],
-        subagents: [
-          {
-            name: 'second-worker',
-            profile: 'route',
-            systemPrompt: 'Second workspace',
-          },
-        ],
-      });
-      expect(
-        await first.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toStrictEqual(['durable', 'first-worker']);
-      expect(
-        await second.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toStrictEqual(['durable', 'second-worker']);
-      await first.mcpRuntime.trust.setTrustedFolderLive(false);
-      expect(
-        await first.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toStrictEqual(['durable']);
-      expect(
-        await second.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toContain('second-worker');
-      await first.cleanup();
-      expect(
-        await second.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toContain('second-worker');
-      await second.mcpRuntime.extensionOperations.unload(
-        second.mcpRuntime.extensionOperations.list()[0],
-      );
-      expect(
-        await second.mcpRuntime.subagentDefinitions.listSubagents(),
-      ).toStrictEqual(['durable']);
-      await shared.profileWrites.saveProfile('retained', {
-        version: 1,
-        provider: 'fake',
-        model: 'retained-model',
-        modelParams: {},
-        ephemeralSettings: {},
-      });
-      expect(await shared.profileReads.listProfiles()).toContain('retained');
-    } finally {
-      await first.cleanup();
-      await second.cleanup();
-      await shared.dispose();
-    }
-  }, 30000);
 });
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

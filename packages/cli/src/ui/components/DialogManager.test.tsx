@@ -1,12 +1,9 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, HydratedModel } from '@vybestack/llxprt-code-core';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
@@ -14,9 +11,7 @@ import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
 import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { useTextBuffer } from './shared/text-buffer.js';
-
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
-
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   renderHook,
@@ -24,9 +19,19 @@ import {
   renderWithProviders,
   createMockSettings,
 } from '../../__tests__/render.js';
-import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import { readFile } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { useModelDialogHandler } from './modelDialogHandler.js';
+import {
+  createDialogStore,
+  type DialogStore,
+  type DialogRequest,
+} from '../stores/dialog/dialogStore.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
@@ -35,13 +40,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 }));
 
 void vi.mock('@vybestack/llxprt-code-providers', () => ({}));
-
-import { useModelDialogHandler } from './modelDialogHandler.js';
-import {
-  createDialogStore,
-  type DialogStore,
-  type DialogRequest,
-} from '../stores/dialog/dialogStore.js';
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -121,13 +119,14 @@ function createSeededStore(): DialogStore {
 }
 
 describe('useModelDialogHandler', () => {
+  useRecordingPrompts();
   beforeEach(() => {
     mockAddItem = vi.fn();
     callSequence = [];
     fakeRuntime = createFakeRuntime();
   });
   it('persists model selection through the Agent recorder without a raw write', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -413,6 +412,7 @@ async function renderDialogManager(requests: DialogRequest[]): Promise<string> {
 }
 
 describe('DialogManager render dispatch', () => {
+  useRecordingPrompts();
   it('renders the folder-trust dialog when only its request is open', async () => {
     const frame = await renderDialogManager([
       { kind: 'folderTrust', payload: {} },

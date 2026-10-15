@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
@@ -12,14 +10,19 @@ import {
   createUnconfiguredToolFormatCommand,
   createUnconfiguredSetCommand,
 } from '../../__tests__/unconfigured-model-command.js';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { chatCommand } from './chatCommand.js';
 import { chatOwnerCommand } from './chatOwnerCommand.js';
 
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
   let recorded = '';
-  await withRecordingLifetimeFixture(async ({ agent }) => {
+  await withRecordingLifetimeFixture(async (agent) => {
     await agent.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
     ]);
@@ -48,10 +51,11 @@ async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
 }
 
 describe('interactive /chat command registry', () => {
+  useRecordingPrompts();
   it('uses the Agent session for explicit owner mode in sync and async loads', async () => {
     const sync = await saveCheckpoint('agent');
     expect(sync).toContain('checkpoint');
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.session.setRecording({ enabled: true });
       const command = (
         await new BuiltinCommandLoader(

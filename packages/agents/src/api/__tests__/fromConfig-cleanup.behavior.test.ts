@@ -1,12 +1,23 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
@@ -15,10 +26,7 @@ import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { cleanupFailedAdoption } from '../fromConfig-cleanup.js';
 import { fromConfig } from '../fromConfig.js';
-import {
-  buildFactoryLessConfig,
-  buildTestMcpRuntime,
-} from './helpers/buildCliStyleConfig.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('adoption cleanup with explicit close operations', () => {
@@ -27,21 +35,77 @@ describe('adoption cleanup with explicit close operations', () => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'adoption-cleanup-')),
     );
-    const fixture = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      {},
-      {
-        workingDir: directory,
-        sessionId: 'cleanup-caller',
-        folderTrust: true,
-        mcpEnabled: false,
-        skillsSupport: false,
-        telemetry: { enabled: false },
-        recording: { enabled: false },
-      },
+
+    const fixtureFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
     );
-    const { config, settingsService, settingsOwner, messageBus, policyOwner } =
-      fixture;
+    const fixtureFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const fixtureFactorylessSupplied: CallerAgentRuntimeFactories = {};
+    const fixtureFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: fixtureFactorylessDirectory,
+        },
+        ...{
+          workingDir: directory,
+          sessionId: 'cleanup-caller',
+          folderTrust: true,
+          mcpEnabled: false,
+          skillsSupport: false,
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+        },
+      }),
+    );
+    const fixtureFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      fixtureFactorylessConfig.getInitialSettings(),
+    ))
+      fixtureFactorylessSettings.set(key, value);
+    const fixtureFactorylessSettingsOwner = new SessionSettingsOwner(
+      fixtureFactorylessSettings,
+    );
+    fixtureFactorylessSettingsOwner.bindTelemetry(fixtureFactorylessConfig);
+    fixtureFactorylessSettingsOwner.initializeProviderSelection(
+      fixtureFactorylessConfig.getProvider(),
+      fixtureFactorylessConfig.getModel(),
+    );
+    const fixtureFactorylessPolicy = new RuntimePolicyOwner(
+      fixtureFactorylessConfig,
+    );
+    const fixtureFactorylessTask =
+      fixtureFactorylessSupplied.taskToolRegistration;
+    const fixtureFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(fixtureFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: fixtureFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(fixtureFactorylessTask
+        ? { taskToolRegistration: () => fixtureFactorylessTask }
+        : {}),
+    };
+
+    const fixtureFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => fixtureFactorylessSettingsOwner.dispose(),
+        () => fixtureFactorylessPolicy.dispose(),
+        () => fixtureFactorylessConfig.dispose(),
+        () => rm(fixtureFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      fixtureFactorylessPreviousReplay,
+    );
+
+    const config = fixtureFactorylessConfig;
+    const settingsService = fixtureFactorylessSettings;
+    const settingsOwner = fixtureFactorylessSettingsOwner;
+    const messageBus = fixtureFactorylessPolicy.session.messageBus;
+    const policyOwner = fixtureFactorylessPolicy;
     const mcp = await buildTestMcpRuntime(
       config,
       messageBus,
@@ -51,7 +115,12 @@ describe('adoption cleanup with explicit close operations', () => {
     );
     const files = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
     const agent = await fromConfig({
-      ...fixture,
+      config: fixtureFactorylessConfig,
+      settingsService: fixtureFactorylessSettings,
+      settingsOwner: fixtureFactorylessSettingsOwner,
+      policyOwner: fixtureFactorylessPolicy,
+      messageBus: fixtureFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: fixtureFactorylessFactories,
       mcpRuntime: mcp,
       providerFileLifecycle: files,
       credentialAuthority: credentials().authority,
@@ -145,8 +214,20 @@ describe('adoption cleanup with explicit close operations', () => {
       signalRelease();
       await result;
       await mcp.dispose();
-      await fixture.cleanup();
+      await fixtureFactorylessClose();
       await rm(directory, { recursive: true, force: true });
     }
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

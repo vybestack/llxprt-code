@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -11,13 +9,18 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { Agent } from '../agent.js';
+import { Agent } from '../agent.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 async function waitForMarker(
   path: string,
@@ -133,12 +136,13 @@ if (input.hook_event_name === 'BeforeAgent') {
 }
 
 describe('public Agent hook shutdown', () => {
+  useRecordingPrompts();
   it('delivers the public final event to an actual pipe consumer', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'public-hook-input-'));
     const input = join(directory, 'input');
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent }) => {
+        async (agent) => {
           await agent.hooks.triggerSessionEnd();
           const data: unknown = JSON.parse(await readFile(input, 'utf8'));
           expect(data).toMatchObject({
@@ -186,7 +190,14 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
 `,
         );
         await withRecordingLifetimeFixture(
-          async ({ agent, borrow, settingsService }) => {
+          async (
+            agent,
+            _config,
+            _settingsOwner,
+            settingsService,
+            _oauthManager,
+            borrow,
+          ) => {
             const peer = await borrow();
             const observed: string[] = [];
             const startup: unknown[] = [];
@@ -291,7 +302,14 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
         };
         await withUnrelatedProcess(evidence, () =>
           withRecordingLifetimeFixture(
-            async ({ agent, borrow, settingsService }) => {
+            async (
+              agent,
+              _config,
+              _settingsOwner,
+              settingsService,
+              _oauthManager,
+              borrow,
+            ) => {
               const second = await borrow();
               const retiring = order === 'first' ? agent : second;
               const peer = order === 'first' ? second : agent;
