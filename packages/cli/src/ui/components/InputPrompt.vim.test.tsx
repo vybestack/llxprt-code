@@ -259,6 +259,7 @@ describe('InputPrompt', () => {
       } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
+      generatePromptContent: null,
       shellModeActive: false,
       setShellModeActive: vi.fn(),
       approvalMode: ApprovalMode.DEFAULT,

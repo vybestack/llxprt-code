@@ -16,3 +16,8 @@ export const pasteConfig = {
   getEnablePromptCompletion: () => false,
   getUtilityModel: () => undefined,
 };
+
+export const pasteCompletion = {
+  enableFuzzyFiltering: true,
+  generatePromptContent: null,
+};

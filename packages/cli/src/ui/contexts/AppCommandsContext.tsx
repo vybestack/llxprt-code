@@ -14,6 +14,7 @@ import type { Key } from '../hooks/useKeypress.js';
 import type { WelcomeActions } from '../hooks/useWelcomeOnboarding.js';
 import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { SettingScope } from '../../config/settings.js';
+import type { PromptContentGenerator } from '../hooks/usePromptCompletion.js';
 
 /**
  * Changing input snapshots use a separate context from stable view commands.
@@ -21,6 +22,7 @@ import type { SettingScope } from '../../config/settings.js';
  * that only dispatch commands.
  */
 export interface AppCommandData {
+  generatePromptContent: PromptContentGenerator | null;
   buffer: TextBuffer;
   commandContext: CommandContext;
   inputHistory: string[];
@@ -110,10 +112,10 @@ export function AppCommandsProvider({
     () => createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
     [latest, canSendQueued, canSteerQueued],
   );
-  const { buffer, commandContext, inputHistory } = value;
+  const { buffer, commandContext, inputHistory, generatePromptContent } = value;
   const data = useMemo(
-    () => ({ buffer, commandContext, inputHistory }),
-    [buffer, commandContext, inputHistory],
+    () => ({ buffer, commandContext, inputHistory, generatePromptContent }),
+    [buffer, commandContext, inputHistory, generatePromptContent],
   );
   return (
     <AppCommandsContext.Provider value={commands}>

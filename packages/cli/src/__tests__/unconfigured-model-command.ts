@@ -240,6 +240,8 @@ export function createUnconfiguredCredentialCommands(): Pick<
           authenticate: unavailable,
         },
         () => true,
+        unavailable,
+        unavailable,
       ),
       bindMcpCommand(
         null,

@@ -27,6 +27,10 @@ describe('registered restore command owner', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'decoy history' }] },
     ]);
     const checkpointDirectory = await mkdtemp(join(tmpdir(), 'restore-owner-'));
+    const restoredUiHistory = [
+      { type: 'user' as const, text: 'owner restored' },
+    ];
+    const ownerUiHistory: unknown[] = [];
     const restoredHistory = [
       {
         speaker: 'human' as const,
@@ -39,6 +43,7 @@ describe('registered restore command owner', () => {
       await writeFile(
         join(checkpointDirectory, 'owner-state.json'),
         JSON.stringify({
+          history: restoredUiHistory,
           clientHistory: restoredHistory,
           toolCall: { name: 'read_file', args: { file_path: 'notes.txt' } },
         }),
@@ -51,6 +56,10 @@ describe('registered restore command owner', () => {
           restoreProjectSnapshot: undefined,
         },
         () => true,
+        (history) => {
+          ownerUiHistory.push(...history);
+        },
+        () => 0,
       );
       if (!command?.action) throw new Error('Restore command is unavailable');
       const registry = await CommandService.create(
@@ -81,6 +90,7 @@ describe('registered restore command owner', () => {
       expect(await owner.getHistory()).toMatchObject([
         { blocks: [{ text: 'owner restored' }] },
       ]);
+      expect(ownerUiHistory).toStrictEqual(restoredUiHistory);
       expect(await decoy.getHistory()).toStrictEqual([
         { speaker: 'human', blocks: [{ type: 'text', text: 'decoy history' }] },
       ]);

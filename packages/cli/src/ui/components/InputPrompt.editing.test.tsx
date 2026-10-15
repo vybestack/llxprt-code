@@ -262,6 +262,7 @@ describe('InputPrompt', () => {
       } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
+      generatePromptContent: null,
       shellModeActive: false,
       setShellModeActive: vi.fn(),
       approvalMode: ApprovalMode.DEFAULT,
@@ -728,6 +729,7 @@ describe('InputPrompt', () => {
           false,
           false,
           expect.any(Object),
+          props.generatePromptContent,
         );
       });
 

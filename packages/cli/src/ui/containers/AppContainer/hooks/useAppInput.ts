@@ -32,6 +32,7 @@ import {
 } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
 import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
+import type { PromptContentGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import { isEditorAvailable } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../../../config/settings.js';
@@ -737,6 +738,10 @@ function useInputStartup(
 }
 
 export function useAppInput(params: AppInputParams) {
+  const generatePromptContent = useMemo<PromptContentGenerator>(() => {
+    const { agentClient } = params.agent;
+    return (...input) => agentClient.generateContent(...input);
+  }, [params.agent]);
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
@@ -744,6 +749,7 @@ export function useAppInput(params: AppInputParams) {
   return {
     buffer: stream.buffer,
     commandContext: core.commandContext,
+    generatePromptContent,
     inputHistoryStore: stream.inputHistoryStore,
     handleUserInputSubmit: stream.handleUserInputSubmit,
     handleSteer: stream.handleSteer,

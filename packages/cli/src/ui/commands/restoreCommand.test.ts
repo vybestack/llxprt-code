@@ -37,6 +37,8 @@ describe('restoreCommand', () => {
       mockContext.services.agent,
       mockContext.services.git,
       () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
+      (history) => mockContext.ui.loadHistory(history),
+      (...input) => mockContext.ui.addItem(...input),
     );
   }
 

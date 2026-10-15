@@ -5,15 +5,21 @@
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { WorkspaceCheckpointOperations } from '@vybestack/llxprt-code-core';
+import type { SlashCommand } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { createRestoreCommand } from './restoreCommand.js';
 
 export function bindRestoreCommand(
   config: CliUiRuntime | null,
   agent: Agent | null,
-  git: CommandContext['services']['git'],
+  git:
+    | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
+    | undefined,
   readFuzzyFiltering: () => boolean,
+  loadHistory: UseHistoryManagerReturn['loadHistory'],
+  addItem: UseHistoryManagerReturn['addItem'],
 ): SlashCommand | null {
   return createRestoreCommand(
     {
@@ -28,5 +34,7 @@ export function bindRestoreCommand(
         : undefined,
     },
     readFuzzyFiltering,
+    loadHistory,
+    addItem,
   );
 }

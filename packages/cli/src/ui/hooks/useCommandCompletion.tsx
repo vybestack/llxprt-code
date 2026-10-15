@@ -13,7 +13,10 @@ import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
-import type { PromptCompletion } from './usePromptCompletion.js';
+import type {
+  PromptCompletion,
+  PromptContentGenerator,
+} from './usePromptCompletion.js';
 import {
   usePromptCompletion,
   PROMPT_COMPLETION_MIN_LENGTH,
@@ -336,7 +339,8 @@ export function useCommandCompletion(
   commandContext: CommandContext,
   reverseSearchActive: boolean = false,
   shellModeActive: boolean,
-  config?: CliUiRuntime,
+  config: CliUiRuntime | undefined,
+  generateContent: PromptContentGenerator | null,
 ): UseCommandCompletionReturn {
   const dirs = useMemo(() => config?.directories() ?? [cwd], [config, cwd]);
 
@@ -378,7 +382,7 @@ export function useCommandCompletion(
   const promptCompletion = usePromptCompletion({
     buffer,
     config,
-    agent: commandContext.services.agent ?? undefined,
+    generateContent,
     enabled: completionMode === CompletionMode.PROMPT,
   });
 

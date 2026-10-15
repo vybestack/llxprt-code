@@ -73,6 +73,8 @@ describe('registered completion filtering owner', () => {
           setClientHistory: (history) => owner.setHistory(history),
         },
         () => false,
+        () => {},
+        () => 0,
       ),
     );
     const fuzzy = await register(
@@ -84,6 +86,8 @@ describe('registered completion filtering owner', () => {
           setClientHistory: (history) => sibling.setHistory(history),
         },
         () => true,
+        () => {},
+        () => 0,
       ),
     );
     if (!prefix.schema || !fuzzy.schema)

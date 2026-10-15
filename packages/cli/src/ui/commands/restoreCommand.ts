@@ -7,7 +7,6 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import {
-  type CommandContext,
   type SlashCommand,
   type SlashCommandActionReturn,
   CommandKind,
@@ -16,8 +15,11 @@ import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
-type LoadHistory = CommandContext['ui']['loadHistory'];
+type LoadHistory = UseHistoryManagerReturn['loadHistory'];
+type AddItem = UseHistoryManagerReturn['addItem'];
 type ClientHistory = Parameters<Agent['setHistory']>[0];
 
 export interface RestoreCommandOperations {
@@ -53,19 +55,20 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
 }
 
 async function applyCheckpointRestoration(
-  ui: Pick<CommandContext['ui'], 'loadHistory' | 'addItem'>,
+  loadHistory: LoadHistory,
+  addItem: AddItem,
   operations: RestoreCommandOperations,
   data: ToolCallCheckpoint,
 ): Promise<void> {
   if (Array.isArray(data.history)) {
-    ui.loadHistory(data.history);
+    loadHistory(data.history);
   }
   if (Array.isArray(data.clientHistory)) {
     await operations.setClientHistory(data.clientHistory);
   }
   if (typeof data.commitHash === 'string' && data.commitHash.length > 0) {
     await operations.restoreProjectSnapshot?.(data.commitHash);
-    ui.addItem(
+    addItem(
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',
@@ -76,7 +79,8 @@ async function applyCheckpointRestoration(
 }
 
 async function restoreFromDirectory(
-  ui: Pick<CommandContext['ui'], 'loadHistory' | 'addItem'>,
+  loadHistory: LoadHistory,
+  addItem: AddItem,
   operations: RestoreCommandOperations,
   checkpointDirectory: string,
   args: string,
@@ -98,7 +102,12 @@ async function restoreFromDirectory(
     const filePath = path.join(checkpointDirectory, selectedFile);
     const text = await fs.readFile(filePath, 'utf-8');
     const checkpoint = JSON.parse(text) as ToolCallCheckpoint;
-    await applyCheckpointRestoration(ui, operations, checkpoint);
+    await applyCheckpointRestoration(
+      loadHistory,
+      addItem,
+      operations,
+      checkpoint,
+    );
     return {
       type: 'tool',
       toolName: checkpoint.toolCall.name,
@@ -116,6 +125,8 @@ async function restoreFromDirectory(
 export function createRestoreCommand(
   operations: RestoreCommandOperations,
   readFuzzyFiltering: () => boolean,
+  loadHistory: LoadHistory,
+  addItem: AddItem,
 ): SlashCommand | null {
   if (!operations.enabled) return null;
 
@@ -151,7 +162,7 @@ export function createRestoreCommand(
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
     schema: restoreSchema,
-    action: async ({ ui }, args) => {
+    action: async (_invocation, args) => {
       if (!checkpointDirectory) {
         return {
           type: 'message',
@@ -159,7 +170,13 @@ export function createRestoreCommand(
           content: 'Could not determine the configuration directory path.',
         };
       }
-      return restoreFromDirectory(ui, operations, checkpointDirectory, args);
+      return restoreFromDirectory(
+        loadHistory,
+        addItem,
+        operations,
+        checkpointDirectory,
+        args,
+      );
     },
   };
 }

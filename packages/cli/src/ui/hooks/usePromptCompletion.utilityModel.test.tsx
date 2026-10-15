@@ -46,7 +46,7 @@ function makeModelOutput(text: string): ModelOutput {
 function makeRuntime(utilityModel: string | undefined): {
   runtime: PromptCompletionRuntime;
   generateContent: ReturnType<typeof vi.fn>;
-  agent: NonNullable<Parameters<typeof usePromptCompletion>[0]['agent']>;
+  generate: Parameters<typeof usePromptCompletion>[0]['generateContent'];
 } {
   const generateContent = vi.fn();
   const runtime = {
@@ -56,9 +56,7 @@ function makeRuntime(utilityModel: string | undefined): {
   return {
     runtime,
     generateContent,
-    agent: {
-      agentClient: { generateContent },
-    },
+    generate: (...input) => generateContent(...input),
   };
 }
 
@@ -69,11 +67,16 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
 
   it('constructs no request when no utilityModel is configured', async () => {
     vi.useFakeTimers();
-    const { runtime, generateContent, agent } = makeRuntime(undefined);
+    const { runtime, generateContent, generate } = makeRuntime(undefined);
     const buffer = makeBuffer('a sufficiently long prompt');
 
     const { result } = renderHook(() =>
-      usePromptCompletion({ buffer, config: runtime, agent, enabled: true }),
+      usePromptCompletion({
+        buffer,
+        config: runtime,
+        generateContent: generate,
+        enabled: true,
+      }),
     );
 
     await act(async () => {
@@ -88,11 +91,16 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
   it('constructs no request when utilityModel is an empty or blank string', async () => {
     vi.useFakeTimers();
     for (const blank of ['', '   ']) {
-      const { runtime, generateContent, agent } = makeRuntime(blank);
+      const { runtime, generateContent, generate } = makeRuntime(blank);
       const buffer = makeBuffer('a sufficiently long prompt');
 
       const { result } = renderHook(() =>
-        usePromptCompletion({ buffer, config: runtime, agent, enabled: true }),
+        usePromptCompletion({
+          buffer,
+          config: runtime,
+          generateContent: generate,
+          enabled: true,
+        }),
       );
 
       await act(async () => {
@@ -121,9 +129,7 @@ describe('usePromptCompletion utilityModel gating (issue #2627)', () => {
       usePromptCompletion({
         buffer,
         config,
-        agent: {
-          agentClient: { generateContent },
-        },
+        generateContent,
         enabled: true,
       }),
     );

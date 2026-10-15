@@ -249,6 +249,7 @@ describe('useCommandCompletion', () => {
         false,
         false,
         composeFixtureRuntime(mockConfig),
+        null,
       );
       return { ...completion, textBuffer };
     });
@@ -281,6 +282,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -312,6 +314,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -346,6 +349,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -379,6 +383,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -412,6 +417,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -449,6 +455,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -480,6 +487,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });
@@ -511,6 +519,7 @@ describe('useCommandCompletion', () => {
           false,
           false,
           composeFixtureRuntime(mockConfig),
+          null,
         );
         return { ...completion, textBuffer };
       });

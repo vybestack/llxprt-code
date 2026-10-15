@@ -7,13 +7,13 @@
 import type {
   SlashCommand,
   SlashCommandActionReturn,
-  CommandContext,
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 export interface McpAuthCommandOperations {
   readonly isConfigured: () => boolean;
@@ -88,16 +88,17 @@ export async function listOAuthServers(
 }
 
 async function performMcpOAuth(
-  context: CommandContext,
   operations: McpAuthCommandOperations,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
   serverName: string,
 ): Promise<MessageActionReturn> {
   const displayListener = (message: string) => {
-    context.ui.addItem({ type: 'info', text: message });
+    addItem({ type: 'info', text: message });
   };
 
   try {
-    context.ui.addItem(
+    addItem(
       {
         type: 'info',
         text: `Starting OAuth authentication for MCP server '${serverName}'...`,
@@ -107,7 +108,7 @@ async function performMcpOAuth(
 
     await operations.authenticate(serverName, displayListener);
 
-    context.ui.addItem(
+    addItem(
       {
         type: 'info',
         text: `✅ Successfully authenticated with MCP server '${serverName}'!`,
@@ -115,7 +116,7 @@ async function performMcpOAuth(
       Date.now(),
     );
 
-    context.ui.reloadCommands();
+    reloadCommands();
 
     return {
       type: 'message',
@@ -134,6 +135,8 @@ async function performMcpOAuth(
 export function createMcpAuthCommand(
   operations: McpAuthCommandOperations,
   readFuzzyFiltering: () => boolean,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
 ): SlashCommand {
   return {
     name: 'auth',
@@ -142,7 +145,7 @@ export function createMcpAuthCommand(
     schema: createMcpAuthSchema(operations, readFuzzyFiltering),
     autoExecute: true,
     action: async (
-      context: CommandContext,
+      _invocation,
       args: string,
     ): Promise<SlashCommandActionReturn> => {
       const serverName = args.trim();
@@ -171,10 +174,7 @@ export function createMcpAuthCommand(
         };
       }
 
-      return performMcpOAuth(context, operations, serverName);
+      return performMcpOAuth(operations, addItem, reloadCommands, serverName);
     },
   };
 }
-
-export { CommandKind };
-export type { SlashCommandActionReturn, CommandContext, MessageActionReturn };

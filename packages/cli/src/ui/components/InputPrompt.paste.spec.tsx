@@ -125,15 +125,15 @@ import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { testRegex } from '../../__tests__/regex.js';
-import { pasteConfig } from './InputPrompt.paste.fixture.js';
+import { pasteConfig, pasteCompletion } from './InputPrompt.paste.fixture.js';
 
 function PasteInputPrompt(
   props: Omit<
     import('./inputPromptTypes.js').InputPromptProps,
-    'enableFuzzyFiltering'
+    'enableFuzzyFiltering' | 'generatePromptContent'
   >,
 ) {
-  return <InputPrompt enableFuzzyFiltering={true} {...props} />;
+  return <InputPrompt {...pasteCompletion} {...props} />;
 }
 
 // Mock Config

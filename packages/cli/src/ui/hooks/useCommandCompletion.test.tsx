@@ -261,6 +261,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -287,6 +288,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           );
           return { completion, textBuffer };
         });
@@ -321,6 +323,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -350,6 +353,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -377,6 +381,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -427,6 +432,7 @@ describe('useCommandCompletion', () => {
               false,
               shellModeActive, // Parameterized shellModeActive
               composeFixtureRuntime(mockConfig),
+              null,
             );
             return { ...completion, textBuffer };
           });
@@ -471,6 +477,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -493,6 +500,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -514,6 +522,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -541,6 +550,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -571,6 +581,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
@@ -609,6 +620,7 @@ describe('useCommandCompletion', () => {
             false,
             false,
             composeFixtureRuntime(mockConfig),
+            null,
           ),
         );
 
