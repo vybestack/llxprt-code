@@ -30,7 +30,10 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/PromptResolver.js';
 import type { Logger } from '@vybestack/llxprt-code-core/utils/logger.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
+import {
+  compressOneShotViaDisk,
+  requireApplied,
+} from './support/oneshot-disk-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers: build IContent objects
@@ -304,41 +307,13 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 // ---------------------------------------------------------------------------
 
 describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
-  it('result.metadata.usage is populated when provider emits usage', async () => {
-    const strategy = new OneShotStrategy();
-    const ctx = buildContext();
-
-    const result = await strategy.compress(ctx);
-
-    expect(result.metadata.llmCallMade).toBe(true);
-
-    expect(result.metadata.usage).toBeDefined();
-    expect(result.metadata.usage?.totalTokens).toBe(MOCK_USAGE.totalTokens);
-    expect(result.metadata.usage?.promptTokens).toBe(MOCK_USAGE.promptTokens);
-    expect(result.metadata.usage?.completionTokens).toBe(
-      MOCK_USAGE.completionTokens,
-    );
-  });
-
-  it('result.metadata.usage is undefined when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy();
-    const provider = makeMockProviderNoUsage();
-    const ctx = buildContext({ provider });
-
-    const result = await strategy.compress(ctx);
-
-    expect(result.metadata.llmCallMade).toBe(true);
-    expect(result.metadata.usage).toBeUndefined();
-  });
-
   it('summary IContent (first entry in newHistory) has usage metadata attached', async () => {
-    const strategy = new OneShotStrategy();
     const ctx = buildContext();
 
-    const result = await strategy.compress(ctx);
+    const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
     // In one-shot: [summary, continuationDirective, ...toKeep]
-    const summaryEntry = result.newHistory[0];
+    const summaryEntry = newHistory[0];
 
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
@@ -346,31 +321,34 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
     expect(summaryEntry.metadata?.usage?.totalTokens).toBe(
       MOCK_USAGE.totalTokens,
     );
+    expect(summaryEntry.metadata?.usage?.promptTokens).toBe(
+      MOCK_USAGE.promptTokens,
+    );
+    expect(summaryEntry.metadata?.usage?.completionTokens).toBe(
+      MOCK_USAGE.completionTokens,
+    );
   });
 
   it('summary IContent has no usage metadata when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy();
     const provider = makeMockProviderNoUsage();
     const ctx = buildContext({ provider });
 
-    const result = await strategy.compress(ctx);
+    const newHistory = requireApplied(await compressOneShotViaDisk(ctx));
 
-    const summaryEntry = result.newHistory[0];
+    const summaryEntry = newHistory[0];
     expect(summaryEntry).toBeDefined();
     expect(summaryEntry.speaker).toBe('human');
     expect(summaryEntry.metadata?.usage).toBeUndefined();
   });
 
-  it('no compression returns result without usage (llmCallMade=false)', async () => {
-    const strategy = new OneShotStrategy();
+  it('no compression returns no summary rows', async () => {
     // History too small to trigger compression
     const tinyHistory = [makeHumanMessage('hi'), makeAiMessage('hello')];
     const ctx = buildContext({ history: tinyHistory });
 
-    const result = await strategy.compress(ctx);
+    const result = await compressOneShotViaDisk(ctx);
 
-    expect(result.metadata.llmCallMade).toBe(false);
-    expect(result.metadata.usage).toBeUndefined();
+    expect(result.kind).toBe('noop');
   });
 });
 

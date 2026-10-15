@@ -10,7 +10,7 @@ import { AnthropicProvider } from '../../packages/providers/src/anthropic/Anthro
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
 import { RetryOrchestrator } from '../../packages/providers/src/RetryOrchestrator.js';
 import { CompressionHandler } from '../../packages/agents/src/compression/CompressionHandler.js';
-import { OneShotStrategy } from '../../packages/agents/src/compression/OneShotStrategy.js';
+import { OneShotArrayOracle } from '../../packages/agents/src/compression/__tests__/support/oneshot-array-oracle.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
 import { buildCompressionSystemInstruction } from '../../packages/agents/src/compression/compressionSystemPrompt.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
@@ -225,7 +225,7 @@ export async function invokedSummaryBodies(
     return networkResponse(name, url.includes('streamGenerateContent'));
   };
   try {
-    const oracle = await new OneShotStrategy().compress({
+    const oracle = await new OneShotArrayOracle().compress({
       ...metadata,
       history: buildCuratedHistory(
         logger,

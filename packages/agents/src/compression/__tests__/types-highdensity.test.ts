@@ -261,14 +261,6 @@ describe('Existing strategy compress compatibility @plan PLAN-20260211-HIGHDENSI
     expect(result.metadata.originalMessageCount).toBe(0);
     expect(result.metadata.strategyUsed).toBe('top-down-truncation');
   });
-
-  /**
-   * @requirement REQ-HD-001.4
-   */
-  it('OneShotStrategy.compress is a function', () => {
-    const strategy = new OneShotStrategy();
-    expect(typeof strategy.compress).toBe('function');
-  });
 });
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import { providerFixtureRow } from '../../../../core/src/services/history/__test
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
+import { OneShotArrayOracle } from './support/oneshot-array-oracle.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
@@ -150,7 +150,7 @@ export async function middleoutOracle(
   };
   let result = await new MiddleOutStrategy().compress(context);
   if (result.kind === 'noop')
-    result = await new OneShotStrategy().compress(context);
+    result = await new OneShotArrayOracle().compress(context);
   if (result.kind !== 'applied')
     throw new Error('Expected legacy oracle compression');
   const top = result.metadata.topPreserved ?? 0;

@@ -2,7 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { OneShotStrategy } from '../OneShotStrategy.js';
+import { OneShotArrayOracle } from './support/oneshot-array-oracle.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
@@ -55,7 +55,7 @@ export async function oneshotOracle(
     () => '/fixture/session.jsonl',
     logger,
   );
-  const result = await new OneShotStrategy().compress({
+  const result = await new OneShotArrayOracle().compress({
     ...metadata,
     history: buildCuratedHistory(logger, raw, false),
   });

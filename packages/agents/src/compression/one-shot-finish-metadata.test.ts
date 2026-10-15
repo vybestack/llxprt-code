@@ -7,7 +7,7 @@ import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/p
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { OneShotStrategy } from './OneShotStrategy.js';
+import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
@@ -48,7 +48,7 @@ describe('One-shot finish diagnostics', () => {
       }),
     });
 
-    const result = new OneShotStrategy().compress(context);
+    const result = compressOneShotViaDisk(context);
 
     await expect(result).rejects.toBeInstanceOf(EmptySummaryError);
     await expect(result).rejects.toMatchObject({
