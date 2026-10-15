@@ -64,6 +64,49 @@ function batchOfRow(record: { payload: unknown }): number | undefined {
   return match === null ? undefined : Number(match[1]);
 }
 
+/**
+ * Wraps the journal scan to ask, each time the pump starts a scan, whether the
+ * rows of batches older than the previous one are still reachable. The
+ * recorders a batch was delivered to may still reference its last rows, so
+ * only older rows must be gone.
+ *
+ * JavaScriptCore scans the machine stack conservatively, so a stale slot can
+ * keep one row of an old batch alive until the slot is reused. That lasts one
+ * batch at most. A row counts as retained only when it is still reachable at
+ * two consecutive checks, which a stale slot never is and a holder always is.
+ */
+function retentionWatch(onRow?: (content: object, batch: number) => void) {
+  const seen: Array<{ batch: number; ref: WeakRef<object> }> = [];
+  const batch = { current: 0 };
+  const retained: number[] = [];
+  let aliveAtPreviousCheck: WeakRef<object> | undefined;
+  const scan: JournalRecordScan = async function* (path, start, end) {
+    for await (const record of scanJournalRecords(path, start, end)) {
+      const rowBatch = batchOfRow(record);
+      const content = (record.payload as { content?: object }).content;
+      if (rowBatch !== undefined && content !== undefined) {
+        seen.push({ batch: rowBatch, ref: new WeakRef(content) });
+        onRow?.(content, rowBatch);
+      }
+      yield record;
+    }
+    // The consumer is suspended here with whatever it holds for the batch.
+    let firstAlive: WeakRef<object> | undefined;
+    for (const entry of seen.filter((item) => item.batch < batch.current - 1)) {
+      if (await collectedWithin(entry.ref)) seen.splice(seen.indexOf(entry), 1);
+      else {
+        firstAlive = entry.ref;
+        break;
+      }
+    }
+    retained.push(
+      firstAlive !== undefined && firstAlive === aliveAtPreviousCheck ? 1 : 0,
+    );
+    aliveAtPreviousCheck = firstAlive;
+  };
+  return { scan, batch, retained };
+}
+
 describe('history fan-out pump memory and read bounds', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'fanout-bounds-'));
@@ -138,35 +181,23 @@ describe('history fan-out pump memory and read bounds', () => {
   }, 120_000);
 
   it('retains no row of an earlier batch while a later batch is pumped', async () => {
-    const seen: Array<{ batch: number; ref: WeakRef<object> }> = [];
-    let current = 0;
-    const retained: number[] = [];
-    const watchingScan: JournalRecordScan = async function* (path, start, end) {
-      for await (const record of scanJournalRecords(path, start, end)) {
-        const batch = batchOfRow(record);
-        const content = (record.payload as { content?: object }).content;
-        if (batch !== undefined && content !== undefined)
-          seen.push({ batch, ref: new WeakRef(content) });
-        yield record;
-      }
-      // The consumer is suspended here with whatever it holds for the batch.
-      // The recorders a batch was delivered to may still reference its last
-      // rows, so only rows older than the previous batch must be gone.
-      let alive = 0;
-      for (const entry of seen.filter((item) => item.batch < current - 1)) {
-        if (await collectedWithin(entry.ref))
-          seen.splice(seen.indexOf(entry), 1);
-        else {
-          alive++;
-          break;
-        }
-      }
-      retained.push(alive);
-    };
-    const context = await fixture(watchingScan);
-    for (current = 0; current < BATCHES / 2; current++)
-      await runBatch(context, current);
-    expect(retained.length).toBeGreaterThan(0);
-    expect(Math.max(...retained)).toBe(0);
+    const watch = retentionWatch();
+    const context = await fixture(watch.scan);
+    for (watch.batch.current = 0; watch.batch.current < BATCHES / 2; )
+      await runBatch(context, watch.batch.current++);
+    expect(watch.retained.length).toBeGreaterThan(0);
+    expect(Math.max(...watch.retained)).toBe(0);
+  }, 120_000);
+
+  it('reports a row that an earlier batch left reachable, which is what the retention gate must catch', async () => {
+    const heldByTrap: object[] = [];
+    const watch = retentionWatch((content, batch) => {
+      if (batch === 0) heldByTrap.push(content);
+    });
+    const context = await fixture(watch.scan);
+    for (watch.batch.current = 0; watch.batch.current < 8; )
+      await runBatch(context, watch.batch.current++);
+    expect(heldByTrap.length).toBeGreaterThan(0);
+    expect(Math.max(...watch.retained)).toBeGreaterThan(0);
   }, 120_000);
 });
