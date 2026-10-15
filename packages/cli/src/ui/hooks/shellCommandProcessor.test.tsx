@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { shellExecutionReads } from './__tests__/shell-execution-reads.js';
 import {
   automock,
   advanceTimersByTimeAsync,
@@ -182,7 +183,7 @@ describe('useShellCommandProcessor', () => {
         setPendingHistoryItemMock,
         onExecMock,
         onDebugMessageMock,
-        mockConfig,
+        ...shellExecutionReads(mockConfig),
         (entry) => agent.addHistory(entry),
         setShellInputFocusedMock,
         80,
@@ -583,7 +584,7 @@ describe('useShellCommandProcessor', () => {
           setPendingHistoryItemMock,
           onExecMock,
           onDebugMessageMock,
-          mockConfig,
+          ...shellExecutionReads(mockConfig),
           (entry) => agent.addHistory(entry),
           setShellInputFocusedMock,
           80,

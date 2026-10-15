@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
+import { resolveEmojiFilterMode } from '../../utils/iContentToHistoryItems.js';
 import {
   resolveContentPrefixIdentity,
   createCliModelIdentityRuntime,
@@ -114,7 +115,14 @@ interface ToolSchedulerState {
 export function useAgentStreamOrchestration(
   args: AgentStreamOrchestrationDeps,
 ): AgentStreamOrchestrationResult {
-  const st = useStreamState(args.addItem, args.runtime);
+  const st = useStreamState(
+    args.addItem,
+    () => resolveEmojiFilterMode(args.runtime.ephemeral),
+    args.runtime.projectTempDir,
+    args.runtime.checkpoint.getCheckpointingEnabled()
+      ? args.runtime.checkpoint.checkpoints
+      : undefined,
+  );
   const loopDetectedRef = useRef(false);
   const scheduler = useToolSchedulerState(args, st);
   const pendingToolCallGroupDisplay = usePendingToolGroupDisplay(
@@ -151,15 +159,7 @@ export function useAgentStreamOrchestration(
   // Refs to break the circular dependency between useSubmitQuery (which
   // creates useStreamEventHandlers → processAgentEvent) and useAgentEventStream
   // (which provides runStream). Each is populated synchronously during render.
-  const processAgentEventRef = useRef<AgentEventRouter | null>(null);
-  const runStreamRef = useRef<
-    | ((
-        message: AgentRequestInput,
-        signal: AbortSignal,
-        promptId: string,
-      ) => Promise<void>)
-    | null
-  >(null);
+  const { processAgentEventRef, runStreamRef } = useStreamRouterRefs();
 
   const submitQueryResult = useSubmitForStream(
     args,
@@ -201,6 +201,19 @@ export function useAgentStreamOrchestration(
   );
 }
 
+function useStreamRouterRefs() {
+  const processAgentEventRef = useRef<AgentEventRouter | null>(null);
+  const runStreamRef = useRef<
+    | ((
+        message: AgentRequestInput,
+        signal: AbortSignal,
+        promptId: string,
+      ) => Promise<void>)
+    | null
+  >(null);
+  return { processAgentEventRef, runStreamRef };
+}
+
 function useToolSchedulerState(
   args: AgentStreamOrchestrationDeps,
   st: ReturnType<typeof useStreamState>,
@@ -211,7 +224,11 @@ function useToolSchedulerState(
     args.onEditorClose,
     args.onEditorOpen,
     args.addItem,
-    args.agent,
+    useCallback(() => args.agent.tools.openClientChannel(), [args.agent]),
+    useCallback<Agent['tools']['subscribeChildTools']>(
+      (callbacks) => args.agent.tools.subscribeChildTools(callbacks),
+      [args.agent],
+    ),
   );
   const [
     toolCalls,
@@ -245,8 +262,31 @@ function useShell(
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
-    runtime: args.runtime,
-    agent: args.agent,
+    readTargetDir: useCallback(
+      () => args.runtime.session.getTargetDir(),
+      [args.runtime.session],
+    ),
+    readUsePty: useCallback(
+      () => args.runtime.shell.getShouldUseNodePtyShell(),
+      [args.runtime.shell],
+    ),
+    readShellExecutionConfig: useCallback(
+      () => args.runtime.shell.getShellExecutionConfig(),
+      [args.runtime.shell],
+    ),
+    readPtyWidth: useCallback(
+      () => args.runtime.shell.getPtyTerminalWidth(),
+      [args.runtime.shell],
+    ),
+    readPtyHeight: useCallback(
+      () => args.runtime.shell.getPtyTerminalHeight(),
+      [args.runtime.shell],
+    ),
+    appendShellHistory: useCallback(
+      (entry: Parameters<Agent['addHistory']>[0]) =>
+        args.agent.addHistory(entry),
+      [args.agent],
+    ),
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
     terminalHeight: args.terminalHeight,

@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { shellExecutionReads } from './__tests__/shell-execution-reads.js';
 import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -40,7 +41,7 @@ async function runShell(
         execution = pending;
       },
       () => {},
-      {
+      ...shellExecutionReads({
         getTargetDir: () => owner.workspace.getWorkingDirectory(),
         getShouldUseNodePtyShell: () => false,
         getPtyTerminalWidth: () => undefined,
@@ -57,7 +58,7 @@ async function runShell(
         getProjectTempDir: () => owner.workspace.getWorkingDirectory(),
         getSessionRecordingQueueByteLimit: () => 1024,
         getLlxprtDir: () => owner.workspace.getWorkingDirectory(),
-      },
+      }),
       appendHistory,
       () => {},
     ),
