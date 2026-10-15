@@ -33,6 +33,7 @@ import {
   BuiltinCommandLoader,
   type BuiltinCommandOwners,
 } from '../../services/BuiltinCommandLoader.js';
+import { bindShellPromptOperations } from '../../services/prompt-processors/shellPromptHost.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import type { ICommandLoader } from '../../services/types.js';
@@ -324,8 +325,31 @@ async function loadSlashCommands(
       new BuiltinCommandLoader(owners, config),
     ];
     if (!shouldUseBuiltinCommandsOnly()) {
-      loaders.unshift(new McpPromptLoader(config));
-      loaders.push(new FileCommandLoader(config));
+      loaders.unshift(
+        new McpPromptLoader(
+          config
+            ? {
+                getMcpServers: () => config.getMcpServers(),
+                listPrompts: (server) => config.listPrompts(server),
+              }
+            : null,
+        ),
+      );
+      loaders.push(
+        new FileCommandLoader(
+          config
+            ? {
+                userCommandsDir: config.userCommandsDir,
+                projectCommandsDir: config.projectCommandsDir,
+                getProjectRoot: () => config.getProjectRoot(),
+                getExtensions: () => config.getExtensions(),
+                getFolderTrust: () => config.getFolderTrust(),
+                isTrustedFolder: () => config.isTrustedFolder(),
+              }
+            : null,
+          bindShellPromptOperations(config),
+        ),
+      );
     }
     const commandService = await CommandService.create(loaders, signal);
     if (!signal.aborted) {

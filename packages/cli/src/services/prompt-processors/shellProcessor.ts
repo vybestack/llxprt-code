@@ -6,21 +6,14 @@
 
 import {
   ApprovalMode,
-  checkCommandPermissions,
   escapeShellArg,
   getShellConfiguration,
-  ShellExecutionService,
-  type ShellPermissionConfig,
+  type ShellExecutionConfig,
+  type ShellExecutionResult,
   type ShellType,
 } from '@vybestack/llxprt-code-core';
 
-import type { CommandContext } from '../../ui/commands/types.js';
-import type {
-  ApprovalState,
-  SessionIdentity,
-  ShellState,
-} from '../../ui/cliUiRuntime.js';
-import type { IPromptProcessor } from './types.js';
+import type { IPromptProcessor, PromptInvocation } from './types.js';
 import {
   SHELL_INJECTION_TRIGGER,
   SHORTHAND_ARGS_PLACEHOLDER,
@@ -28,10 +21,24 @@ import {
 import { StreamingInjectionBuilder } from './injectionOutputBudget.js';
 import { resolveAcquisitionBudgetFromSetting } from '@vybestack/llxprt-code-core';
 
-type ShellProcessorRuntime = ShellPermissionConfig &
-  ApprovalState &
-  SessionIdentity &
-  ShellState;
+export interface ShellPromptOperations {
+  readonly checkPermissions: (
+    command: string,
+    allowlist: Set<string>,
+    shell: ShellType,
+  ) => {
+    allAllowed: boolean;
+    disallowedCommands: string[];
+    blockReason?: string;
+    isHardDenial?: boolean;
+  };
+  readonly getApprovalMode: () => ApprovalMode;
+  readonly readShellConfig: () => ShellExecutionConfig;
+  readonly execute: (
+    command: string,
+    signal: AbortSignal,
+  ) => Promise<ShellExecutionResult>;
+}
 
 export class ConfirmationRequiredError extends Error {
   constructor(
@@ -68,17 +75,20 @@ interface ShellInjection {
  * 4. Parsing correctly handles nested braces.
  */
 export class ShellProcessor implements IPromptProcessor {
-  constructor(private readonly commandName: string) {}
+  constructor(
+    private readonly commandName: string,
+    private readonly operations: ShellPromptOperations | null,
+  ) {}
 
-  async process(prompt: string, context: CommandContext): Promise<string> {
+  async process(prompt: string, context: PromptInvocation): Promise<string> {
     const userArgsRaw = context.invocation?.args ?? '';
 
     if (!prompt.includes(SHELL_INJECTION_TRIGGER)) {
       return prompt.replaceAll(SHORTHAND_ARGS_PLACEHOLDER, userArgsRaw);
     }
 
-    const config = context.services.config;
-    if (!config) {
+    const operations = this.operations;
+    if (!operations) {
       throw new Error(
         `Security configuration not loaded. Cannot verify shell command permissions for '${this.commandName}'. Aborting.`,
       );
@@ -100,7 +110,7 @@ export class ShellProcessor implements IPromptProcessor {
     );
     this.checkPermissions(
       resolvedInjections,
-      config,
+      operations,
       sessionShellAllowlist,
       shell,
     );
@@ -108,7 +118,7 @@ export class ShellProcessor implements IPromptProcessor {
     return this.executeInjections(
       prompt,
       resolvedInjections,
-      config,
+      operations,
       userArgsRaw,
       context.signal,
     );
@@ -132,7 +142,7 @@ export class ShellProcessor implements IPromptProcessor {
 
   private checkPermissions(
     resolvedInjections: ShellInjection[],
-    config: ShellProcessorRuntime,
+    operations: ShellPromptOperations,
     sessionShellAllowlist: Set<string>,
     shell: ShellType,
   ): void {
@@ -142,7 +152,7 @@ export class ShellProcessor implements IPromptProcessor {
       if (!command) continue;
 
       const { allAllowed, disallowedCommands, blockReason, isHardDenial } =
-        checkCommandPermissions(command, config, sessionShellAllowlist, shell);
+        operations.checkPermissions(command, sessionShellAllowlist, shell);
 
       if (allAllowed !== true) {
         if (isHardDenial === true) {
@@ -150,7 +160,7 @@ export class ShellProcessor implements IPromptProcessor {
             `Blocked command: "${command}". Reason: ${blockReason ?? 'Blocked by configuration.'}`,
           );
         }
-        if (config.getApprovalMode() !== ApprovalMode.YOLO) {
+        if (operations.getApprovalMode() !== ApprovalMode.YOLO) {
           disallowedCommands.forEach((uc) => commandsToConfirm.add(uc));
         }
       }
@@ -167,7 +177,7 @@ export class ShellProcessor implements IPromptProcessor {
   private async executeInjections(
     prompt: string,
     resolvedInjections: ShellInjection[],
-    config: ShellProcessorRuntime,
+    operations: ShellPromptOperations,
     userArgsRaw: string,
     signal: AbortSignal,
   ): Promise<string> {
@@ -178,7 +188,7 @@ export class ShellProcessor implements IPromptProcessor {
     // and never holds all command outputs simultaneously.
     const builder = new StreamingInjectionBuilder(
       resolveAcquisitionBudgetFromSetting(
-        config.getShellExecutionConfig().outputRetentionMaxBytes,
+        operations.readShellConfig().outputRetentionMaxBytes,
       ),
     );
     let lastIndex = 0;
@@ -197,18 +207,10 @@ export class ShellProcessor implements IPromptProcessor {
       // effects always run, then feed the output to the streaming builder so
       // the full output is reduced to a bounded head/tail immediately.
       if (injection.resolvedCommand) {
-        const { result } = await ShellExecutionService.execute(
+        const executionResult = await operations.execute(
           injection.resolvedCommand,
-          config.getTargetDir(),
-          () => {},
-          // The invocation's cancellation signal, so Esc actually kills the
-          // injected shell command instead of orphaning it (issue #2976).
           signal,
-          config.getShouldUseNodePtyShell(),
-          config.getShellExecutionConfig(),
         );
-
-        const executionResult = await result;
 
         // Handle Spawn Errors
         if (executionResult.error && !executionResult.aborted) {

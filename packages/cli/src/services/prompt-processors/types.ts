@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CommandContext } from '../../ui/commands/types.js';
+export interface PromptInvocation {
+  readonly signal: AbortSignal;
+  readonly invocation?: {
+    readonly raw: string;
+    readonly name: string;
+    readonly args: string;
+  };
+  readonly session: { readonly sessionShellAllowlist: Set<string> };
+}
 
 /**
  * Defines the interface for a prompt processor, a module that can transform
@@ -16,19 +24,16 @@ export interface IPromptProcessor {
    * Processes a prompt string, applying a specific transformation as part of a pipeline.
    *
    * Each processor in a command's pipeline receives the output of the previous
-   * processor. This method provides the full command context, allowing for
-   * complex transformations that may require access to invocation details,
-   * application services, or UI state.
+   * processor. Processors receive invocation data and cancellation; owner operations
+   * are captured when the command is registered.
    *
    * @param prompt The current state of the prompt string. This may have been
    *   modified by previous processors in the pipeline.
-   * @param context The full command context, providing access to invocation
-   *   details (like `context.invocation.raw` and `context.invocation.args`),
-   *   application services, and UI handlers.
+   * @param context Invocation arguments, shell approvals and cancellation.
    * @returns A promise that resolves to the transformed prompt string, which
    *   will be passed to the next processor or, if it's the last one, sent to the model.
    */
-  process(prompt: string, context: CommandContext): Promise<string>;
+  process(prompt: string, context: PromptInvocation): Promise<string>;
 }
 
 /**
