@@ -111,6 +111,7 @@ function workspaceProjection(
     checkpoints: checkpoints.operations,
     ...retainedRoot.ignore,
     ...retainedRoot.search,
+    ...retainedRoot.files,
     getDirectories: () => [...retainedRoot.paths.directories()],
     addDirectory: (directory) => retainedRoot.addDirectory(directory),
     containsPath: (filePath) => retainedRoot.paths.contains(filePath),

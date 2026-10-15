@@ -12,6 +12,9 @@ import type { McpConstructionResources } from './mcp-construction-resources.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
+
 import type {
   Config,
   WorkspaceTrustControlPort,
@@ -112,6 +115,7 @@ export type McpRuntimeConstructionInputs = [
   trustCleanup?: () => Promise<void>,
   skillOperations?: WorkspaceSkillAssemblyOperations,
   mcpSettings?: SessionMcpSettingsReads,
+  filesystemService?: FileSystemService,
 ];
 
 export function retainPolicyOwner(
@@ -215,6 +219,7 @@ export function selectMcpConstructionInputs([
   trustCleanup,
   skillOperations,
   mcpSettings,
+  filesystemService,
 ]: McpRuntimeConstructionInputs) {
   return {
     oauth,
@@ -237,5 +242,6 @@ export function selectMcpConstructionInputs([
     trustCleanup,
     skillOperations,
     mcpSettings,
+    filesystemService,
   };
 }

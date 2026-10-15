@@ -22,6 +22,7 @@ import type {
 import type {
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
+  WorkspaceTextOperations,
   WorkspaceSearchOptions,
 } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type {
@@ -43,6 +44,7 @@ export interface WorkspaceControlDeps {
   readonly checkpoints: WorkspaceCheckpointOperations;
   readonly ignore: WorkspaceIgnoreOperations;
   readonly search: WorkspaceSearchOperations;
+  readonly files: WorkspaceTextOperations;
   readonly containsPath: (filePath: string) => boolean;
   readonly directories: () => readonly string[];
   readonly addDirectory: (path: string) => void;
@@ -209,6 +211,16 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   ): Promise<string[]> {
     return this.admitWork(() =>
       this.deps.search.search(directory, pattern, options),
+    );
+  }
+
+  async readTextFile(filePath: string): Promise<string> {
+    return this.admitWork(() => this.deps.files.readTextFile(filePath));
+  }
+
+  async writeTextFile(filePath: string, content: string): Promise<void> {
+    return this.admitWork(() =>
+      this.deps.files.writeTextFile(filePath, content),
     );
   }
 

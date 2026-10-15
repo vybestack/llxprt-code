@@ -355,6 +355,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       inputs.messageBus,
       inputs.policyOwner,
       inputs.policyOwnership,
+      inputs.filesystemService,
     );
     this.subscriptions.push(environment[4]);
     return environment;

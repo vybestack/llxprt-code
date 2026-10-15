@@ -49,6 +49,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       signal: AbortSignal,
       tokenBudget?: number,
     ) => Promise<string>,
+    private readonly executeTransport?: IShellToolHost['executeShellCommand'],
   ) {}
 
   getTargetDir(): string {
@@ -177,6 +178,8 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     onOutput: (event: ToolsShellOutputEvent) => void,
     signal: AbortSignal,
   ): Promise<ToolsShellExecutionResult> {
+    if (this.executeTransport !== undefined)
+      return this.executeTransport(command, cwd, onOutput, signal);
     const handle = await ShellExecutionService.execute(
       command,
       cwd,

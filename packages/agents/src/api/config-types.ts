@@ -1,3 +1,5 @@
+import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionImageSelection } from './session-image-assembly.js';
 import type {
@@ -393,6 +395,8 @@ export interface AgentConfig
   readonly onOAuthPrompt?: OAuthPromptHandler;
   readonly definitionOwner?: WorkspaceDefinitionOwner;
   readonly definitionOwnership?: 'agent' | 'caller';
+  readonly executeShellCommand?: IShellToolHost['executeShellCommand'];
+  readonly filesystemService?: FileSystemService;
   readonly filesystemOwner?: WorkspaceFilesystemOwner;
   readonly filesystemOwnership?: 'agent' | 'caller';
   readonly lspOwner?: WorkspaceLspOwner;

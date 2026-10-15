@@ -20,6 +20,7 @@ import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
+  WorkspaceTextOperations,
 } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
@@ -1020,7 +1021,8 @@ export interface AgentSkillsControl {
  */
 export interface AgentWorkspaceControl
   extends WorkspaceIgnoreOperations,
-    WorkspaceSearchOperations {
+    WorkspaceSearchOperations,
+    WorkspaceTextOperations {
   readonly checkpoints: WorkspaceCheckpointOperations;
   readonly profileDefinitions: ProfileDefinitionReads;
   readonly profileWrites: ProfileDefinitionWrites;

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
+
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
@@ -15,6 +17,7 @@ export function assembleMcpFilesystem(
   ownership: 'runtime' | 'caller',
   resources: McpConstructionResources,
   trust: WorkspaceTrustControlPort,
+  service: FileSystemService | undefined,
 ): { filesystem: WorkspaceFilesystemOwner; unsubscribe: () => void } {
   if (ownership === 'caller' && supplied === undefined)
     throw new Error(
@@ -27,6 +30,8 @@ export function assembleMcpFilesystem(
       customExcludes: config.customExcludes,
       includeDirectories: config.getConfiguredIncludeDirectories(),
       isTrusted: () => trust.isTrustedFolder(),
+      fileSystem:
+        service === undefined ? undefined : { service, ownership: 'caller' },
     });
   if (ownership === 'runtime') resources.retain(() => filesystem.dispose());
   const unsubscribe = trust.subscribeTrustChange(() =>

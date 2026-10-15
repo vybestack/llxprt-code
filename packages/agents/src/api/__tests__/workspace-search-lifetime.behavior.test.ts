@@ -59,6 +59,7 @@ describe('workspace search facade lifetime', () => {
       directories: operations.workspacePaths.directories,
       ignore: operations.workspaceIgnore,
       search: operations.workspaceSearch,
+      files: operations.workspaceFiles,
       containsPath: operations.workspacePaths.contains,
       addDirectory: operations.addWorkspaceDirectory,
       workingDirectory: directory,
