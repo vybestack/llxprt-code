@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { initializationOperations } from './__tests__/session-initialization-operations.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -67,7 +68,7 @@ interface SessionStartOutput {
 const makeAgentWithSpy = (output: SessionStartOutput = {}) => {
   const triggerSessionStart = vi.fn().mockResolvedValue(output);
   return {
-    agent: { hooks: { triggerSessionStart } } as never,
+    agent: { hooks: { triggerSessionStart } },
     triggerSessionStart,
   };
 };
@@ -91,8 +92,7 @@ describe('useSessionInitialization', () => {
 
     const { result } = renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
+        ...initializationOperations(config, makeAgent()),
         addItem,
         loadHistory,
       }),
@@ -116,8 +116,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
+        ...initializationOperations(config, makeAgent()),
         addItem,
         loadHistory,
         resumedHistory,
@@ -142,8 +141,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
+        ...initializationOperations(config, makeAgent()),
         addItem,
         loadHistory,
         resumedHistory: [],
@@ -165,8 +163,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent,
+        ...initializationOperations(config, agent),
         addItem,
         loadHistory,
       }),
@@ -196,8 +193,7 @@ describe('useSessionInitialization', () => {
 
     renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent,
+        ...initializationOperations(config, agent),
         addItem,
         loadHistory,
       }),
@@ -228,8 +224,7 @@ describe('useSessionInitialization', () => {
 
     const { unmount } = renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
+        ...initializationOperations(config, makeAgent()),
         addItem,
         loadHistory,
       }),
@@ -259,8 +254,7 @@ describe('useSessionInitialization', () => {
 
     const { rerender } = renderHook(() =>
       useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
+        ...initializationOperations(config, makeAgent()),
         addItem,
         loadHistory,
         resumedHistory,

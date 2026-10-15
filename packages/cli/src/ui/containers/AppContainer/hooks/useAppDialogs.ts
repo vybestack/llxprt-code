@@ -15,6 +15,7 @@ import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogComma
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
+import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
 import type { UseWelcomeOnboardingReturn } from '../../../hooks/useWelcomeOnboarding.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
@@ -261,6 +262,34 @@ function useDialogsAuthProviders(
   };
 }
 
+function useDialogsWelcome(
+  p: AppDialogsParams,
+  isFolderTrustComplete: boolean,
+) {
+  const { settings } = p;
+  const oauthControl = useOAuthControl();
+  return useWelcomeOnboarding({
+    settings,
+    isFolderTrustComplete,
+    listProviders: p.runtime.listProviders,
+    listAvailableModels: p.runtime.listAvailableModels,
+    setActiveModel: p.runtime.setActiveModel,
+    readProviderStatus: p.runtime.providerStatus,
+    listSavedProfiles: p.runtime.listSavedProfiles,
+    saveProfileSnapshot: p.runtime.saveProfileSnapshot,
+    setDefaultProfileName: p.runtime.setDefaultProfileName,
+    loadProfileByName: p.runtime.loadProfileByName,
+    switchProviderAfterAuth: useCallback(
+      (provider: string) =>
+        p.agent.setProvider(provider, undefined, { autoOAuth: false }),
+      [p.agent],
+    ),
+    updateActiveProviderApiKey: p.runtime.updateActiveProviderApiKey,
+    authenticate: oauthControl.authenticate,
+    suppressStartup: p.suppressStartupWelcome === true,
+  });
+}
+
 function useDialogsAuth(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsStoreState>,
@@ -287,12 +316,7 @@ function useDialogsAuth(
     store,
     dialogs,
   });
-  const welcome = useWelcomeOnboarding({
-    settings,
-    isFolderTrustComplete: !folderTrust.isFolderTrustDialogOpen,
-    agent: p.agent,
-    suppressStartup: p.suppressStartupWelcome === true,
-  });
+  const welcome = useDialogsWelcome(p, !folderTrust.isFolderTrustDialogOpen);
   // The welcome dialog mirrors welcome.showWelcome in the DialogStore;
   // dismiss/resetAndReopen flip showWelcome and this effect follows.
   useEffect(() => {
