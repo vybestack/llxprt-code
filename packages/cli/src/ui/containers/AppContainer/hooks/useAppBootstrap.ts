@@ -41,6 +41,7 @@ import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
+import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
@@ -126,6 +127,39 @@ export interface AppBootstrapResult {
   recordingOwner?: 'agent' | 'raw';
 }
 
+function useInitializationBindings(
+  agent: AppBootstrapProps['agent'],
+  uiRuntime: AppBootstrapProps['uiRuntime'],
+) {
+  return {
+    triggerSessionStart: useCallback(
+      () => agent.hooks.triggerSessionStart(),
+      [agent],
+    ),
+    appendHookContext: useCallback(
+      async (text: string) => {
+        await agent.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text }],
+        });
+      },
+      [agent],
+    ),
+    readEmojiFilterMode: useCallback(
+      () => resolveEmojiFilterMode(uiRuntime.ephemeral),
+      [uiRuntime],
+    ),
+    readLlxprtMdFileCount: useCallback(
+      () => uiRuntime.memory.getLlxprtMdFileCount(),
+      [uiRuntime],
+    ),
+    readCoreMemoryFileCount: useCallback(
+      () => uiRuntime.memory.getCoreMemoryFileCount(),
+      [uiRuntime],
+    ),
+  };
+}
+
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
   const { uiRuntime, agent, settings, resumedHistory } = props;
@@ -175,8 +209,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     coreMemoryFileCount,
     setCoreMemoryFileCount: _setCoreMemoryFileCount,
   } = useSessionInitialization({
-    uiRuntime,
-    agent,
+    ...useInitializationBindings(agent, uiRuntime),
     addItem,
     loadHistory,
     resumedHistory,
