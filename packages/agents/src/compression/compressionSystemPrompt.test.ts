@@ -33,7 +33,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
-import { MiddleOutStrategy } from './MiddleOutStrategy.js';
+import { compressMiddleOutViaDisk } from './__tests__/support/middleout-disk-adapter.js';
 import { runVerificationPass } from './utils.js';
 import {
   CompressionLoadBalancingProvider,
@@ -226,8 +226,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       preserveThreshold: 0.2,
     });
 
-    const strategy = new MiddleOutStrategy();
-    const result = await strategy.compress(context);
+    const result = await compressMiddleOutViaDisk(context);
 
     expect(result.kind).toBe('applied');
     expect(captured.length).toBeGreaterThanOrEqual(1);

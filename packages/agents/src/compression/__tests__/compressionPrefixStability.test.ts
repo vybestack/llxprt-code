@@ -27,11 +27,11 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  CompressionContext,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
+import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  compressMiddleOutViaDisk,
+  type MiddleOutDiskOutcome,
+} from './support/middleout-disk-adapter.js';
 import {
   buildContext,
   humanMsg,
@@ -140,7 +140,7 @@ async function restampAndAppend(
   return [...(await collectRawHistory(hs))];
 }
 
-function assertApplied(result: StrategyCompressionResult): {
+function assertApplied(result: MiddleOutDiskOutcome): {
   newHistory: IContent[];
   topPreserved: number;
 } {
@@ -151,7 +151,7 @@ function assertApplied(result: StrategyCompressionResult): {
   }
   return {
     newHistory: result.newHistory,
-    topPreserved: result.metadata.topPreserved,
+    topPreserved: result.top,
   };
 }
 
@@ -178,8 +178,6 @@ const densityFixture3_observeThrowsWhenALiveMaxOutputTokensSettingContextLimit =
   };
 
 const densityFixture4_observeFiveCompressionCycles = async () => {
-  const strategy = new MiddleOutStrategy();
-
   // Start with enough messages to compress
   const baseHistory: IContent[] = [];
   for (let i = 0; i < 20; i++) {
@@ -197,7 +195,7 @@ const densityFixture4_observeFiveCompressionCycles = async () => {
 
   for (let cycle = 0; cycle < 5; cycle++) {
     const ctx = buildCtx(currentHistory, anchor);
-    const applied = assertApplied(await strategy.compress(ctx));
+    const applied = assertApplied(await compressMiddleOutViaDisk(ctx));
     const newHistory = applied.newHistory;
 
     const headEnd = findHeadEnd(newHistory, applied.topPreserved);
@@ -228,8 +226,6 @@ const densityFixture4_observeFiveCompressionCycles = async () => {
 
 const densityFixture5_observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary =
   async () => {
-    const strategy = new MiddleOutStrategy();
-
     // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
     // The anchor floor is set to the entry just before the unmatched tool_call,
     // so adjustForToolCallBoundary would try to move the split backward below
@@ -265,7 +261,7 @@ const densityFixture5_observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBou
     const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
 
     const ctx = buildCtx(stamped, anchorSeq);
-    const result = await strategy.compress(ctx);
+    const result = await compressMiddleOutViaDisk(ctx);
 
     // Either the anchor floor held (applied with topPreserved >= 8) or a clean
     // structural no-op was returned. The floor must NEVER be silently violated.
@@ -274,15 +270,13 @@ const densityFixture5_observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBou
     // 'applied' path the preserved head must cover the floor; on the 'noop'
     // path compression was declined so the floor is intact by definition.
     // Expressed as a single non-conditional assertion — no sentinel fallback.
-    const floorHeld =
-      result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
+    const floorHeld = result.kind === 'noop' || result.top >= 8;
 
     return { result, floorHeld };
   };
 
 const densityFixture6_observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf =
   async () => {
-    const strategy = new MiddleOutStrategy();
     const history: IContent[] = [
       humanMsg('h0'),
       aiTextMsg('a1'),
@@ -310,12 +304,12 @@ const densityFixture6_observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf =
     const stamped = await stampHistory(history);
     const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
 
-    const result = await strategy.compress(buildCtx(stamped, anchorSeq));
+    const result = await compressMiddleOutViaDisk(buildCtx(stamped, anchorSeq));
     if (result.kind !== 'applied') {
       throw new Error('Expected matched tool boundary compression to apply');
     }
 
-    const preserved = result.newHistory.slice(0, result.metadata.topPreserved);
+    const preserved = result.newHistory.slice(0, result.top);
     const callIndex = preserved.findIndex((entry) =>
       entry.blocks.some(
         (block) => block.type === 'tool_call' && block.id === 'tc-matched',
@@ -341,8 +335,6 @@ const densityFixture6_observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf =
 
 const densityFixture7_observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural =
   async () => {
-    const strategy = new MiddleOutStrategy();
-
     const history: IContent[] = [];
     for (let i = 0; i < 10; i++) {
       history.push(humanMsg(`user ${i}`));
@@ -355,7 +347,7 @@ const densityFixture7_observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanSt
       stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
 
     const ctx = buildCtx(stamped, anchorSeq);
-    const result = await strategy.compress(ctx);
+    const result = await compressMiddleOutViaDisk(ctx);
 
     // An anchor at the very end pushes topSplit past bottomSplit → structural no-op
 
@@ -599,8 +591,6 @@ function observeDensityCase12() {
 }
 
 async function observeDensityCase13() {
-  const strategy = new MiddleOutStrategy();
-
   // 40 plain human/ai messages (no tool calls → boundary adjustment is no-op)
   const baseHistory: IContent[] = [];
   for (let i = 0; i < 20; i++) {
@@ -611,7 +601,7 @@ async function observeDensityCase13() {
   // First compression, no anchor yet
   const stamped1 = await stampHistory(baseHistory);
   const ctx1 = buildCtx(stamped1, 0);
-  const applied1 = assertApplied(await strategy.compress(ctx1));
+  const applied1 = assertApplied(await compressMiddleOutViaDisk(ctx1));
   const newHistory1 = applied1.newHistory;
 
   const head1End = findHeadEnd(newHistory1, applied1.topPreserved);
@@ -632,7 +622,7 @@ async function observeDensityCase13() {
 
   // Second compression WITH the anchor
   const ctx2 = buildCtx(history2, anchorSeq as number);
-  const applied2 = assertApplied(await strategy.compress(ctx2));
+  const applied2 = assertApplied(await compressMiddleOutViaDisk(ctx2));
   const newHistory2 = applied2.newHistory;
 
   const head2End = findHeadEnd(newHistory2, applied2.topPreserved);

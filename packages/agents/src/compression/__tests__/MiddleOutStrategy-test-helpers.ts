@@ -301,3 +301,25 @@ export function generateHistory(count: number): IContent[] {
   }
   return messages;
 }
+
+/**
+ * Builds a context whose provider resolution is counted. The disk outcome
+ * carries no llmCallMade flag, so the call count is the observable fact
+ * behind "an LLM call was (not) made".
+ */
+export function buildCountingContext(
+  overrides: Parameters<typeof buildContext>[0] = {},
+): { ctx: CompressionContext; providerCalls: () => number } {
+  const ctx = buildContext(overrides);
+  let providerCalls = 0;
+  return {
+    ctx: {
+      ...ctx,
+      resolveProvider: (profileName) => {
+        providerCalls++;
+        return ctx.resolveProvider(profileName);
+      },
+    },
+    providerCalls: () => providerCalls,
+  };
+}

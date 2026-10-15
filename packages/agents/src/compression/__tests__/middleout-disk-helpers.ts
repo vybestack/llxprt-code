@@ -9,7 +9,7 @@ import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-he
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { providerFixtureRow } from '../../../../core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
+import { MiddleOutArrayOracle } from './support/middleout-array-oracle.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
 import { OneShotArrayOracle } from './support/oneshot-array-oracle.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -148,7 +148,7 @@ export async function middleoutOracle(
     ...metadata,
     history: buildCuratedHistory(logger, raw, false),
   };
-  let result = await new MiddleOutStrategy().compress(context);
+  let result = await new MiddleOutArrayOracle().compress(context);
   if (result.kind === 'noop')
     result = await new OneShotArrayOracle().compress(context);
   if (result.kind !== 'applied')

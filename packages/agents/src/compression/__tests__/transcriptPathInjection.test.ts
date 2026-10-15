@@ -22,7 +22,7 @@ import type {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
 import { compressOneShotViaDisk } from './support/oneshot-disk-adapter.js';
-import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
+import { compressMiddleOutViaDisk } from './support/middleout-disk-adapter.js';
 import {
   buildContext,
   createCaptureProvider,
@@ -96,7 +96,7 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy hands the journal path to the summarizing model', async () => {
     const requestText = await captureRequestText(
-      (context) => new MiddleOutStrategy().compress(context),
+      compressMiddleOutViaDisk,
       JOURNAL_PATH,
     );
 
@@ -109,7 +109,7 @@ describe('session journal notice injection (#2933)', () => {
       JOURNAL_PATH,
     );
     const middleOutText = await captureRequestText(
-      (context) => new MiddleOutStrategy().compress(context),
+      compressMiddleOutViaDisk,
       JOURNAL_PATH,
     );
 
@@ -133,7 +133,7 @@ describe('session journal notice injection (#2933)', () => {
 
   it('MiddleOutStrategy sends no journal notice when no path is present', async () => {
     const requestText = await captureRequestText(
-      (context) => new MiddleOutStrategy().compress(context),
+      compressMiddleOutViaDisk,
       undefined,
     );
 
