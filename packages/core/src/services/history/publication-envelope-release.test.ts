@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { retainedAfterSettling } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { JournalResolver } from '../../recording/journalResolver.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
 import type { EnvelopeFixture } from './publication-envelope-test-helpers.js';
 import {
   envelopeGC,
-  envelopeSurvivors,
   envelopeCensus,
   withEnvelopeFixture,
   seedEnvelopeStore,
@@ -66,7 +66,7 @@ for (const [size, bytes] of [
         fixture.writer.resolve();
         await completed;
         await expectReleased(fixture);
-        expect(envelopeSurvivors(weak)).toBe(0);
+        expect(await retainedAfterSettling(weak)).toBe(0);
         await expectFullBytes(fixture, size, bytes);
         await completed;
         expect([pendingLength, fixture.store.getLength()]).toStrictEqual([
@@ -85,7 +85,7 @@ for (const [size, bytes] of [
           fixture.writer.resolve();
           await held.completed;
           await expectReleased(fixture);
-          expect(envelopeSurvivors(held.weak)).toBe(0);
+          expect(await retainedAfterSettling(held.weak)).toBe(0);
           expect(held.publication.admittedCount).toBe(size);
           await expectFullBytes(fixture, size, bytes);
           held.publication.close();
@@ -102,3 +102,19 @@ for (const [size, bytes] of [
     }, 180_000);
   });
 }
+
+describe('acknowledged publication envelope retention trap', () => {
+  it('trap: a seeded row the caller keeps is reported as retained', async () => {
+    await withEnvelopeFixture(async (fixture) => {
+      const weak = seedEnvelopeStore(fixture.store, 8, 2048);
+      const kept = weak[0].deref();
+      const completed = fixture.store.waitForDurable();
+      await fixture.writerStarted.promise;
+      fixture.writer.resolve();
+      await completed;
+      await envelopeGC();
+      expect(await retainedAfterSettling(weak)).toBe(1);
+      expect(kept?.speaker).toBe('human');
+    });
+  }, 180_000);
+});

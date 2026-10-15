@@ -5,6 +5,7 @@ import {
   median,
   medianOfRuns,
   medianSettledDelta,
+  retainedAfterSettling,
   settledHeap,
 } from './settled-heap.js';
 
@@ -58,5 +59,22 @@ describe('settled heap measurement helpers', () => {
     expect(await collectedWithin(droppedRef, 12)).toBe(true);
     expect(await collectedWithin(heldRef, 3)).toBe(false);
     expect(held.held).toBe(true);
+  });
+
+  it('retainedAfterSettling reports zero for dropped objects', async () => {
+    const dropped = (() =>
+      Array.from(
+        { length: 64 },
+        () => new WeakRef<object>({ dropped: true }),
+      ))();
+    expect(await retainedAfterSettling(dropped)).toBe(0);
+  });
+
+  it('trap: retainedAfterSettling reports every object that is held strongly', async () => {
+    const held = Array.from({ length: 3 }, () => ({ held: true }));
+    const refs = held.map((object) => new WeakRef<object>(object));
+    const dropped = (() => new WeakRef<object>({ dropped: true }))();
+    expect(await retainedAfterSettling([...refs, dropped], 3)).toBe(3);
+    expect(held).toHaveLength(3);
   });
 });

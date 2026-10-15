@@ -110,3 +110,29 @@ export async function collectedWithin(
   }
   return ref.deref() === undefined;
 }
+
+/**
+ * How many of `refs` are still reachable after settling. A target counts only
+ * when it stays alive through up to `maxRounds` further collections, each
+ * preceded by a trip to the event loop.
+ *
+ * JavaScriptCore scans the machine stack conservatively, so a stale slot of a
+ * frame that already returned can keep one object alive until the slot is
+ * reused. That ends within a few collections, while a real holder keeps its
+ * target alive in every one of them. The check never widens a bound: a held
+ * target is reported on every run.
+ */
+export async function retainedAfterSettling(
+  refs: ReadonlyArray<WeakRef<object>>,
+  maxRounds = MAX_SETTLE_ROUNDS,
+): Promise<number> {
+  let alive = refs.flatMap((ref, index) =>
+    ref.deref() === undefined ? [] : [index],
+  );
+  for (let round = 0; round < maxRounds && alive.length > 0; round++) {
+    await yieldToEventLoop();
+    gcAndSweep();
+    alive = alive.filter((index) => refs[index].deref() !== undefined);
+  }
+  return alive.length;
+}

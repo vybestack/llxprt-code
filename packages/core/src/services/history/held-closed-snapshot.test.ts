@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
+import { retainedAfterSettling } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   detachedRow,
   detachedDigest,
@@ -28,18 +29,16 @@ function submit(
   fixture: DetachedFixture,
   size: number,
   bytes: number,
+  keep?: IContent[],
 ): { weak: Array<WeakRef<IContent>>; operation: Promise<void> } {
   const rows = Array.from({ length: size }, (_, index) =>
     detachedRow(index, bytes),
   );
+  if (keep !== undefined) keep.push(rows[0]);
   return {
     weak: rows.map((row) => new WeakRef(row)),
     operation: fixture.history.replaceAll(rows),
   };
-}
-
-function survivors(weak: ReadonlyArray<WeakRef<IContent>>): number {
-  return weak.filter((ref) => ref.deref() !== undefined).length;
 }
 
 function expectClosed(snapshot: HistoryMutationSnapshot): void {
@@ -79,7 +78,7 @@ for (const [size, bytes] of [
         );
         expect(await operation).toBe(failure);
         await collectGarbage();
-        expect(survivors(active.weak)).toBe(0);
+        expect(await retainedAfterSettling(active.weak)).toBe(0);
         expect(held.snapshot?.length).toBe(size);
         for (const reader of readers) expect(reader.next().done).toBe(true);
         if (held.snapshot === undefined)
@@ -115,7 +114,7 @@ describe('held closed snapshot caller and disposal', () => {
         held.rows = [...snapshot];
       });
       await collectGarbage();
-      expect(survivors(active.weak)).toBe(0);
+      expect(await retainedAfterSettling(active.weak)).toBe(0);
       expect(held.rows).toHaveLength(8192);
       expect(held.rows?.[0].blocks).toStrictEqual(detachedRow(0, 2048).blocks);
       expect(held.rows?.[8191].blocks).toStrictEqual(
@@ -139,4 +138,19 @@ describe('held closed snapshot caller and disposal', () => {
       });
     });
   });
+});
+
+describe('held closed snapshot retention trap', () => {
+  it('trap: a submitted row the caller keeps is reported as retained', async () => {
+    await withDetachedFixture(async (fixture) => {
+      const kept: IContent[] = [];
+      const active = submit(fixture, 512, 2048, kept);
+      await active.operation;
+      await collectGarbage();
+      expect(await retainedAfterSettling(active.weak)).toBeGreaterThanOrEqual(
+        1,
+      );
+      expect(kept[0].speaker).toBe('human');
+    });
+  }, 180_000);
 });
