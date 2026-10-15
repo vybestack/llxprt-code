@@ -562,7 +562,7 @@ describe('interactive runtime owner bridge', () => {
           );
         },
       });
-      const authCommand = createAuthCommand(rightControl);
+      const authCommand = createAuthCommand(rightControl, () => true);
       if (!authCommand.action) throw new Error('Auth command unavailable');
       const statusResult = await authCommand.action(rightContext, 'claudecode');
       expect(statusResult).toMatchObject({
