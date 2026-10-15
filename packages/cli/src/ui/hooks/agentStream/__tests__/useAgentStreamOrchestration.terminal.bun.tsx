@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act, useMemo, useState } from 'react';
@@ -189,12 +190,13 @@ function useOrchestration(
     [commandEffect],
   );
 
+  const policyOps = useMemo(() => streamPolicyOperations(runtime), [runtime]);
   const submissionOps = useMemo(
     () => submissionOperations(agent, undefined, undefined),
     [agent],
   );
   const submitDeps: UseSubmitQueryDeps = {
-    runtime,
+    ...policyOps,
     ...submissionOps,
     addItem,
     removeItems,

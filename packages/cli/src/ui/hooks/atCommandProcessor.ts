@@ -21,25 +21,9 @@ import type {
   AtCommandPart,
   AtCommandProcessResult,
 } from './atCommandProcessorHelpers.js';
-import type { StreamRuntime, UiSubagentManager } from '../cliUiRuntime.js';
+import type { UiSubagentManager } from '../cliUiRuntime.js';
 
 export type AtCommandRuntime = AtCommandHelperRuntime;
-
-export function buildAtCommandRuntimeFromStream(
-  runtime: StreamRuntime,
-): AtCommandRuntime {
-  return {
-    // @plan:ISSUE-2376 — tool lookup is routed through the Agent surface
-    // (getToolHandle), so the @-command runtime no longer exposes
-    // getToolRegistry; it only carries MCP + file/workspace access.
-    getFileFilteringOptions: () => runtime.files.getFileFilteringOptions(),
-    directories: () => runtime.files.directories(),
-    contains: (filePath) => runtime.files.contains(filePath),
-    ignore: runtime.files.ignore,
-    getEnableRecursiveFileSearch: () =>
-      runtime.files.getEnableRecursiveFileSearch(),
-  };
-}
 
 // Detect if running in PowerShell to handle @ symbol conflicts
 // PowerShell's IntelliSense treats @ as hashtable start and causes severe lag

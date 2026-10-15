@@ -27,6 +27,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -108,9 +109,8 @@ void vi.mock('../agentEventDispatcher.js', () => ({
 const harness = createLifecyclePerfHarness();
 
 function renderUseSubmitQuery(deps: LifecycleDeps) {
-  return renderHook(() =>
-    useSubmitQuery(buildLifecycleHookDeps(deps, harness.registry)),
-  );
+  const hookDeps = buildLifecycleHookDeps(deps, harness.registry);
+  return renderHook(() => useSubmitQuery(hookDeps));
 }
 
 function drainAndRead() {
@@ -343,7 +343,8 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
     });
 
     const hookDeps: UseSubmitQueryDeps = {
-      runtime: createStreamRuntimeForTest(),
+      ...{ runtime: createStreamRuntimeForTest() },
+      ...streamPolicyOperations(createStreamRuntimeForTest()),
       ...submissionOperations(
         createMockAgentClient() as unknown as Agent,
         {

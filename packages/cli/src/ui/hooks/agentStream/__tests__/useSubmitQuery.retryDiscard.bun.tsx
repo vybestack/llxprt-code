@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Behavioral tests for issue #3048 — discard-and-restart in the interactive CLI.
@@ -223,9 +224,15 @@ async function buildUseSubmitQueryDeps(
     ? overrides.removeItems
     : deps.removeItemsRecorder.removeItems;
   const stableDeps = {
-    runtime:
+    ...{
+      runtime:
+        overrides.runtime ??
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    },
+    ...streamPolicyOperations(
       overrides.runtime ??
-      createStreamRuntimeForTest({}, createMockOverrides()),
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
     ...submissionOperations(await createMockAgent(), undefined, undefined),
     addItem: deps.addItemRecorder.addItem,
     removeItems,

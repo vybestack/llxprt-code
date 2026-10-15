@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Behavioral tests for the consolidated inline notification path (issue #1770).
@@ -56,7 +57,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
     };
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        runtime: createStreamRuntimeForTest(mockConfig),
+        ...streamPolicyOperations(createStreamRuntimeForTest(mockConfig)),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),
@@ -139,7 +140,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
   ) {
     const { result } = renderHook(() =>
       useStreamEventHandlers({
-        runtime: createStreamRuntimeForTest(mockConfig),
+        ...streamPolicyOperations(createStreamRuntimeForTest(mockConfig)),
         settings: mockSettings,
         addItem: mockAddItem,
         onDebugMessage: vi.fn(),

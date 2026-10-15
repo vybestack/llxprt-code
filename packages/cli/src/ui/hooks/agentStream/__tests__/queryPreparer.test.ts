@@ -25,7 +25,9 @@ function createDeps(
   overrides: Partial<PrepareQueryDeps> = {},
 ): PrepareQueryDeps {
   return {
-    runtime: createStreamRuntimeForTest({ getModel: () => 'test-model' }),
+    atCommandConfig: createStreamRuntimeForTest({
+      getModel: () => 'test-model',
+    }).files,
     logUserPrompt: vi.fn(),
     addItem: vi.fn(),
     onDebugMessage: vi.fn(),

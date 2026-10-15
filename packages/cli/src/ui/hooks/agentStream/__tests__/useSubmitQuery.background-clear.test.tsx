@@ -4,6 +4,7 @@ import { submissionOperations } from './submission-operations.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
@@ -57,7 +58,10 @@ function renderNotificationQueue(
 ): ReturnType<typeof renderHook<ReturnType<typeof useSubmitQuery>, undefined>> {
   const noop = (): void => {};
   const deps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest({}, createMockOverrides()),
+    ...{ runtime: createStreamRuntimeForTest({}, createMockOverrides()) },
+    ...streamPolicyOperations(
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
     ...submissionOperations(agent, undefined, undefined),
     addItem: () => 1,
     settings: createLoadedSettings(),

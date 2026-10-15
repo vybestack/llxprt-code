@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './__tests__/stream-policy-operations.js';
 import { describe, expect, it } from 'bun:test';
 import { act } from 'react';
 import { writeFile } from 'node:fs/promises';
@@ -32,7 +33,13 @@ async function prepareOwnedFile(owner: Agent, decoy: Agent): Promise<string> {
   );
   const hook = renderHook(() =>
     useStreamEventHandlers({
-      runtime,
+      ...{
+        runtime: createStreamRuntimeForTest({
+          getTargetDir: () => decoy.workspace.getWorkingDirectory(),
+        }),
+      },
+      ...streamPolicyOperations(runtime),
+      atCommandConfig: runtime.files,
       ...{ agent: decoy },
       getProviderContextLimit: () => owner.getProviderContextLimit(),
       getContentPrefixIdentity: () => null,

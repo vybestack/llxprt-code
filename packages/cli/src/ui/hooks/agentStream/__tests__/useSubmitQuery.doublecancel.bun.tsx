@@ -17,6 +17,7 @@ import { submissionOperations } from './submission-operations.js';
  * a newer turn has superseded this one and the stale turn must not mutate
  * shared React state.
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
@@ -158,9 +159,15 @@ async function createUseSubmitQueryDeps(
   const queueOperations =
     overrides.queueOperations ?? createQueueOperations(queuedSubmissionsRef);
   const stableDeps = {
-    runtime:
+    ...{
+      runtime:
+        overrides.runtime ??
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    },
+    ...streamPolicyOperations(
       overrides.runtime ??
-      createStreamRuntimeForTest({}, createMockOverrides()),
+        createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
     ...submissionOperations(
       overrides.agent ?? (await createMockAgent()),
       overrides.recordingIntegration,
