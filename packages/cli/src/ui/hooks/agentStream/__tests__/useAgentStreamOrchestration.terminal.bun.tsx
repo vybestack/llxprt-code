@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import React, { act, useState } from 'react';
+import React, { act, useMemo, useState } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
   useSubmitQuery,
@@ -39,6 +39,7 @@ import {
   createMockOverrides,
   createQueueOperations,
 } from './submitQueryTestFixtures.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 void vi.mock('../turnPreparation.js', () => ({
   prepareTurnForQuery: vi.fn().mockResolvedValue(undefined),
@@ -243,8 +244,9 @@ function useOrchestration(
   const submitResult = useSubmitQuery(submitDeps);
   state.processAgentEventRef.current = submitResult.processAgentEvent;
 
+  const operations = useMemo(() => agentStreamOperations(agent), [agent]);
   const eventStream = useAgentEventStream({
-    agent,
+    ...operations,
     addItem,
     processAgentEventRef: state.processAgentEventRef,
     flushPendingHistoryItem: vi.fn(),

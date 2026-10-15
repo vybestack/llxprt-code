@@ -98,6 +98,7 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 // ─── Module mocks (UI-side only; the engine below is real) ──────────────────
 
@@ -499,12 +500,13 @@ function renderHarness(options: {
     current: false,
   };
 
+  const operations = agentStreamOperations(env.agent);
   const hook = renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       const queue = useQueuedSubmissions();
       const processAgentEventRef = useRef<AgentEventRouter | null>(null);
       const eventStream = useAgentEventStream({
-        agent: env.agent,
+        ...operations,
         addItem: handles.addItem,
         processAgentEventRef,
         flushPendingHistoryItem: handles.flushPendingHistoryItem,

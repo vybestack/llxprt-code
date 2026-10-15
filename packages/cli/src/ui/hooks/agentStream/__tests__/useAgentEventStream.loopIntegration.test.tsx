@@ -81,6 +81,7 @@ import {
   agentRequestInputToBlocks,
   type ScriptedClientState,
 } from './loopTestHelpers.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
   client: AgentClientContract;
@@ -421,9 +422,10 @@ function setupHookWithAgent(agent: Agent): HookHarness {
     { current: null };
   const addItem = vi.fn();
   const onToolCallsUpdate = vi.fn();
+  const operations = agentStreamOperations(agent);
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
-      agent,
+      ...operations,
       addItem,
       processAgentEventRef,
       flushPendingHistoryItem: vi.fn(),

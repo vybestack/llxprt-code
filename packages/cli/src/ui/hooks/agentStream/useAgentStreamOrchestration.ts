@@ -280,8 +280,22 @@ function useEventStreamForAgent(
   processAgentEventRef: React.MutableRefObject<AgentEventRouter | null>,
 ) {
   const lifecycle = args.operationLifecycle;
+  const { agent } = args;
+  const stream = useCallback<Agent['stream']>(
+    (input, options) => agent.stream(input, options),
+    [agent],
+  );
+  const setDisplayCallbacks = useCallback<
+    Agent['tools']['setDisplayCallbacks']
+  >((callbacks) => agent.tools.setDisplayCallbacks(callbacks), [agent]);
+  const setEditorCallbacks = useCallback<Agent['tools']['setEditorCallbacks']>(
+    (callbacks) => agent.tools.setEditorCallbacks(callbacks),
+    [agent],
+  );
   return useAgentEventStream({
-    agent: args.agent,
+    stream,
+    setDisplayCallbacks,
+    setEditorCallbacks,
     addItem: args.addItem,
     processAgentEventRef,
     flushPendingHistoryItem: st.flushPendingHistoryItem,

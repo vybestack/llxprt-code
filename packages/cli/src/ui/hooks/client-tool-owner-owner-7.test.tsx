@@ -54,6 +54,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { FakeProvider } from '../../../../providers/src/fake/FakeProvider.js';
 import { useAgentEventStream } from './agentStream/useAgentEventStream.js';
+import { agentStreamOperations } from './agentStream/__tests__/helpers/agentStreamOperations.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 
 /**
@@ -413,9 +414,10 @@ describe('Agent-owned CLI client tools', () => {
       },
     );
     const display: unknown[] = [];
+    const operations = agentStreamOperations(a.agent);
     const stream = renderHook(() =>
       useAgentEventStream({
-        agent: a.agent,
+        ...operations,
         addItem: (item) => {
           display.push(item);
           return display.length;
