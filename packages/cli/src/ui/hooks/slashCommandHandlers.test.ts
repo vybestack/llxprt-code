@@ -7,11 +7,12 @@
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import {
+  bindFixtureHistoryLoader,
   createCommands,
-  createDeps,
-} from './slash-command-handler-deps-test-helpers.js';
+} from '../../__tests__/command-history-result-fixture.js';
+import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
+import { createDeps } from './slash-command-handler-deps-test-helpers.js';
 import { createDirectoryCommand } from '../commands/directoryCommand.js';
 import { bindDirectoryCommand } from '../commands/directoryCommandHost.js';
 import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
@@ -455,6 +456,7 @@ describe('slashCommandHandlers', () => {
           : ({
               getEphemeralSetting: vi.fn().mockReturnValue(emojiMode),
             } as unknown as SlashCommandHandlerDeps['config']);
+      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
           name: 'loadhist',
@@ -593,6 +595,7 @@ describe('slashCommandHandlers', () => {
       const history: HistoryItemWithoutId[] = [
         { type: 'gemini', text: MODEL_TEXT },
       ];
+      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
           name: 'loadhist',

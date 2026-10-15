@@ -1,3 +1,5 @@
+import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
  * @license
@@ -544,6 +546,15 @@ function buildHandlerDeps(
   cancellation: SlashCommandCancellation,
 ): SlashCommandHandlerDeps {
   return {
+    loadCommandHistory: bindCommandHistoryLoader(
+      async (history) => {
+        if (!args.agent) throw new Error('Session agent is unavailable');
+        await args.agent.setHistory(history);
+      },
+      () => resolveEmojiFilterMode(args.config),
+      commandContext.ui.clear,
+      args.addItem,
+    ),
     recordCommandError: bindCommandErrorRecorder(
       args.agent,
       args.recordingOwner,

@@ -7,27 +7,8 @@
 import { vi } from 'bun:test';
 import { DebugLogger, type Logger } from '@vybestack/llxprt-code-core';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-import { CommandKind, type SlashCommand } from '../commands/types.js';
+import { createCommands } from '../../__tests__/command-history-result-fixture.js';
 import type { SlashCommandHandlerDeps } from './slashCommandHandlers.js';
-
-export function createCommands(
-  action: SlashCommand['action'],
-): readonly SlashCommand[] {
-  return [
-    {
-      name: 'help',
-      description: 'Show help',
-      kind: CommandKind.BUILT_IN,
-      action:
-        action ??
-        vi.fn(() => ({
-          type: 'message' as const,
-          messageType: 'info' as const,
-          content: 'ok',
-        })),
-    },
-  ];
-}
 
 export function createDeps(
   addItem: ReturnType<typeof vi.fn>,
@@ -86,6 +67,7 @@ export function createDeps(
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     recordCommandError: async () => {},
+    loadCommandHistory: async () => {},
     ...overrides,
   };
 }

@@ -109,6 +109,7 @@ describe('recording owner slash command construction', () => {
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       recordCommandError: async () => {},
+      loadCommandHistory: async () => {},
       ...overrides,
     };
   }
