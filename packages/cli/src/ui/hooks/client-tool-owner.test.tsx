@@ -104,18 +104,18 @@ describe('Agent-owned CLI client tools', () => {
     });
     agents.push(agent);
     await agent.agentClient.startChat();
-    const runtime = {
-      scheduler: {},
-      session: { getSessionId: () => config.config.getSessionId() },
-      agent,
-    };
+    const openClientChannel = () => agent.tools.openClientChannel();
+    const subscribeChildTools: Agent['tools']['subscribeChildTools'] = (
+      callbacks,
+    ) => agent.tools.subscribeChildTools(callbacks);
     const completed: CompletedToolCall[][] = [];
     const hook = renderHook(() =>
       useReactToolScheduler(
         (_id, calls) => {
           completed.push(calls);
         },
-        runtime,
+        openClientChannel,
+        subscribeChildTools,
         noop,
         () => undefined,
         noop,
@@ -467,7 +467,10 @@ describe('Agent-owned CLI client tools', () => {
     };
     const id = Symbol('pending-renderer');
     const pending = { current: [] };
-    const renderer = renderHook(() => useScheduler(a.agent, id, refs, pending));
+    const openClientChannel = () => a.agent.tools.openClientChannel();
+    const renderer = renderHook(() =>
+      useScheduler(openClientChannel, id, refs, pending),
+    );
     await waitFor(() => expect(renderer.result.current).not.toBeNull());
     const handle = renderer.result.current;
     if (handle === null) throw new Error('Missing client channel');

@@ -40,7 +40,7 @@ import {
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import { createToolSchedulerOperationsForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
 type OnCompleteFn = (
@@ -446,7 +446,7 @@ const renderScheduler = (
   renderHook(() =>
     useReactToolScheduler(
       onComplete,
-      createReactToolSchedulerRuntimeForTest(mockConfig, async (callbacks) => {
+      ...createToolSchedulerOperationsForTest(mockConfig, async (callbacks) => {
         const scheduler = buildMockScheduler(mockConfig as Config, callbacks);
         createdSchedulers.set({}, scheduler);
         return scheduler;

@@ -89,7 +89,15 @@ export function useToolSchedulerSetup(
   addItem: UseHistoryManagerReturn['addItem'],
   agent: Agent,
 ) {
-  const schedulerRuntime = useMemo(() => ({ agent }), [agent]);
+  const openClientChannel = useCallback(
+    () => agent.tools.openClientChannel(),
+    [agent],
+  );
+  const subscribeChildTools = useCallback(
+    (callbacks: Parameters<Agent['tools']['subscribeChildTools']>[0]) =>
+      agent.tools.subscribeChildTools(callbacks),
+    [agent],
+  );
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;
@@ -107,7 +115,8 @@ export function useToolSchedulerSetup(
         addItem,
       );
     },
-    schedulerRuntime,
+    openClientChannel,
+    subscribeChildTools,
     setPendingHistoryItem,
     getPreferredEditor,
     onEditorClose,
