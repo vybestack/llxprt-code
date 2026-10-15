@@ -3,6 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { bindCommandOwnerResume } from '../ui/hooks/commandOwnerResumeHost.js';
+import {
+  resumeOwnerSession,
+  importOwnerSession,
+} from '../ui/utils/ownerSessionUi.js';
+import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { vi } from 'bun:test';
 import {
   CommandKind,
@@ -43,4 +49,19 @@ export function createCommands(
         })),
     },
   ];
+}
+
+export function bindFixtureOwnerResume(
+  context: CommandContext,
+  config: CliUiRuntime | null,
+) {
+  const agent = context.services.agent;
+  const loadHistory = context.ui.loadHistory;
+  return bindCommandOwnerResume((action) => {
+    if (agent === null) throw new Error('Session agent is unavailable');
+    const mode = resolveEmojiFilterMode(config);
+    return action.sessionPackage === undefined
+      ? resumeOwnerSession(agent, action.sessionRef, mode)
+      : importOwnerSession(agent, action.sessionPackage.packageDirectory, mode);
+  }, loadHistory);
 }

@@ -1,3 +1,4 @@
+import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -85,10 +86,15 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         slashCommandLogger: new DebugLogger('test-slash'),
         beginSlashCommandAction: () => new AbortController(),
         endSlashCommandAction: () => {},
+        resumeOwnedSession: null,
         recordCommandError: async () => {},
         loadCommandHistory: async () => {},
       };
 
+      deps.resumeOwnedSession = bindFixtureOwnerResume(
+        deps.commandContext,
+        deps.config,
+      );
       await processSlashCommand(deps, `/continue ${sourceId}`);
 
       const visible = turnStore.store
