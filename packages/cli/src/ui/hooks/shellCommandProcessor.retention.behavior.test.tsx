@@ -50,7 +50,7 @@ function ShellHarness({
     },
     () => {},
     config,
-    agent,
+    (entry) => agent.addHistory(entry),
     () => {},
     120,
     40,

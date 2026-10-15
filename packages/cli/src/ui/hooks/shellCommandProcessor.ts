@@ -49,6 +49,8 @@ export const OUTPUT_UPDATE_INTERVAL_MS = 100;
 const LIVE_DISPLAY_MAX_BYTES = 512 * 1024;
 const MAX_OUTPUT_LENGTH = 10000;
 
+type AppendShellHistory = Agent['addHistory'];
+
 interface ShellExecutionParams {
   commandToExecute: string;
   targetDir: string;
@@ -57,7 +59,7 @@ interface ShellExecutionParams {
   userMessageTimestamp: number;
   pwdFilePath: string | undefined;
   config: ShellCommandRuntime;
-  agent: Agent | undefined;
+  appendHistory: AppendShellHistory | undefined;
   rawQuery: string;
   abortSignal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -86,7 +88,7 @@ interface ShellEventState {
 }
 
 function addShellCommandToAgentHistory(
-  agent: Agent | undefined,
+  appendHistory: AppendShellHistory | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -95,14 +97,13 @@ function addShellCommandToAgentHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  if (agent) {
-    void agent
-      .addHistory({
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: `I ran the following shell command:
+  if (appendHistory) {
+    void appendHistory({
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'text',
+          text: `I ran the following shell command:
 \`\`\`sh
 ${rawQuery}
 \`\`\`
@@ -111,15 +112,11 @@ This produced the following result:
 \`\`\`
 ${modelContent}
 \`\`\``,
-          },
-        ],
-      })
-      .catch((error) => {
-        debugLogger.error(
-          'Failed to add shell command to agent history:',
-          error,
-        );
-      });
+        },
+      ],
+    }).catch((error) => {
+      debugLogger.error('Failed to add shell command to agent history:', error);
+    });
   }
 }
 
@@ -332,7 +329,7 @@ function handleShellResult(
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
-  agent: Agent | undefined,
+  appendHistory: AppendShellHistory | undefined,
   rawQuery: string,
 ) {
   setPendingHistoryItem(null);
@@ -372,7 +369,7 @@ function handleShellResult(
     userMessageTimestamp,
   );
 
-  addShellCommandToAgentHistory(agent, rawQuery, finalOutput);
+  addShellCommandToAgentHistory(appendHistory, rawQuery, finalOutput);
 }
 
 function handleShellError(
@@ -468,7 +465,7 @@ function handleExecutionResult(
         params.userMessageTimestamp,
         params.addItemToHistory,
         params.setPendingHistoryItem,
-        params.agent,
+        params.appendHistory,
         params.rawQuery,
       );
     })
@@ -624,7 +621,7 @@ export const useShellCommandProcessor = (
   onExec: (command: Promise<void>) => void | Promise<void>,
   onDebugMessage: (message: string) => void,
   config: ShellCommandRuntime,
-  agent: Agent | undefined,
+  appendHistory: AppendShellHistory | undefined,
   setShellInputFocused: (value: boolean) => void,
   terminalWidth?: number,
   terminalHeight?: number,
@@ -663,7 +660,7 @@ export const useShellCommandProcessor = (
           userMessageTimestamp,
           pwdFilePath,
           config,
-          agent,
+          appendHistory,
           rawQuery,
           abortSignal,
           onDebugMessage,
@@ -688,7 +685,7 @@ export const useShellCommandProcessor = (
       addItemToHistory,
       setPendingHistoryItem,
       onExec,
-      agent,
+      appendHistory,
       setShellInputFocused,
       terminalWidth,
       terminalHeight,
