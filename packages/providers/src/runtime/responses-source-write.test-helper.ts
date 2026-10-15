@@ -10,13 +10,15 @@ const fifo = process.argv[2];
 const before = new Set(fs.readdirSync(getScratchRoot()));
 const controller = new AbortController();
 const reason = new Error('abort queued during a synchronous disk write');
-setImmediate(() => {
-  controller.abort(reason);
-  fs.writeFileSync(fifo + '.aborted', 'abort fired');
-  fs.writeSync(1, 'abort-fired\n');
-});
 const write = spyOn(fs, 'writeSync').mockImplementation((fd, buffer) => {
   write.mockRestore();
+  // Queue the abort only once the first synchronous write is entered, so the
+  // test proves the queued callback cannot run until this write returns.
+  setImmediate(() => {
+    controller.abort(reason);
+    fs.writeFileSync(fifo + '.aborted', 'abort fired');
+    fs.writeSync(1, 'abort-fired\n');
+  });
   fs.writeSync(1, 'write-blocked\n');
   fs.writeFileSync(fifo + '.blocked', 'write entered');
   const gate = fs.openSync(fifo, 'r');
@@ -29,6 +31,11 @@ const write = spyOn(fs, 'writeSync').mockImplementation((fd, buffer) => {
   return fs.writeSync(fd, bytes);
 });
 async function* contents(): AsyncIterable<IContent> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  yield {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'first row' }],
+  };
   await new Promise<void>((resolve) => setImmediate(resolve));
   yield {
     speaker: 'human',

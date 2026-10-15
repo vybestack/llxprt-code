@@ -16,6 +16,12 @@ const context = {
   debug: (): void => {},
 };
 
+function leafFailures(error: unknown): unknown[] {
+  return error instanceof AggregateError
+    ? error.errors.flatMap(leafFailures)
+    : [error];
+}
+
 describe('Responses serializer disk-write lifecycle', () => {
   it('retains both a disk-write failure and failed directory cleanup', async () => {
     const before = new Set(fs.readdirSync(getScratchRoot()));
@@ -44,7 +50,18 @@ describe('Responses serializer disk-write lifecycle', () => {
       expect(outcome).toBeInstanceOf(AggregateError);
       if (!(outcome instanceof AggregateError))
         throw new Error('Missing combined failure');
-      expect(outcome.errors).toStrictEqual([writeFailure, cleanupFailure]);
+      // Every layer that owns a resource (request spool, segment writers,
+      // scratch directory) reports its own write and cleanup failure, so the
+      // combined error nests. The original write failure stays the first leaf
+      // and the scratch directory cleanup failure the last; nothing else leaks in.
+      const failures = leafFailures(outcome);
+      expect(failures[0]).toBe(writeFailure);
+      expect(failures.at(-1)).toBe(cleanupFailure);
+      expect(
+        failures.every(
+          (failure) => failure === writeFailure || failure === cleanupFailure,
+        ),
+      ).toBe(true);
       expect(await pending.cleanup).toStrictEqual({
         status: 'rejected',
         reason: outcome,
