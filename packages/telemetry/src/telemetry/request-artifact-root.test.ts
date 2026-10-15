@@ -321,4 +321,75 @@ describe('request artifact telemetry owned by a RootTelemetry', () => {
     await selected.flush();
     await selected.close();
   }, 30000);
+
+  describe('a cancelled receipt on a stalled exporter', () => {
+    const stallWindowMs = 5000;
+    const marginMs = 4000;
+
+    async function stalledRoot(
+      sessionId: string,
+    ): Promise<{ selected: RootTelemetry; exported: Promise<void> }> {
+      let reached: () => void = () => undefined;
+      const exported = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const stalled: LogRecordExporter & {
+        readonly requestArtifactSchemaVersion: 4;
+      } = {
+        requestArtifactSchemaVersion: 4,
+        export: () => reached(),
+        shutdown: () => Promise.resolve(),
+        forceFlush: () => Promise.resolve(),
+      };
+      const selected = await createRootTelemetry(
+        { sessionId, enabled: true, maxBytes: 1, maxFiles: 1 },
+        () => ({
+          tracer: {
+            export: (_spans, done) => done({ code: ExportResultCode.SUCCESS }),
+            shutdown: () => Promise.resolve(),
+          },
+          logger: stalled,
+          meter: {
+            export: (_metrics, done) =>
+              done({ code: ExportResultCode.SUCCESS }),
+            shutdown: () => Promise.resolve(),
+            forceFlush: () => Promise.resolve(),
+          },
+        }),
+      );
+      roots.push(selected);
+      return { selected, exported };
+    }
+
+    async function cancelAfterExport(
+      selected: RootTelemetry,
+      exported: Promise<void>,
+    ): Promise<void> {
+      const cancel = new AbortController();
+      const publishing = flushRequestArtifactTelemetry(
+        selected,
+        { body: 'cancelled record' },
+        cancel.signal,
+      );
+      await exported;
+      cancel.abort(new Error('request cancelled'));
+      await expect(publishing).rejects.toThrow('request cancelled');
+    }
+
+    it('still releases flush within the stall window', async () => {
+      const { selected, exported } = await stalledRoot('cancel-then-flush');
+      await cancelAfterExport(selected, exported);
+      const started = Date.now();
+      await selected.flush();
+      expect(Date.now() - started).toBeLessThan(stallWindowMs + marginMs);
+    }, 12000);
+
+    it('still releases close within the stall window', async () => {
+      const { selected, exported } = await stalledRoot('cancel-then-close');
+      await cancelAfterExport(selected, exported);
+      const started = Date.now();
+      await selected.close();
+      expect(Date.now() - started).toBeLessThan(stallWindowMs + marginMs);
+    }, 12000);
+  });
 });

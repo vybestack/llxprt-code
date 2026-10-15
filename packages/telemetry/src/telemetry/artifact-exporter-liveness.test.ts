@@ -132,6 +132,47 @@ describe('progress-based export liveness', () => {
     await provider.shutdown();
   }, 15000);
 
+  it('keeps the stall timer for an in-flight export after its receipt is cancelled', async () => {
+    const exporter = {
+      requestArtifactSchemaVersion: 4 as const,
+      export: (): void => undefined,
+      shutdown: (): Promise<void> => Promise.resolve(),
+      forceFlush: (): Promise<void> => Promise.resolve(),
+    };
+    const acknowledging = new AcknowledgedLogExporter(exporter, { livenessMs });
+    const results: ExportResult[] = [];
+    const provider = new LoggerProvider({
+      processors: [
+        new SimpleLogRecordProcessor({
+          export: (records, callback) =>
+            acknowledging.export(records, (result) => {
+              results.push(result);
+              callback(result);
+            }),
+          shutdown: () => acknowledging.shutdown(),
+          forceFlush: () => acknowledging.forceFlush(),
+        }),
+      ],
+    });
+    const cancel = new AbortController();
+    const receipt = acknowledging.receipt({ body: 'chunk' }, cancel.signal);
+    const cancelled = receipt.acknowledged.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    provider.getLogger('liveness').emit(receipt.record);
+    cancel.abort(new Error('request cancelled'));
+    expect(String(await cancelled)).toContain('request cancelled');
+    expect(results).toHaveLength(0);
+
+    await sleep(livenessMs * 3);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].code).toBe(ExportResultCode.FAILED);
+    expect(results[0].error).toBeInstanceOf(ExportAcknowledgementMissingError);
+    await provider.shutdown();
+  }, 15000);
+
   it('rejects a non-positive liveness window', () => {
     expect(
       () =>

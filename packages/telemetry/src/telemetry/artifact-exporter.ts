@@ -65,7 +65,15 @@ export interface LogExportReceipt {
 export class AcknowledgedLogExporter implements LogRecordExporter {
   private readonly receipts = new Map<string, (error?: unknown) => void>();
   private readonly abandonExports = new Map<string, (error: Error) => void>();
-  private readonly livenessTouches = new Map<string, () => void>();
+  /**
+   * One stall timer per receipt id. It outlives the receipt's own settlement
+   * while the export carrying the id is in flight, so cancelling one receipt
+   * never disables the stall detection that releases flush and close.
+   */
+  private readonly liveness = new Map<
+    string,
+    { readonly arm: () => void; readonly stop: () => void }
+  >();
   private readonly livenessMs: number;
   constructor(
     private readonly exporter: LogRecordExporter,
@@ -100,10 +108,13 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
     };
     const acknowledged = new Promise<void>((resolve, reject) => {
       let timeout: ReturnType<typeof setTimeout> | undefined;
+      const stop = (): void => {
+        clearTimeout(timeout);
+        this.liveness.delete(id);
+      };
       const settle = (error?: unknown): void => {
         if (!this.receipts.delete(id)) return;
-        this.livenessTouches.delete(id);
-        clearTimeout(timeout);
+        if (!this.abandonExports.has(id)) stop();
         signal?.removeEventListener('abort', abort);
         if (error === undefined) resolve();
         else reject(error);
@@ -124,7 +135,7 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
       arm();
       fail = settle;
       this.receipts.set(id, settle);
-      this.livenessTouches.set(id, arm);
+      this.liveness.set(id, { arm, stop });
       signal?.addEventListener('abort', abort, { once: true });
     });
     return {
@@ -150,7 +161,10 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
     const complete = (result: ExportResult): void => {
       if (completed) return;
       completed = true;
-      for (const id of ids) this.abandonExports.delete(id);
+      for (const id of ids) {
+        this.abandonExports.delete(id);
+        this.liveness.get(id)?.stop();
+      }
       const error =
         result.code === ExportResultCode.SUCCESS
           ? undefined
@@ -169,7 +183,7 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
       signal: writing.signal,
       report: () => {
         if (completed) return;
-        for (const id of ids) this.livenessTouches.get(id)?.();
+        for (const id of ids) this.liveness.get(id)?.arm();
       },
     };
     try {
