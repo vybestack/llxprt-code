@@ -338,7 +338,7 @@ describe('no context-retaining collections in the facade surface (P05b3): produc
   it('rejects reintroducing the eager API in the actual product source', async () => {
     const file = path.join(import.meta.dir, 'HistoryService.ts');
     const source = await fs.readFile(file, 'utf8');
-    const insertion = '  dispose(): void {';
+    const insertion = '  dispose(): Promise<void> {';
     expect(source).toContain(insertion);
     const mutated = source.replace(
       insertion,
