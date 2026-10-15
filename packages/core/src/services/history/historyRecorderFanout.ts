@@ -42,6 +42,23 @@ export class HistoryRecorderFanout {
       throw new Error(`Session recording is inactive (${type})`);
   }
 
+  /**
+   * Resolve once every record handed to a mirror is on disk. `send` and
+   * `deliver` only enqueue, so a caller that reports a mutation durable has to
+   * wait here; every mirror is flushed before failures are rethrown together.
+   */
+  async flush(): Promise<void> {
+    const results = await Promise.allSettled(
+      this.bindings.map((entry) => entry.recorder.flush()),
+    );
+    rethrow(
+      results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      ),
+      'Recorder fan-out flush failed',
+    );
+  }
+
   /** Re-binding an origin replaces that origin's recorder; others are untouched. */
   bind(origin: string, recorder: SessionRecordingService): void {
     const index = this.bindings.findIndex((entry) => entry.origin === origin);

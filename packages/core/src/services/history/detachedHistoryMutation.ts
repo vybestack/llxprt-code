@@ -488,4 +488,5 @@ async function commitDetachedHistory(
     scope.close(false);
     publication.close();
   }
+  await host.journal.settleFanout();
 }

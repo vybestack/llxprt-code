@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { replaySession } from '../../../../recording/ReplayEngine.js';
 import { SessionRecordingService } from '../../../../recording/SessionRecordingService.js';
+import type { RecordingWriterIo } from '../../../../recording/types.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 
@@ -47,7 +48,7 @@ export class FanoutHarness {
     await rm(this.dir, { recursive: true, force: true });
   }
 
-  recorder(id: string): SessionRecordingService {
+  recorder(id: string, io?: RecordingWriterIo): SessionRecordingService {
     const created = new SessionRecordingService({
       sessionId: `harness-${id}-${this.counter++}`,
       projectHash: FANOUT_PROJECT_HASH,
@@ -55,6 +56,7 @@ export class FanoutHarness {
       workspaceDirs: [this.dir],
       provider: 'test',
       model: 'test',
+      ...(io === undefined ? {} : { io }),
     });
     this.recorders.push(created);
     return created;

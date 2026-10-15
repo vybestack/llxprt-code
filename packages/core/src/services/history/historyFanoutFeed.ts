@@ -375,11 +375,19 @@ export class HistoryFanoutFeed {
     }
   }
 
-  /** Resolve once every scheduled delivery ran; rethrow what failed. */
+  /**
+   * Resolve once every scheduled delivery ran and every mirror has written
+   * what it was handed; rethrow what failed.
+   */
   async settle(): Promise<void> {
     await this.chain;
     const failures = this.failures;
     this.failures = [];
+    try {
+      await this.fanout.flush();
+    } catch (error) {
+      failures.push(error);
+    }
     rethrow(failures, 'Recorder fan-out failed');
   }
 }

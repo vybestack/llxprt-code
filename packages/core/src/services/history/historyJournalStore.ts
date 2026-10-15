@@ -398,7 +398,17 @@ export class HistoryJournalStore {
    */
   async waitForDurable(): Promise<void> {
     await this.waitForPrimaryDurable();
-    await this.fanoutFeed.settle();
+    await this.settleFanout();
+  }
+
+  /**
+   * Resolve once everything delivered to the mirrors so far is on disk. A
+   * publication scope hands its ops to the mirrors only when it closes, which
+   * is after the mutation awaited {@link waitForDurable}, so a mutation that
+   * promises durability calls this once its scope has closed.
+   */
+  settleFanout(): Promise<void> {
+    return this.fanoutFeed.settle();
   }
 
   private async waitForPrimaryDurable(): Promise<void> {

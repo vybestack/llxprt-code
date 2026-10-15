@@ -1010,6 +1010,7 @@ export abstract class HistoryServiceCore
       scope.close(false);
       publication.close();
     }
+    await this.journal.settleFanout();
   }
 
   /**
