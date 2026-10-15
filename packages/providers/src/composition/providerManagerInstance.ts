@@ -1,6 +1,3 @@
-import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,30 +13,30 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionAuthPolicy } from '../auth/types.js';
 
-import { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+import type {
+  IOAuthSettingsProvider,
+  OAuthUICallback,
+} from '@vybestack/llxprt-code-auth';
 import {
+  DebugLogger,
   type Config,
+  type ContentGenerator,
   type MessageBus,
   type RuntimeContentGeneratorFactory,
-  type ContentGenerator,
   type RuntimeProviderManager,
-  type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core/config/models.js';
-import { ProviderManager } from '../ProviderManager.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import stripJsonComments from 'strip-json-comments';
+import { OAuthManager } from '../auth/index.js';
+import { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+import type { TokenStore } from '../auth/types.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
-import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
+import { ProviderManager } from '../ProviderManager.js';
 import type { IFileSystem } from './IFileSystem.js';
-import type { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import stripJsonComments from 'strip-json-comments';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { OAuthManager } from '../auth/index.js';
-import type { TokenStore } from '../auth/types.js';
 import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
-import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
@@ -48,8 +45,8 @@ import {
 } from './providerAliases.js';
 
 import {
-  sanitizeApiKey,
   registerAliasProviders,
+  sanitizeApiKey,
 } from './aliasProviderFactory.js';
 import type { ProviderContributionRegistry } from './runtimePlugins/types.js';
 
@@ -528,87 +525,6 @@ export function createOwnedOAuthManager(
     },
     'owned',
   );
-}
-
-function bindCredentialKeys(
-  manager: ProviderManager,
-  authority: CredentialAuthority,
-): void {
-  if (manager.peekProviderKeyStorage() !== undefined) return;
-  const storage = authority.createProviderKeyStorage();
-  manager.bindProviderKeyStorage(storage, () => storage.close());
-}
-
-export function createProviderManager(
-  settings: RuntimeSettingsState,
-  runtime: ProviderRuntimeContext,
-  config: Config | undefined,
-  authority: CredentialAuthority,
-  fileSystem: IFileSystem,
-  mediaResolver: RequestMediaResolutionService | undefined,
-  requestMediaBudgetBytes: number | undefined,
-  providerFileBindings: ProviderFileBindingStore | undefined,
-  providerFileLifecycle: object | undefined,
-  oauthSettings?: IOAuthSettingsProvider,
-  runtimeMessageBus?: MessageBus,
-  borrowedOAuthManager?: OAuthManager,
-  owner?: SessionSettingsOwner,
-  selectedManager?: ProviderManager,
-  providerContributions?: ProviderContributionRegistry,
-  addItem?: OAuthUICallback,
-  allowBrowser = false,
-  activateConfiguredProvider = true,
-): { manager: ProviderManager; oauthManager: OAuthManager } {
-  const manager =
-    selectedManager ??
-    new ProviderManager(
-      mediaResolver,
-      requestMediaBudgetBytes,
-      providerFileBindings,
-      providerFileLifecycle,
-      settings,
-      config,
-      runtime,
-      undefined,
-      owner,
-    );
-
-  bindCredentialKeys(manager, authority);
-
-  // @plan:PLAN-20250214-CREDPROXY.P33
-  const tokenStore =
-    borrowedOAuthManager?.getTokenStore() ?? authority.createTokenStore();
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
-  const oauthManager =
-    borrowedOAuthManager ??
-    createOwnedOAuthManager(
-      tokenStore,
-      oauthSettings,
-      runtimeMessageBus,
-      config,
-      manager,
-      settings,
-    );
-
-  populateProviderManager(
-    manager,
-    oauthManager,
-    tokenStore,
-    settings,
-    fileSystem,
-    config,
-    providerContributions,
-    addItem,
-    allowBrowser,
-    activateConfiguredProvider,
-    process.env.LLXPRT_FAKE_RESPONSES,
-  );
-  return { manager, oauthManager };
 }
 
 export function populateProviderManager(

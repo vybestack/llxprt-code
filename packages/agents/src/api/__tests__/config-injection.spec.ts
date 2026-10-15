@@ -178,6 +178,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -227,6 +228,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

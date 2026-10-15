@@ -123,6 +123,7 @@ describe('Agent finalization collaborators', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -167,6 +168,7 @@ describe('Agent finalization collaborators', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

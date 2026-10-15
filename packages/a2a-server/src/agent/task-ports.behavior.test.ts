@@ -96,4 +96,48 @@ describe('A2A worker data and turn ports', () => {
       else process.env.LLXPRT_FAKE_RESPONSES = previous;
     }
   });
+  it('retains the actual A2A provider response after projecting the public task Agent', async () => {
+    const previous = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
+        import.meta.url,
+      ),
+    );
+    const agent = await createTaskAgent({}, [], 'port-proof');
+    try {
+      const task = createOwnedTask('port-proof', 'context', agent);
+      const acceptUserMessage = task.acceptUserMessage.bind(task);
+      expect(
+        ['providerManager', 'agentClient', 'sessionClient', 'dispose'].filter(
+          (key) => key in acceptUserMessage,
+        ),
+      ).toStrictEqual([]);
+      const request = new RequestContext(
+        {
+          kind: 'message',
+          role: 'user',
+          messageId: 'request',
+          parts: [{ kind: 'text', text: 'Retain the provider response' }],
+        },
+        'port-proof',
+        'context',
+      );
+      const text: string[] = [];
+      const types: string[] = [];
+      for await (const event of acceptUserMessage(
+        request,
+        new AbortController().signal,
+      )) {
+        types.push(event.type);
+        if (event.type === 'text') text.push(event.text);
+      }
+      expect(text.join('')).toContain('a plain text reply');
+      expect(types[types.length - 1]).toBe('done');
+    } finally {
+      await agent.dispose();
+      if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = previous;
+    }
+  });
 });

@@ -104,6 +104,7 @@ describe('Codex effective context limit runtime integration', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       await settingsOwner.startTelemetry(config);
       manager.setRuntimeContext(

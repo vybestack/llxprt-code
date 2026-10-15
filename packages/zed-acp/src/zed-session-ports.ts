@@ -1,4 +1,3 @@
-import { buildZedSession } from './zed-agent-setup.js';
 import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 /**
  * @license
@@ -26,8 +25,38 @@ export type ZedSessionSettings = Pick<
     readonly subscribeModelChanges: SubscribeModelChanges;
   };
 
+export interface ZedSessionView {
+  readonly projectRoot: string;
+  readonly maxSessionTurns: number;
+  readonly debugMode: boolean;
+  readonly fileFiltering: ReturnType<Config['getFileFilteringOptions']>;
+  readonly targetDir: string;
+  readonly recursiveFileSearch: boolean;
+}
+
+export function captureZedSessionView(
+  config: Pick<
+    Config,
+    | 'getProjectRoot'
+    | 'getMaxSessionTurns'
+    | 'getDebugMode'
+    | 'getFileFilteringOptions'
+    | 'getTargetDir'
+    | 'getEnableRecursiveFileSearch'
+  >,
+): ZedSessionView {
+  return {
+    projectRoot: config.getProjectRoot(),
+    maxSessionTurns: config.getMaxSessionTurns(),
+    debugMode: config.getDebugMode(),
+    fileFiltering: config.getFileFilteringOptions(),
+    targetDir: config.getTargetDir(),
+    recursiveFileSearch: config.getEnableRecursiveFileSearch(),
+  };
+}
+
 export function projectZedSessionSettings(
-  config: Config,
+  view: ZedSessionView,
   agent: Pick<
     Agent,
     'getModel' | 'getEphemeralSetting' | 'setEphemeralSetting'
@@ -41,39 +70,15 @@ export function projectZedSessionSettings(
     getModel: () => agent.getModel(),
     getEphemeralSetting: (key) => agent.getEphemeralSetting(key),
     setEphemeralSetting: (key, value) => agent.setEphemeralSetting(key, value),
-    getProjectRoot: () => config.getProjectRoot(),
-    getMaxSessionTurns: () => config.getMaxSessionTurns(),
-    getDebugMode: () => config.getDebugMode(),
+    getProjectRoot: () => view.projectRoot,
+    getMaxSessionTurns: () => view.maxSessionTurns,
+    getDebugMode: () => view.debugMode,
     ignore,
-    getFileFilteringOptions: () => config.getFileFilteringOptions(),
-    getTargetDir: () => config.getTargetDir(),
-    getEnableRecursiveFileSearch: () => config.getEnableRecursiveFileSearch(),
+    getFileFilteringOptions: () => view.fileFiltering,
+    getTargetDir: () => view.targetDir,
+    getEnableRecursiveFileSearch: () => view.recursiveFileSearch,
     readTextFile: (filePath) => files.readTextFile(filePath),
     writeTextFile: (filePath, content) =>
       files.writeTextFile(filePath, content),
   };
-}
-
-export function buildProjectedZedSession<T>(
-  agent: Agent,
-  config: Config,
-  files: WorkspaceTextOperations,
-  subscribeModelChanges: SubscribeModelChanges,
-  create: (settings: ZedSessionSettings) => T,
-  onError: (error: unknown) => void,
-): Promise<T> {
-  return buildZedSession(
-    () => agent.dispose(),
-    () =>
-      create(
-        projectZedSessionSettings(
-          config,
-          agent,
-          files,
-          agent.workspace,
-          subscribeModelChanges,
-        ),
-      ),
-    onError,
-  );
 }

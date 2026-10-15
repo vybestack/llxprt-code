@@ -72,15 +72,7 @@
     "lsp": [],
     "mcp": ["auth", "settings", "storage", "telemetry", "tools"],
     "policy": [],
-    "providers": [
-      "auth",
-      "core",
-      "mcp",
-      "settings",
-      "storage",
-      "telemetry",
-      "tools"
-    ],
+    "providers": ["auth", "core", "mcp", "settings", "storage", "tools"],
     "settings": ["storage"],
     "storage": [],
     "telemetry": ["storage"],
@@ -89,6 +81,7 @@
     "vscode-ide-companion": ["ide-integration"],
     "zed-acp": [
       "agents",
+      "auth",
       "core",
       "providers",
       "settings",
@@ -107,7 +100,7 @@
     "lsp": [],
     "mcp": ["test-utils"],
     "policy": [],
-    "providers": ["policy", "test-utils"],
+    "providers": ["policy", "telemetry", "test-utils"],
     "settings": [],
     "storage": [],
     "telemetry": [],

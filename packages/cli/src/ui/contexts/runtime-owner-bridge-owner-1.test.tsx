@@ -209,6 +209,7 @@ describe('interactive runtime owner bridge', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
     const firstCallerMedia = new SessionMediaOwner(
       firstCallerConfig.projectTempDir,
@@ -252,6 +253,7 @@ describe('interactive runtime owner bridge', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -380,6 +382,7 @@ describe('interactive runtime owner bridge', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
     const secondCallerMedia = new SessionMediaOwner(
       secondCallerConfig.projectTempDir,
@@ -423,6 +426,7 @@ describe('interactive runtime owner bridge', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       const activation = await executeProviderActivation(

@@ -175,6 +175,7 @@ describe('Profile credential clearing at the transaction owner', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -225,6 +226,7 @@ describe('Profile credential clearing at the transaction owner', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

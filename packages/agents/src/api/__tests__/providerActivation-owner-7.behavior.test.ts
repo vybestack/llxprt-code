@@ -223,6 +223,7 @@ describe('executeProviderActivation surfaces switchError (#2374 finding 6)', () 
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -279,6 +280,7 @@ describe('executeProviderActivation surfaces switchError (#2374 finding 6)', () 
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

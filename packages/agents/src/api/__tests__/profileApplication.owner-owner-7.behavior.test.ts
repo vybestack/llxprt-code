@@ -264,6 +264,7 @@ describe('public profile application ownership outside ALS', () => {
       a_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       a_builtCallerRelease,
+      undefined,
     );
     const a_builtCallerMedia = new SessionMediaOwner(
       a_builtCallerConfig.projectTempDir,
@@ -307,6 +308,7 @@ describe('public profile application ownership outside ALS', () => {
         a_builtCallerOAuth,
         a_builtCallerRuntimeId,
         a_builtCallerTokenizer,
+        undefined,
       );
       await a_builtCallerMcp.initialize();
       const a_activation = await executeProviderActivation(
@@ -470,6 +472,7 @@ describe('public profile application ownership outside ALS', () => {
       b_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       b_builtCallerRelease,
+      undefined,
     );
     const b_builtCallerMedia = new SessionMediaOwner(
       b_builtCallerConfig.projectTempDir,
@@ -513,6 +516,7 @@ describe('public profile application ownership outside ALS', () => {
         b_builtCallerOAuth,
         b_builtCallerRuntimeId,
         b_builtCallerTokenizer,
+        undefined,
       );
       await b_builtCallerMcp.initialize();
       const b_activation = await executeProviderActivation(

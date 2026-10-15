@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type {
   Agent,
   AgentProfilePreflight,
@@ -7,12 +8,6 @@ import type {
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import {
-  providerSwitchInputs,
-  overrideInputs,
-  modelParamInputs,
-} from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -36,8 +31,7 @@ import {
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestAgent,
 } from './test-utils.js';
 import { setActiveModelParam } from '../../../agents/src/api/model-parameters.js';
 import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
@@ -56,7 +50,8 @@ describe('Runtime Provider Switching Integration', () => {
   const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let settingsOwner: SessionSettingsOwner;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
   let preflight: AgentProfilePreflight;
@@ -82,12 +77,14 @@ describe('Runtime Provider Switching Integration', () => {
         providerManager = manager;
       },
     );
-    sessionRoot = await initializeTestSessionRoot(
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    sessionRoot = await initializeTestAgent(
       config,
       providerManager,
       settingsService,
+      settingsOwner,
     );
-    sessionClient = sessionRoot.agent.sessionClient;
+    sessionClient = sessionRoot.sessionClient;
   });
 
   afterEach(async () => {
@@ -124,32 +121,44 @@ describe('Runtime Provider Switching Integration', () => {
     await providerManager.setActiveProvider('providerA');
     const setResult = await setProviderApiKey(
       'key-for-provider-a',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
       providerManager.getActiveProvider(),
     );
     expect(setResult.success).toBe(true);
     expect(settingsService.getProviderSettings('providerA')['auth-key']).toBe(
       'key-for-provider-a',
     );
-    expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
+    expect(sessionRoot.getEphemeralSetting('auth-key')).toBe(
       'key-for-provider-a',
     );
 
     await switchActiveProvider(
       'providerB',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('providerA')['auth-key'],
     ).toBeUndefined();
-    expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(sessionRoot.getEphemeralSetting('auth-key')).toBeUndefined();
 
     const resultB = await setProviderApiKey(
       'key-for-provider-b',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
       providerManager.getActiveProvider(),
     );
     expect(resultB.success).toBe(true);
@@ -160,9 +169,13 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider(
       'providerA',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('providerB')['auth-key'],
@@ -179,16 +192,16 @@ describe('Runtime Provider Switching Integration', () => {
     setActiveModelParam(
       'temperature',
       0.7,
-      ...modelParamInputs(sessionRoot, providerManager),
+      settingsService,
+      providerManager.getActiveProviderName(),
     );
     setActiveModelParam(
       'top_p',
       0.9,
-      ...modelParamInputs(sessionRoot, providerManager),
+      settingsService,
+      providerManager.getActiveProviderName(),
     );
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.7,
       top_p: 0.9,
     });
@@ -196,41 +209,44 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider(
       'providerB',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('providerA').temperature,
     ).toBeUndefined();
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
 
     setActiveModelParam(
       'temperature',
       0.3,
-      ...modelParamInputs(sessionRoot, providerManager),
+      settingsService,
+      providerManager.getActiveProviderName(),
     );
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.3,
     });
 
     await switchActiveProvider(
       'providerA',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('providerB').temperature,
     ).toBeUndefined();
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
   });
 
   it('clears gemini provider settings when switching active provider', async () => {
@@ -250,9 +266,13 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider(
       'other',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('gemini')['base-url'],
@@ -269,9 +289,13 @@ describe('Runtime Provider Switching Integration', () => {
     const result = await switchActiveProvider(
       'providerA',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(result.changed).toBe(false);
     expect(providerA.clearState).not.toHaveBeenCalled();
@@ -291,14 +315,18 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider(
       'openai',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
 
     const openaiSettings = settingsService.getProviderSettings('openai');
     expect(openaiSettings.model).toBe('gpt-5.5');
-    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe('gpt-5.5');
+    expect(settingsOwner.readSelectedModel()).toBe('gpt-5.5');
   });
 
   it('clears legacy base URL and resets model when switching back to provider', async () => {
@@ -316,34 +344,37 @@ describe('Runtime Provider Switching Integration', () => {
       'https://legacy.example/v1',
     );
     settingsService.setProviderSetting('providerA', 'model', 'legacy-model');
-    sessionRoot.agent.setEphemeralSetting(
-      'base-url',
-      'https://legacy.example/v1',
-    );
-    sessionRoot.settingsOwner.chooseModel('legacy-model');
+    sessionRoot.setEphemeralSetting('base-url', 'https://legacy.example/v1');
+    settingsOwner.chooseModel('legacy-model');
 
     await switchActiveProvider(
       'providerB',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     await switchActiveProvider(
       'providerA',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
 
     const refreshedSettings = settingsService.getProviderSettings('providerA');
     expect(refreshedSettings['base-url']).toBeUndefined();
     expect(refreshedSettings.model).toBe('providerA-default');
-    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe(
-      'providerA-default',
-    );
-    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(settingsOwner.readSelectedModel()).toBe('providerA-default');
+    expect(sessionRoot.getEphemeralSetting('base-url')).toBeUndefined();
   });
 
   it('does not call getModels during provider switch', async () => {
@@ -358,9 +389,13 @@ describe('Runtime Provider Switching Integration', () => {
     const result = await switchActiveProvider(
       'providerB',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
 
     expect(result.changed).toBe(true);
@@ -381,14 +416,16 @@ describe('Runtime Provider Switching Integration', () => {
     await switchActiveProvider(
       'providerB',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
 
-    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe(
-      'custom-default-model',
-    );
+    expect(settingsOwner.readSelectedModel()).toBe('custom-default-model');
   });
 });
 
@@ -396,7 +433,8 @@ describe('First provider selection from no active provider (#2481)', () => {
   const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let settingsOwner: SessionSettingsOwner;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
   let preflight: AgentProfilePreflight;
@@ -422,12 +460,14 @@ describe('First provider selection from no active provider (#2481)', () => {
         providerManager = manager;
       },
     );
-    sessionRoot = await initializeTestSessionRoot(
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    sessionRoot = await initializeTestAgent(
       config,
       providerManager,
       settingsService,
+      settingsOwner,
     );
-    sessionClient = sessionRoot.agent.sessionClient;
+    sessionClient = sessionRoot.sessionClient;
 
     providerManager.registerProvider(createMockProvider('openai'));
     providerManager.registerProvider(createMockProvider('anthropic'));
@@ -449,9 +489,13 @@ describe('First provider selection from no active provider (#2481)', () => {
     const result = await switchActiveProvider(
       'openai',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
 
     expect(result.changed).toBe(true);
@@ -471,9 +515,13 @@ describe('First provider selection from no active provider (#2481)', () => {
       await switchActiveProvider(
         'anthropic',
         {},
-        ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-          sessionClient.refreshAuth(),
-        )),
+        config,
+        settingsService,
+        providerManager,
+        null,
+        undefined,
+        () => sessionClient.refreshAuth(),
+        settingsOwner,
       );
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
@@ -485,18 +533,26 @@ describe('First provider selection from no active provider (#2481)', () => {
     await switchActiveProvider(
       'openai',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(providerManager.getActiveProviderName()).toBe('openai');
 
     const result = await switchActiveProvider(
       'anthropic',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(result.changed).toBe(true);
     expect(result.previousProvider).toBe('openai');

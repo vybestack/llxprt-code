@@ -1,4 +1,6 @@
 import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { runCleanupSteps } from '../core/subagent-cleanup.js';
 import {
   ChildAgentAssembly,
   type ChildAgentLaunch,
@@ -448,6 +450,11 @@ export class PreferredAgentAssembly {
   private readonly schedulerHandles: AgentSchedulerHandle[] = [];
   private schedulerFactory!: SchedulerConstruction;
   private executeShellCommand: AgentConfig['executeShellCommand'];
+  private sessionOverrides: AgentConfig['sessionOverrides'];
+  private oauthSettings: AgentConfig['oauthSettings'];
+  private providerContributions: AgentConfig['providerContributions'];
+  private trustPort: AgentConfig['trustPort'];
+  private readonly inheritedTrustRelease = new AcquisitionRelease();
   private readonly workspaceRelease = new AcquisitionRelease();
 
   constructor(
@@ -503,7 +510,6 @@ export class PreferredAgentAssembly {
       this.contentSelection = raw.contentGeneratorFactory;
       this.profileReads = raw.definitionOwner?.profileReads;
       this.authority = authority;
-      this.mcpOptions = agentMcpAssemblyOptions(raw, construction);
       this.agentClientFactory =
         construction.runtimeFactoryBindings?.agentClientFactory;
       this.taskToolRegistration =
@@ -512,7 +518,15 @@ export class PreferredAgentAssembly {
       this.onOAuthPrompt = construction.onOAuthPrompt;
       this.editorCallbacks = construction.editorCallbacks;
       this.executeShellCommand = raw.executeShellCommand;
+      this.sessionOverrides = raw.sessionOverrides;
+      this.oauthSettings = raw.oauthSettings;
+      this.providerContributions = raw.providerContributions;
       this.constructWorkspace(raw, construction.suppliedMediaOwner);
+      this.mcpOptions = agentMcpAssemblyOptions(
+        raw,
+        construction,
+        this.trustPort,
+      );
     } catch (primary) {
       await rejectPreferredAcquisition(
         primary,
@@ -546,7 +560,8 @@ export class PreferredAgentAssembly {
     });
     this.workspaceRelease.acquire('policy', () => config.dispose());
     this.config = config;
-    const policy = new RuntimePolicyOwner(config, raw.trustPort);
+    this.trustPort = this.acquireWorkspaceTrust(raw);
+    const policy = new RuntimePolicyOwner(config, this.trustPort);
     this.workspaceRelease.acquire('policy', () => policy.dispose());
     this.policyOwner = policy;
     if (forceConfirmations)
@@ -562,6 +577,30 @@ export class PreferredAgentAssembly {
     this.mediaOwner = media;
   }
 
+  private acquireWorkspaceTrust(raw: AgentConfig): AgentConfig['trustPort'] {
+    const parent = raw.parentTrustPort;
+    if (parent === undefined) return raw.trustPort;
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: parent.isTrustedFolder(),
+    });
+    this.inheritedTrustRelease.acquire('policy', () => trust.dispose());
+    this.workspaceRelease.acquire('policy', () =>
+      this.inheritedTrustRelease.rollback(),
+    );
+    const stop = parent.subscribeTrustChange((transition) => {
+      void trust.setTrustedFolderLive(transition.trusted);
+    });
+    this.inheritedTrustRelease.acquire('policy', stop);
+    return trust;
+  }
+
+  private async releaseProviders(): Promise<void> {
+    await runCleanupSteps([
+      () => this.release.close(),
+      () => this.inheritedTrustRelease.rollback(),
+    ]);
+  }
+
   private async acquireProviders(): Promise<void> {
     const release = new AcquisitionRelease();
     let settings: SettingsService;
@@ -572,7 +611,10 @@ export class PreferredAgentAssembly {
     let tokenizerFactory: RuntimeTokenizerFactory;
     let contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
     try {
-      settings = new SettingsService();
+      settings =
+        this.sessionOverrides === undefined
+          ? new SettingsService()
+          : SettingsService.withReadOnlySessionOverrides(this.sessionOverrides);
       if (this.settingsSnapshot !== undefined)
         settings.restoreFromStateSnapshot(this.settingsSnapshot);
       settingsOwner = acquirePreferredSettings(
@@ -611,6 +653,7 @@ export class PreferredAgentAssembly {
         this.profileReads,
         this.authority,
         release,
+        this.oauthSettings,
       );
       await preparePreferredProviderCompletion(
         this.config,
@@ -620,6 +663,7 @@ export class PreferredAgentAssembly {
         oauth,
         this.runtimeId,
         tokenizerFactory,
+        this.providerContributions,
       );
       this.settings = settings;
       this.settingsOwner = settingsOwner;
@@ -679,7 +723,7 @@ export class PreferredAgentAssembly {
     } catch (primaryError) {
       await cleanupFailedCreatedAgent(
         primaryError,
-        () => this.release.close(),
+        () => this.releaseProviders(),
         this.config,
         this.mediaOwner,
         this.sessionClient,
@@ -689,8 +733,7 @@ export class PreferredAgentAssembly {
   }
 
   private async initializeCreatedAgent(): Promise<void> {
-    const { settings, settingsOwner, manager, oauth, release, mcpRuntime } =
-      this;
+    const { settings, settingsOwner, manager, oauth, mcpRuntime } = this;
     const ownedSessionClient = this.sessionClient;
     if (ownedSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
@@ -718,7 +761,7 @@ export class PreferredAgentAssembly {
       this.runtimeId,
       settingsOwner,
       (): RuntimeKind => 'agent',
-      () => release.close(),
+      () => this.releaseProviders(),
       this.onApproval,
       this.onOAuthPrompt,
       this.editorCallbacks,

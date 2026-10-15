@@ -95,6 +95,7 @@ describe('runtime/provider OAuth MessageBus seam integration', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       await settingsOwner.startTelemetry(config);
       manager.setRuntimeContext(

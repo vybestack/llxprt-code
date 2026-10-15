@@ -7,7 +7,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
  */
 
 import { installZedFilesystemFixture } from './__tests__/zed-filesystem-fixture.js';
-import { projectZedSessionSettings } from './zed-session-ports.js';
+import {
+  projectZedSessionSettings,
+  captureZedSessionView,
+} from './zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -420,7 +423,7 @@ describe('Zed terminal execution', () => {
       () => agent.profiles.list(),
       () => agent.tasks.list(),
       projectZedSessionSettings(
-        buildMinimalConfig(),
+        captureZedSessionView(buildMinimalConfig()),
         agent,
         fixtureFilesystem().files,
         fixtureFilesystem().ignore,
@@ -529,7 +532,7 @@ describe('Zed terminal execution', () => {
       () => agent.profiles.list(),
       () => agent.tasks.list(),
       projectZedSessionSettings(
-        buildMinimalConfig(),
+        captureZedSessionView(buildMinimalConfig()),
         agent,
         fixtureFilesystem().files,
         fixtureFilesystem().ignore,

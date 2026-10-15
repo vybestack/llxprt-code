@@ -252,6 +252,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -307,6 +308,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

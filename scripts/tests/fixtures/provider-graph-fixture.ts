@@ -39,7 +39,12 @@ export function createProviderGraphFixture(repoRoot: string): {
       ),
     },
     testOnlyEdges: {
-      providers: [...source.testOnlyEdges.providers, 'telemetry'],
+      providers: [
+        ...source.testOnlyEdges.providers.filter(
+          (edge) => edge !== 'telemetry',
+        ),
+        'telemetry',
+      ],
     },
     observers: {},
     pathObservers: [],

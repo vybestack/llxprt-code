@@ -155,6 +155,7 @@ describe('configureProviderRuntimeFactories', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       callerTokenizer = configureProviderRuntimeFactories(
         callerConfig,

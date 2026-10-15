@@ -6,7 +6,10 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  NodeFileSystem,
+  type ProviderContributionRegistry,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type {
@@ -162,6 +165,7 @@ export function registerProvidersOntoManager(
   settingsService: RuntimeSettingsState,
   config: Config,
   oauthManager: OAuthManager | undefined,
+  contributions: ProviderContributionRegistry | undefined,
 ): void {
   if (!(isolatedManager instanceof ProviderManager))
     throw new AgentBootstrapError(
@@ -178,7 +182,7 @@ export function registerProvidersOntoManager(
     settingsService,
     new NodeFileSystem(),
     config,
-    undefined,
+    contributions,
     undefined,
     false,
     false,

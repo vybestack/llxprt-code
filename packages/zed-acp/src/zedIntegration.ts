@@ -4,18 +4,12 @@ import { Session } from './zed-session.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import type { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
-import { authenticateZedAgent, initializeZedAgent } from './zed-initialize.js';
+import type { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { authenticateZedAgent, initializeZedAgent } from './zed-initialize.js';
 
 import {
-  type RuntimeProviderManager,
   type Config,
   type IContent,
   type ProfileDefinitionListing,
@@ -26,51 +20,49 @@ import type {
   AgentProfileApplication,
 } from '@vybestack/llxprt-code-agents';
 
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type * as acp from '@agentclientprotocol/sdk';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
+import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
 import { randomUUID } from 'crypto';
 import { buildSessionModes } from './zed-helpers.js';
-
-import {
-  buildProjectedZedSession,
-  projectZedSessionSettings,
-} from './zed-session-ports.js';
-
 import {
   buildZedSessionAgent,
   captureZedHostInputs,
   resolveZedHostTrust,
-  type ZedSessionProviderInputs,
-  type ZedSessionAgent,
   type ZedHostInputs,
+  type ZedSessionProviderInputs,
 } from './zed-session-agent.js';
-
+import { resolveSessionTargetDir } from './zed-session-config.js';
+import { SessionLifecycle } from './zed-session-lifecycle.js';
 import {
-  resumeAgentHistory,
-  toLoadRequestError,
   hasRecordedSessionFile,
   nodeChatSessionFileLister,
+  resumeAgentHistory,
+  toLoadRequestError,
   type ChatSessionFileLister,
 } from './zed-session-loader.js';
-import { SessionLifecycle } from './zed-session-lifecycle.js';
+import {
+  projectZedSessionSettings,
+  type ZedSessionSettings,
+} from './zed-session-ports.js';
+import type { TerminalManager } from './zed-terminal-manager.js';
+import { createZedTerminalTransport } from './zed-terminal-setup.js';
 
+import type {
+  ClientCapabilitiesWithSession,
+  CloseSessionRequest,
+  CloseSessionResponse,
+  DeleteSessionRequest,
+  DeleteSessionResponse,
+} from './acp-types.js';
+import { enableZedSessionRecording } from './zed-agent-setup.js';
 import {
   dispatchZedConfigOption,
   zedConfigOptionsForClient,
   zedSessionConfigOptions,
 } from './zed-config-options.js';
-import { enableZedSessionRecording } from './zed-agent-setup.js';
-
-import type {
-  CloseSessionRequest,
-  CloseSessionResponse,
-  DeleteSessionRequest,
-  DeleteSessionResponse,
-  ClientCapabilitiesWithSession,
-} from './acp-types.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
-export { runZedIntegration } from './runZedIntegration.js';
 
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
@@ -84,7 +76,6 @@ export class ZedAgent {
     private config: Config,
     private connection: acp.AgentSideConnection,
     private readonly application: AgentProfileApplication,
-    readonly providerManager: RuntimeProviderManager,
     private readonly createSessionSettings: () => SettingsService,
     private readonly sessionFileLister: ChatSessionFileLister = nodeChatSessionFileLister,
     private readonly definitions?: ProfileDefinitionListing,
@@ -125,14 +116,14 @@ export class ZedAgent {
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const {
-        agent,
-        config: sessionConfig,
+      const settingsSource = this.createSessionSettings();
+      const terminals = this.createTerminals(sessionId, cwd, settingsSource);
+      const agent = await this.buildSessionAgent(
+        sessionId,
+        cwd,
+        settingsSource,
         terminals,
-        files,
-        disposeConfig,
-        settingsOwner,
-      } = await this.buildSessionAgent(sessionId, cwd);
+      );
       let session: Session;
       try {
         await enableZedSessionRecording(
@@ -142,45 +133,34 @@ export class ZedAgent {
               () => `Recording failed for ${sessionId}: ${error}`,
             ),
         );
-        session = await buildProjectedZedSession(
-          agent,
-          sessionConfig,
-          files,
-          settingsOwner.subscribeModelChanges.bind(settingsOwner),
-          (settings) =>
-            new Session(
-              sessionId,
-              (input, options) => agent.stream(input, options),
-              () => agent.getModel(),
-              (model) => agent.setModel(model),
-              () => agent.listAvailableModels(),
-              () => agent.getProviderContextLimit(),
-              () => agent.getApprovalMode(),
-              (mode) => agent.setApprovalMode(mode),
-              () => agent.getHistory(),
-              (options) => agent.compress(options),
-              () => agent.dispose(),
-              (name) => agent.tools.get(name),
-              () => agent.tools.list(),
-              agent.tools.respondToConfirmation.bind(agent.tools),
-              () => agent.session.getRecordingTitle(),
-              (title) => agent.session.recordRecordingTitle(title),
-              () => agent.memory.getFilePaths(),
-              () => agent.profiles.list(),
-              () => agent.tasks.list(),
-              settings,
-              this.connection,
-              this.supportsConfigOptions(),
-              terminals,
-              disposeConfig,
-            ),
-          (error) =>
-            this.logger.debug(() => `Session cleanup failed: ${error}`),
+        session = new Session(
+          sessionId,
+          (input, options) => agent.stream(input, options),
+          () => agent.getModel(),
+          (model) => agent.setModel(model),
+          () => agent.listAvailableModels(),
+          () => agent.getProviderContextLimit(),
+          () => agent.getApprovalMode(),
+          (mode) => agent.setApprovalMode(mode),
+          () => agent.getHistory(),
+          (options) => agent.compress(options),
+          () => agent.dispose(),
+          (name) => agent.tools.get(name),
+          () => agent.tools.list(),
+          agent.tools.respondToConfirmation.bind(agent.tools),
+          () => agent.session.getRecordingTitle(),
+          (title) => agent.session.recordRecordingTitle(title),
+          () => agent.memory.getFilePaths(),
+          () => agent.profiles.list(),
+          () => agent.tasks.list(),
+          this.projectSessionSettings(agent),
+          this.connection,
+          this.supportsConfigOptions(),
+          terminals,
         );
       } catch (error) {
         await agent.dispose().catch(() => undefined);
         await terminals?.settleAll().catch(() => undefined);
-        await disposeConfig();
         throw error;
       }
       return await this.publishNewSession(
@@ -292,7 +272,7 @@ export class ZedAgent {
       return null;
     }
     const recordingExists = await hasRecordedSessionFile(
-      this.config,
+      this.config.projectChatsDir,
       sessionId,
       this.sessionFileLister,
     );
@@ -343,19 +323,19 @@ export class ZedAgent {
     sessionId: string,
     cwd: string | undefined,
   ): Promise<{ session: Session; history: readonly IContent[] }> {
-    const {
-      agent,
-      config: sessionConfig,
+    const settingsSource = this.createSessionSettings();
+    const terminals = this.createTerminals(sessionId, cwd, settingsSource);
+    const agent = await this.buildSessionAgent(
+      sessionId,
+      cwd,
+      settingsSource,
       terminals,
-      files,
-      disposeConfig,
-      settingsOwner,
-    } = await this.buildSessionAgent(sessionId, cwd);
+    );
     try {
       const history = await resumeAgentHistory(
         (id) => agent.session.resume(id),
         sessionId,
-        sessionConfig,
+        this.config.projectChatsDir,
         this.sessionFileLister,
       );
       const session = new Session(
@@ -378,43 +358,90 @@ export class ZedAgent {
         () => agent.memory.getFilePaths(),
         () => agent.profiles.list(),
         () => agent.tasks.list(),
-        projectZedSessionSettings(
-          sessionConfig,
-          agent,
-          files,
-          agent.workspace,
-          settingsOwner.subscribeModelChanges.bind(settingsOwner),
-        ),
+        this.projectSessionSettings(agent),
         this.connection,
         this.supportsConfigOptions(),
         terminals,
-        disposeConfig,
       );
       return { session, history };
     } catch (error) {
       await agent.dispose().catch(() => undefined);
       await terminals?.settleAll().catch(() => undefined);
-      await disposeConfig();
       this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
       throw toLoadRequestError(sessionId, error);
     }
   }
+  private projectSessionSettings(agent: Agent): ZedSessionSettings {
+    return projectZedSessionSettings(
+      {
+        projectRoot: agent.workspace.getProjectRoot(),
+        targetDir: agent.workspace.getWorkingDirectory(),
+        maxSessionTurns: this.hostInputs.maxSessionTurns ?? -1,
+        debugMode: this.hostInputs.debugMode,
+        fileFiltering: {
+          respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
+          respectLlxprtIgnore:
+            this.hostInputs.fileFiltering.respectLlxprtIgnore,
+        },
+        recursiveFileSearch:
+          this.hostInputs.fileFiltering.enableRecursiveFileSearch,
+      },
+      agent,
+      agent.workspace,
+      agent.workspace,
+      (listener) => agent.settings.subscribeModelChanges(listener),
+    );
+  }
+  private createTerminals(
+    sessionId: string,
+    cwd: string | undefined,
+    source: SettingsService,
+  ): TerminalManager | null {
+    if (this.clientCapabilities?.terminal !== true) return null;
+    return createZedTerminalTransport(
+      sessionId,
+      this.connection,
+      resolveSessionTargetDir(this.config, cwd),
+      this.logger,
+      this.config.getInitialSettings()['shell-output-retention-max-bytes'] ??
+        source.get('shell-output-retention-max-bytes'),
+    );
+  }
   private async buildSessionAgent(
     sessionId: string,
     cwd: string | undefined,
-  ): Promise<ZedSessionAgent> {
-    return buildZedSessionAgent(
-      this.config,
-      this.hostInputs,
-      this.connection,
-      this.clientCapabilities,
-      sessionId,
-      cwd,
-      this.logger,
-      this.createSessionSettings(),
-      this.hostTrust,
-      this.providerInputs,
-    );
+    source: SettingsService,
+    terminals: TerminalManager | null,
+  ): Promise<Agent> {
+    const execute: IShellToolHost['executeShellCommand'] | undefined =
+      terminals === null
+        ? undefined
+        : (command, directory, output, signal) =>
+            terminals.executeShellCommand(command, directory, output, signal);
+    try {
+      return await buildZedSessionAgent(
+        this.config,
+        this.hostInputs,
+        this.connection,
+        this.clientCapabilities,
+        sessionId,
+        cwd,
+        source,
+        this.hostTrust,
+        this.providerInputs,
+        execute,
+      );
+    } catch (primary) {
+      try {
+        await terminals?.settleAll();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [primary, cleanup],
+          'ACP session startup and terminal cleanup failed',
+        );
+      }
+      throw primary;
+    }
   }
   deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
     return this.lifecycle.delete(params);

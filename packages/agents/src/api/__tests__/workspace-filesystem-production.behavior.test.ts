@@ -228,6 +228,7 @@ describe('production filesystem roots', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -284,6 +285,7 @@ describe('production filesystem roots', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
 
@@ -453,6 +455,7 @@ describe('production filesystem roots', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient(selection.activation);
@@ -509,6 +512,7 @@ describe('production filesystem roots', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
 

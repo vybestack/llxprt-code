@@ -147,6 +147,7 @@ describe('admitted instruction publication disposal', () => {
         callerMcp.profileDefinitions,
         credentials().authority,
         callerRelease,
+        undefined,
       );
       const callerMedia = new SessionMediaOwner(
         callerConfig.projectTempDir,
@@ -187,6 +188,7 @@ describe('admitted instruction publication disposal', () => {
           callerOAuth,
           callerRuntimeId,
           callerTokenizer,
+          undefined,
         );
         await callerMcp.initialize();
         await callerOwner.initializeTools();

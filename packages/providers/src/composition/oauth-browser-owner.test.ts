@@ -227,6 +227,7 @@ describe('OAuth owner reads before registration', () => {
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
   }
   function adoptOAuth(oauth: OAuthManager, release: AcquisitionRelease): void {

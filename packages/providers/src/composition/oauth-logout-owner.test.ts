@@ -114,6 +114,7 @@ describe('logout ownership', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -159,6 +160,7 @@ describe('logout ownership', () => {
         firstConfig.getSessionId(),
         configureProviderRuntimeFactories(firstConfig, firstManager)
           .tokenizerFactory,
+        undefined,
       );
   }
   async function closeFirst(): Promise<void> {
@@ -239,6 +241,7 @@ describe('logout ownership', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -284,6 +287,7 @@ describe('logout ownership', () => {
         secondConfig.getSessionId(),
         configureProviderRuntimeFactories(secondConfig, secondManager)
           .tokenizerFactory,
+        undefined,
       );
   }
   async function closeSecond(): Promise<void> {

@@ -215,6 +215,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -271,6 +272,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
 
@@ -474,6 +476,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient(selection.activation);
@@ -530,6 +533,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
 

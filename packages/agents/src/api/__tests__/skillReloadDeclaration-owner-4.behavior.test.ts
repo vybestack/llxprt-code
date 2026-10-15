@@ -305,6 +305,7 @@ describe('workspace skill root lifetime @issue:2615', () => {
         callerCallerMcp.profileDefinitions,
         callerCredentials().authority,
         callerCallerRelease,
+        undefined,
       );
       const callerCallerMedia = new SessionMediaOwner(
         callerCallerConfig.projectTempDir,
@@ -348,6 +349,7 @@ describe('workspace skill root lifetime @issue:2615', () => {
           callerCallerOAuth,
           callerCallerRuntimeId,
           callerCallerTokenizer,
+          undefined,
         );
         await callerCallerMcp.initialize();
         const activation = await executeProviderActivation(
@@ -537,6 +539,7 @@ describe('workspace skill root lifetime @issue:2615', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -580,6 +583,7 @@ describe('workspace skill root lifetime @issue:2615', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(

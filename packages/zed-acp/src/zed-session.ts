@@ -99,8 +99,6 @@ export class Session {
     >,
     configOptionsEnabled = false,
     terminals: TerminalManager | null = null,
-    private readonly disposeConfig: () => Promise<void> = () =>
-      Promise.resolve(),
   ) {
     this.terminals = terminals;
     this.pathResolver = new ZedPathResolver(this.config, (msg) =>
@@ -442,7 +440,6 @@ export class Session {
         this.pendingPrompt = null;
       },
       this.retireAgent,
-      this.disposeConfig,
     );
   }
 }

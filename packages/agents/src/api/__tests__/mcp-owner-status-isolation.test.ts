@@ -196,6 +196,7 @@ describe('MCP public owner status isolation', () => {
           builtCallerMcp.profileDefinitions,
           builtCredentials().authority,
           builtCallerRelease,
+          undefined,
         );
         const builtCallerMedia = new SessionMediaOwner(
           builtCallerConfig.projectTempDir,
@@ -239,6 +240,7 @@ describe('MCP public owner status isolation', () => {
             builtCallerOAuth,
             builtCallerRuntimeId,
             builtCallerTokenizer,
+            undefined,
           );
           await builtCallerMcp.initialize();
           const activation = await executeProviderActivation(

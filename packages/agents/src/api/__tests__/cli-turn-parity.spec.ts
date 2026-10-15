@@ -243,6 +243,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = acquireConsumerMedia(
       builtCallerConfig,
@@ -286,6 +287,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -421,6 +423,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           builtRefCallerMcp.profileDefinitions,
           builtRefCredentials().authority,
           builtRefCallerRelease,
+          undefined,
         );
         const builtRefCallerMedia = acquireConsumerMedia(
           builtRefCallerConfig,
@@ -464,6 +467,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             builtRefCallerOAuth,
             builtRefCallerRuntimeId,
             builtRefCallerTokenizer,
+            undefined,
           );
           await builtRefCallerMcp.initialize();
           const activation = await executeProviderActivation(

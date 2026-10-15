@@ -208,6 +208,41 @@ describe('preferred Agent required settings snapshot restoration', () => {
       { model: 'snapshot-model', temperature: 0.37, authorized: true },
     ]);
   }, 30000);
+  it('restores independent persisted state while borrowing only live read-only session overrides', async () => {
+    const source = new SettingsService();
+    source.set('activeProvider', 'openai');
+    source.setProviderSetting('openai', 'model', 'captured-model');
+    source.set('dumpcontext', 'error');
+    const agent = await createAgentFromSettingsSnapshot(
+      {
+        provider: 'openai',
+        model: 'fallback-model',
+        workingDir: directory,
+        credentialAuthority: credentials().authority,
+        sessionOverrides: source.readSessionOverrides(),
+        harness: { includeProcessCwd: false },
+      },
+      source.exportForStateSnapshot(),
+    );
+    cleanup.push(() => agent.dispose());
+    source.setProviderSetting('openai', 'model', 'later-host-model');
+    source.setSessionScoped('dumpcontext', 'on');
+    expect(agent.getEphemeralSetting('dumpcontext')).toBe('on');
+    expect(agent.getModel()).toBe('captured-model');
+    expect(agent.settings.getEphemeralSettings().dumpcontext).toBe('on');
+    expect(() =>
+      agent.settings.setSessionSetting('dumpcontext', 'off'),
+    ).toThrow('read-only');
+    expect(() => agent.settings.clearSessionSetting('dumpcontext')).toThrow(
+      'read-only',
+    );
+    source.clearSessionScoped('dumpcontext');
+    expect(agent.getEphemeralSetting('dumpcontext')).toBe('error');
+    await agent.dispose();
+    source.setSessionScoped('dumpcontext', 'off');
+    expect(source.getSessionScoped('dumpcontext')).toBe('off');
+  });
+
   it.each([
     {
       provider: undefined,

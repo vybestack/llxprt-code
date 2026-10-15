@@ -259,6 +259,7 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -315,6 +316,7 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

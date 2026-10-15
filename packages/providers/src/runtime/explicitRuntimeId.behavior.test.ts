@@ -108,6 +108,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -127,6 +128,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       firstConfig.getSessionId(),
       configureProviderRuntimeFactories(firstConfig, firstManager)
         .tokenizerFactory,
+      undefined,
     );
   }
 
@@ -204,6 +206,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -223,6 +226,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       secondConfig.getSessionId(),
       configureProviderRuntimeFactories(secondConfig, secondManager)
         .tokenizerFactory,
+      undefined,
     );
   }
 

@@ -165,9 +165,10 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
         undefined,
         credentials.authority,
         release,
+        undefined,
       );
       await owner.startTelemetry(config);
-      registerProvidersOntoManager(manager, settings, config, oauth);
+      registerProvidersOntoManager(manager, settings, config, oauth, undefined);
       const provider = manager.getProviderByName(providerName);
       complete = true;
       if (!provider) {

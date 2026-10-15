@@ -134,6 +134,7 @@ describe('Explicit session client lifetime', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -174,6 +175,7 @@ describe('Explicit session client lifetime', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
@@ -303,6 +305,7 @@ describe('Explicit session client lifetime', () => {
       leftMcp.profileDefinitions,
       credentials().authority,
       leftRelease,
+      undefined,
     );
     const leftMedia = new SessionMediaOwner(
       leftConfig.projectTempDir,
@@ -343,6 +346,7 @@ describe('Explicit session client lifetime', () => {
         leftOAuth,
         leftRuntimeId,
         leftTokenizer,
+        undefined,
       );
       await leftMcp.initialize();
       await leftOwner.initializeTools();
@@ -435,6 +439,7 @@ describe('Explicit session client lifetime', () => {
       rightMcp.profileDefinitions,
       credentials().authority,
       rightRelease,
+      undefined,
     );
     const rightMedia = new SessionMediaOwner(
       rightConfig.projectTempDir,
@@ -475,6 +480,7 @@ describe('Explicit session client lifetime', () => {
         rightOAuth,
         rightRuntimeId,
         rightTokenizer,
+        undefined,
       );
       await rightMcp.initialize();
       await rightOwner.initializeTools();

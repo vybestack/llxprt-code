@@ -15,7 +15,11 @@ import { releaseAdoptedFileScope } from './adoption-release.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { TokenStore } from '@vybestack/llxprt-code-auth';
+import type {
+  TokenStore,
+  IOAuthSettingsProvider,
+} from '@vybestack/llxprt-code-auth';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   SettingsService,
   ProfileManager,
@@ -117,13 +121,18 @@ export function acquirePreferredOAuth(
   profileReads: Pick<ProfileManager, 'loadProfile'> | undefined,
   authority: CredentialAuthority,
   release: AcquisitionRelease,
+  oauthSettings: IOAuthSettingsProvider | null | undefined,
 ): OAuthManager {
   const store = suppliedStore ?? authority.createTokenStore();
   if (suppliedStore === undefined)
     release.acquire('tokens', createOwnedTokenStoreClose(store));
+  const selectedSettings =
+    oauthSettings === undefined
+      ? createFileOAuthSettingsProvider()
+      : oauthSettings;
   const oauth = createOwnerOAuthManager(
     store,
-    createFileOAuthSettingsProvider(),
+    selectedSettings ?? undefined,
     messageBus,
     profileReads ?? createOAuthProfileReads(config.profileDirectory),
     createSessionAuthPolicyReader(settings),
@@ -144,6 +153,7 @@ export async function preparePreferredProviderCompletion(
   oauth: OAuthManager,
   runtimeId: string,
   tokenizer: RuntimeTokenizerFactory,
+  contributions: ProviderContributionRegistry | undefined,
 ): Promise<void> {
   await settingsOwner.startTelemetry(config);
   manager.setRetryOperationsFactory((name, profileId) =>
@@ -159,7 +169,7 @@ export async function preparePreferredProviderCompletion(
     settings,
     config,
   );
-  registerProvidersOntoManager(manager, settings, config, oauth);
+  registerProvidersOntoManager(manager, settings, config, oauth, contributions);
   manager.setTokenizerFactory(tokenizer);
   manager.setConfig(config);
 }

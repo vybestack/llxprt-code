@@ -70,7 +70,6 @@ interface SimpleMapping {
  */
 const SIMPLE_MAPPINGS: readonly SimpleMapping[] = [
   { configField: 'fileFiltering', paramField: 'fileFiltering', kind: 'clone' },
-  { configField: 'telemetry', paramField: 'telemetry', kind: 'clone' },
   { configField: 'proxy', paramField: 'proxy', kind: 'copy' },
   {
     configField: 'maxSessionTurns',
@@ -183,6 +182,15 @@ function applyObjectMappings(
   config: AgentConfig,
   params: ConfigParamsMut,
 ): void {
+  if (config.telemetry !== undefined) {
+    const { customRedactionPatterns, ...values } = structuredClone(
+      config.telemetry,
+    );
+    params.telemetry =
+      customRedactionPatterns === undefined
+        ? values
+        : { ...values, customRedactionPatterns: [...customRedactionPatterns] };
+  }
   if (config.mcpServers !== undefined) {
     params.mcpServers = clone(
       config.mcpServers,

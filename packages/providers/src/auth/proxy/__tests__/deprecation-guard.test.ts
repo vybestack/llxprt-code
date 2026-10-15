@@ -247,7 +247,7 @@ describe('Deprecation Guards (P36)', () => {
       const runtimeMatches = grepFiles(
         '.createTokenStore(',
         '*.ts',
-        path.resolve(providersSrcRoot, 'runtime'),
+        path.resolve(packagesRoot, 'agents', 'src', 'api'),
         ['node_modules', 'dist', '__tests__'],
       );
 
@@ -268,7 +268,7 @@ describe('Deprecation Guards (P36)', () => {
       // At least one consumer in each category that creates OAuthManager should
       // use the factory; the auth command should no longer create OAuthManager.
       const hasRuntimeFactoryImport = runtimeMatches.some((m) =>
-        m.includes('runtimeContextFactory.ts'),
+        m.includes('preferred-provider-acquisition.ts'),
       );
       const hasProviderFactoryImport = providerMatches.some((m) =>
         m.includes('providerManagerInstance.ts'),
@@ -278,7 +278,10 @@ describe('Deprecation Guards (P36)', () => {
       );
 
       expect(hasRuntimeFactoryImport).toBe(true);
-      expect(hasProviderFactoryImport).toBe(true);
+      expect(hasProviderFactoryImport).toBe(false);
+      expect(
+        runtimeMatches.some((match) => match.includes('profile-preflight.ts')),
+      ).toBe(true);
       expect(commandStillReferencesFactory).toBe(false);
     });
   });

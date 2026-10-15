@@ -35,10 +35,6 @@ import {
  */
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  parseEphemeralSettingValue: vi.fn(),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
 
 void vi.mock('@vybestack/llxprt-code-providers', () => ({}));
 

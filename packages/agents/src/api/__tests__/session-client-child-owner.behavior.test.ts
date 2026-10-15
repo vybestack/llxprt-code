@@ -155,6 +155,7 @@ async function withChildOwner(
     builtMcp.profileDefinitions,
     authority,
     builtRelease,
+    undefined,
   );
   const builtMedia = new SessionMediaOwner(
     builtConfig.projectTempDir,
@@ -195,6 +196,7 @@ async function withChildOwner(
       builtOAuth,
       builtRuntimeId,
       builtTokenizer,
+      undefined,
     );
     await builtMcp.initialize();
     await builtOwner.initializeTools();

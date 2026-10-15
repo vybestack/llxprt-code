@@ -115,15 +115,6 @@ void vi.mock('../colors.js', () => ({
   SemanticColors: new Proxy({}, { get: () => '#808080' }),
 }));
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
-
 function createConfigStub() {
   return {
     getScreenReader: () => false,

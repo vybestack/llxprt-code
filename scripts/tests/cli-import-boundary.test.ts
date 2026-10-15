@@ -943,7 +943,7 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/ui/commands/providerCommand.ts',
-          "import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
+          "import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition.js';\n",
         );
         write(...thinIndex());
         return runScript(root, 0);
@@ -952,22 +952,22 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       expect(code).toBe(0);
     });
 
-    it('allows imports from the providers runtime.js public barrel without an allowlist entry', () => {
+    it('rejects imports from the retired providers runtime.js barrel', () => {
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/ui/commands/clearCommand.ts',
           "import { getCliRuntimeServices } from '@vybestack/llxprt-code-providers/runtime.js';\n",
         );
         write(...thinIndex());
-        return runScript(root, 0);
+        return runScript(root, 1);
       });
-      expect(stdout).toContain('CLI import boundary check PASSED.');
-      expect(code).toBe(0);
+      expect(stdout).toContain('@vybestack/llxprt-code-providers/runtime.js');
+      expect(code).toBe(1);
     });
 
     it('still flags deep providers/runtime/* paths that are NOT the public barrel', () => {
-      // runtime.js is public, but runtime/runtimeSettings.js is a deep internal
-      // path that must still be flagged.
+      // Retired runtime entrypoints and deep runtime implementation paths must
+      // both remain outside the public package boundary.
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/rogue.ts',

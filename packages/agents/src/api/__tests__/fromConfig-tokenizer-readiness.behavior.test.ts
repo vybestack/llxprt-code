@@ -253,6 +253,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -308,6 +309,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

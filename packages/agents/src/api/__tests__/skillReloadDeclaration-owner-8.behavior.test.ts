@@ -293,6 +293,7 @@ describe('enabled extension joint root shutdown', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
     const firstCallerMedia = new SessionMediaOwner(
       firstCallerConfig.projectTempDir,
@@ -336,6 +337,7 @@ describe('enabled extension joint root shutdown', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -468,6 +470,7 @@ describe('enabled extension joint root shutdown', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
     const secondCallerMedia = new SessionMediaOwner(
       secondCallerConfig.projectTempDir,
@@ -511,6 +514,7 @@ describe('enabled extension joint root shutdown', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       const activation = await executeProviderActivation(

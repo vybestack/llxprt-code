@@ -248,6 +248,7 @@ describe('missing-credentials fallback precedence (#2374 round-3 Fix 4)', () => 
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -304,6 +305,7 @@ describe('missing-credentials fallback precedence (#2374 round-3 Fix 4)', () => 
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

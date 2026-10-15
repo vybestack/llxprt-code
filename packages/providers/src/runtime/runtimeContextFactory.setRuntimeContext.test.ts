@@ -86,6 +86,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
     await activateAdoptedProviders(
       config,
@@ -203,6 +204,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
     await activateAdoptedProviders(
       config,

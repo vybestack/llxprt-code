@@ -289,6 +289,7 @@ describe('proxy integration (phase 31)', () => {
         undefined,
         authority,
         release,
+        undefined,
       );
       store = oauth.getTokenStore();
       complete = true;

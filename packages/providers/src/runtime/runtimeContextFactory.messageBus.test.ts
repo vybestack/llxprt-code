@@ -95,6 +95,7 @@ describe('isolated runtime messageBus ownership', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       await settingsOwner.startTelemetry(config);
       manager.setRuntimeContext(

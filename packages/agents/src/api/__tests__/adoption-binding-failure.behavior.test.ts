@@ -139,6 +139,7 @@ describe('failed adopted session binding', () => {
       callerMcp.profileDefinitions,
       callerCredentials.authority,
       callerRelease,
+      undefined,
     );
     const callerMedia = new SessionMediaOwner(
       callerConfig.projectTempDir,
@@ -180,6 +181,7 @@ describe('failed adopted session binding', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await callerOwner.initializeTools();

@@ -604,10 +604,11 @@ async function applyModelAndParams(
       ? intent.model.trim()
       : undefined;
   const activeProvider = manager.getActiveProvider();
+  if (activeProvider === undefined) return;
   const resolvedModel =
     modelOverride ??
     selection.readModel() ??
-    resolveFallbackModel(config, activeProvider?.getDefaultModel?.());
+    resolveFallbackModel(config, activeProvider.getDefaultModel?.());
   if (resolvedModel !== undefined) {
     await setActiveModel(
       resolvedModel,
@@ -622,18 +623,15 @@ async function applyModelAndParams(
   // clear all existing params — wiping profile defaults (#2374 CodeRabbit).
   if (intent.modelParams !== undefined) {
     const desiredParams = intent.modelParams;
-    const existingParams =
-      activeProvider === undefined
-        ? {}
-        : extractModelParams(
-            settingsService.getProviderSettings(activeProvider.name),
-          );
+    const existingParams = extractModelParams(
+      settingsService.getProviderSettings(activeProvider.name),
+    );
     for (const [key, value] of Object.entries(desiredParams)) {
-      setActiveModelParam(key, value, settingsService, activeProvider?.name);
+      setActiveModelParam(key, value, settingsService, activeProvider.name);
     }
     for (const key of Object.keys(existingParams)) {
       if (!(key in desiredParams)) {
-        clearActiveModelParam(key, settingsService, activeProvider?.name);
+        clearActiveModelParam(key, settingsService, activeProvider.name);
       }
     }
   }

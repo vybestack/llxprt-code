@@ -224,6 +224,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -280,6 +281,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

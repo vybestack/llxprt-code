@@ -54,11 +54,11 @@ function createTestOAuthBinding(): McpOAuthBinding {
   };
 }
 
-const roots = new Set<CliTestSessionRoot>();
+const roots = new Set<() => Promise<void>>();
 afterEach(async () => {
   const retiring = [...roots];
   roots.clear();
-  await Promise.all(retiring.map((root) => root.dispose()));
+  await Promise.all(retiring.map((close) => close()));
 });
 
 /**
@@ -91,32 +91,27 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     }
   }
 }
-export interface CliTestSessionRoot {
-  readonly config: Config;
-  readonly settingsService: SettingsService;
-  readonly settingsOwner: SessionSettingsOwner;
-  readonly agent: Agent;
-  dispose(): Promise<void>;
-}
-
 export async function initializeTestConfig(
   config: Config,
   providerManager?: RuntimeProviderManager,
 ): Promise<Agent> {
-  return (await initializeTestSessionRoot(config, providerManager)).agent;
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  return initializeTestAgent(
+    config,
+    providerManager,
+    settings,
+    new SessionSettingsOwner(settings),
+  );
 }
 
-export async function initializeTestSessionRoot(
+export async function initializeTestAgent(
   config: Config,
-  providerManager?: RuntimeProviderManager,
-  suppliedSettings?: SettingsService,
-): Promise<CliTestSessionRoot> {
-  const settingsService = suppliedSettings ?? new SettingsService();
-  if (suppliedSettings === undefined) {
-    for (const [key, value] of Object.entries(config.getInitialSettings()))
-      settingsService.set(key, value);
-  }
-  const settingsOwner = new SessionSettingsOwner(settingsService);
+  providerManager: RuntimeProviderManager | undefined,
+  settingsService: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+): Promise<Agent> {
   settingsOwner.initializeProviderSelection(
     config.getProvider(),
     config.getModel(),
@@ -142,21 +137,14 @@ export async function initializeTestSessionRoot(
     mcpRuntime: mcpOwner,
     mcpOwnership: 'caller',
   });
-  const root: CliTestSessionRoot = {
-    config,
-    settingsService,
-    settingsOwner,
-    agent,
-    dispose: async () => {
-      await agent.dispose();
-      await mcpOwner.dispose();
-      await settingsOwner.dispose();
-      await policyOwner.dispose();
-      await config.dispose();
-    },
-  };
-  roots.add(root);
-  return root;
+  roots.add(async () => {
+    await agent.dispose();
+    await mcpOwner.dispose();
+    await settingsOwner.dispose();
+    await policyOwner.dispose();
+    await config.dispose();
+  });
+  return agent;
 }
 
 /**

@@ -181,6 +181,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -231,6 +232,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

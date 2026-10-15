@@ -211,6 +211,7 @@ describe('fromConfig activation intent does not desync Agent facade (#2374 round
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -267,6 +268,7 @@ describe('fromConfig activation intent does not desync Agent facade (#2374 round
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

@@ -196,6 +196,7 @@ describe('session executable tool ownership', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient(selection.activation);
@@ -246,6 +247,7 @@ describe('session executable tool ownership', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(

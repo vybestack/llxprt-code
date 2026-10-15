@@ -154,6 +154,7 @@ describe('interactive runtime owner admission', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient();
@@ -209,6 +210,7 @@ describe('interactive runtime owner admission', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
   async function activatefirstCallerClient(): Promise<void> {
@@ -332,6 +334,7 @@ describe('interactive runtime owner admission', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient();
@@ -387,6 +390,7 @@ describe('interactive runtime owner admission', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
   async function activatesecondCallerClient(): Promise<void> {

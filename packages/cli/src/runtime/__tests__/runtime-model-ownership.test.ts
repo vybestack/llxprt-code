@@ -168,6 +168,7 @@ describe('CLI retained session model commands', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient();
@@ -223,6 +224,7 @@ describe('CLI retained session model commands', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
   async function activatefirstCallerClient(): Promise<void> {
@@ -346,6 +348,7 @@ describe('CLI retained session model commands', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient();
@@ -401,6 +404,7 @@ describe('CLI retained session model commands', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
   async function activatesecondCallerClient(): Promise<void> {

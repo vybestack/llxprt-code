@@ -257,6 +257,7 @@ describe('explicit MCP construction ownership', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -300,6 +301,7 @@ describe('explicit MCP construction ownership', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -500,6 +502,7 @@ describe('explicit MCP construction ownership', () => {
         builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         builtCallerRelease,
+        undefined,
       );
       const builtCallerMedia = new SessionMediaOwner(
         builtCallerConfig.projectTempDir,
@@ -543,6 +546,7 @@ describe('explicit MCP construction ownership', () => {
           builtCallerOAuth,
           builtCallerRuntimeId,
           builtCallerTokenizer,
+          undefined,
         );
         await builtCallerMcp.initialize();
         const activation = await executeProviderActivation(

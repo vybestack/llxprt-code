@@ -221,6 +221,7 @@ class RecordingLifetime {
       this.#oAuth,
       this.#runtimeId,
       this.#tokenizer,
+      undefined,
     );
 
     await this.#mcp.initialize();
@@ -271,6 +272,7 @@ class RecordingLifetime {
       this.#mcp.profileDefinitions,
       this.credentials.authority,
       this.#release,
+      undefined,
     );
   }
   private async activateClient(

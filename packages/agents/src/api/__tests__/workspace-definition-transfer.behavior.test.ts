@@ -228,6 +228,7 @@ describe('public Agent workspace definition lifetime', () => {
         callerCallerOAuth,
         callerCallerRuntimeId,
         callerCallerTokenizer,
+        undefined,
       );
       await callerCallerMcp.initialize();
       await activatecallerCallerClient(selection.activation);
@@ -284,6 +285,7 @@ describe('public Agent workspace definition lifetime', () => {
       callerCallerMcp.profileDefinitions,
       callerCredentials().authority,
       callerCallerRelease,
+      undefined,
     );
   }
 

@@ -150,6 +150,7 @@ describe('UI session client ownership', () => {
       fixtureMcp.profileDefinitions,
       credentials().authority,
       fixtureRelease,
+      undefined,
     );
     const fixtureMedia = new SessionMediaOwner(
       fixtureConfig.projectTempDir,
@@ -190,6 +191,7 @@ describe('UI session client ownership', () => {
         fixtureOAuth,
         fixtureRuntimeId,
         fixtureTokenizer,
+        undefined,
       );
       await fixtureMcp.initialize();
       await fixtureOwner.initializeTools();
@@ -391,6 +393,7 @@ describe('UI session client ownership', () => {
       fixtureMcp.profileDefinitions,
       credentials().authority,
       fixtureRelease,
+      undefined,
     );
     const fixtureMedia = new SessionMediaOwner(
       fixtureConfig.projectTempDir,
@@ -431,6 +434,7 @@ describe('UI session client ownership', () => {
         fixtureOAuth,
         fixtureRuntimeId,
         fixtureTokenizer,
+        undefined,
       );
       await fixtureMcp.initialize();
       await fixtureOwner.initializeTools();
@@ -591,6 +595,7 @@ describe('UI session client ownership', () => {
       fixtureMcp.profileDefinitions,
       credentials().authority,
       fixtureRelease,
+      undefined,
     );
     const fixtureMedia = new SessionMediaOwner(
       fixtureConfig.projectTempDir,
@@ -631,6 +636,7 @@ describe('UI session client ownership', () => {
         fixtureOAuth,
         fixtureRuntimeId,
         fixtureTokenizer,
+        undefined,
       );
       await fixtureMcp.initialize();
       await fixtureOwner.initializeTools();

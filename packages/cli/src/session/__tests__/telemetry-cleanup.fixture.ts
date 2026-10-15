@@ -232,6 +232,7 @@ class TelemetryCleanup {
       this.#oAuth,
       this.#runtimeId,
       this.#tokenizer,
+      undefined,
     );
 
     await this.#mcp.initialize();
@@ -283,6 +284,7 @@ class TelemetryCleanup {
       this.#mcp.profileDefinitions,
       this.credentials.authority,
       this.#release,
+      undefined,
     );
   }
   private async activateCallerClient(

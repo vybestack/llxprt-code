@@ -10,15 +10,6 @@ import {
   createBootstrapResult,
 } from '../profileBootstrap.js';
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
-
 type BootstrapProfileArgs = {
   profileName: string | null;
   profileJson: string | null;

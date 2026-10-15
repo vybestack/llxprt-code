@@ -191,6 +191,7 @@ describe('activation bootstrap ownership and queued work', () => {
       blocked_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       blocked_builtCallerRelease,
+      undefined,
     );
     const blocked_builtCallerMedia = new SessionMediaOwner(
       blocked_builtCallerConfig.projectTempDir,
@@ -237,6 +238,7 @@ describe('activation bootstrap ownership and queued work', () => {
         blocked_builtCallerOAuth,
         blocked_builtCallerRuntimeId,
         blocked_builtCallerTokenizer,
+        undefined,
       );
       await blocked_builtCallerMcp.initialize();
       const blocked_activation = await executeProviderActivation(
@@ -396,6 +398,7 @@ describe('activation bootstrap ownership and queued work', () => {
       independent_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       independent_builtCallerRelease,
+      undefined,
     );
     const independent_builtCallerMedia = new SessionMediaOwner(
       independent_builtCallerConfig.projectTempDir,
@@ -447,6 +450,7 @@ describe('activation bootstrap ownership and queued work', () => {
         independent_builtCallerOAuth,
         independent_builtCallerRuntimeId,
         independent_builtCallerTokenizer,
+        undefined,
       );
       await independent_builtCallerMcp.initialize();
       const independent_activation = await executeProviderActivation(

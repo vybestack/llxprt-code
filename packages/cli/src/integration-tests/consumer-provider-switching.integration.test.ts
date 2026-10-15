@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,8 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 import {
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestAgent,
   createTempDirectory,
   cleanupTempDirectory,
 } from './test-utils.js';
@@ -21,8 +21,6 @@ import {
   type AgentProfilePreflight,
   switchActiveProvider,
 } from '@vybestack/llxprt-code-agents';
-
-import { providerSwitchInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 import { type RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 
@@ -108,7 +106,8 @@ describe('explicit provider primitive owners', () => {
     describe('Provider switching reachable through CLI/runtime flow', () => {
       let tempDir: string;
       let config: Config;
-      let sessionRoot: CliTestSessionRoot;
+      let settingsOwner: SessionSettingsOwner;
+      let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
       let providerManager: RuntimeProviderManager;
       let settingsService: SettingsService;
       let preflight: AgentProfilePreflight;
@@ -133,12 +132,14 @@ describe('explicit provider primitive owners', () => {
             providerManager = manager;
           },
         );
-        sessionRoot = await initializeTestSessionRoot(
+        settingsOwner = new SessionSettingsOwner(settingsService);
+        sessionRoot = await initializeTestAgent(
           config,
           providerManager,
           settingsService,
+          settingsOwner,
         );
-        sessionClient = sessionRoot.agent.sessionClient;
+        sessionClient = sessionRoot.sessionClient;
 
         // Register test providers
         const providerA = createTestProvider('provider-a', 'model-a');
@@ -161,20 +162,24 @@ describe('explicit provider primitive owners', () => {
        */
       it('switchActiveProvider changes active provider through CLI runtime path', async () => {
         await providerManager.setActiveProvider('provider-a');
-        expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
+        expect(sessionRoot.providerReads.getActiveProviderName()).toBe(
           'provider-a',
         );
 
         const result = await switchActiveProvider(
           'provider-b',
           {},
-          ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-            sessionClient.refreshAuth(),
-          )),
+          config,
+          settingsService,
+          providerManager,
+          null,
+          undefined,
+          () => sessionClient.refreshAuth(),
+          settingsOwner,
         );
         expect(result.changed).toBe(true);
         expect(result.nextProvider).toBe('provider-b');
-        expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
+        expect(sessionRoot.providerReads.getActiveProviderName()).toBe(
           'provider-b',
         );
       });
@@ -187,7 +192,7 @@ describe('explicit provider primitive owners', () => {
        * registered providers.
        */
       it('listProviders returns registered providers through CLI runtime path', () => {
-        const providers = sessionRoot.agent.providerReads.listProviders();
+        const providers = sessionRoot.providerReads.listProviders();
         expect(providers).toContain('provider-a');
         expect(providers).toContain('provider-b');
       });
@@ -205,11 +210,15 @@ describe('explicit provider primitive owners', () => {
         await switchActiveProvider(
           'provider-b',
           {},
-          ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-            sessionClient.refreshAuth(),
-          )),
+          config,
+          settingsService,
+          providerManager,
+          null,
+          undefined,
+          () => sessionClient.refreshAuth(),
+          settingsOwner,
         );
-        const status = sessionRoot.agent.providerReads.providerStatus();
+        const status = sessionRoot.providerReads.providerStatus();
         expect(status.providerName).toBe('provider-b');
       });
 
@@ -225,9 +234,13 @@ describe('explicit provider primitive owners', () => {
         const result = await switchActiveProvider(
           'provider-a',
           {},
-          ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-            sessionClient.refreshAuth(),
-          )),
+          config,
+          settingsService,
+          providerManager,
+          null,
+          undefined,
+          () => sessionClient.refreshAuth(),
+          settingsOwner,
         );
         expect(result.changed).toBe(false);
       });

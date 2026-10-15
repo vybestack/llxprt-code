@@ -153,6 +153,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -203,6 +204,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

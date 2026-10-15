@@ -198,6 +198,7 @@ describe('auxiliary generation lifetime', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -253,6 +254,7 @@ describe('auxiliary generation lifetime', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(
@@ -406,6 +408,7 @@ describe('auxiliary generation lifetime', () => {
         peerCallerOAuth,
         peerCallerRuntimeId,
         peerCallerTokenizer,
+        undefined,
       );
       await peerCallerMcp.initialize();
       await activatepeerCallerClient(selection.activation);
@@ -458,6 +461,7 @@ describe('auxiliary generation lifetime', () => {
       peerCallerMcp.profileDefinitions,
       peerCredentials().authority,
       peerCallerRelease,
+      undefined,
     );
   }
   async function activatepeerCallerClient(

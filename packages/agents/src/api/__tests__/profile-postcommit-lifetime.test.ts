@@ -299,6 +299,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         builtCallerRelease,
+        undefined,
       );
       const builtCallerMedia = new SessionMediaOwner(
         builtCallerConfig.projectTempDir,
@@ -450,6 +451,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         otherCallerMcp.profileDefinitions,
         otherCredentials().authority,
         otherCallerRelease,
+        undefined,
       );
       const otherCallerMedia = new SessionMediaOwner(
         otherCallerConfig.projectTempDir,

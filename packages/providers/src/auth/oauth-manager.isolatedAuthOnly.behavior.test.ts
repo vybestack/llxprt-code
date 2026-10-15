@@ -87,6 +87,7 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
     const beforeAuthOnly = await oauth.getHigherPriorityAuth('anthropic');
     expect(beforeAuthOnly).toBe('API Key');

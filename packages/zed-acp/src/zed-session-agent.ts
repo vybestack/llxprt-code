@@ -3,39 +3,44 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type {
-  createProviderManager,
-  ProviderContributionRegistry,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
-import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-
-import { createZedWorkspace } from './zed-workspace.js';
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type * as acp from '@agentclientprotocol/sdk';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import {
-  Config,
+  createAgentFromSettingsSnapshot,
+  type Agent,
+  type AgentConfig,
+} from '@vybestack/llxprt-code-agents';
+import {
+  type Config,
   type ConfigParameters,
-  DebugLogger,
+  type DebugLogger,
+  type WorkspaceTrustControlPort,
+  StandardFileSystemService,
+  normalizeShellReplacement,
 } from '@vybestack/llxprt-code-core';
+import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core/config/models.js';
 import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 import { MCP_TRUSTED_POLICY_SOURCE } from '@vybestack/llxprt-code-core/policy/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ShellTool } from '@vybestack/llxprt-code-tools';
-
-import { buildZedTerminalSetup } from './zed-terminal-setup.js';
+import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
 import type { TerminalManager } from './zed-terminal-manager.js';
 import type { ClientCapabilitiesWithSession } from './acp-types.js';
+import { AcpFileSystemService } from './fileSystemService.js';
+import { resolveSessionTargetDir } from './zed-session-config.js';
 
 export type ZedHostInputs = Readonly<
-  { storageRoot: string } & Pick<
+  {
+    storageRoot: string;
+    fileFiltering: {
+      respectGitIgnore: boolean;
+      respectLlxprtIgnore: boolean;
+      enableRecursiveFileSearch: boolean;
+      disableFuzzySearch: boolean;
+    };
+  } & Pick<
     ConfigParameters,
     | 'debugMode'
     | 'outputFormat'
@@ -43,7 +48,6 @@ export type ZedHostInputs = Readonly<
     | 'sandbox'
     | 'embeddingModel'
     | 'includeDirectories'
-    | 'fileFiltering'
     | 'checkpointing'
     | 'useRipgrep'
     | 'skillsSupport'
@@ -93,40 +97,18 @@ export function captureZedHostInputs(host: Config): ZedHostInputs {
   };
 }
 
-/**
- * Provider assembly inputs owned by the ACP connection. Omitting them yields a
- * built-ins-only provider set and an OAuth manager without a settings surface.
- */
 export interface ZedSessionProviderInputs {
   readonly credentialAuthority?: CredentialAuthority;
   readonly providerContributions?: ProviderContributionRegistry;
-  readonly oauthSettings?: NonNullable<
-    Parameters<typeof createProviderManager>[9]
-  >;
+  readonly oauthSettings?: IOAuthSettingsProvider | null;
 }
 
-/** The provider/model the connection currently has selected. */
 export interface ZedSessionSelection {
   readonly provider: string | undefined;
   readonly model: string;
 }
 
-export function readZedSessionSelection(
-  settings: SettingsService,
-  host: Config,
-): ZedSessionSelection {
-  const active = settings.get('activeProvider');
-  if (typeof active !== 'string' || active.length === 0)
-    return { provider: host.getProvider(), model: host.getModel() };
-  const model = settings.getProviderSettings(active).model;
-  return {
-    provider: active,
-    model:
-      typeof model === 'string' && model.length > 0 ? model : host.getModel(),
-  };
-}
-
-export function createZedSessionConfig(
+export function captureZedSessionParameters(
   host: Config,
   sessionId: string,
   targetDir: string,
@@ -135,13 +117,13 @@ export function createZedSessionConfig(
     provider: host.getProvider(),
     model: host.getModel(),
   },
-): Config {
+): ConfigParameters {
   const policy = host.getPolicyEngineConfig();
   const mcpServers = host.getMcpServers();
   const hooks = host.getHooks();
   const projectHooks = host.getProjectHooks();
   const sanitizationConfig = host.getSanitizationConfig();
-  const sessionConfig = new Config({
+  return {
     ...hostInputs,
     sessionId,
     targetDir,
@@ -188,8 +170,7 @@ export function createZedSessionConfig(
       defaultDecision: policy.defaultDecision,
       nonInteractive: policy.nonInteractive,
     },
-  });
-  return sessionConfig;
+  };
 }
 
 /**
@@ -210,14 +191,57 @@ export function resolveZedHostTrust(
   return { trust: owned, owned };
 }
 
-export interface ZedSessionAgent {
-  agent: Agent;
-  config: Config;
-  files: WorkspaceFilesystemOwner['files'];
-  ignore: WorkspaceFilesystemOwner['ignore'];
-  terminals: TerminalManager | null;
-  disposeConfig: () => Promise<void>;
-  settingsOwner: SessionSettingsOwner;
+export function captureZedAgentDeclaration(
+  params: ConfigParameters,
+): AgentConfig {
+  return {
+    provider: params.provider ?? UNCONFIGURED_PROVIDER,
+    model: params.model,
+    sessionId: params.sessionId,
+    workingDir: params.targetDir,
+    includeDirectories: params.includeDirectories,
+    outputFormat: params.outputFormat,
+    sandbox: params.sandbox,
+    embeddingModel: params.embeddingModel,
+    fileFiltering: params.fileFiltering,
+    checkpointing: params.checkpointing,
+    skillsSupport: params.skillsSupport,
+    ide: { mode: params.ideMode },
+    shell: normalizeShellReplacement(params.shellReplacement),
+    interactive: params.interactive,
+    telemetry: params.telemetry,
+    maxSessionTurns: params.maxSessionTurns,
+    hooks: params.hooks,
+    projectHooks: params.projectHooks,
+    disabledHooks: params.disabledHooks,
+    disabledSkills: params.disabledSkills,
+    adminSkillsEnabled: params.adminSkillsEnabled,
+    approvalMode: params.approvalMode,
+    folderTrust: params.trustedFolder,
+    coreTools: params.coreTools,
+    allowedTools: params.allowedTools,
+    excludeTools: params.excludeTools,
+    mcpServers: params.mcpServers,
+    blockedMcpServers: params.blockedMcpServers,
+    extensions: params.extensions,
+    policy: params.policyEngineConfig,
+    debugMode: params.debugMode,
+    settings: {
+      storageRoot: params.storageRoot,
+      quiet: params.quiet,
+      initialSettings: params.initialSettings,
+      useRipgrep: params.useRipgrep,
+      enableHooks: params.enableHooks,
+      enableHooksUI: params.enableHooksUI,
+      noBrowser: params.noBrowser,
+      usageStatisticsEnabled: params.usageStatisticsEnabled,
+      jitContextEnabled: params.jitContextEnabled,
+      disableYoloMode: params.disableYoloMode,
+      sanitizationConfig: params.sanitizationConfig,
+      activeExtensions: params.activeExtensions,
+    },
+    harness: { includeProcessCwd: false, forceConfirmations: false },
+  };
 }
 
 export async function buildZedSessionAgent(
@@ -227,184 +251,42 @@ export async function buildZedSessionAgent(
   capabilities: ClientCapabilitiesWithSession | undefined,
   sessionId: string,
   cwd: string | undefined,
-  logger: DebugLogger,
-  settingsService: SettingsService,
+  settingsSource: SettingsService,
   hostTrust: WorkspaceTrustControlPort,
   providerInputs: ZedSessionProviderInputs = {},
-): Promise<ZedSessionAgent> {
-  const trust = createSessionTrust(hostTrust);
-  const { sessionConfig, filesystem } = createZedWorkspace(
-    hostConfig,
-    hostInputs,
-    connection,
-    capabilities,
-    sessionId,
-    cwd,
-    trust,
-    readZedSessionSelection(settingsService, hostConfig),
-  );
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  const policy = new RuntimePolicyOwner(sessionConfig, trust);
-  let disposeManager: () => void | Promise<void> = () => {};
-  const disposeConfig = sessionWorkspaceDisposer(
-    settingsOwner,
-    bindSessionTrust(hostTrust, trust),
-    joinProviderPolicy(() => disposeManager(), policy),
-    sessionConfig,
-    filesystem,
-    trust,
-  );
-  let terminalSetup: ReturnType<typeof buildZedTerminalSetup> | undefined;
-  let agent: Agent | undefined;
-  try {
-    const { manager, oauthManager } = await composeSessionProviderManager(
-      { sessionConfig, sessionId, settingsService, policy },
-      providerInputs,
-    );
-    disposeManager = () => manager.dispose();
-    agent = await fromConfig({
-      ...sessionPolicyInput(settingsService, settingsOwner, policy, trust),
-      config: sessionConfig,
-      filesystemOwner: filesystem,
-      filesystemOwnership: 'agent',
-      providerManager: manager,
-      ...sessionProviderInput(oauthManager, sessionId, providerInputs),
-      prepareSessionTools: (config, messageBus, tools) => {
-        if (capabilities?.terminal !== true) return;
-        terminalSetup = buildZedTerminalSetup(
-          sessionId,
-          config,
-          tools,
-          connection,
-          logger,
-          messageBus,
-          filesystem.paths,
-          settingsOwner,
-          trust,
-        );
-        const shell = terminalSetup.registry.getTool(ShellTool.Name);
-        if (shell) tools.registerTool(shell);
-      },
-    });
-  } catch (error) {
-    await settleFailedSession(error, agent, terminalSetup, disposeConfig);
-    throw error;
-  }
-  return {
-    agent,
-    config: sessionConfig,
-    files: filesystem.files,
-    ignore: filesystem.ignore,
-    terminals: terminalSetup?.terminals ?? null,
-    disposeConfig,
-    settingsOwner,
-  };
-}
-
-function sessionProviderInput(
-  oauthManager: OAuthManager,
-  sessionId: string,
-  providerInputs: ZedSessionProviderInputs,
-) {
-  return {
-    oauthManager,
-    sessionId,
-    credentialAuthority: providerInputs.credentialAuthority,
-  };
-}
-
-async function composeSessionProviderManager(
-  session: {
-    sessionConfig: Config;
-    sessionId: string;
-    settingsService: SettingsService;
-    policy: RuntimePolicyOwner;
-  },
-  providerInputs: ZedSessionProviderInputs,
-) {
-  const { sessionConfig: config, sessionId, settingsService, policy } = session;
-  const { createProviderManager, NodeFileSystem } = await import(
-    '@vybestack/llxprt-code-providers/composition.js'
-  );
+  executeShellCommand?: IShellToolHost['executeShellCommand'],
+): Promise<Agent> {
   if (providerInputs.credentialAuthority === undefined)
     throw new Error(
       'ACP provider construction requires a credential authority',
     );
-  const { manager, oauthManager } = createProviderManager(
-    settingsService,
-    { runtimeId: sessionId },
-    config,
-    providerInputs.credentialAuthority,
-    new NodeFileSystem(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    providerInputs.oauthSettings,
-    policy.session.messageBus,
-    undefined,
-    undefined,
-    undefined,
-    providerInputs.providerContributions,
+  const params = captureZedSessionParameters(
+    hostConfig,
+    sessionId,
+    resolveSessionTargetDir(hostConfig, cwd),
+    hostInputs,
   );
-  return { manager, oauthManager };
-}
-
-async function disposeSessionInfrastructure(
-  disposeManager: () => void | Promise<void>,
-  config: Config,
-): Promise<void> {
-  const managers = await Promise.allSettled([
-    Promise.resolve().then(disposeManager),
-  ]);
-  const configs = await Promise.allSettled([config.dispose()]);
-  const failures = [...managers, ...configs].flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
+  const filesystemService = capabilities?.fs
+    ? new AcpFileSystemService(
+        connection,
+        sessionId,
+        capabilities.fs,
+        new StandardFileSystemService(),
+      )
+    : undefined;
+  return createAgentFromSettingsSnapshot(
+    {
+      ...captureZedAgentDeclaration(params),
+      credentialAuthority: providerInputs.credentialAuthority,
+      providerContributions: providerInputs.providerContributions,
+      oauthSettings: providerInputs.oauthSettings,
+      sessionOverrides: settingsSource.readSessionOverrides(),
+      parentTrustPort: hostTrust,
+      filesystemService,
+      executeShellCommand,
+    },
+    settingsSource.exportForStateSnapshot(),
   );
-  if (failures.length > 0)
-    throw new AggregateError(
-      failures,
-      'ACP session infrastructure cleanup failed',
-    );
-}
-async function settleFailedSession(
-  error: unknown,
-  agent: Agent | undefined,
-  terminalSetup: ReturnType<typeof buildZedTerminalSetup> | undefined,
-  disposeConfig: () => Promise<void>,
-): Promise<void> {
-  const clients = await Promise.allSettled([
-    agent?.dispose(),
-    terminalSetup?.terminals.settleAll(),
-  ]);
-  const infrastructure = await Promise.allSettled([disposeConfig()]);
-  const failures = [...clients, ...infrastructure].flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  if (failures.length > 0)
-    throw new AggregateError(
-      [error, ...failures],
-      'ACP session startup and cleanup failed',
-    );
-}
-
-async function retireSessionWorkspace(
-  releases: ReadonlyArray<() => void | Promise<void>>,
-): Promise<void> {
-  const failures: unknown[] = [];
-  for (const release of releases) {
-    try {
-      await release();
-    } catch (error) {
-      failures.push(error);
-    }
-  }
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 0)
-    throw new AggregateError(
-      failures,
-      'ACP session infrastructure cleanup failed',
-    );
 }
 
 export async function disposeZedSession(
@@ -413,7 +295,6 @@ export async function disposeZedSession(
   logger: DebugLogger,
   abortPrompt: () => void,
   retireAgent: Agent['dispose'],
-  disposeConfig: () => Promise<void>,
 ): Promise<void> {
   try {
     detach();
@@ -424,80 +305,6 @@ export async function disposeZedSession(
       );
     abortPrompt();
   } finally {
-    try {
-      await retireAgent();
-    } finally {
-      await disposeConfig();
-    }
+    await retireAgent();
   }
-}
-
-function sessionWorkspaceDisposer(
-  settingsOwner: SessionSettingsOwner,
-  stopTrustUpdates: () => void,
-  disposeManager: () => void | Promise<void>,
-  sessionConfig: Config,
-  filesystem: WorkspaceFilesystemOwner,
-  trust: WorkspaceTrustLifecycle,
-): () => Promise<void> {
-  let disposal: Promise<void> | undefined;
-  const disposeConfig = (): Promise<void> => {
-    disposal ??= retireSessionWorkspace([
-      () => settingsOwner.closeAdmission(),
-      stopTrustUpdates,
-      () => disposeSessionInfrastructure(disposeManager, sessionConfig),
-      () => settingsOwner.dispose(),
-      () => filesystem.dispose(),
-      () => trust.dispose(),
-    ]);
-    return disposal;
-  };
-  return disposeConfig;
-}
-
-function bindSessionTrust(
-  host: WorkspaceTrustControlPort,
-  session: WorkspaceTrustLifecycle,
-): () => void {
-  return host.subscribeTrustChange((transition) => {
-    session.setTrustedFolderLive(transition.trusted).catch((error: unknown) => {
-      new DebugLogger('llxprt:zed-integration:trust').error(() =>
-        String(error),
-      );
-    });
-  });
-}
-
-function createSessionTrust(
-  host: WorkspaceTrustControlPort,
-): WorkspaceTrustLifecycle {
-  return new WorkspaceTrustLifecycle({ localTrust: host.isTrustedFolder() });
-}
-
-function joinProviderPolicy(
-  disposeManager: () => void | Promise<void>,
-  policy: RuntimePolicyOwner,
-): () => Promise<void> {
-  return async () => {
-    try {
-      await disposeManager();
-    } finally {
-      await policy.dispose();
-    }
-  };
-}
-
-function sessionPolicyInput(
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  policyOwner: RuntimePolicyOwner,
-  trustPort: WorkspaceTrustControlPort,
-) {
-  return {
-    settingsService,
-    settingsOwner,
-    policyOwner,
-    messageBus: policyOwner.session.messageBus,
-    trustPort,
-  };
 }

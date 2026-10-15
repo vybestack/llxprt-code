@@ -204,6 +204,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -259,6 +260,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

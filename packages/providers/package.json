@@ -46,36 +46,6 @@
       "bun": "./src/composition/IFileSystem.ts",
       "import": "./dist/src/composition/IFileSystem.js"
     },
-    "./runtime.js": {
-      "types": "./dist/src/runtime/index.d.ts",
-      "bun": "./src/runtime/index.ts",
-      "import": "./dist/src/runtime/index.js"
-    },
-    "./runtime/runtimeLifecycle.js": {
-      "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
-      "bun": "./src/runtime/runtimeLifecycle.ts",
-      "import": "./dist/src/runtime/runtimeLifecycle.js"
-    },
-    "./runtime/runtimeContextFactory.js": {
-      "types": "./dist/src/runtime/runtimeContextFactory.d.ts",
-      "bun": "./src/runtime/runtimeContextFactory.ts",
-      "import": "./dist/src/runtime/runtimeContextFactory.js"
-    },
-    "./runtime/runtimeActivationBindings.js": {
-      "types": "./dist/src/runtime/runtimeActivationBindings.d.ts",
-      "bun": "./src/runtime/runtimeActivationBindings.ts",
-      "import": "./dist/src/runtime/runtimeActivationBindings.js"
-    },
-    "./runtime/assembleCliProviderRuntime.js": {
-      "types": "./dist/src/runtime/assembleCliProviderRuntime.d.ts",
-      "bun": "./src/runtime/assembleCliProviderRuntime.ts",
-      "import": "./dist/src/runtime/assembleCliProviderRuntime.js"
-    },
-    "./runtime/cliForegroundRuntime.js": {
-      "types": "./dist/src/runtime/cliForegroundRuntime.d.ts",
-      "bun": "./src/runtime/cliForegroundRuntime.ts",
-      "import": "./dist/src/runtime/cliForegroundRuntime.js"
-    },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
       "bun": "./src/runtime/statelessHardening.ts",

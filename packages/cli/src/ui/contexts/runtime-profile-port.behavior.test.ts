@@ -173,6 +173,7 @@ describe('CLI profile operation projection', () => {
         ownerCallerOAuth,
         ownerCallerRuntimeId,
         ownerCallerTokenizer,
+        undefined,
       );
       await ownerCallerMcp.initialize();
       await activateownerCallerClient();
@@ -228,6 +229,7 @@ describe('CLI profile operation projection', () => {
       ownerCallerMcp.profileDefinitions,
       ownerCredentials().authority,
       ownerCallerRelease,
+      undefined,
     );
   }
   async function activateownerCallerClient(): Promise<void> {
