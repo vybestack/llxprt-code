@@ -53,6 +53,7 @@ export * from './event-schema.js';
 export {
   createAgent,
   createAgentWithRetainedProviderFiles,
+  createAgentFromSettingsSnapshot,
 } from './createAgent.js';
 export type {
   AgentRetainedProviderFile,
