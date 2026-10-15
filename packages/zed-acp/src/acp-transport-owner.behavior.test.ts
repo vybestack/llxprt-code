@@ -58,7 +58,18 @@ function ownedTransport(agent: Agent, updates: acp.SessionUpdate[]): Session {
     () => agent.memory.getFilePaths(),
     () => agent.profiles.list(),
     () => agent.tasks.list(),
-    config,
+    config.getProjectRoot.bind(config),
+    config.getMaxSessionTurns.bind(config),
+    config.getDebugMode.bind(config),
+    config.getFileFilteringOptions.bind(config),
+    config.getTargetDir.bind(config),
+    config.getEnableRecursiveFileSearch.bind(config),
+    config.readTextFile.bind(config),
+    config.ignore.shouldIgnoreFile.bind(config.ignore),
+    config.ignore.getCoreIgnorePatterns.bind(config.ignore),
+    config.getEphemeralSetting.bind(config),
+    config.setEphemeralSetting.bind(config),
+    config.subscribeModelChanges,
     {
       sessionUpdate: async ({ update }: acp.SessionNotification) => {
         updates.push(update);

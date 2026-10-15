@@ -42,10 +42,6 @@ import {
   toLoadRequestError,
   type ChatSessionFileLister,
 } from './zed-session-loader.js';
-import {
-  projectZedSessionSettings,
-  type ZedSessionSettings,
-} from './zed-session-ports.js';
 import type { TerminalManager } from './zed-terminal-manager.js';
 import { createZedTerminalTransport } from './zed-terminal-setup.js';
 
@@ -110,17 +106,23 @@ export class ZedAgent {
   authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
     return authenticateZedAgent(this.definitions, methodId, this.application);
   }
-  async newSession({
-    cwd,
-    mcpServers: _mcpServers,
-  }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
+  private reportRecordingFailure(sessionId: string, error: unknown): void {
+    this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`);
+  }
+  async newSession(
+    params: acp.NewSessionRequest,
+  ): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
       const settingsSource = this.createSessionSettings();
-      const terminals = this.createTerminals(sessionId, cwd, settingsSource);
+      const terminals = this.createTerminals(
+        sessionId,
+        params.cwd,
+        settingsSource,
+      );
       const agent = await this.buildSessionAgent(
         sessionId,
-        cwd,
+        params.cwd,
         settingsSource,
         terminals,
       );
@@ -128,10 +130,7 @@ export class ZedAgent {
       try {
         await enableZedSessionRecording(
           () => agent.session.setRecording({ enabled: true }),
-          (error) =>
-            this.logger.debug(
-              () => `Recording failed for ${sessionId}: ${error}`,
-            ),
+          this.reportRecordingFailure.bind(this, sessionId),
         );
         session = new Session(
           sessionId,
@@ -153,7 +152,22 @@ export class ZedAgent {
           () => agent.memory.getFilePaths(),
           () => agent.profiles.list(),
           () => agent.tasks.list(),
-          this.projectSessionSettings(agent),
+          () => agent.workspace.getProjectRoot(),
+          () => this.hostInputs.maxSessionTurns ?? -1,
+          () => this.hostInputs.debugMode,
+          () => ({
+            respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
+            respectLlxprtIgnore:
+              this.hostInputs.fileFiltering.respectLlxprtIgnore,
+          }),
+          () => agent.workspace.getWorkingDirectory(),
+          () => this.hostInputs.fileFiltering.enableRecursiveFileSearch,
+          (path) => agent.workspace.readTextFile(path),
+          (path, options) => agent.workspace.shouldIgnoreFile(path, options),
+          () => agent.workspace.getCoreIgnorePatterns(),
+          (key) => agent.getEphemeralSetting(key),
+          (key, value) => agent.setEphemeralSetting(key, value),
+          (listener) => agent.settings.subscribeModelChanges(listener),
           this.connection,
           this.supportsConfigOptions(),
           terminals,
@@ -169,7 +183,6 @@ export class ZedAgent {
         () => agent.getModel(),
         () => agent.listAvailableModels(),
         (key) => agent.getEphemeralSetting(key),
-        (key, value) => agent.setEphemeralSetting(key, value),
       );
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
@@ -182,7 +195,6 @@ export class ZedAgent {
     readModel: Agent['getModel'],
     listModels: Agent['listAvailableModels'],
     readSetting: Agent['getEphemeralSetting'],
-    writeSetting: Agent['setEphemeralSetting'],
   ): Promise<acp.NewSessionResponse> {
     try {
       await session.sendAvailableCommands();
@@ -194,11 +206,9 @@ export class ZedAgent {
     try {
       ({ configOptions } = await zedConfigOptionsForClient(
         this.clientCapabilities,
-        {
-          getModel: readModel,
-          listAvailableModels: listModels,
-        },
-        { getEphemeralSetting: readSetting, setEphemeralSetting: writeSetting },
+        readModel,
+        listModels,
+        readSetting,
       ));
     } catch (error) {
       await session.dispose();
@@ -358,7 +368,22 @@ export class ZedAgent {
         () => agent.memory.getFilePaths(),
         () => agent.profiles.list(),
         () => agent.tasks.list(),
-        this.projectSessionSettings(agent),
+        () => agent.workspace.getProjectRoot(),
+        () => this.hostInputs.maxSessionTurns ?? -1,
+        () => this.hostInputs.debugMode,
+        () => ({
+          respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
+          respectLlxprtIgnore:
+            this.hostInputs.fileFiltering.respectLlxprtIgnore,
+        }),
+        () => agent.workspace.getWorkingDirectory(),
+        () => this.hostInputs.fileFiltering.enableRecursiveFileSearch,
+        (path) => agent.workspace.readTextFile(path),
+        (path, options) => agent.workspace.shouldIgnoreFile(path, options),
+        () => agent.workspace.getCoreIgnorePatterns(),
+        (key) => agent.getEphemeralSetting(key),
+        (key, value) => agent.setEphemeralSetting(key, value),
+        (listener) => agent.settings.subscribeModelChanges(listener),
         this.connection,
         this.supportsConfigOptions(),
         terminals,
@@ -370,27 +395,6 @@ export class ZedAgent {
       this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
       throw toLoadRequestError(sessionId, error);
     }
-  }
-  private projectSessionSettings(agent: Agent): ZedSessionSettings {
-    return projectZedSessionSettings(
-      {
-        projectRoot: agent.workspace.getProjectRoot(),
-        targetDir: agent.workspace.getWorkingDirectory(),
-        maxSessionTurns: this.hostInputs.maxSessionTurns ?? -1,
-        debugMode: this.hostInputs.debugMode,
-        fileFiltering: {
-          respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
-          respectLlxprtIgnore:
-            this.hostInputs.fileFiltering.respectLlxprtIgnore,
-        },
-        recursiveFileSearch:
-          this.hostInputs.fileFiltering.enableRecursiveFileSearch,
-      },
-      agent,
-      agent.workspace,
-      agent.workspace,
-      (listener) => agent.settings.subscribeModelChanges(listener),
-    );
   }
   private createTerminals(
     sessionId: string,

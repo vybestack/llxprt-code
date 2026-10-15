@@ -5,10 +5,6 @@
  */
 
 import { installZedFilesystemFixture } from './zed-filesystem-fixture.js';
-import {
-  projectZedSessionSettings,
-  captureZedSessionView,
-} from '../zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -585,6 +581,7 @@ export function createSession(
   connection: RecordingConnection,
   config: Config = buildMinimalConfig(),
 ): Session {
+  const filesystem = fixtureFilesystem();
   return new Session(
     'test-session-id',
     (input, options) => agent.stream(input, options),
@@ -611,16 +608,21 @@ export function createSession(
     () => agent.memory.getFilePaths(),
     () => agent.profiles.list(),
     () => agent.tasks.list(),
-    projectZedSessionSettings(
-      captureZedSessionView(config),
-      agent,
-      fixtureFilesystem().files,
-      fixtureFilesystem().ignore,
-      (listener) =>
-        new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
-          listener,
-        ),
-    ),
+    config.getProjectRoot.bind(config),
+    config.getMaxSessionTurns.bind(config),
+    config.getDebugMode.bind(config),
+    config.getFileFilteringOptions.bind(config),
+    config.getTargetDir.bind(config),
+    config.getEnableRecursiveFileSearch.bind(config),
+    filesystem.files.readTextFile.bind(filesystem.files),
+    filesystem.ignore.shouldIgnoreFile.bind(filesystem.ignore),
+    filesystem.ignore.getCoreIgnorePatterns.bind(filesystem.ignore),
+    agent.getEphemeralSetting.bind(agent),
+    agent.setEphemeralSetting.bind(agent),
+    (listener) =>
+      new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+        listener,
+      ),
     connection as unknown as acp.AgentSideConnection,
   );
 }
