@@ -76,6 +76,7 @@ export async function hydrateRecordedMedia(
       });
     }
   }
+  if (admissions.length === 0) return;
   await store.admitObjects(admissions);
 }
 
