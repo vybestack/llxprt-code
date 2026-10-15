@@ -72,6 +72,20 @@ export function createStableAppCommands(
     handleFolderTrustSelect: (...args) =>
       latest.current.handleFolderTrustSelect(...args),
     triggerWelcomeAuth: (...args) => latest.current.triggerWelcomeAuth(...args),
+    resumeBrowserTarget: (...args) =>
+      latest.current.resumeBrowserTarget(...args),
+    listSubagentDefinitions: (...args) =>
+      latest.current.listSubagentDefinitions(...args),
+    loadSubagentDefinition: (...args) =>
+      latest.current.loadSubagentDefinition(...args),
+    saveSubagentDefinition: (...args) =>
+      latest.current.saveSubagentDefinition(...args),
+    deleteSubagentDefinition: (...args) =>
+      latest.current.deleteSubagentDefinition(...args),
+    listSubagentProfiles: (...args) =>
+      latest.current.listSubagentProfiles(...args),
+    generateSubagentPrompt: (...args) =>
+      latest.current.generateSubagentPrompt(...args),
     recordModelSwitch: (...args) => latest.current.recordModelSwitch(...args),
     handleThemeSelect: (...args) => latest.current.handleThemeSelect(...args),
     handleThemeHighlight: (...args) =>
