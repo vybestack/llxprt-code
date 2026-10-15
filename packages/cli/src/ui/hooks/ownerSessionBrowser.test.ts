@@ -2,11 +2,15 @@ import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
-import { useSessionBrowser } from './useSessionBrowser.js';
+import {
+  type UseSessionBrowserProps,
+  useSessionBrowser,
+} from './useSessionBrowser.js';
 import { Key } from './useKeypress.js';
 
 /**
@@ -53,12 +57,27 @@ describe('owner session browser', () => {
         await next.session.setRecording({ enabled: true });
         const path = next.session.getRecording().path;
         if (!path) throw new Error('Missing live owner');
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async (target) => {
               await resumeOwnerSession(
                 next,
@@ -117,12 +136,27 @@ describe('owner session browser', () => {
         await next.setHistory([human('prior owner')]);
         await next.session.setRecording({ enabled: true });
         let shown = false;
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async (target) => {
               const replay = await resumeOwnerSession(
                 next,

@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from '../hooks/browserCatalogHost.js';
+
 /**
  * Pure dialog renderer helpers shared by DialogManager. Each helper maps one
  * dialog kind to its component; all data arrives through parameters so these
@@ -19,12 +24,11 @@ import type {
   HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { ModelInfo, WelcomeState } from '../hooks/useWelcomeOnboarding.js';
 import type { ProfileListItem } from '../stores/settings/settingsStore.js';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import { join } from 'node:path';
-import type { ResumeContext } from '../../services/performResume.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -390,9 +394,6 @@ export function renderSessionBrowserDialog(
   config: CliUiRuntime,
   commandContext: {
     ui: { pendingItem: unknown };
-    recordingOwner?: 'agent';
-    services: { agent: Agent | null };
-    recordingSwapCallbacks?: ResumeContext['recordingCallbacks'];
   },
   handleSessionBrowserSelect: (
     target: ContinueTarget,
@@ -401,6 +402,8 @@ export function renderSessionBrowserDialog(
     | { ok: false; error: string }
   >,
   close: () => void,
+  readCatalog: BrowserCatalogReader,
+  deleteTarget: BrowserTargetDeleter,
 ) {
   const chatsDir = join(config.getProjectTempDir(), 'chats');
   const projectHash = getProjectHash(config.getProjectRoot());
@@ -413,18 +416,8 @@ export function renderSessionBrowserDialog(
         projectHash={projectHash}
         currentSessionId={currentSessionId}
         hasActiveConversation={hasActiveConversation}
-        activeRecording={
-          commandContext.recordingOwner === 'agent'
-            ? null
-            : (commandContext.recordingSwapCallbacks?.getCurrentRecording() ??
-              null)
-        }
-        ownerAgent={
-          commandContext.recordingOwner === 'agent'
-            ? (commandContext.services.agent ?? undefined)
-            : undefined
-        }
-        mediaStore={commandContext.services.agent?.agentClient.mediaStore}
+        readCatalog={readCatalog}
+        deleteTarget={deleteTarget}
         onSelect={handleSessionBrowserSelect}
         onClose={close}
       />

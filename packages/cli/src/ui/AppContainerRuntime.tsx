@@ -268,6 +268,8 @@ export function buildAppCommands(
     welcomeActions: dialogs.welcomeActions,
     triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
     resumeBrowserTarget: input.resumeBrowserTarget,
+    readBrowserCatalog: input.readBrowserCatalog,
+    deleteBrowserTarget: input.deleteBrowserTarget,
     recordModelSwitch: dialogs.recordModelSwitch,
     readPolicyRules: dialogs.readPolicyRules,
     ...subagentDialogCommands(dialogs),

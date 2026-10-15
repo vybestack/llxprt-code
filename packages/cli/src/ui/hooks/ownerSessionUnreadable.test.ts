@@ -8,6 +8,7 @@
  * raw recording path does.
  */
 
+import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -23,7 +24,10 @@ import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
-import { useSessionBrowser } from './useSessionBrowser.js';
+import {
+  type UseSessionBrowserProps,
+  useSessionBrowser,
+} from './useSessionBrowser.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
@@ -175,12 +179,27 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
         const next = await borrow();
 
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async () => ({ ok: false, error: 'not selected' }),
             onClose: () => {},
           }),

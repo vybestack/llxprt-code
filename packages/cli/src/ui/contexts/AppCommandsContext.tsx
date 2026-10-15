@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from '../hooks/browserCatalogHost.js';
+
 import { createContext, useContext, useMemo, useRef } from 'react';
 import { createStableAppCommands } from './stableAppCommands.js';
 import type { ContinueTarget, EditorType } from '@vybestack/llxprt-code-core';
@@ -34,6 +39,8 @@ export interface AppCommandData {
 export interface AppCommandBindings extends AppCommands, AppCommandData {}
 
 export interface AppCommands {
+  readBrowserCatalog: BrowserCatalogReader;
+  deleteBrowserTarget: BrowserTargetDeleter;
   readPolicyRules: PolicyRulesReader;
   listSubagentDefinitions: SubagentManagerDialogProps['listSubagents'];
   loadSubagentDefinition: SubagentManagerDialogProps['loadSubagent'];
@@ -122,9 +129,13 @@ export function AppCommandsProvider({
   latest.current = value;
   const canSendQueued = value.sendAllQueuedSubmissions !== undefined;
   const canSteerQueued = value.steerAllQueuedSubmissions !== undefined;
+  const readBrowserCatalog = value.readBrowserCatalog;
   const commands = useMemo(
-    () => createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
-    [latest, canSendQueued, canSteerQueued],
+    () => ({
+      ...createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
+      readBrowserCatalog,
+    }),
+    [latest, canSendQueued, canSteerQueued, readBrowserCatalog],
   );
   const { buffer, commandContext, inputHistory, generatePromptContent } = value;
   const data = useMemo(
