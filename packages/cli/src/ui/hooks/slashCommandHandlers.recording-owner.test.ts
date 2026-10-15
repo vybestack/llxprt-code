@@ -4,18 +4,11 @@ import {
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { bindFixtureOwnerResume } from '../../__tests__/command-history-result-fixture.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
-import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+import { createDeps } from './slash-command-handler-deps-test-helpers.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { DebugLogger, type Logger } from '@vybestack/llxprt-code-core';
-import {
-  CommandContext,
-  SlashCommand,
-  CommandKind,
-} from '../commands/types.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { CommandKind } from '../commands/types.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 
 /**
  * @license
@@ -33,91 +26,6 @@ describe('recording owner slash command construction', () => {
   beforeEach(() => {
     performResumeMock.mockReset();
   });
-
-  function createCommands(
-    action: SlashCommand['action'],
-  ): readonly SlashCommand[] {
-    return [
-      {
-        name: 'help',
-        description: 'Show help',
-        kind: CommandKind.BUILT_IN,
-        action:
-          action ??
-          vi.fn(() => ({
-            type: 'message' as const,
-            messageType: 'info' as const,
-            content: 'ok',
-          })),
-      },
-    ];
-  }
-
-  function createDeps(
-    addItem: ReturnType<typeof vi.fn>,
-    overrides: Partial<SlashCommandHandlerDeps> = {},
-  ): SlashCommandHandlerDeps {
-    return {
-      commands: createCommands(undefined),
-      config: null,
-      commandContext: {
-        runtimeApi: createMockRuntimeApi(),
-        refreshProviderAliases: vi.fn(async () => {}),
-        oauthControl:
-          {} as SlashCommandHandlerDeps['commandContext']['oauthControl'],
-        signal: new AbortController().signal,
-        services: {
-          config: null,
-          agent: null,
-          settings:
-            {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
-          git: undefined,
-          logger: new DebugLogger('test') as unknown as Logger,
-        },
-        ui: {
-          addItem,
-          clear: vi.fn(),
-          setDebugMessage: vi.fn(),
-          pendingItem: null,
-          setPendingItem: vi.fn(),
-          loadHistory: vi.fn(),
-          toggleCorgiMode: vi.fn(),
-          toggleDebugProfiler: vi.fn(),
-          toggleVimEnabled: vi.fn(),
-          setLlxprtMdFileCount: vi.fn(),
-          updateHistoryTokenCount: vi.fn(),
-          reloadCommands: vi.fn(),
-          extensionsUpdateState: new Map(),
-          dispatchExtensionStateUpdate: vi.fn(),
-          addConfirmUpdateExtensionRequest: vi.fn(),
-        },
-        session: {
-          stats:
-            {} as SlashCommandHandlerDeps['commandContext']['session']['stats'],
-          sessionShellAllowlist: new Set(),
-        },
-      },
-      actions: {} as SlashCommandHandlerDeps['actions'],
-      addItem,
-      addMessage: vi.fn(),
-      setIsProcessing: vi.fn(),
-      setLocalIsProcessing: vi.fn(),
-      setPendingItem: vi.fn(),
-      setSessionShellAllowlist: vi.fn(),
-      setConfirmationRequest: vi.fn(),
-      confirmationLogger: new DebugLogger('test-confirmation'),
-      slashCommandLogger: new DebugLogger('test-slash'),
-      beginSlashCommandAction: () => new AbortController(),
-      endSlashCommandAction: () => {},
-      resumeOwnedSession: null,
-      isMcpDiscoveryPending: () => false,
-      resumeRawSession: null,
-      replayResumedHistory: () => {},
-      recordCommandError: async () => {},
-      loadCommandHistory: async () => {},
-      ...overrides,
-    };
-  }
 
   /**
    * Wires the REAL cancellation registry into the handler deps so the tests
@@ -156,7 +64,7 @@ describe('recording owner slash command construction', () => {
         deps.commandContext.services.agent = next;
         deps.commandContext.recordingOwner = 'agent';
         let loaded:
-          | Parameters<CommandContext['ui']['loadHistory']>[0]
+          | Parameters<CommandOwnerFixture['ui']['loadHistory']>[0]
           | undefined;
         deps.commandContext.ui.loadHistory = (history) => {
           loaded = history;

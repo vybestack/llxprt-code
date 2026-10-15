@@ -11,10 +11,10 @@ import {
   type RecordingSwapCallbacks,
 } from '../services/performResume.js';
 import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
-import type { SlashCommandHandlerDeps } from '../ui/hooks/slashCommandHandlers.js';
+import type { CommandHandlerFixture } from '../ui/hooks/slash-command-handler-deps-test-helpers.js';
 
 export function installFixtureRawResume(
-  deps: SlashCommandHandlerDeps,
+  deps: CommandHandlerFixture,
   persistence: CliSessionPersistencePort,
   callbacks: RecordingSwapCallbacks,
   resume: typeof performResume = performResume,

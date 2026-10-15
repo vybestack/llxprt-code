@@ -9,25 +9,11 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import process from 'node:process';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  type RecordingIntegration,
-  type Todo,
-  CoreEvent,
-  coreEvents,
-  type WorkspaceCheckpointOperations,
-  Logger,
-  type SubagentDefinitionReads,
-  type SubagentDefinitionWrites,
-  type ProfileDefinitionReads,
-} from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { type Todo, CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message, HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
-import type { LoadedSettings } from '../../config/settings.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { CommandService } from '../../services/CommandService.js';
 import {
   BuiltinCommandLoader,
@@ -50,18 +36,6 @@ interface TodoContextValue {
 }
 
 interface CommandContextInputs {
-  runtimeApi: RuntimeApi;
-  refreshProviderAliases: CommandContext['refreshProviderAliases'];
-  oauthControl: CommandContext['oauthControl'];
-  config: CliUiRuntime | null;
-  agent: Agent | null;
-  settings: LoadedSettings;
-  gitService: WorkspaceCheckpointOperations | undefined;
-  logger: Logger;
-  profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined;
-  subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
-    | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
   loadHistory: UseHistoryManagerReturn['loadHistory'];
@@ -77,9 +51,6 @@ interface CommandContextInputs {
   reloadCommands: () => void;
   extensionsUpdateState: Map<string, ExtensionUpdateState>;
   todoContext: TodoContextValue | undefined;
-  recordingIntegration: RecordingIntegration | undefined;
-  recordingOwner?: 'agent' | 'raw';
-  recordingSwapCallbacks: RecordingSwapCallbacks | undefined;
   stats: {
     stats: CommandContext['session']['stats'];
     updateHistoryTokenCount: (count: number) => void;
@@ -127,38 +98,6 @@ export function convertMessageToHistoryItem(
   }
 }
 
-export function useManagers(
-  config: CliUiRuntime | null,
-  agent?: Agent,
-): {
-  gitService: WorkspaceCheckpointOperations | undefined;
-  logger: Logger;
-  profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined;
-  subagentManager:
-    | (SubagentDefinitionReads & SubagentDefinitionWrites)
-    | undefined;
-} {
-  const gitService =
-    config?.getCheckpointingEnabled() === true ? config.checkpoints : undefined;
-  const logger = useMemo(
-    () =>
-      new Logger(
-        config?.getSessionId() ?? '',
-        config?.projectTempDir ??
-          new Storage(process.cwd()).getProjectTempDir(),
-      ),
-    [config],
-  );
-  const profileManager = agent?.workspace.profileDefinitions;
-  const subagentManager = agent
-    ? {
-        ...agent.workspace.subagentDefinitions,
-        ...agent.workspace.subagentWrites,
-      }
-    : undefined;
-  return { gitService, logger, profileManager, subagentManager };
-}
-
 export function usePendingHistory(
   addItem: UseHistoryManagerReturn['addItem'],
 ): {
@@ -200,19 +139,7 @@ export function useCommandContext(
 ): CommandContext {
   return useShallowMemo(
     (): CommandContext => ({
-      runtimeApi: inputs.runtimeApi,
-      refreshProviderAliases: inputs.refreshProviderAliases,
-      oauthControl: inputs.oauthControl,
       signal: NEVER_ABORTED_SIGNAL,
-      services: {
-        config: inputs.config,
-        agent: inputs.agent,
-        settings: inputs.settings,
-        git: inputs.gitService,
-        logger: inputs.logger,
-        profileManager: inputs.profileManager,
-        subagentManager: inputs.subagentManager,
-      },
       ui: buildCommandContextUi(inputs),
       session: {
         stats: inputs.stats.stats,
@@ -220,9 +147,6 @@ export function useCommandContext(
         isProcessing: inputs.localIsProcessing,
       },
       todoContext: inputs.todoContext,
-      recordingIntegration: inputs.recordingIntegration,
-      recordingOwner: inputs.recordingOwner === 'agent' ? 'agent' : undefined,
-      recordingSwapCallbacks: inputs.recordingSwapCallbacks,
     }),
     {
       ...inputs,

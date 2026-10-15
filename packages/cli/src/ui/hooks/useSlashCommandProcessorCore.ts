@@ -91,7 +91,6 @@ import {
   loadBuiltinSlashCommands,
   useCommandContext,
   useCommandReload,
-  useManagers,
   type usePendingHistory,
 } from './slashCommandProcessorSupport.js';
 import { type SlashCommandCancellation } from './useSlashCommandCancellation.js';
@@ -742,8 +741,9 @@ export function useSlashCommandProcessorCore(
 ): SlashCommandProcessorCoreResult {
   const api = useRuntimeApi();
   const refreshProviderAliases = useProviderAliasRefresh();
-  const { oauthControl, cancellation, pending, session } =
-    useCommandRuntimeState(args.addItem);
+  const { cancellation, pending, session } = useCommandRuntimeState(
+    args.addItem,
+  );
   const state = useRegisteredCommands(
     args,
     api,
@@ -752,13 +752,6 @@ export function useSlashCommandProcessorCore(
     session.updateHistoryTokenCount,
   );
   const commandContext = useCommandContext({
-    runtimeApi: api,
-    refreshProviderAliases,
-    oauthControl,
-    config: args.config,
-    agent: args.agent,
-    settings: args.settings,
-    ...useManagers(args.config, args.agent ?? undefined),
     addItem: args.addItem,
     clearItems: args.clearItems,
     loadHistory: args.loadHistory,
@@ -775,9 +768,6 @@ export function useSlashCommandProcessorCore(
     reloadCommands: state.reloadCommands,
     extensionsUpdateState: args.extensionsUpdateState,
     todoContext: args.todoContext,
-    recordingIntegration: args.recordingIntegration,
-    recordingOwner: args.recordingOwner,
-    recordingSwapCallbacks: args.recordingSwapCallbacks,
     stats: session,
   });
   useCommandReload(

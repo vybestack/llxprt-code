@@ -6,6 +6,7 @@
  * Behavioral tests for the /continue command.
  * @plan PLAN-20260214-SESSIONBROWSER.P19
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
@@ -35,7 +36,6 @@ import {
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import type {
-  CommandContext,
   SlashCommandActionReturn,
   MessageActionReturn,
   OpenDialogActionReturn,
@@ -99,7 +99,7 @@ function isPerformResumeAction(
 
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   useRecordingPrompts();
-  let ctx: CommandContext;
+  let ctx: CommandOwnerFixture;
   const continueCommand = createContinueCommandForTest(() => ctx);
 
   beforeEach(() => {

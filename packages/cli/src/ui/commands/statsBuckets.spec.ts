@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import {
   vi,
@@ -14,14 +15,14 @@ import {
   type Mock,
 } from 'bun:test';
 import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
-import type { CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 
 const optionalOAuthManagerMock = vi.fn();
 
-function getBucketsSubCommand(context: CommandContext) {
+function getBucketsSubCommand(context: CommandOwnerFixture) {
   const sub = registerStatsCommand(context).subCommands?.find(
     (sc) => sc.name === 'buckets',
   );
@@ -51,7 +52,7 @@ function makeTokenStore(
   };
 }
 
-function getBucketResultItem(context: CommandContext): {
+function getBucketResultItem(context: CommandOwnerFixture): {
   type: MessageType;
   text?: string;
 } {
@@ -107,7 +108,7 @@ async function getStatsWithCodexFailure(provider: string): Promise<{
 }
 
 describe('/stats buckets subcommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     mockContext = createMockCommandContext({
@@ -115,7 +116,7 @@ describe('/stats buckets subcommand', () => {
         isAvailable: () => Boolean(optionalOAuthManagerMock()),
         discoverBuckets: (
           logger: Parameters<
-            CommandContext['oauthControl']['discoverBuckets']
+            CommandOwnerFixture['oauthControl']['discoverBuckets']
           >[0],
         ) => discoverProviderBuckets(optionalOAuthManagerMock(), logger),
       },

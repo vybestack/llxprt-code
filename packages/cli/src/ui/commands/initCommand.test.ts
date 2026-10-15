@@ -3,13 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createInitCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { type CommandContext } from './types.js';
 
 const mockMemoryExists = vi.fn();
 // Mock the 'fs' module
@@ -29,7 +29,7 @@ void vi.mock('fs', () => {
 });
 
 describe('initCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   const targetDir = '/test/dir';
   const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
 

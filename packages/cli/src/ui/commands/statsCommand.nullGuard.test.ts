@@ -4,6 +4,7 @@ import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import {
   vi,
@@ -15,7 +16,7 @@ import {
   setSystemTime,
 } from 'bun:test';
 import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -24,7 +25,7 @@ const getActiveProviderNameMock = vi.fn();
 const providerManagerMock = vi.fn();
 
 describe('statsCommand null sessionStartTime guard', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.useFakeTimers();

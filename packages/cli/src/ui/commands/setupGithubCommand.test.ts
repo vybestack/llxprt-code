@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { bindGithubSetup } from './setupGithubCommandHost.js';
 
@@ -26,7 +27,7 @@ import {
   updateGitignore,
   GITHUB_WORKFLOW_PATHS,
 } from './setupGithubCommand.js';
-import type { CommandContext, ToolActionReturn } from './types.js';
+import type { ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
 import { assertTruthy } from '../../__tests__/assertions.js';
 
@@ -69,10 +70,10 @@ void vi.mock('../utils/commandUtils.js', () => ({
  * The command only reads `signal` off the context, so a minimal context with a
  * real signal is enough and keeps the fixture honest about what is required.
  */
-function makeContext(signal?: AbortSignal): CommandContext {
+function makeContext(signal?: AbortSignal): CommandOwnerFixture {
   return {
     signal: signal ?? new AbortController().signal,
-  } as CommandContext;
+  } as CommandOwnerFixture;
 }
 
 describe('setupGithubCommand', () => {

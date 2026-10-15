@@ -1,3 +1,4 @@
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,10 +29,7 @@ import {
   type UseSessionBrowserProps,
   useSessionBrowser,
 } from './useSessionBrowser.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
 const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.jsonl';

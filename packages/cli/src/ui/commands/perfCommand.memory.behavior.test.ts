@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * `/perf memory` wiring: it must read live session state, and it must degrade
@@ -11,10 +12,10 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createPerfCommand } from './perfCommand.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-function memorySubCommand(context?: CommandContext): SlashCommand {
+function memorySubCommand(context?: CommandOwnerFixture): SlashCommand {
   const command = createPerfCommand({
     perfDir: '/tmp/perf-memory-test',
     readHistory: () =>
@@ -30,7 +31,7 @@ function memorySubCommand(context?: CommandContext): SlashCommand {
 }
 
 /** A context whose agent client exposes the given history. */
-function contextWithHistory(history: readonly IContent[]): CommandContext {
+function contextWithHistory(history: readonly IContent[]): CommandOwnerFixture {
   return {
     services: {
       agent: {
@@ -44,12 +45,12 @@ function contextWithHistory(history: readonly IContent[]): CommandContext {
       },
       config: {},
     },
-  } as unknown as CommandContext;
+  } as unknown as CommandOwnerFixture;
 }
 
 async function run(
   sub: SlashCommand,
-  context: CommandContext,
+  context: CommandOwnerFixture,
 ): Promise<string> {
   const result = await sub.action?.(context, '');
   if (result === undefined || !('content' in result)) {
@@ -104,7 +105,7 @@ describe('/perf memory', () => {
   it('degrades honestly when no agent client exists yet', async () => {
     const context = {
       services: { config: null },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
     const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });
@@ -119,7 +120,7 @@ describe('/perf memory', () => {
         },
         config: {},
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
     const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });

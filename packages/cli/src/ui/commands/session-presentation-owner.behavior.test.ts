@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import { describe, expect, it } from 'bun:test';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
@@ -13,7 +15,6 @@ import { createClearCommand } from './clearCommand.js';
 import { bindClearSession } from './simpleCommandHost.js';
 import { createVimCommand } from './vimCommand.js';
 import { createAboutCommand } from './aboutCommand.js';
-import type { CommandContext } from './types.js';
 
 describe('registered session and presentation commands', () => {
   const makeOwner = useCommandOwners();
@@ -71,7 +72,8 @@ describe('registered session and presentation commands', () => {
   it('renders about data and awaits Vim toggling from registered operations', async () => {
     const owner = await makeOwner('owner');
     const sibling = await makeOwner('sibling');
-    const history: Array<Parameters<CommandContext['ui']['addItem']>[0]> = [];
+    const history: Array<Parameters<CommandOwnerFixture['ui']['addItem']>[0]> =
+      [];
     let vim = false;
     const commands = {
       ...createUnconfiguredBuiltinOwners(),

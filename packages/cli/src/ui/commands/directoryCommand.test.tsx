@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -18,7 +19,7 @@ import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspa
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
@@ -52,7 +53,7 @@ function rejectDirectory(
 }
 
 describe('directoryCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockConfig: Config;
   let mockWorkspaceContext: WorkspaceContext;
   function getSubCommand(name: string): SlashCommand {
@@ -127,7 +128,7 @@ describe('directoryCommand', () => {
       ui: {
         addItem: vi.fn(),
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
   });
 
   describe('show', () => {

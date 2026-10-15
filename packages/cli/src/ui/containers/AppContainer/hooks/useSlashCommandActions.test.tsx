@@ -29,10 +29,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createSettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import { createTurnStore } from '../../../stores/turn/turnStore.js';
 
-import {
-  useCommandContext,
-  useManagers,
-} from '../../../hooks/slashCommandProcessorSupport.js';
+import { useCommandContext } from '../../../hooks/slashCommandProcessorSupport.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { createDialogStore } from '../../../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../../../stores/dialog/dialogOpeners.js';
@@ -144,7 +141,6 @@ describe('useSlashCommandActions', () => {
     const callbacks = { ...baseCallbacks(), dialogs };
     const context = createMockCommandContext();
     const turn = createTurnStore();
-    const settings = createMockSettings({});
     const refreshStatic = () => {};
     const toggleVimEnabled = async () => false;
     const setCount = () => {};
@@ -156,16 +152,8 @@ describe('useSlashCommandActions', () => {
     >[0]['extensionsUpdateState'] = new Map();
     const { result, rerender, unmount } = renderHook(
       ({ processing }) => {
-        const managers = useManagers(null);
         const actions = useSlashCommandActions(callbacks);
         return useCommandContext({
-          runtimeApi: context.runtimeApi,
-          refreshProviderAliases: context.refreshProviderAliases,
-          oauthControl: context.oauthControl,
-          ...managers,
-          config: null,
-          agent: null,
-          settings,
           addItem: turn.commands.addItem,
           clearItems: turn.commands.clearItems,
           loadHistory: turn.commands.loadHistory,
@@ -181,8 +169,6 @@ describe('useSlashCommandActions', () => {
           reloadCommands,
           extensionsUpdateState,
           todoContext: undefined,
-          recordingIntegration: undefined,
-          recordingSwapCallbacks: undefined,
           stats: {
             stats: context.session.stats,
             updateHistoryTokenCount: setCount,
@@ -197,6 +183,10 @@ describe('useSlashCommandActions', () => {
     rerender({ processing: true });
     expect(result.current).not.toBe(initial);
     expect(result.current.session.isProcessing).toBe(true);
+    expect(Reflect.has(result.current, 'services')).toBe(false);
+    expect(Reflect.has(result.current, 'runtimeApi')).toBe(false);
+    expect(Reflect.has(result.current, 'oauthControl')).toBe(false);
+    expect(Reflect.has(result.current, 'refreshProviderAliases')).toBe(false);
     unmount();
   });
 
@@ -525,10 +515,10 @@ describe('domain dialog routes', () => {
             ),
           ],
           config: null,
-          commandContext: {
+          commandContext: createMockCommandContext({
             ...context,
             services: { ...context.services, subagentManager: subagents },
-          },
+          }),
           actions: result.current,
           addItem: turn.commands.addItem,
           addMessage: () => {},

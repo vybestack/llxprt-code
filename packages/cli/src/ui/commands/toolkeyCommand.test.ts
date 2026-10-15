@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260206-TOOLKEY.P07
@@ -17,7 +18,7 @@ import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { CommandKind } from './types.js';
-import type { CommandContext, MessageActionReturn } from './types.js';
+import type { MessageActionReturn } from './types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
@@ -45,7 +46,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 
 describe('toolkeyCommand', () => {
   const toolkeyCommand = createToolkeyCommand(new ToolKeyStorage());
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     vi.clearAllMocks();

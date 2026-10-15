@@ -3,10 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { vi } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CommandContext } from '../types.js';
+
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 // Imported from the MCP package rather than through the core re-export:
 // diagnosticsTokens.ts imports it from '@vybestack/llxprt-code-mcp', and under
@@ -114,7 +115,7 @@ export function createMCPCredentials(
 }
 
 export interface DiagnosticsTestSetup {
-  mockContext: CommandContext;
+  mockContext: CommandOwnerFixture;
   mockTokenStore: Map<string, MCPOAuthCredentials>;
 }
 

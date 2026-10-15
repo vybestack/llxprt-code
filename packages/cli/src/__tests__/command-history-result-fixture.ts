@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from './mockCommandContext.js';
+
 import { bindCommandOwnerResume } from '../ui/hooks/commandOwnerResumeHost.js';
 import {
   resumeOwnerSession,
@@ -10,15 +12,11 @@ import {
 } from '../ui/utils/ownerSessionUi.js';
 import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { vi } from 'bun:test';
-import {
-  CommandKind,
-  type SlashCommand,
-  type CommandContext,
-} from '../ui/commands/types.js';
+import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
 import { bindCommandHistoryLoader } from '../ui/hooks/commandHistoryLoaderHost.js';
 import { resolveEmojiFilterMode } from '../ui/utils/iContentToHistoryItems.js';
 
-export function bindFixtureHistoryLoader(context: CommandContext) {
+export function bindFixtureHistoryLoader(context: CommandOwnerFixture) {
   const agent = context.services.agent;
   const config = context.services.config;
   return bindCommandHistoryLoader(
@@ -52,7 +50,7 @@ export function createCommands(
 }
 
 export function bindFixtureOwnerResume(
-  context: CommandContext,
+  context: CommandOwnerFixture,
   config: CliUiRuntime | null,
 ) {
   const agent = context.services.agent;

@@ -3,12 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { bindDumpManager } from './__tests__/dumpcontext-owner-fixture.js';
 import { createDumpcontextCommand } from './dumpcontextCommand.js';
 import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
-import { type CommandContext, type SlashCommand } from './types.js';
+import { type SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
@@ -36,7 +37,7 @@ import { assertDefined } from '../../__tests__/assertions.js';
 
 function createOwnedCommandContext(
   ...args: Parameters<typeof createMockCommandContext>
-): CommandContext {
+): CommandOwnerFixture {
   const context = createMockCommandContext(...args);
   Object.defineProperty(context, 'runtimeApi', {
     configurable: true,
@@ -45,7 +46,7 @@ function createOwnedCommandContext(
   return context;
 }
 
-function createDumpCommand(context: CommandContext): SlashCommand {
+function createDumpCommand(context: CommandOwnerFixture): SlashCommand {
   return createDumpcontextCommand(
     bindDumpcontextCommand({
       readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
@@ -69,7 +70,7 @@ function createDumpCommand(context: CommandContext): SlashCommand {
 }
 
 async function invokeDumpCommand(
-  context: CommandContext,
+  context: CommandOwnerFixture,
   args: string,
 ): Promise<ReturnType<NonNullable<SlashCommand['action']>>> {
   const action = createDumpCommand(context).action;
@@ -78,7 +79,7 @@ async function invokeDumpCommand(
 }
 
 describe('dumpcontextCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let dumpcontextCommand: ReturnType<typeof createDumpcontextCommand>;
 
   beforeEach(() => {
@@ -236,7 +237,7 @@ describe('dumpcontextCommand', () => {
               getHistoryService: mockGetHistoryService,
             },
           },
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -290,7 +291,7 @@ describe('dumpcontextCommand', () => {
 
       const ctxWithHistory = createOwnedCommandContext();
       ctxWithHistory.services.agent =
-        configWithReceiverDependentMethod as unknown as CommandContext['services']['agent'];
+        configWithReceiverDependentMethod as unknown as CommandOwnerFixture['services']['agent'];
 
       Object.defineProperty(ctxWithHistory, 'runtimeApi', {
         configurable: true,
@@ -369,7 +370,7 @@ describe('dumpcontextCommand', () => {
           },
           config: {
             getEphemeralSettings: vi.fn().mockReturnValue({}),
-          } as unknown as CommandContext['services']['config'],
+          } as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -432,7 +433,7 @@ describe('dumpcontextCommand', () => {
           },
           config: {
             getEphemeralSettings: vi.fn().mockReturnValue({}),
-          } as unknown as CommandContext['services']['config'],
+          } as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -506,7 +507,7 @@ describe('dumpcontextCommand', () => {
           },
           config: {
             getEphemeralSettings: vi.fn().mockReturnValue({}),
-          } as unknown as CommandContext['services']['config'],
+          } as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -598,7 +599,7 @@ describe('dumpcontextCommand', () => {
               }),
             },
           },
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -698,7 +699,7 @@ describe('dumpcontextCommand', () => {
               }),
             },
           },
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -741,7 +742,7 @@ describe('dumpcontextCommand', () => {
           },
           config: {
             getEphemeralSettings: vi.fn().mockReturnValue({}),
-          } as unknown as CommandContext['services']['config'],
+          } as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -765,7 +766,7 @@ describe('dumpcontextCommand', () => {
       const ctxWithoutHistory = createOwnedCommandContext({
         services: {
           agent: null,
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -787,7 +788,7 @@ describe('dumpcontextCommand', () => {
       const ctxWithoutAgentClient = createOwnedCommandContext({
         services: {
           agent: null,
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -823,7 +824,7 @@ describe('dumpcontextCommand', () => {
               getHistoryService: mockGetHistoryService,
             },
           },
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -854,7 +855,7 @@ describe('dumpcontextCommand', () => {
               getHistoryService: vi.fn().mockReturnValue(null),
             },
           },
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 
@@ -876,7 +877,7 @@ describe('dumpcontextCommand', () => {
       const ctxWithoutCallableAgentClient = createOwnedCommandContext({
         services: {
           agent: null,
-          config: {} as unknown as CommandContext['services']['config'],
+          config: {} as unknown as CommandOwnerFixture['services']['config'],
         },
       });
 

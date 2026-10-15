@@ -3,18 +3,20 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
+
 import { basename } from 'node:path';
 import {
   SessionDiscovery,
   validateSessionMediaPackage,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { CommandContext } from '../types.js';
+
 import { createContinueCommand } from '../continueCommand.js';
 import { warnUnreadableRecordings } from '../../utils/warnUnreadableRecordings.js';
 
 export function createContinueCommandForTest(
-  currentContext: () => CommandContext,
+  currentContext: () => CommandOwnerFixture,
 ) {
   return createContinueCommand({
     isInteractive: () =>

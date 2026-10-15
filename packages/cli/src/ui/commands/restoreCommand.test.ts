@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -20,14 +21,14 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { bindRestoreCommand } from './restoreCommandHost.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('restoreCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockConfig: Config;
   let mockGitService: GitService;
   let mockSetHistory: ReturnType<typeof vi.fn>;

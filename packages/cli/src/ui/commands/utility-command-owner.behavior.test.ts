@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,7 +15,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createStatsCommand } from './statsCommand.js';
 import { createLoggingCommand } from './loggingCommand.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import { MessageType, type HistoryItemStats } from '../types.js';
 
 async function registered(command: SlashCommand): Promise<SlashCommand> {
@@ -40,8 +42,9 @@ describe('registered statistics and logging owners', () => {
   const makeOwner = useCommandOwners();
   it('uses registered session time and reports through its registered UI', async () => {
     await makeOwner('owner');
-    const history: Array<Parameters<CommandContext['ui']['addItem']>[0]> = [];
-    const addItem: CommandContext['ui']['addItem'] = (item) => {
+    const history: Array<Parameters<CommandOwnerFixture['ui']['addItem']>[0]> =
+      [];
+    const addItem: CommandOwnerFixture['ui']['addItem'] = (item) => {
       history.push(item);
       return history.length;
     };
@@ -88,8 +91,9 @@ describe('registered statistics and logging owners', () => {
         }),
       ].join('\n'),
     );
-    const history: Array<Parameters<CommandContext['ui']['addItem']>[0]> = [];
-    const addItem: CommandContext['ui']['addItem'] = (item) => {
+    const history: Array<Parameters<CommandOwnerFixture['ui']['addItem']>[0]> =
+      [];
+    const addItem: CommandOwnerFixture['ui']['addItem'] = (item) => {
       history.push(item);
       return history.length;
     };

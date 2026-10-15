@@ -4,14 +4,11 @@ import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { registerQuotaCommand } from '../../__tests__/credential-command-test-owner.js';
-import {
-  type CommandContext,
-  CommandKind,
-  type SlashCommand,
-} from './types.js';
+import { CommandKind, type SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -47,7 +44,7 @@ const UUID_REGEX =
 /**
  * Get the last informational or error item added to the UI.
  */
-function getLastUiItem(ctx: CommandContext): {
+function getLastUiItem(ctx: CommandOwnerFixture): {
   type: 'info' | 'error';
   text?: string;
 } {
@@ -155,7 +152,7 @@ function makeCodexResetOauthManager(
 }
 
 describe('quotaCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let quotaCommand: SlashCommand;
 
   beforeEach(() => {

@@ -3,13 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { CommandKind } from './types.js';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
-import type { CommandContext } from './types.js';
 
 const realTerminalSetupModule2 = {
   ...(await import('../utils/terminalSetup.js')),
@@ -40,7 +40,10 @@ describe('terminalSetupCommand', () => {
       message: 'Terminal configured successfully',
     });
 
-    const result = await terminalSetupCommand.action!({} as CommandContext, '');
+    const result = await terminalSetupCommand.action!(
+      {} as CommandOwnerFixture,
+      '',
+    );
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -56,7 +59,10 @@ describe('terminalSetupCommand', () => {
       requiresRestart: true,
     });
 
-    const result = await terminalSetupCommand.action!({} as CommandContext, '');
+    const result = await terminalSetupCommand.action!(
+      {} as CommandOwnerFixture,
+      '',
+    );
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -72,7 +78,10 @@ describe('terminalSetupCommand', () => {
       message: 'Failed to detect terminal',
     });
 
-    const result = await terminalSetupCommand.action!({} as CommandContext, '');
+    const result = await terminalSetupCommand.action!(
+      {} as CommandOwnerFixture,
+      '',
+    );
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -86,7 +95,10 @@ describe('terminalSetupCommand', () => {
       new Error('Unexpected error'),
     );
 
-    const result = await terminalSetupCommand.action!({} as CommandContext, '');
+    const result = await terminalSetupCommand.action!(
+      {} as CommandOwnerFixture,
+      '',
+    );
 
     expect(result).toStrictEqual({
       type: 'message',

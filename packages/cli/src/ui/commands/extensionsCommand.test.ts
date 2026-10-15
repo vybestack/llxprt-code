@@ -3,12 +3,13 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { registerExtensionsCommand } from '../../__tests__/extensions-command-test-owner.js';
-import type { SlashCommand, type CommandContext } from './types.js';
+import type { SlashCommand } from './types.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -38,7 +39,7 @@ function completeScheduledUpdate(
 }
 
 describe('extensionsCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let extensionsCommand: SlashCommand;
   const mockDispatchExtensionState = vi.fn();
 

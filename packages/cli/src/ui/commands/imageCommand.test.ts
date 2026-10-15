@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
@@ -10,7 +11,7 @@ import { createImageCommand } from './imageCommand.js';
 import { bindImageCommand } from './imageCommandHost.js';
 import { assertTruthy } from '../../__tests__/assertions.js';
 import { MessageType } from '../types.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 
 function completeImageOperation(signal: AbortSignal): {
   absoluteOutputPath: string;
@@ -28,7 +29,7 @@ function makeMockContext(overrides?: {
     inputPaths: readonly string[];
   }) => Promise<{ absoluteOutputPath: string }>;
   signal?: AbortSignal;
-}): CommandContext {
+}): CommandOwnerFixture {
   return {
     signal: overrides?.signal ?? new AbortController().signal,
     services: {
@@ -64,10 +65,10 @@ function makeMockContext(overrides?: {
       stats: {} as never,
       sessionShellAllowlist: new Set(),
     },
-  } as unknown as CommandContext;
+  } as unknown as CommandOwnerFixture;
 }
 
-function createTestCommand(context: CommandContext): SlashCommand {
+function createTestCommand(context: CommandOwnerFixture): SlashCommand {
   return createImageCommand(
     bindImageCommand(
       context.services.config,

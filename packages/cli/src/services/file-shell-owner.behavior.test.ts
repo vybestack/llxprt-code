@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
+
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,7 +12,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../ui/commands/types.js';
+
 import { CommandService } from './CommandService.js';
 import { bindShellPromptOperations } from './prompt-processors/shellPromptHost.js';
 import { FileCommandLoader } from './FileCommandLoader.js';
@@ -19,7 +21,7 @@ function shellContext(
   agent: Agent,
   root: string,
   excluded: () => string[],
-): CommandContext {
+): CommandOwnerFixture {
   return createMockCommandContext({
     invocation: { raw: '/where', name: 'where', args: '' },
     services: {
@@ -41,7 +43,7 @@ function shellContext(
 
 async function fileRegistry(
   root: string,
-  context: CommandContext,
+  context: CommandOwnerFixture,
 ): Promise<CommandService> {
   return CommandService.create(
     [

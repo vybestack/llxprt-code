@@ -1,3 +1,4 @@
+import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
 import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 /**
@@ -23,10 +24,7 @@ import {
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { processSlashCommand } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
 const SESSION_ID = 'healthy-resume-session';

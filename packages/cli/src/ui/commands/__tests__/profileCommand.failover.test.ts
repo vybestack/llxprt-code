@@ -9,11 +9,12 @@
  * Tests MUST be written FIRST, implementation SECOND.
  * These tests verify CLI parsing of the failover/roundrobin policy parameter.
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createProfileCommandForTest } from './profile-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import type { CommandContext, SlashCommand } from '../types.js';
+import type { SlashCommand } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../__tests__/regex.js';
 
@@ -24,7 +25,7 @@ const runtimeMocks = {
 };
 
 describe('profileCommand - failover policy parsing', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let profileCommand: SlashCommand;
 
   beforeEach(() => {

@@ -4,6 +4,7 @@ import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -17,7 +18,7 @@ import {
   afterEach,
 } from 'bun:test';
 import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
-import { type CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
@@ -61,7 +62,7 @@ describe('statsCommand', () => {
     restoreGlobals();
   });
 
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   const startTime = new Date('2025-07-14T10:00:00.000Z');
   const endTime = new Date('2025-07-14T10:00:30.000Z');
 

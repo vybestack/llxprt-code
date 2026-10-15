@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * Behavioral coverage for the /auth command ACTION runtime infrastructure guard
@@ -31,11 +32,11 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 import { registerAuthCommand } from '../../__tests__/credential-command-test-owner.js';
-import type { CommandContext, SlashCommandActionReturn } from './types.js';
+import type { SlashCommandActionReturn } from './types.js';
 
 // SlashCommand.action is optional in the type; assert presence once per command.
 function runAuth(
-  context: CommandContext,
+  context: CommandOwnerFixture,
   args: string,
 ): Promise<SlashCommandActionReturn | void> {
   const action = registerAuthCommand(context).action;
@@ -46,7 +47,7 @@ function runAuth(
 }
 
 describe('auth command action rejects partial runtime infrastructure (issue #2300)', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(() => {
     oauthControl.getSupportedProviders.mockReset();
@@ -63,7 +64,7 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
 
       ui: {} as never,
       session: {} as never,
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
   });
 
   it('throws instead of synthesizing OAuth infrastructure when the owner control cannot resolve it', async () => {

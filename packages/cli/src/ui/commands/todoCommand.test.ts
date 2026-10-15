@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260129-TODOPERSIST.P05
@@ -11,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { registerTodoCommand } from '../../__tests__/todo-command-test-owner.js';
-import type { CommandContext } from './types.js';
+
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -20,7 +21,7 @@ import { assertDefined } from '../../__tests__/assertions.js';
  * Mock context factory
  * @plan PLAN-20260129-TODOPERSIST.P08
  */
-function createMockContext(initialTodos: Todo[] = []): CommandContext {
+function createMockContext(initialTodos: Todo[] = []): CommandOwnerFixture {
   const addItemMock = vi.fn();
   const updateTodosMock = vi.fn((newTodos: Todo[]) => {
     mockTodoContext.todos = newTodos;
@@ -35,9 +36,9 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
   return {
     services: {
       config: null,
-      settings: {} as unknown as CommandContext['services']['settings'],
+      settings: {} as unknown as CommandOwnerFixture['services']['settings'],
       git: undefined,
-      logger: {} as unknown as CommandContext['services']['logger'],
+      logger: {} as unknown as CommandOwnerFixture['services']['logger'],
     },
     ui: {
       addItem: addItemMock,
@@ -57,11 +58,11 @@ function createMockContext(initialTodos: Todo[] = []): CommandContext {
       addConfirmUpdateExtensionRequest: vi.fn(),
     },
     session: {
-      stats: {} as unknown as CommandContext['session']['stats'],
+      stats: {} as unknown as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set(),
     },
     todoContext: mockTodoContext,
-  } as unknown as CommandContext;
+  } as unknown as CommandOwnerFixture;
 }
 
 describe('todoCommand', () => {

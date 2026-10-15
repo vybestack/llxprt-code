@@ -3,11 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler } from '../schema/index.js';
-import type { CommandContext } from '../types.js';
+
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { createSetCommandForTest } from '../../../__tests__/set-command-test-owner.js';
 import { assertDefined } from '../../../__tests__/assertions.js';
@@ -70,7 +71,7 @@ assertDefined(commandSchema);
 
 describe('setCommand schema integration', () => {
   // Mock context for testing
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   let handler: ReturnType<typeof createCompletionHandler>;
 

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from './mockCommandContext.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -18,10 +19,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertHasType } from '../__tests__/assertions.js';
 import { createContinueCommandForTest } from '../ui/commands/__tests__/continue-command-test-owner.js';
-import type {
-  CommandContext,
-  SlashCommandActionReturn,
-} from '../ui/commands/types.js';
+import type { SlashCommandActionReturn } from '../ui/commands/types.js';
 import {
   cleanupSessionBrowserTestState,
   createSessionBrowserTestState,
@@ -58,9 +56,9 @@ describe('Continue command integration #2', () => {
       services: {
         config: {
           isInteractive: () => true,
-        } as CommandContext['services']['config'],
+        } as CommandOwnerFixture['services']['config'],
         agent: null,
-        settings: {} as CommandContext['services']['settings'],
+        settings: {} as CommandOwnerFixture['services']['settings'],
         git: undefined,
         logger: makeMockLogger(),
       },

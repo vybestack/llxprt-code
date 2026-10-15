@@ -71,6 +71,7 @@ import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 import { LoadedSettings } from './config/settings.js';
 import { CommandContext } from './ui/commands/types.js';
+import { bindAutoPromptOperation } from './ui/commands/subagentCommandHost.js';
 import { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 /**
@@ -317,14 +318,21 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     vi.restoreAllMocks();
   });
 
-  it('rejects runtime access from a headless command without an Agent owner', async () => {
+  it('rejects a registered headless operation without an Agent owner', async () => {
+    const generatePrompt = bindAutoPromptOperation(null, null);
     mockGetCommands.mockReturnValue([
       {
         name: 'runtime',
         description: 'requires runtime state',
-        action: (context: CommandContext) => {
-          context.runtimeApi.getActiveModelName();
-          return { type: 'submit_prompt', content: 'unreachable' };
+        action: async (invocation: CommandContext) => {
+          expect(Reflect.has(invocation, 'services')).toBe(false);
+          expect(Reflect.has(invocation, 'runtimeApi')).toBe(false);
+          expect(Reflect.has(invocation, 'oauthControl')).toBe(false);
+          expect(Reflect.has(invocation, 'refreshProviderAliases')).toBe(false);
+          return {
+            type: 'submit_prompt',
+            content: await generatePrompt('Describe the workspace'),
+          };
         },
       },
     ]);
@@ -335,7 +343,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         input: '/runtime',
         prompt_id: 'headless-owner-required',
       }),
-    ).rejects.toThrow('Headless command requires an Agent-owned runtime API.');
+    ).rejects.toThrow('Session agent is unavailable');
   });
 
   it('runs a real /set command against the supplied headless Agent owner rather than another ambient runtime', async () => {

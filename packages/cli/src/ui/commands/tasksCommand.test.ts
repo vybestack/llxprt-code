@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * @plan PLAN-20260130-ASYNCTASK.P16
@@ -16,7 +17,7 @@ import { createFakeAgent } from '../hooks/agentStream/__tests__/helpers/createFa
 import { registerTaskCommand } from '../../__tests__/hook-task-command-test-owner.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
-import type { CommandContext } from './types.js';
+
 import {
   AsyncTaskManager,
   SubagentTerminateMode,
@@ -28,7 +29,7 @@ import type { SessionStatsState } from '../contexts/SessionContext.js';
 
 describe('tasksCommand', () => {
   let asyncTaskManager: AsyncTaskManager;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let addItemMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -38,7 +39,7 @@ describe('tasksCommand', () => {
     context = {
       runtimeApi: createMockRuntimeApi(),
       refreshProviderAliases: vi.fn(async () => {}),
-      oauthControl: {} as CommandContext['oauthControl'],
+      oauthControl: {} as CommandOwnerFixture['oauthControl'],
       signal: new AbortController().signal,
       services: {
         config: null,

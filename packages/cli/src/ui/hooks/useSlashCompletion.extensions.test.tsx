@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeHook } from '../../__tests__/workspace-runtime-fixture.js';
 const useFixtureRuntime = installWorkspaceRuntimeHook();
@@ -20,14 +21,14 @@ const useFixtureRuntime = installWorkspaceRuntimeHook();
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
-  let mockCommandContext: CommandContext;
+  let mockCommandContext: CommandOwnerFixture;
   let mockConfig: Config;
   const testDirs: string[] = ['/test/project'];
   const testRootDir = '/test/project';

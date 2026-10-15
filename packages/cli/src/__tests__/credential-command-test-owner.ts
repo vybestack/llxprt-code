@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from './mockCommandContext.js';
+
 import {
   bindBaseurlCommandOperations,
   bindKeyCommandOperations,
@@ -23,15 +25,15 @@ import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
 import { createMcpAuthCommand } from '../ui/commands/mcpAuth.js';
 import { createMcpCommand } from '../ui/commands/mcpCommand.js';
 import { bindMcpCommand } from '../ui/commands/mcpCommandHost.js';
-import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
+import type { SlashCommand } from '../ui/commands/types.js';
 
 /**
  * Registers the credential commands over the owners a fixture context carries,
  * the way the slash-command host binds them for a live session.
  */
 export function registerKeyCommand(
-  owners: Pick<CommandContext, 'runtimeApi'> & {
-    services: Pick<CommandContext['services'], 'config'>;
+  owners: Pick<CommandOwnerFixture, 'runtimeApi'> & {
+    services: Pick<CommandOwnerFixture['services'], 'config'>;
   },
   overrides: Partial<KeyCommandOperations> = {},
 ): SlashCommand {
@@ -42,8 +44,8 @@ export function registerKeyCommand(
 }
 
 export function registerKeyfileCommand(
-  owners: Pick<CommandContext, 'runtimeApi'> & {
-    services: Pick<CommandContext['services'], 'settings'>;
+  owners: Pick<CommandOwnerFixture, 'runtimeApi'> & {
+    services: Pick<CommandOwnerFixture['services'], 'settings'>;
   },
 ): SlashCommand {
   return createKeyfileCommand(
@@ -52,8 +54,8 @@ export function registerKeyfileCommand(
 }
 
 export function registerBaseurlCommand(
-  owners: Pick<CommandContext, 'runtimeApi'> & {
-    services: Pick<CommandContext['services'], 'agent'>;
+  owners: Pick<CommandOwnerFixture, 'runtimeApi'> & {
+    services: Pick<CommandOwnerFixture['services'], 'agent'>;
   },
 ): SlashCommand {
   return createBaseurlCommand(
@@ -62,8 +64,8 @@ export function registerBaseurlCommand(
 }
 
 export function registerLogoutCommand(
-  owners: Pick<CommandContext, 'oauthControl'> & {
-    services: Pick<CommandContext['services'], 'agent'>;
+  owners: Pick<CommandOwnerFixture, 'oauthControl'> & {
+    services: Pick<CommandOwnerFixture['services'], 'agent'>;
   },
 ): SlashCommand {
   return createLogoutCommand(
@@ -72,7 +74,7 @@ export function registerLogoutCommand(
 }
 
 export function registerAuthCommand(
-  owners: Pick<CommandContext, 'oauthControl' | 'services'>,
+  owners: Pick<CommandOwnerFixture, 'oauthControl' | 'services'>,
 ): SlashCommand {
   return createAuthCommand(
     owners.oauthControl,
@@ -81,14 +83,14 @@ export function registerAuthCommand(
 }
 
 export function registerQuotaCommand(
-  owners: Pick<CommandContext, 'oauthControl' | 'runtimeApi'>,
+  owners: Pick<CommandOwnerFixture, 'oauthControl' | 'runtimeApi'>,
 ): SlashCommand {
   return createQuotaCommand(
     bindQuotaCommandOperations(owners.runtimeApi, owners.oauthControl),
   );
 }
 
-export function registerMcpCommand(context: CommandContext): SlashCommand {
+export function registerMcpCommand(context: CommandOwnerFixture): SlashCommand {
   return createMcpCommand(
     createMcpAuthCommand(
       bindMcpAuthCommandOperations(

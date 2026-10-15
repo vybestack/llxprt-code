@@ -3,12 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { bindShellPromptOperations } from './shellPromptHost.js';
 import { ConfirmationRequiredError, ShellProcessor } from './shellProcessor.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../../ui/commands/types.js';
+
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
   ApprovalMode,
@@ -16,7 +17,7 @@ import {
   getShellConfiguration,
 } from '@vybestack/llxprt-code-core';
 
-function registerShellProcessor(context: CommandContext): ShellProcessor {
+function registerShellProcessor(context: CommandOwnerFixture): ShellProcessor {
   return new ShellProcessor(
     'test-command',
     bindShellPromptOperations(context.services.config),
@@ -53,7 +54,7 @@ const SUCCESS_RESULT = {
 };
 
 describe('ShellProcessor', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
   let mockConfig: Partial<Config>;
 
   beforeEach(() => {

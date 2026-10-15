@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
  * Behavioral tests for Session Browser integration wiring.
@@ -32,7 +33,6 @@ import { Box, Text } from 'ink';
 import { createContinueCommandForTest } from '../commands/__tests__/continue-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type {
-  CommandContext,
   SlashCommandActionReturn,
   OpenDialogActionReturn,
   PerformResumeActionReturn,
@@ -116,7 +116,7 @@ function TestDialogRenderer({ store }: { store: DialogStore }) {
 // ---------------------------------------------------------------------------
 
 describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
-  let ctx: CommandContext;
+  let ctx: CommandOwnerFixture;
   const continueCommand = createContinueCommandForTest(() => ctx);
 
   beforeEach(() => {

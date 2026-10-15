@@ -3,6 +3,7 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -19,7 +20,7 @@ import { Config } from '@vybestack/llxprt-code-core';
 import { registerSkillsCommand } from '../../__tests__/skills-command-test-owner.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+
 import type { SkillDefinition } from '@vybestack/llxprt-code-core';
 import {
   SettingScope,
@@ -35,8 +36,8 @@ void vi.mock('../../config/settings.js', () => ({
 }));
 
 function getConfig(
-  context: CommandContext,
-): NonNullable<CommandContext['services']['config']> {
+  context: CommandOwnerFixture,
+): NonNullable<CommandOwnerFixture['services']['config']> {
   if (context.services.config === null) {
     throw new Error('Expected test config');
   }
@@ -51,7 +52,7 @@ function findSkill(
 }
 
 describe('skillsCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
   beforeEach(async () => {
     vi.useFakeTimers();

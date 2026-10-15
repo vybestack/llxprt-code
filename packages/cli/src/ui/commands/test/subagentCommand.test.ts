@@ -48,6 +48,8 @@ void vi.mock('../../utils/autoPromptGenerator.js', () => {
  *
  * See: project-plans/subagentconfig/analysis/findings.md for Phase 01 results
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
+
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
 import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
@@ -60,7 +62,6 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
 import type {
-  CommandContext,
   MessageActionReturn,
   ConfirmActionReturn,
   SlashCommandActionReturn,
@@ -70,7 +71,7 @@ import type { SessionStatsState } from '../../contexts/SessionContext.js';
 import { testRegex } from '../../../__tests__/regex.js';
 
 import { registerSubagentCommand } from '../../../__tests__/subagent-command-test-owner.js';
-const findSubCommand = (name: string, context: CommandContext) =>
+const findSubCommand = (name: string, context: CommandOwnerFixture) =>
   registerSubagentCommand(context).subCommands!.find(
     (cmd) => cmd.name === name,
   )!;
@@ -85,7 +86,7 @@ const createTestContext = ({
   subagentManager,
   profileManager,
   overwriteConfirmed,
-}: TestContextOptions = {}): CommandContext => {
+}: TestContextOptions = {}): CommandOwnerFixture => {
   const settings = { merged: {} } as LoadedSettings;
   const logger = {
     log: vi.fn(),
@@ -164,7 +165,7 @@ const createTestContext = ({
   return {
     runtimeApi: createMockRuntimeApi(),
     refreshProviderAliases: vi.fn(async () => {}),
-    oauthControl: {} as CommandContext['oauthControl'],
+    oauthControl: {} as CommandOwnerFixture['oauthControl'],
     signal: new AbortController().signal,
     invocation: {
       raw: '',
@@ -255,7 +256,7 @@ const ensureDialog = (
  */
 describe('subagentCommand', () => {
   describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
-    let context: CommandContext;
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
@@ -556,7 +557,7 @@ describe('subagentCommand', () => {
    * Editor-based tests removed in favor of dialog-based UI.
    */
   describe('editCommand @requirement:REQ-008', () => {
-    let context: CommandContext;
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
@@ -653,7 +654,7 @@ describe('subagentCommand', () => {
    * @requirement:REQ-003
    */
   describe('saveCommand - auto mode @requirement:REQ-003', () => {
-    let context: CommandContext;
+    let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
