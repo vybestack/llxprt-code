@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useCallback, useMemo } from 'react';
+import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
+import { createDocsCommand } from '../commands/docsCommand.js';
+import { createHelpCommand } from '../commands/helpCommand.js';
+import { createQuitCommand } from '../commands/quitCommand.js';
+import { createDebugCommand } from '../commands/debugCommands.js';
+import { bindDebugCommand } from '../commands/debugCommandHost.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -19,10 +25,19 @@ export function useUtilityCommands(
   config: CliUiRuntime | null,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
-): Pick<BuiltinCommandOwners, 'statsCommand' | 'loggingCommand'> {
+): Pick<
+  BuiltinCommandOwners,
+  | 'statsCommand'
+  | 'loggingCommand'
+  | 'debugCommand'
+  | 'docsCommand'
+  | 'helpCommand'
+  | 'quitCommand'
+> {
   const api = useRuntimeApi();
   const oauth = useOAuthControl();
-  const startTime = useSessionStats().stats.sessionStartTime;
+  const { stats } = useSessionStats();
+  const startTime = stats.sessionStartTime;
   const readStartTime = useCallback(() => startTime, [startTime]);
   const statsCommand = useMemo(
     () =>
@@ -33,8 +48,30 @@ export function useUtilityCommands(
     () => createLoggingCommand(bindLoggingCommand(config, settings, addItem)),
     [config, settings, addItem],
   );
+  const debugCommand = useMemo(
+    () =>
+      createDebugCommand(bindDebugCommand(ConfigurationManager.getInstance())),
+    [],
+  );
+  const docsCommand = useMemo(() => createDocsCommand(addItem), [addItem]);
+  const helpCommand = useMemo(() => createHelpCommand(addItem), [addItem]);
+  const quitCommand = useMemo(() => createQuitCommand(() => stats), [stats]);
   return useMemo(
-    () => ({ statsCommand, loggingCommand }),
-    [statsCommand, loggingCommand],
+    () => ({
+      statsCommand,
+      loggingCommand,
+      debugCommand,
+      docsCommand,
+      helpCommand,
+      quitCommand,
+    }),
+    [
+      statsCommand,
+      loggingCommand,
+      debugCommand,
+      docsCommand,
+      helpCommand,
+      quitCommand,
+    ],
   );
 }

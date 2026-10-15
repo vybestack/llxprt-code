@@ -25,7 +25,7 @@ describe('docsCommand', () => {
     mockContext = createMockCommandContext();
     mockOpen.mockClear();
     browserLaunchDisabled = false;
-    command = createDocsCommand({
+    command = createDocsCommand(mockContext.ui.addItem, {
       openUrl: mockOpen,
       isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
     });

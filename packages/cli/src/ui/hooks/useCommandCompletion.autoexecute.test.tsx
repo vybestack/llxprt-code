@@ -9,11 +9,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
-import { docsCommand } from '../commands/docsCommand.js';
 import { editorCommand } from '../commands/editorCommand.js';
-import { helpCommand } from '../commands/helpCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
-import { quitCommand } from '../commands/quitCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
 import { createPoliciesCommand } from '../commands/policiesCommand.js';
@@ -32,6 +29,9 @@ const modelCommand = createModelCommand(
 function findSub(cmd: SlashCommand, name: string): SlashCommand | undefined {
   return cmd.subCommands?.find((s) => s.name === name);
 }
+
+const { docsCommand, helpCommand, quitCommand } =
+  createUnconfiguredBuiltinOwners();
 
 describe('autoExecute classifications — top-level commands', () => {
   it.each<[string, SlashCommand]>([

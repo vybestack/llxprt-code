@@ -16,19 +16,15 @@ import type {
   ExtensionEnablementSource,
 } from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
-import { docsCommand } from '../ui/commands/docsCommand.js';
 
 import { editorCommand } from '../ui/commands/editorCommand.js';
-import { helpCommand } from '../ui/commands/helpCommand.js';
 
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
-import { quitCommand } from '../ui/commands/quitCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
-import { debugCommand } from '../ui/commands/debugCommands.js';
 
 import { setupCommand } from '../ui/commands/setupCommand.js';
 /**
@@ -40,6 +36,10 @@ import { setupCommand } from '../ui/commands/setupCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly quitCommand: SlashCommand;
+  readonly helpCommand: SlashCommand;
+  readonly docsCommand: SlashCommand;
+  readonly debugCommand: SlashCommand;
   readonly setupGithubCommand: SlashCommand;
   readonly diagnosticsCommand: SlashCommand;
   readonly ideCommand: SlashCommand | null;
@@ -152,11 +152,11 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.clearCommand,
       this.owners.compressCommand,
       this.owners.copyCommand,
-      docsCommand,
+      this.owners.docsCommand,
       this.owners.directoryCommand,
       editorCommand,
       this.owners.extensionsCommand,
-      helpCommand,
+      this.owners.helpCommand,
       this.owners.ideCommand,
       this.owners.imageCommand,
       this.owners.initCommand,
@@ -166,7 +166,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.loggingCommand,
       mouseCommand,
       ...(isDevelopment ? [this.owners.uiProfileCommand] : []),
-      quitCommand,
+      this.owners.quitCommand,
       this.owners.restoreCommand,
       this.owners.quotaCommand,
       this.owners.statsCommand,
@@ -188,7 +188,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.profileCommand,
       this.owners.diagnosticsCommand,
       terminalSetupCommand,
-      debugCommand,
+      this.owners.debugCommand,
       this.owners.logoutCommand,
       this.owners.subagentCommand,
       this.owners.permissionsCommand,

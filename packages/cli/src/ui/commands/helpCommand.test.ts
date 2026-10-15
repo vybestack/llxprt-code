@@ -5,12 +5,13 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { helpCommand } from './helpCommand.js';
+import { createHelpCommand } from './helpCommand.js';
 import { type CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('helpCommand', () => {
+  let helpCommand: ReturnType<typeof createHelpCommand>;
   let mockContext: CommandContext;
   let mockAddItem: ReturnType<typeof vi.fn>;
 
@@ -21,6 +22,7 @@ describe('helpCommand', () => {
         addItem: mockAddItem,
       },
     } as unknown as CommandContext;
+    helpCommand = createHelpCommand(mockContext.ui.addItem);
   });
 
   it("should add a HELP history item for '/help'", async () => {

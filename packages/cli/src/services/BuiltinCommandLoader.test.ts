@@ -29,16 +29,13 @@ void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 void vi.mock('../ui/commands/compressCommand.js', () => ({
   compressCommand: {},
 }));
-void vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
 void vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
 void vi.mock('../ui/commands/extensionsCommand.js', () => ({
   extensionsCommand: () => ({}),
 }));
-void vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
 void vi.mock('../ui/commands/privacyCommand.js', () => ({
   privacyCommand: {},
 }));
-void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
 void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 
