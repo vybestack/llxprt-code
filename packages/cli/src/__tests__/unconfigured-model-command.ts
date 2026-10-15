@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createDocsCommand } from '../ui/commands/docsCommand.js';
+import { createHelpCommand } from '../ui/commands/helpCommand.js';
+import { createQuitCommand } from '../ui/commands/quitCommand.js';
+import {
+  createSessionMetrics,
+  ConfigurationManager,
+} from '@vybestack/llxprt-code-telemetry';
+import { createDebugCommand } from '../ui/commands/debugCommands.js';
+import { bindDebugCommand } from '../ui/commands/debugCommandHost.js';
 import { createSetupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { createDiagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
@@ -291,6 +300,15 @@ export function createUnconfiguredChatCommand(): SlashCommand {
 
 function unconfiguredReadCommands() {
   return {
+    docsCommand: createDocsCommand(() => 0),
+    helpCommand: createHelpCommand(() => 0),
+    quitCommand: createQuitCommand(() => ({
+      sessionStartTime: new Date(0),
+      metrics: createSessionMetrics(),
+    })),
+    debugCommand: createDebugCommand(
+      bindDebugCommand(ConfigurationManager.getInstance()),
+    ),
     setupGithubCommand: createSetupGithubCommand({
       isGitHubRepository: () => false,
       getGitRepoRoot: () => {

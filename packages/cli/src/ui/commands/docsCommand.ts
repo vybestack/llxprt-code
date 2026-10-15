@@ -7,12 +7,9 @@
 import { isBrowserLaunchDisabledDuringTests } from '@vybestack/llxprt-code-core';
 import open from 'open';
 import process from 'node:process';
-import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
+import { type SlashCommand, CommandKind } from './types.js';
 import { MessageType } from '../types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 interface DocsCommandDependencies {
   readonly openUrl: (url: string) => Promise<unknown>;
@@ -25,6 +22,7 @@ const defaultDependencies: DocsCommandDependencies = {
 };
 
 export function createDocsCommand(
+  addItem: UseHistoryManagerReturn['addItem'],
   dependencies: DocsCommandDependencies = defaultDependencies,
 ): SlashCommand {
   return {
@@ -32,7 +30,7 @@ export function createDocsCommand(
     description: 'open full LLxprt Code documentation in your browser',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
-    action: async (context: CommandContext): Promise<void> => {
+    action: async (): Promise<void> => {
       const docsUrl =
         'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
       const sandboxEnvironment = process.env.SANDBOX;
@@ -45,7 +43,7 @@ export function createDocsCommand(
         dependencies.isBrowserLaunchDisabledDuringTests();
 
       if (requiresManualOpen) {
-        context.ui.addItem(
+        addItem(
           {
             type: MessageType.INFO,
             text: `Please open the following URL in your browser to view the documentation:\n${docsUrl}`,
@@ -53,7 +51,7 @@ export function createDocsCommand(
           Date.now(),
         );
       } else {
-        context.ui.addItem(
+        addItem(
           {
             type: MessageType.INFO,
             text: `Opening documentation in your browser: ${docsUrl}`,
@@ -65,5 +63,3 @@ export function createDocsCommand(
     },
   };
 }
-
-export const docsCommand = createDocsCommand();
