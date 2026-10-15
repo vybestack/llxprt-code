@@ -9,6 +9,7 @@ import { createStableAppCommands } from './stableAppCommands.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type { CommandContext } from '../commands/types.js';
+import type { ProviderSwitchRecorder } from '../utils/recordActiveProviderSwitch.js';
 import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { Key } from '../hooks/useKeypress.js';
 import type { WelcomeActions } from '../hooks/useWelcomeOnboarding.js';
@@ -51,6 +52,7 @@ export interface AppCommands {
   setQueueErrorMessage: (message: string | null) => void;
 
   // Dialog domain handlers
+  recordModelSwitch: ProviderSwitchRecorder['recordProviderSwitch'];
   onWorkspaceMigrationDialogOpen: () => void;
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;
   handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;

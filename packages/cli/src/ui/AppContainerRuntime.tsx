@@ -243,6 +243,7 @@ export function buildAppCommands(
     handleFolderTrustSelect: dialogs.handleFolderTrustSelect,
     welcomeActions: dialogs.welcomeActions,
     triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
+    recordModelSwitch: dialogs.recordModelSwitch,
     handleThemeSelect: dialogs.handleThemeSelect,
     handleThemeHighlight: dialogs.handleThemeHighlight,
     handleAuthSelect: dialogs.handleAuthSelect,

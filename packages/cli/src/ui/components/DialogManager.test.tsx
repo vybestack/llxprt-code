@@ -21,6 +21,7 @@ import {
 } from '../../__tests__/render.js';
 import { readFile } from 'node:fs/promises';
 import { useModelDialogHandler } from './modelDialogHandler.js';
+import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 import {
   createDialogStore,
   type DialogStore,
@@ -141,11 +142,11 @@ describe('useModelDialogHandler', () => {
           mockAddItem,
           store,
           'openai',
-          {
-            recordingOwner: 'agent',
-            services: { agent },
-            recordingIntegration: { recordProviderSwitch: rawWrite } as never,
-          },
+          bindModelSwitchRecording(
+            'agent',
+            (event) => agent.session.recordRecordingEvent(event),
+            { recordProviderSwitch: rawWrite },
+          ),
         ),
       );
       result.current(makeModel('openai', 'owner-model'));
@@ -163,13 +164,21 @@ describe('useModelDialogHandler', () => {
 
   it('opens config dialog after successful same-provider model switch', async () => {
     const store = createSeededStore();
+    // The success path records the switch, so bind the real unowned,
+    // no-recorder configuration rather than a stand-in callback.
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
         store,
         'openai',
-        {},
+        bindModelSwitchRecording(
+          undefined,
+          () => {
+            throw new Error('Unexpected owner recording');
+          },
+          undefined,
+        ),
       ),
     );
 
@@ -191,7 +200,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 
@@ -219,7 +228,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -243,7 +252,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -270,7 +279,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -304,7 +313,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 

@@ -241,7 +241,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
         },
         store,
         null,
-        { recordingIntegration: integration },
+        (provider, model) => integration.recordProviderSwitch(provider, model),
       ),
     );
 
@@ -270,7 +270,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
         },
         store,
         'codex',
-        { recordingIntegration: integration },
+        (provider, model) => integration.recordProviderSwitch(provider, model),
       ),
     );
 
@@ -385,7 +385,8 @@ describe('provider changes made in dialogs reach the session recording (issue #3
           },
           store,
           null,
-          { recordingIntegration: integration },
+          (provider, model) =>
+            integration.recordProviderSwitch(provider, model),
         ),
       );
 
@@ -420,7 +421,8 @@ describe('provider changes made in dialogs reach the session recording (issue #3
           },
           store,
           'codex',
-          { recordingIntegration: integration },
+          (provider, model) =>
+            integration.recordProviderSwitch(provider, model),
         ),
       );
 

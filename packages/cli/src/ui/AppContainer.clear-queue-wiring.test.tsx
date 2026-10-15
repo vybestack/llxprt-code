@@ -52,6 +52,7 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
       dismiss: noop,
     },
     triggerWelcomeAuth: asyncNoop,
+    recordModelSwitch: () => undefined,
     handleThemeSelect: noop,
     handleThemeHighlight: noop,
     handleAuthSelect: asyncNoop,

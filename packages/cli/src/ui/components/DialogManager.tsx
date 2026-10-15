@@ -344,7 +344,7 @@ function useDialogManagerState(
     addItem,
     dialogStore,
     currentProvider,
-    commandContext,
+    uiActions.recordModelSwitch,
   );
 
   const handleSessionBrowserSelect = useSessionBrowserHandler(

@@ -22,6 +22,7 @@ import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
 import { useProfileManagement } from '../../../hooks/useProfileManagement.js';
 import {
+  bindModelSwitchRecording,
   dialogProviderSwitchRecorder,
   type ProviderSwitchRecorder,
 } from '../../../utils/recordActiveProviderSwitch.js';
@@ -536,6 +537,16 @@ export function useAppDialogs(params: AppDialogsParams) {
     core.setContextLimit,
   );
   const profiles = useDialogsProfiles(params);
+  const { agent, recordingOwner, recordingIntegration } = params;
+  const recordModelSwitch = useMemo(
+    () =>
+      bindModelSwitchRecording(
+        recordingOwner,
+        (event) => agent.session.recordRecordingEvent(event),
+        recordingIntegration,
+      ),
+    [agent, recordingOwner, recordingIntegration],
+  );
   useDialogDataSync(
     params.settingsStore,
     auth.welcome,
@@ -548,6 +559,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     // Input-surface commands (cross-hook command arguments)
     welcomeActions: auth.welcome.actions,
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
+    recordModelSwitch,
     onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
