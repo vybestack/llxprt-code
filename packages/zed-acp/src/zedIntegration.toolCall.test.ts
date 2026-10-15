@@ -14,7 +14,7 @@ import {
   runPrompt,
 } from './__tests__/zed-test-helpers.js';
 
-import type { Session } from './zedIntegration.js';
+import type { Session } from './zed-session.js';
 
 const createdSessions: Session[] = [];
 

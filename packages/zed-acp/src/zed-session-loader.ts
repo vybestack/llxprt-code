@@ -55,13 +55,13 @@ const logger = new DebugLogger('llxprt:zed-integration:session-loader');
  * read/replayed") rather than being misreported as resourceNotFound (FINDING B).
  */
 export async function resumeAgentHistory(
-  agent: Agent,
+  resume: Agent['session']['resume'],
   sessionId: string,
   sessionConfig: Config,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
 ): Promise<readonly IContent[]> {
   try {
-    return await agent.session.resume(sessionId);
+    return await resume(sessionId);
   } catch (error) {
     throw await classifyResumeFailure(sessionId, error, () =>
       listSessionFileNames(sessionConfig, listFiles),
@@ -137,9 +137,9 @@ export async function hasRecordedSessionFile(
  * empty history, yielding an empty array (zero replay updates).
  */
 export async function readAgentHistoryAsIContent(
-  agent: Pick<Agent, 'getHistory'>,
+  readHistory: Agent['getHistory'],
 ): Promise<readonly IContent[]> {
-  return [...(await agent.getHistory())];
+  return [...(await readHistory())];
 }
 
 /**
@@ -150,11 +150,11 @@ export async function readAgentHistoryAsIContent(
  * disk-resume path's error semantics.
  */
 export async function readAgentHistoryForReplay(
-  agent: Pick<Agent, 'getHistory'>,
+  readHistory: Agent['getHistory'],
   sessionId: string,
 ): Promise<readonly IContent[]> {
   try {
-    return await readAgentHistoryAsIContent(agent);
+    return await readAgentHistoryAsIContent(readHistory);
   } catch (error) {
     throw wrapReplayFailure(sessionId, error);
   }

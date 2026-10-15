@@ -3,6 +3,7 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
  * Behavioral tests for the #3221 provider-neutral Task facade default.
@@ -23,7 +24,6 @@ import {
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { Task } from './task.js';
 
 const WORKSPACE = mkdtempSync(join(tmpdir(), 'a2a-taskneutral-'));
 const FIXTURE = join(WORKSPACE, 'fake-responses.jsonl');
@@ -83,7 +83,7 @@ describe('Task: provider-neutral default (not gemini)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t1', 'c1', agent);
+      const task = createOwnedTask('t1', 'c1', agent);
       const types: string[] = [];
       for await (const event of task.acceptUserMessage(
         { userMessage: { parts: [{ kind: 'text', text: 'hello' }] } } as never,
@@ -103,7 +103,7 @@ describe('Task: provider-neutral default (not gemini)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t2', 'c2', agent);
+      const task = createOwnedTask('t2', 'c2', agent);
       const metadata = task.getMetadata();
       expect(metadata.id).toBe('t2');
       expect(metadata.contextId).toBe('c2');
@@ -121,7 +121,7 @@ describe('Task: provider-neutral default (not gemini)', () => {
     process.env.GEMINI_API_KEY = 'test-key';
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t3', 'c3', agent);
+      const task = createOwnedTask('t3', 'c3', agent);
       const metadata = task.getMetadata();
       expect(metadata.model).toBe(PLACEHOLDER_MODEL);
       expect(agent.getProvider()).toBe(UNCONFIGURED_PROVIDER);

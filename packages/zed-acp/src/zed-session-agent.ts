@@ -412,7 +412,7 @@ export async function disposeZedSession(
   terminals: TerminalManager | null,
   logger: DebugLogger,
   abortPrompt: () => void,
-  agent: Pick<Agent, 'dispose'>,
+  retireAgent: Agent['dispose'],
   disposeConfig: () => Promise<void>,
 ): Promise<void> {
   try {
@@ -425,7 +425,7 @@ export async function disposeZedSession(
     abortPrompt();
   } finally {
     try {
-      await agent.dispose();
+      await retireAgent();
     } finally {
       await disposeConfig();
     }

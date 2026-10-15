@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import {
   buildFakeAgent,
   RecordingConnection,

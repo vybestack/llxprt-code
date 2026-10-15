@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
  * Behavioral tests for the #3221 approval-boundary semantics of Task:
@@ -158,7 +159,7 @@ describe('Task approval-boundary semantics (#3221)', () => {
   it('rejects a message mixing a pending confirmation with new content before consuming the confirmation', async () => {
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t-mixed', 'c-mixed', agent);
+      const task = createOwnedTask('t-mixed', 'c-mixed', agent);
       const { callId } = await driveToApprovalBoundary(task);
 
       const mixedMessage = {
@@ -210,7 +211,7 @@ describe('Task approval-boundary semantics (#3221)', () => {
   it('cancelTurn at the approval boundary releases the turn-scoped confirmation state', async () => {
     const agent = await buildAgent();
     try {
-      const task = await Task.create('t-cancel', 'c-cancel', agent);
+      const task = createOwnedTask('t-cancel', 'c-cancel', agent);
       const { callId } = await driveToApprovalBoundary(task);
       expect(task.hasPendingConfirmation(callId)).toBe(true);
 
