@@ -216,7 +216,7 @@ describe('call-bound provider ports', () => {
       promptEnvelopeTransportToken: rightProjection.transportToken,
     };
     abort.abort(new Error('owner cancelled'));
-    await expect(drain(left)).rejects.toThrow(/aborted/i);
+    await expect(drain(left)).rejects.toThrow('owner cancelled');
     expect(left.resolver.accounting().activeRequestCount).toBe(0);
     expect(right.resolver.accounting().activeRequestCount).toBe(1);
     expect(await drain(right)).toContain('delivered');

@@ -200,6 +200,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return true;
   }
 
+  protected override async releaseUnstartedOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<void> {
+    const prepared = this.preparedPromptEnvelopes.get(
+      options.promptEnvelopeTransportToken,
+    );
+    if (prepared === undefined) return;
+    const mediaRequest =
+      prepared.protocol === 'openai-chat'
+        ? prepared.mediaRequest
+        : prepared.requestContext.mediaRequest;
+    await mediaRequest.release();
+  }
+
   /**
    * Tool formatter instances cannot be shared between stateless calls,
    * so construct a fresh one for every invocation.

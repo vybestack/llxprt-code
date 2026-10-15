@@ -850,9 +850,32 @@ export abstract class BaseProvider implements IProvider {
       maybeTools,
       resolveAuthentication,
     );
-    return stagesRows
-      ? attachDeferredHistory(normalized, contentsOrOptions)
-      : normalized;
+    if (!stagesRows) return normalized;
+    try {
+      return await attachDeferredHistory(normalized, contentsOrOptions);
+    } catch (error) {
+      return this.releaseUnstartedAfterFailure(normalized, error);
+    }
+  }
+
+  /**
+   * A call that fails before it starts never reaches the transport that would
+   * discharge its prepared projection, so the projection is released here. A
+   * release that also fails is reported together with the primary failure.
+   */
+  private async releaseUnstartedAfterFailure(
+    options: NormalizedGenerateChatOptions,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.releaseUnstartedOptions(options);
+    } catch (releaseError) {
+      throw new AggregateError(
+        [error, releaseError],
+        'Request failed and its prepared projection could not be released',
+      );
+    }
+    throw error;
   }
 
   private async normalizeProvidedOptions(
