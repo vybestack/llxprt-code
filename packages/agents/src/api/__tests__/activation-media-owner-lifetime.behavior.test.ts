@@ -1,3 +1,15 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +21,7 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 
 import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import { join } from 'node:path';
+
 import { assembleWorkspaceMemory } from '@vybestack/llxprt-code-core';
 
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
@@ -20,33 +32,93 @@ import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { AgentActivationBootstrap } from '../activationPreflightState.js';
-import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
 
 describe('activation media owner lifetime', () => {
   const createFilesystem = installTestWorkspaceFilesystem();
   it('joins accepted activation before closing an untransferred media owner', async () => {
-    const built = await buildFactoryLessConfig('multi-turn-text.jsonl');
+    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
+    const builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{},
+      }),
+    );
+    const builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    const builtFactorylessPolicy = new RuntimePolicyOwner(
+      builtFactorylessConfig,
+    );
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    const builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+
+    const builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
     const filesystem = createFilesystem({
-      targetDir: built.config.getTargetDir(),
+      targetDir: builtFactorylessConfig.getTargetDir(),
       isTrusted: () =>
         new WorkspaceTrustLifecycle({
-          localTrust: built.config.initialWorkspaceTrust,
+          localTrust: builtFactorylessConfig.initialWorkspaceTrust,
         }).isTrustedFolder(),
     });
-    const owner = new SessionMediaOwner(built.config.projectTempDir, 1024);
+    const owner = new SessionMediaOwner(
+      builtFactorylessConfig.projectTempDir,
+      1024,
+    );
     const manager = new ProviderManager(
       undefined,
       undefined,
       undefined,
       undefined,
-      built.settingsService,
+      builtFactorylessSettings,
     );
     const entered = gate();
-    const factories = configureProviderRuntimeFactories(built.config, manager);
+    const factories = configureProviderRuntimeFactories(
+      builtFactorylessConfig,
+      manager,
+    );
     const released = gate();
-    const settingsOwner = built.settingsOwner;
+    const settingsOwner = builtFactorylessSettingsOwner;
     const operation = new AgentActivationBootstrap(
-      built.config,
+      builtFactorylessConfig,
       manager,
       async () => {
         await owner.store.admit({
@@ -60,10 +132,10 @@ describe('activation media owner lifetime', () => {
       },
       owner,
       await SessionClientOwner.create(
-        built.config,
-        assembleTaskSchemaPolicy(built.settingsService),
+        builtFactorylessConfig,
+        assembleTaskSchemaPolicy(builtFactorylessSettings),
         manager,
-        built.runtimeFactoryBindings.agentClientFactory,
+        builtFactorylessFactories.agentClientFactory,
         owner.store,
         () => undefined,
         filesystem.paths,
@@ -73,22 +145,22 @@ describe('activation media owner lifetime', () => {
       ),
       filesystem,
       assembleWorkspaceMemory(
-        built.config,
+        builtFactorylessConfig,
         filesystem,
         new WorkspaceTrustLifecycle({
-          localTrust: built.config.initialWorkspaceTrust,
+          localTrust: builtFactorylessConfig.initialWorkspaceTrust,
         }),
       ),
       false,
       settingsOwner,
       'borrowed',
       new WorkspaceDefinitionOwner(
-        join(built.config.getTargetDir(), 'profiles'),
-        join(built.config.getTargetDir(), 'subagents'),
+        join(builtFactorylessConfig.getTargetDir(), 'profiles'),
+        join(builtFactorylessConfig.getTargetDir(), 'subagents'),
       ),
       true,
       new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
+        localTrust: builtFactorylessConfig.initialWorkspaceTrust,
       }),
     );
     const pending = operation.preflight({ provider: 'fake' });
@@ -108,21 +180,66 @@ describe('activation media owner lifetime', () => {
       await pending;
       await closing;
       manager.dispose();
-      await built.cleanup();
+      await builtFactorylessClose();
     }
     await expect(owner.store.getStoredByteLength()).rejects.toThrow(/closed/i);
   });
   it('releases the owned filesystem after an accepted memory publication fails during teardown', async () => {
-    const built = await buildFactoryLessConfig('multi-turn-text.jsonl');
+    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+
+    const builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{},
+      }),
+    );
+    const builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    const builtFactorylessPolicy = new RuntimePolicyOwner(
+      builtFactorylessConfig,
+    );
+
+    const builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
     const filesystem = createFilesystem({
-      targetDir: built.config.getTargetDir(),
+      targetDir: builtFactorylessConfig.getTargetDir(),
       isTrusted: () => true,
     });
     const memory = assembleWorkspaceMemory(
-      built.config,
+      builtFactorylessConfig,
       filesystem,
       new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
+        localTrust: builtFactorylessConfig.initialWorkspaceTrust,
       }),
     );
     const entered = gate();
@@ -137,12 +254,12 @@ describe('activation media owner lifetime', () => {
       undefined,
       undefined,
       undefined,
-      built.settingsService,
-      built.config,
+      builtFactorylessSettings,
+      builtFactorylessConfig,
     );
     const operation = await assembleAgentActivationBootstrap(
-      built.config,
-      built.settingsService,
+      builtFactorylessConfig,
+      builtFactorylessSettings,
       manager,
       null,
       () => undefined,
@@ -151,7 +268,7 @@ describe('activation media owner lifetime', () => {
       undefined,
       filesystem,
       memory,
-      built.settingsOwner,
+      builtFactorylessSettingsOwner,
       undefined,
       undefined,
       undefined,
@@ -174,7 +291,19 @@ describe('activation media owner lifetime', () => {
     } finally {
       manager.dispose();
       await filesystem.dispose();
-      await built.cleanup();
+      await builtFactorylessClose();
     }
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

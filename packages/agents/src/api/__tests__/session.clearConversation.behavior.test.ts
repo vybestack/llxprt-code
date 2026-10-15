@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, it, expect, spyOn } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,7 +30,12 @@ import {
 } from './helpers/agentHarness.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 function clientOwner(agent: Agent): SessionClientOwner {
   if (
@@ -109,6 +112,7 @@ async function withRecordedConversation<T>(
 }
 
 describe('starting a new conversation session', () => {
+  useRecordingPrompts();
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
@@ -616,22 +620,31 @@ describe('starting a new conversation session', () => {
   });
 
   it('does not clear a sibling conversation or change shared Config identity', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
-      await agent.setHistory([textItem('human', 'shared conversation')]);
-      const sibling = await borrow();
-      const prior = await sibling.getHistory();
-      const configId = config.getSessionId();
-      await agent.session.setRecording({ enabled: true });
-      await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
-      expect(await sibling.getHistory()).toStrictEqual(prior);
-      expect(config.getSessionId()).toBe(configId);
-      await agent.session.setRecording({ enabled: false });
-      await agent.session.resume('latest');
-      expect((await agent.getHistory()).map(itemText)).toStrictEqual([
-        'shared conversation',
-      ]);
-    });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+      ) => {
+        await agent.setHistory([textItem('human', 'shared conversation')]);
+        const sibling = await borrow();
+        const prior = await sibling.getHistory();
+        const configId = config.getSessionId();
+        await agent.session.setRecording({ enabled: true });
+        await agent.session.startNewSession();
+        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await sibling.getHistory()).toStrictEqual(prior);
+        expect(config.getSessionId()).toBe(configId);
+        await agent.session.setRecording({ enabled: false });
+        await agent.session.resume('latest');
+        expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+          'shared conversation',
+        ]);
+      },
+    );
   });
 
   it('keeps the new facade session identity on model requests after a model switch', async () => {
@@ -639,7 +652,7 @@ describe('starting a new conversation session', () => {
     const outfile = join(directory, 'telemetry.jsonl');
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, config }) => {
+        async (agent, config) => {
           const sharedId = config.getSessionId();
           await agent.session.startNewSession();
           const nextId = agent.session.getSessionId();

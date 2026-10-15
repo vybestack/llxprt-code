@@ -1,3 +1,15 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,27 +44,81 @@ import { describe, expect, it } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { fromConfig } from '../fromConfig.js';
 import { AgentBootstrapError } from '../agentBootstrap.js';
-import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
 
 describe('finalizeAgent post-auth client guard', () => {
   it('throws a typed AgentBootstrapError when a caller factory completed bootstrap without constructing an agent client', async () => {
-    const built = await buildFactoryLessConfig('plain-text.jsonl', {
+    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    const builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {
       // Deliberate caller-side defect under test: the factory "succeeds"
       // (initialize completes) but constructs nothing. authMode 'none' keeps
       // activation from repairing the omission via refreshAuth.
       agentClientFactory: () => undefined as unknown as AgentClientContract,
-    });
+    };
+    const builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{},
+      }),
+    );
+    const builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    const builtFactorylessPolicy = new RuntimePolicyOwner(
+      builtFactorylessConfig,
+    );
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    const builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+    const builtFactorylessNoManager = undefined;
+    const builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
     try {
       let captured: unknown;
       try {
         await fromConfig({
-          settingsOwner: built.settingsOwner,
-          settingsService: built.settingsService,
-          providerManager: built.providerManager,
-          runtimeFactoryBindings: built.runtimeFactoryBindings,
-          config: built.config,
-          messageBus: built.messageBus,
-          policyOwner: built.policyOwner,
+          settingsOwner: builtFactorylessSettingsOwner,
+          settingsService: builtFactorylessSettings,
+          providerManager: builtFactorylessNoManager,
+          runtimeFactoryBindings: builtFactorylessFactories,
+          config: builtFactorylessConfig,
+          messageBus: builtFactorylessPolicy.session.messageBus,
+          policyOwner: builtFactorylessPolicy,
           activation: {
             provider: 'fake',
             model: 'fake-model',
@@ -72,7 +138,19 @@ describe('finalizeAgent post-auth client guard', () => {
       expect(bootstrapError.name).toBe('AgentBootstrapError');
       expect(bootstrapError.message).toBe('no post-auth agent client');
     } finally {
-      await built.cleanup();
+      await builtFactorylessClose();
     }
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

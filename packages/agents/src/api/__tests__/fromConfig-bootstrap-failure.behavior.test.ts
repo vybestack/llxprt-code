@@ -1,12 +1,23 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import {
@@ -18,49 +29,10 @@ import { WorkspaceCheckpointOwner } from '@vybestack/llxprt-code-core/services/w
 import { CHECKPOINT_STORE_MARKER_FILENAME } from '@vybestack/llxprt-code-core/services/gitService.js';
 import { fromConfig } from '../fromConfig.js';
 import { assembleMcpRuntime } from '../mcpOAuthAssembly.js';
-import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
+
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
-
-async function adoptionOptions(credentialAuthority: CredentialAuthority) {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), 'from-config-bootstrap-failure-')),
-  );
-  cleanups.push(() => rm(directory, { recursive: true, force: true }));
-  const built = await buildFactoryLessConfig(
-    'plain-text.jsonl',
-    {},
-    {
-      workingDir: directory,
-      sessionId: 'from-config-bootstrap-failure',
-      checkpointing: true,
-      folderTrust: true,
-      mcpEnabled: false,
-      skillsSupport: false,
-      recording: { enabled: false },
-      telemetry: { enabled: false },
-      settings: { jitContextEnabled: false },
-    },
-  );
-  cleanups.push(built.cleanup);
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    built.settingsService,
-  );
-  manager.registerProvider(
-    new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
-  );
-  return {
-    ...built,
-    credentialAuthority,
-    providerManager: manager,
-    activation: { provider: 'fake', model: 'fake-model' },
-  };
-}
 
 async function blockCheckpointConfiguration(
   historyDirectory: string,
@@ -93,6 +65,102 @@ function observeCheckpointFailures(): unknown[] {
 }
 
 describe('fromConfig bootstrap failure reporting', () => {
+  async function adoptionOptions(_credentialAuthority: CredentialAuthority) {
+    directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'from-config-bootstrap-failure-')),
+    );
+    cleanups.push(() => rm(directory, { recursive: true, force: true }));
+
+    builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
+    builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{
+          workingDir: directory,
+          sessionId: 'from-config-bootstrap-failure',
+          checkpointing: true,
+          folderTrust: true,
+          mcpEnabled: false,
+          skillsSupport: false,
+          recording: { enabled: false },
+          telemetry: { enabled: false },
+          settings: { jitContextEnabled: false },
+        },
+      }),
+    );
+    builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    builtFactorylessPolicy = new RuntimePolicyOwner(builtFactorylessConfig);
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+
+    builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
+    cleanups.push(builtFactorylessClose);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessSettings,
+    );
+    manager.registerProvider(
+      new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
+    );
+  }
+
+  let directory: string;
+  let builtFactorylessPreviousReplay: string | undefined;
+  let builtFactorylessDirectory: string;
+  let builtFactorylessConfig: Config;
+  let builtFactorylessSettings: SettingsService;
+  let builtFactorylessSettingsOwner: SessionSettingsOwner;
+  let builtFactorylessPolicy: RuntimePolicyOwner;
+  let builtFactorylessFactories: ReturnType<
+    typeof createAgentRuntimeFactoryBindings
+  >;
+  let builtFactorylessClose: () => Promise<void>;
+  let manager: ProviderManager;
+
   const credentials = useOwnedCredentials();
 
   afterEach(async () => {
@@ -101,7 +169,18 @@ describe('fromConfig bootstrap failure reporting', () => {
   });
 
   it('surfaces a workspace initialization failure as the original error, not a cleanup wrapper', async () => {
-    const options = await adoptionOptions(credentials().authority);
+    await adoptionOptions(credentials().authority);
+    const options = {
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      settingsOwner: builtFactorylessSettingsOwner,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
+      credentialAuthority: credentials().authority,
+      providerManager: manager,
+      activation: { provider: 'fake', model: 'fake-model' },
+    };
     await blockCheckpointConfiguration(options.config.projectHistoryDir);
     const failures = observeCheckpointFailures();
 
@@ -121,7 +200,18 @@ describe('fromConfig bootstrap failure reporting', () => {
   });
 
   it('keeps the primary message visible when a genuine cleanup failure is also reported', async () => {
-    const options = await adoptionOptions(credentials().authority);
+    await adoptionOptions(credentials().authority);
+    const options = {
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      settingsOwner: builtFactorylessSettingsOwner,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
+      credentialAuthority: credentials().authority,
+      providerManager: manager,
+      activation: { provider: 'fake', model: 'fake-model' },
+    };
     await blockCheckpointConfiguration(options.config.projectHistoryDir);
     const policyWritePath = join(
       Storage.getUserPoliciesDir(),
@@ -169,3 +259,15 @@ describe('fromConfig bootstrap failure reporting', () => {
     expect(credentials().snapshot()).toStrictEqual([1]);
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

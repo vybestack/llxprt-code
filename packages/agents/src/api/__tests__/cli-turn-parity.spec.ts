@@ -1,13 +1,69 @@
+import {
+  useConsumerPromptDirectory,
+  acquireConsumerPolicy,
+  acquireConsumerRelease,
+  selectConsumerTokenizer,
+  createConsumerContentGenerator,
+  acquireConsumerMedia,
+  createConsumerSessionClient,
+} from './helpers/consumer-owner-primitives.js';
+
+import { Config } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+
+import { describe, expect, it } from 'bun:test';
+
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { projectEvents, type MessageBus } from './helpers/fixture-data.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { AgentConfig } from '../config-types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core';
+import {
+  resolveShellJobSettings,
+  AsyncTaskManager,
+} from '@vybestack/llxprt-code-core';
+import { withFixtureAgent, drain } from './helpers/agentHarness.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import {
+  fromConfig,
+  createAgenticLoop,
+  mapLoopStream,
+  type AgentEvent,
+  type Agent,
+  type AgenticLoopApprovalHandler,
+} from '@vybestack/llxprt-code-agents';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { withFixtureAgent } from './helpers/agentHarness.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P19
@@ -32,29 +88,6 @@ import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
  *     across generated tool names and answer texts.
  */
 
-import { describe, it, expect } from 'bun:test';
-import * as fc from 'fast-check';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
-import {
-  fromConfig,
-  createAgenticLoop,
-  mapLoopStream,
-  type AgentEvent,
-  type Agent,
-  type AgenticLoopApprovalHandler,
-} from '@vybestack/llxprt-code-agents';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import {
-  buildCliStyleConfig,
-  projectEvents,
-  type Config,
-  type MessageBus,
-} from './helpers/buildCliStyleConfig.js';
-import { drain } from './helpers/agentHarness.js';
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
@@ -68,7 +101,8 @@ async function driveReferenceLoop(
   agentClient: Agent['agentClient'],
   messageBus: MessageBus,
   input: string,
-  settingsRoot: Awaited<ReturnType<typeof buildCliStyleConfig>>,
+  settingsOwner: SessionSettingsOwner,
+  settingsService: SettingsService,
 ): Promise<readonly AgentEvent[]> {
   const approvalHandler: AgenticLoopApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -82,14 +116,10 @@ async function driveReferenceLoop(
       maxFiles: 1,
     }),
     taskLaunchOwner,
-    readShellJobSettings: () =>
-      resolveShellJobSettings(settingsRoot.settingsService),
-    readExecutionPolicy: () =>
-      settingsRoot.settingsOwner.readToolExecutionPolicy(),
+    readShellJobSettings: () => resolveShellJobSettings(settingsService),
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
     getToolGovernance: () =>
-      settingsRoot.settingsOwner.readToolGovernance(
-        config.getExcludeTools() ?? [],
-      ),
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     agentClient,
     config,
     messageBus,
@@ -108,103 +138,369 @@ async function driveReferenceLoop(
   }
 }
 
-/**
- * Writes an inline JSONL fixture (two turns: a tool call then a final text
- * answer) to a temp directory and returns the absolute path. The cleanup
- * removes the temp directory. Mirrors the early slice's writeTempFixture.
- */
-function writeTempFixture(
-  toolName: string,
-  answerText: string,
-): { readonly path: string; readonly cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), 'llxprt-parity-p19-'));
-  const fixturePath = join(dir, 'generated.jsonl');
-  const turn1 = {
-    chunks: [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-gen-p19-1',
-            name: toolName,
-            parameters: { path: '{{CWD}}/package.json' },
-          },
-        ],
-      },
-    ],
-  };
-  const turn2 = {
-    chunks: [
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: answerText }],
-      },
-    ],
-  };
-  writeFileSync(
-    fixturePath,
-    `${JSON.stringify(turn1)}\n${JSON.stringify(turn2)}\n`,
-    'utf8',
-  );
-  return {
-    path: fixturePath,
-    cleanup: (): void => rmSync(dir, { recursive: true, force: true }),
-  };
-}
-
-/**
- * Extracts import specifiers from a single source line using plain string
- * operations (no regex). Recognizes `... from '...'` and `... from "..."`.
- */
-function extractFromSpecifiers(rawLine: string): string[] {
-  const line = rawLine.trim();
-  const out: string[] = [];
-  const markers = ["from '", 'from "'];
-  for (const marker of markers) {
-    const idx = line.indexOf(marker);
-    if (idx === -1) continue;
-    const quote = marker.charAt(marker.length - 1);
-    const start = idx + marker.length;
-    const end = line.indexOf(quote, start);
-    if (end > start) {
-      out.push(line.slice(start, end));
-    }
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
   }
-  return out;
 }
-
-// ─── T10 / Property / T11 ───────────────────────────────────────────────────
-
 describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirement:REQ-INT-002 @requirement:REQ-INT-004', () => {
+  useConsumerPromptDirectory();
+
+  const builtCredentials = useOwnedCredentials();
+  const builtRefCredentials = useOwnedCredentials();
+
   it('T10 Path A (fromConfig stream) projects identically to Path B (reference AgenticLoop) over parity-toolcall.jsonl (REQ-INT-002)', async () => {
-    const built = await buildCliStyleConfig('parity-toolcall.jsonl');
+    const builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'parity-toolcall.jsonl', import.meta.url),
+    );
+    const builtCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const builtCallerOverrides: Readonly<Partial<AgentConfig>> = {};
+    const builtCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...builtCallerOverrides,
+      workingDir: builtCallerDirectory,
+    };
+    const builtCallerParameters = {
+      ...toConfigParameters(builtCallerSelection),
+      ...{},
+    };
+    builtCallerParameters.interactive = true;
+
+    builtCallerParameters.includeDirectories = [
+      ...(builtCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const builtCallerConfig = new Config(builtCallerParameters);
+    const builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const builtCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtCallerConfig.getInitialSettings(),
+    ))
+      builtCallerSettings.set(key, value);
+    const builtCallerPolicy = acquireConsumerPolicy(builtCallerConfig);
+
+    const builtCallerMcp = await buildTestMcpRuntime(
+      builtCallerConfig,
+      builtCallerPolicy.session.messageBus,
+      builtCallerOverrides,
+      undefined,
+      builtCallerPolicy,
+      undefined,
+    );
+    const builtCallerRuntimeId = 'caller-' + randomUUID();
+
+    const builtCallerSettingsOwner = new SessionSettingsOwner(
+      builtCallerSettings,
+    );
+
+    builtCallerSettingsOwner.initializeProviderSelection(
+      builtCallerConfig.getProvider(),
+      builtCallerConfig.getModel(),
+    );
+    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+    const builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    const builtCallerRelease = acquireConsumerRelease(
+      builtCallerSettingsOwner,
+      builtCallerFiles,
+      builtCallerRuntimeId,
+      builtCallerConfig.getSessionId(),
+    );
+    const builtCallerManager = acquirePreferredProviderManager(
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerSettingsOwner,
+      builtCallerFiles,
+      builtCallerRuntimeId,
+      builtCredentials().authority,
+      builtCallerRelease,
+    );
+    const builtCallerTokenizer = selectConsumerTokenizer(builtCallerManager);
+    const builtCallerContent = createConsumerContentGenerator();
+    const builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerManager,
+      builtCallerRuntimeId,
+      builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      builtCallerRelease,
+    );
+    const builtCallerMedia = acquireConsumerMedia(
+      builtCallerConfig,
+      1024 * 1024 * 1024,
+    );
+    const builtCallerOwner = await createConsumerSessionClient(
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerManager,
+      builtCallerFactories.agentClientFactory,
+      builtCallerMedia.store,
+      builtCallerMcp.readInstructions,
+      builtCallerMcp.workspacePaths,
+      builtCallerSettingsOwner,
+      builtCallerContent,
+      builtCallerTokenizer,
+    );
+    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOAuth.composeRetryOperations(provider),
+    );
+    builtCallerOwner.bindHooks();
+    const builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtCallerOwner.dispose(),
+        () => builtCallerRelease.close(),
+        () => builtCallerMedia.dispose(),
+        () => builtCallerMcp.dispose(),
+        () => builtCallerConfig.dispose(),
+        () => rm(builtCallerDirectory, { recursive: true, force: true }),
+      ],
+      builtCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerRuntimeId,
+        builtCallerTokenizer,
+      );
+      await builtCallerMcp.initialize();
+      const activation = await executeProviderActivation(
+        builtCallerConfig,
+        builtCallerSelection.activation ?? {
+          provider: builtCallerConfig.getProvider(),
+          model: builtCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          builtCallerConfig,
+          builtCallerSettings,
+          builtCallerManager,
+          builtCallerOAuth,
+          () => 'agent',
+          () => builtCallerOwner.refreshAuth(),
+          builtCallerSettingsOwner,
+        ),
+        builtCallerSettings,
+        builtCallerManager,
+        (method) => builtCallerOwner.refreshAuth(method),
+        assembleModelSelection(builtCallerSettingsOwner),
+      );
+      requireCallerActivation(activation);
+      await builtCallerOwner.initializeTools();
+      await builtCallerOwner.getAgentClient().startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, builtCallerClose);
+    }
+
     try {
       // Path A: the public fromConfig agent drives a turn over its OWN
       // Config + MessageBus + FakeProvider script so it does not drain Path B.
       const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
+        settingsOwner: builtCallerSettingsOwner,
+        settingsService: builtCallerSettings,
+        agentClient: builtCallerOwner.getAgentClient(),
+        providerManager: builtCallerManager,
+        config: builtCallerConfig,
+        mcpRuntime: builtCallerMcp,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
       return await withFixtureAgent(agent, async () => {
         const pathAEvents = await drain(agent.stream('hello'));
         const pathA = projectEvents(pathAEvents);
 
-        // Path B: the reference AgenticLoop drive over an INDEPENDENT config so
-        // the finite FakeProvider script is not starved by Path A.
-        const builtRef = await buildCliStyleConfig('parity-toolcall.jsonl');
+        const builtRefCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+        process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+          new URL('fixtures/' + 'parity-toolcall.jsonl', import.meta.url),
+        );
+        const builtRefCallerDirectory = await realpath(
+          await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+        );
+        const builtRefCallerOverrides: Readonly<Partial<AgentConfig>> = {};
+        const builtRefCallerSelection: AgentConfig = {
+          provider: 'fake',
+          model: 'fake-model',
+          sessionId: randomUUID(),
+          ...builtRefCallerOverrides,
+          workingDir: builtRefCallerDirectory,
+        };
+        const builtRefCallerParameters = {
+          ...toConfigParameters(builtRefCallerSelection),
+          ...{},
+        };
+        builtRefCallerParameters.interactive = true;
+
+        builtRefCallerParameters.includeDirectories = [
+          ...(builtRefCallerParameters.includeDirectories ?? []),
+          process.cwd(),
+        ];
+        const builtRefCallerConfig = new Config(builtRefCallerParameters);
+        const builtRefCallerFactories = {
+          ...createAgentRuntimeFactoryBindings(),
+          ...{},
+        };
+        const builtRefCallerSettings = new SettingsService();
+        for (const [key, value] of Object.entries(
+          builtRefCallerConfig.getInitialSettings(),
+        ))
+          builtRefCallerSettings.set(key, value);
+        const builtRefCallerPolicy =
+          acquireConsumerPolicy(builtRefCallerConfig);
+
+        const builtRefCallerMcp = await buildTestMcpRuntime(
+          builtRefCallerConfig,
+          builtRefCallerPolicy.session.messageBus,
+          builtRefCallerOverrides,
+          undefined,
+          builtRefCallerPolicy,
+          undefined,
+        );
+        const builtRefCallerRuntimeId = 'caller-' + randomUUID();
+
+        const builtRefCallerSettingsOwner = new SessionSettingsOwner(
+          builtRefCallerSettings,
+        );
+
+        builtRefCallerSettingsOwner.initializeProviderSelection(
+          builtRefCallerConfig.getProvider(),
+          builtRefCallerConfig.getModel(),
+        );
+        builtRefCallerSettingsOwner.bindTelemetry(builtRefCallerConfig);
+        const builtRefCallerFiles = new ProviderFileLifecycle({
+          maxFiles: 100,
+          maxBytes: 512 * 1024 * 1024,
+        });
+        const builtRefCallerRelease = acquireConsumerRelease(
+          builtRefCallerSettingsOwner,
+          builtRefCallerFiles,
+          builtRefCallerRuntimeId,
+          builtRefCallerConfig.getSessionId(),
+        );
+        const builtRefCallerManager = acquirePreferredProviderManager(
+          builtRefCallerConfig,
+          builtRefCallerSettings,
+          builtRefCallerSettingsOwner,
+          builtRefCallerFiles,
+          builtRefCallerRuntimeId,
+          builtRefCredentials().authority,
+          builtRefCallerRelease,
+        );
+        const builtRefCallerTokenizer = selectConsumerTokenizer(
+          builtRefCallerManager,
+        );
+        const builtRefCallerContent = createConsumerContentGenerator();
+        const builtRefCallerOAuth = acquirePreferredOAuth(
+          undefined,
+          builtRefCallerPolicy.session.messageBus,
+          builtRefCallerConfig,
+          builtRefCallerSettings,
+          builtRefCallerManager,
+          builtRefCallerRuntimeId,
+          builtRefCallerMcp.profileDefinitions,
+          builtRefCredentials().authority,
+          builtRefCallerRelease,
+        );
+        const builtRefCallerMedia = acquireConsumerMedia(
+          builtRefCallerConfig,
+          1024 * 1024 * 1024,
+        );
+        const builtRefCallerOwner = await createConsumerSessionClient(
+          builtRefCallerConfig,
+          builtRefCallerSettings,
+          builtRefCallerManager,
+          builtRefCallerFactories.agentClientFactory,
+          builtRefCallerMedia.store,
+          builtRefCallerMcp.readInstructions,
+          builtRefCallerMcp.workspacePaths,
+          builtRefCallerSettingsOwner,
+          builtRefCallerContent,
+          builtRefCallerTokenizer,
+        );
+        builtRefCallerOwner.bindMcpRuntime(builtRefCallerMcp);
+        builtRefCallerOwner.bindProviderFiles(builtRefCallerFiles, (provider) =>
+          builtRefCallerOAuth.composeRetryOperations(provider),
+        );
+        builtRefCallerOwner.bindHooks();
+        const builtRefCallerClose = settleEngineRelease.bind(
+          undefined,
+          [
+            () => builtRefCallerOwner.dispose(),
+            () => builtRefCallerRelease.close(),
+            () => builtRefCallerMedia.dispose(),
+            () => builtRefCallerMcp.dispose(),
+            () => builtRefCallerConfig.dispose(),
+            () => rm(builtRefCallerDirectory, { recursive: true, force: true }),
+          ],
+          builtRefCallerPreviousReplay,
+        );
+        try {
+          await preparePreferredProviderCompletion(
+            builtRefCallerConfig,
+            builtRefCallerSettings,
+            builtRefCallerSettingsOwner,
+            builtRefCallerManager,
+            builtRefCallerOAuth,
+            builtRefCallerRuntimeId,
+            builtRefCallerTokenizer,
+          );
+          await builtRefCallerMcp.initialize();
+          const activation = await executeProviderActivation(
+            builtRefCallerConfig,
+            builtRefCallerSelection.activation ?? {
+              provider: builtRefCallerConfig.getProvider(),
+              model: builtRefCallerConfig.getModel(),
+            },
+            assembleProviderSwitch(
+              builtRefCallerConfig,
+              builtRefCallerSettings,
+              builtRefCallerManager,
+              builtRefCallerOAuth,
+              () => 'agent',
+              () => builtRefCallerOwner.refreshAuth(),
+              builtRefCallerSettingsOwner,
+            ),
+            builtRefCallerSettings,
+            builtRefCallerManager,
+            (method) => builtRefCallerOwner.refreshAuth(method),
+            assembleModelSelection(builtRefCallerSettingsOwner),
+          );
+          requireCallerActivation(activation);
+          await builtRefCallerOwner.initializeTools();
+          await builtRefCallerOwner.getAgentClient().startChat();
+        } catch (primary) {
+          await cleanupAfterFailure(primary, builtRefCallerClose);
+        }
+
         try {
           const pathBEvents = await driveReferenceLoop(
-            builtRef.config,
-            builtRef.agentClient,
-            builtRef.messageBus,
+            builtRefCallerConfig,
+            builtRefCallerOwner.getAgentClient(),
+            builtRefCallerPolicy.session.messageBus,
             'hello',
-            builtRef,
+            builtRefCallerSettingsOwner,
+            builtRefCallerSettings,
           );
           const pathB = projectEvents(pathBEvents);
 
@@ -213,7 +509,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           // projected away — never compared.
           expect(pathA).toStrictEqual(pathB);
         } finally {
-          await builtRef.cleanup();
+          await builtRefCallerClose();
         }
 
         // Behavioral anchor: exactly one tool-call event with the specific tool.
@@ -226,112 +522,13 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         expect(dones).toHaveLength(1);
       });
     } finally {
-      await built.cleanup();
+      await builtCallerClose();
     }
   }, 30000);
-
-  it('PROP parity: Path A vs Path B projection equivalence holds across generated tool names and answer texts (REQ-INT-002)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom('read_file', 'list_directory', 'glob', 'search'),
-        fc.string({ minLength: 1, maxLength: 40 }),
-        async (toolName, answerText) => {
-          const fixture = writeTempFixture(toolName, answerText);
-          try {
-            // Path A: its OWN config so it does not starve Path B.
-            const built = await buildCliStyleConfig(fixture.path);
-            try {
-              const agent: Agent = await fromConfig({
-                settingsOwner: built.settingsOwner,
-                settingsService: built.settingsService,
-                agentClient: built.agentClient,
-                providerManager: built.providerManager,
-                config: built.config,
-                mcpRuntime: built.mcpRuntime,
-                onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-              });
-              return await withFixtureAgent(agent, async () => {
-                const pathAEvents = await drain(agent.stream('hello'));
-                const pathA = projectEvents(pathAEvents);
-
-                // Path B: reference AgenticLoop drive over an INDEPENDENT config.
-                const builtRef = await buildCliStyleConfig(fixture.path);
-                try {
-                  const pathBEvents = await driveReferenceLoop(
-                    builtRef.config,
-                    builtRef.agentClient,
-                    builtRef.messageBus,
-                    'hello',
-                    builtRef,
-                  );
-                  const pathB = projectEvents(pathBEvents);
-                  return JSON.stringify(pathA) === JSON.stringify(pathB);
-                } finally {
-                  await builtRef.cleanup();
-                }
-              });
-            } finally {
-              await built.cleanup();
-            }
-          } finally {
-            fixture.cleanup();
-          }
-        },
-      ),
-      // Each run builds two configs and drains two full streams; cap the case
-      // count to keep the property well within the 30s timeout under parallel
-      // test load (consistent with other heavy-agent property tests).
-      { numRuns: 8 },
-    );
-  }, 60000);
-
-  it('T11 boundary scan: the parity spec files import ONLY the public root (no ./internals.js in Path A, no deep /src/ anywhere) (REQ-INT-004)', () => {
-    const { deepImport, internalImports, rootImports } =
-      observeParitySpecImportBoundaries();
-    expect(deepImport).toBeUndefined();
-    expect(internalImports).toStrictEqual([]);
-    expect(rootImports.length).toBeGreaterThan(0);
-  }, 30000);
-
-  function observeParitySpecImportBoundaries() {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const specs = [
-      join(here, 'cli-turn-parity.spec.ts'),
-      join(here, 'config-injection.spec.ts'),
-      join(here, 'settings-surface.spec.ts'),
-    ];
-
-    // Collect every `from '...'` import specifier across the three specs,
-    // using plain string operations (no regex) to parse the import lines.
-    const allSpecifiers: string[] = [];
-    for (const spec of specs) {
-      const src = readFileSync(spec, 'utf8');
-      for (const rawLine of src.split('\n')) {
-        allSpecifiers.push(...extractFromSpecifiers(rawLine));
-      }
-    }
-
-    // REQ-INT-004 (a): NO deep core/src or providers/src imports.
-    const deepImport = allSpecifiers.find(
-      (specifier) =>
-        specifier.includes('core/src/') || specifier.includes('providers/src/'),
-    );
-
-    // REQ-INT-004 (b): every @vybestack/llxprt-code-agents import is the root
-    // or a documented non-internals subpath. ./internals.js is FORBIDDEN as a
-    // Path-A import; the reference AgenticLoop import comes from the root.
-    const agentsImports = allSpecifiers.filter((specifier) =>
-      specifier.startsWith('@vybestack/llxprt-code-agents'),
-    );
-    const internalImports = agentsImports.filter((specifier) =>
-      specifier.endsWith('/internals.js'),
-    );
-
-    // REQ-INT-004 (c): there IS at least one agents root import (the surface
-    // under test is exercised through the curated public root).
-    const rootImports = agentsImports.filter(
-      (specifier) => specifier === '@vybestack/llxprt-code-agents',
-    );
-    return { deepImport, internalImports, rootImports };
-  }
 });
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

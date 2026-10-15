@@ -1,14 +1,43 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  ProviderFileLifecycle,
+  GenerateChatOptions,
+  FakeProvider,
+} from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { AgentConfig } from '../config-types.js';
 import {
   fromConfig,
   type Agent,
@@ -22,10 +51,14 @@ import {
   type ToolResult,
   type ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-tools';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {
@@ -158,66 +191,254 @@ function restoreEnvironment(
   }
 }
 
-async function exerciseOwners(sameLabel: boolean): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'llxprt-same-label-tools-'));
-  const envKeys = [
-    'LLXPRT_CONFIG_HOME',
-    'LLXPRT_DATA_HOME',
-    'LLXPRT_CACHE_HOME',
-    'LLXPRT_LOG_HOME',
-    'LLXPRT_FAKE_RESPONSES',
-  ];
-  const previous = envKeys.map((key) => [key, process.env[key]] as const);
-  for (const key of envKeys.filter((key) => key !== 'LLXPRT_FAKE_RESPONSES')) {
-    process.env[key] = root;
-  }
-  const configs: Array<Awaited<ReturnType<typeof buildCliStyleConfig>>> = [];
-  const agents: Agent[] = [];
-  const restores: Array<() => void> = [];
-  const releases: Array<() => void> = [];
-  const pending: Array<Promise<Observation>> = [];
-  const abort = new AbortController();
-  const label = `tool-owner-${randomUUID()}`;
+describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const builtCredentials = useOwnedCredentials();
+  async function exerciseOwners(sameLabel: boolean): Promise<void> {
+    const root = await mkdtemp(join(tmpdir(), 'llxprt-same-label-tools-'));
+    const envKeys = [
+      'LLXPRT_CONFIG_HOME',
+      'LLXPRT_DATA_HOME',
+      'LLXPRT_CACHE_HOME',
+      'LLXPRT_LOG_HOME',
+      'LLXPRT_FAKE_RESPONSES',
+    ];
+    const previous = envKeys.map((key) => [key, process.env[key]] as const);
+    for (const key of envKeys.filter(
+      (key) => key !== 'LLXPRT_FAKE_RESPONSES',
+    )) {
+      process.env[key] = root;
+    }
+    const callerCloses: Array<() => Promise<void>> = [];
+    const agents: Agent[] = [];
+    const restores: Array<() => void> = [];
+    const releases: Array<() => void> = [];
+    const pending: Array<Promise<Observation>> = [];
+    const abort = new AbortController();
+    const label = `tool-owner-${randomUUID()}`;
 
-  async function owner(name: string, sessionId: string) {
-    const modelEntered = gate();
-    const modelRelease = gate();
-    const toolEntered = gate();
-    const toolRelease = gate();
-    releases.push(modelRelease.release, toolRelease.release);
-    let calls: readonly string[] = [];
-    let requests: readonly IContent[][] = [];
-    const approvals: string[] = [];
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      sessionId,
-      workingDir: root,
-      folderTrust: true,
-      telemetry: { enabled: false },
-      recording: { enabled: false },
-    });
-    configs.push(built);
-    const externalTool = new ExternalTool(async (invocation) => {
-      calls = [...calls, invocation];
-      toolEntered.release();
-      await toolRelease.promise;
-      return {
-        llmContent: `${name}-external-output:${invocation}`,
-        returnDisplay: `${name} record`,
+    async function owner(name: string, sessionId: string) {
+      const modelEntered = gate();
+      const modelRelease = gate();
+      const toolEntered = gate();
+      const toolRelease = gate();
+      releases.push(modelRelease.release, toolRelease.release);
+      let calls: readonly string[] = [];
+      let requests: readonly IContent[][] = [];
+      const approvals: string[] = [];
+
+      const builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+      process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+        new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+      );
+      const builtCallerDirectory = await realpath(
+        await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+      );
+      const builtCallerOverrides: Readonly<Partial<AgentConfig>> = {
+        sessionId,
+        workingDir: root,
+        folderTrust: true,
+        telemetry: { enabled: false },
+        recording: { enabled: false },
       };
-    });
-    let provider: unknown = built.providerManager.getProviderByName('fake');
-    while (
-      typeof provider === 'object' &&
-      provider !== null &&
-      'wrappedProvider' in provider
-    ) {
-      provider = provider.wrappedProvider;
-    }
-    if (!(provider instanceof FakeProvider)) {
-      throw new Error('Fixture requires the external FakeProvider boundary');
-    }
-    const model = spyOn(provider, 'generateChatCompletion').mockImplementation(
-      async function* (
+      const builtCallerSelection: AgentConfig = {
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        ...builtCallerOverrides,
+        workingDir:
+          builtCallerOverrides.workingDir === undefined
+            ? builtCallerDirectory
+            : await realpath(builtCallerOverrides.workingDir),
+      };
+      const builtCallerParameters = {
+        ...toConfigParameters(builtCallerSelection),
+        ...{},
+      };
+      builtCallerParameters.interactive = true;
+
+      builtCallerParameters.includeDirectories = [
+        ...(builtCallerParameters.includeDirectories ?? []),
+        process.cwd(),
+      ];
+      const builtCallerConfig = new Config(builtCallerParameters);
+      const builtCallerFactories = {
+        ...createAgentRuntimeFactoryBindings(),
+        ...{},
+      };
+      const builtCallerSettings = new SettingsService();
+      for (const [key, value] of Object.entries(
+        builtCallerConfig.getInitialSettings(),
+      ))
+        builtCallerSettings.set(key, value);
+      const builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
+      injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
+      const builtCallerMcp = await buildTestMcpRuntime(
+        builtCallerConfig,
+        builtCallerPolicy.session.messageBus,
+        builtCallerOverrides,
+        undefined,
+        builtCallerPolicy,
+        undefined,
+      );
+      const builtCallerRuntimeId = 'caller-' + randomUUID();
+      const builtCallerRelease = new AcquisitionRelease();
+      const builtCallerSettingsOwner = new SessionSettingsOwner(
+        builtCallerSettings,
+      );
+      builtCallerRelease.acquire('settings', () =>
+        builtCallerSettingsOwner.dispose(),
+      );
+      builtCallerSettingsOwner.initializeProviderSelection(
+        builtCallerConfig.getProvider(),
+        builtCallerConfig.getModel(),
+      );
+      builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+      const builtCallerFiles = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      for (const scope of [
+        builtCallerRuntimeId,
+        builtCallerConfig.getSessionId(),
+      ])
+        builtCallerRelease.acquire('files', () =>
+          releaseAdoptedFileScope(builtCallerFiles, scope),
+        );
+      const builtCallerManager = acquirePreferredProviderManager(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerSettingsOwner,
+        builtCallerFiles,
+        builtCallerRuntimeId,
+        builtCredentials().authority,
+        builtCallerRelease,
+      );
+      const {
+        tokenizerFactory: builtCallerTokenizer,
+        contentGeneratorFactory: builtCallerContent,
+      } = configureProviderRuntimeFactories(
+        builtCallerConfig,
+        builtCallerManager,
+      );
+      const builtCallerOAuth = acquirePreferredOAuth(
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerManager,
+        builtCallerRuntimeId,
+        builtCallerMcp.profileDefinitions,
+        builtCredentials().authority,
+        builtCallerRelease,
+      );
+      const builtCallerMedia = new SessionMediaOwner(
+        builtCallerConfig.projectTempDir,
+        1024 * 1024 * 1024,
+      );
+      const builtCallerOwner = await SessionClientOwner.create(
+        builtCallerConfig,
+        assembleTaskSchemaPolicy(builtCallerSettings),
+        builtCallerManager,
+        builtCallerFactories.agentClientFactory,
+        builtCallerMedia.store,
+        builtCallerMcp.readInstructions,
+        builtCallerMcp.workspacePaths,
+        builtCallerSettingsOwner,
+        builtCallerContent,
+        builtCallerTokenizer,
+      );
+      builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+      builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+        builtCallerOAuth.composeRetryOperations(provider),
+      );
+      builtCallerOwner.bindHooks();
+      const builtCallerClose = settleEngineRelease.bind(
+        undefined,
+        [
+          () => builtCallerOwner.dispose(),
+          () => builtCallerRelease.close(),
+          () => builtCallerMedia.dispose(),
+          () => builtCallerMcp.dispose(),
+          () => builtCallerConfig.dispose(),
+          () => rm(builtCallerDirectory, { recursive: true, force: true }),
+        ],
+        builtCallerPreviousReplay,
+      );
+      try {
+        await preparePreferredProviderCompletion(
+          builtCallerConfig,
+          builtCallerSettings,
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          builtCallerOAuth,
+          builtCallerRuntimeId,
+          builtCallerTokenizer,
+        );
+        await builtCallerMcp.initialize();
+        const activation = await executeProviderActivation(
+          builtCallerConfig,
+          builtCallerSelection.activation ?? {
+            provider: builtCallerConfig.getProvider(),
+            model: builtCallerConfig.getModel(),
+          },
+          assembleProviderSwitch(
+            builtCallerConfig,
+            builtCallerSettings,
+            builtCallerManager,
+            builtCallerOAuth,
+            () => 'agent',
+            () => builtCallerOwner.refreshAuth(),
+            builtCallerSettingsOwner,
+          ),
+          builtCallerSettings,
+          builtCallerManager,
+          (method) => builtCallerOwner.refreshAuth(method),
+          assembleModelSelection(builtCallerSettingsOwner),
+        );
+        requireCallerActivation(activation);
+        await builtCallerOwner.initializeTools();
+        await builtCallerOwner.getAgentClient().startChat();
+      } catch (primary) {
+        await cleanupAfterFailure(primary, builtCallerClose);
+      }
+
+      callerCloses.push(builtCallerClose);
+      const externalTool = new ExternalTool(async (invocation) => {
+        calls = [...calls, invocation];
+        toolEntered.release();
+        await toolRelease.promise;
+        return {
+          llmContent: `${name}-external-output:${invocation}`,
+          returnDisplay: `${name} record`,
+        };
+      });
+      let provider: unknown = builtCallerManager.getProviderByName('fake');
+      while (
+        typeof provider === 'object' &&
+        provider !== null &&
+        'wrappedProvider' in provider
+      ) {
+        provider = provider.wrappedProvider;
+      }
+      if (!(provider instanceof FakeProvider)) {
+        throw new Error('Fixture requires the external FakeProvider boundary');
+      }
+      const model = spyOn(
+        provider,
+        'generateChatCompletion',
+      ).mockImplementation(async function* (
         options: GenerateChatOptions | IContent[],
       ): AsyncIterableIterator<IContent> {
         const contents = Array.isArray(options) ? options : options.contents;
@@ -246,135 +467,135 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
             blocks: [{ type: 'text', text: `${name} finished` }],
           };
         }
-      },
-    );
-    restores.push(() => model.mockRestore());
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-      messageBus: built.messageBus,
-      sessionId,
-      prepareSessionTools: (_config, _bus, tools) =>
-        tools.registerTool(externalTool),
-      onApproval: (confirmation) => {
-        approvals.push(confirmation.toolCallId);
-        return ToolConfirmationOutcome.ProceedOnce;
-      },
-    });
-    agents.push(agent);
-    return {
-      agent,
-      callerClient: built.agentClient,
-      modelEntered,
-      modelRelease,
-      toolEntered,
-      toolRelease,
-      approvals,
-      calls: () => calls,
-      requests: () => requests,
-    };
-  }
-
-  function start(agent: Agent): Promise<Observation> {
-    const operation = collect(agent, abort.signal);
-    pending.push(operation);
-    return operation;
-  }
-
-  try {
-    const a = await owner('alpha', label);
-    const b = await owner('beta', sameLabel ? label : `${label}-other`);
-    const first = start(a.agent);
-    await reached(a.modelEntered.promise, first, 'alpha model');
-    const second = start(b.agent);
-    await reached(b.modelEntered.promise, second, 'beta model');
-    b.modelRelease.release();
-    await reached(b.toolEntered.promise, second, 'beta tool');
-    a.modelRelease.release();
-    await reached(a.toolEntered.promise, first, 'alpha tool');
-    a.toolRelease.release();
-    const firstResult = await first;
-    successful(firstResult);
-    await a.agent.dispose();
-    b.toolRelease.release();
-    const secondResult = await second;
-    successful(secondResult);
-
-    for (const [current, other, result, name] of [
-      [a, b, firstResult, 'alpha'],
-      [b, a, secondResult, 'beta'],
-    ] as const) {
-      const invocation = `${name}-invocation-1`;
-      expect(current.calls()).toStrictEqual([invocation]);
-      expect(current.approvals).toStrictEqual([invocation]);
-      expect(
-        result.events.filter((event) => event.type === 'tool-call'),
-      ).toStrictEqual([
-        {
-          type: 'tool-call',
-          call: { id: invocation, name: 'owner_record', args: { invocation } },
-        },
-      ]);
-      const results = result.events.filter(
-        (event) => event.type === 'tool-result',
-      );
-      expect(results).toHaveLength(1);
-      expect(results[0]?.result).toMatchObject({
-        id: invocation,
-        name: 'owner_record',
-        isError: false,
       });
-      const ownOutput = `${name}-external-output:${invocation}`;
-      const otherInvocation = other.calls()[0];
-      expect(JSON.stringify(results)).toContain(ownOutput);
-      expect(JSON.stringify(results)).not.toContain(otherInvocation);
-      expect(current.requests()).toHaveLength(2);
-      expect(JSON.stringify(current.requests()[1])).toContain(ownOutput);
-      expect(JSON.stringify(current.requests()[1])).not.toContain(
-        otherInvocation,
-      );
+      restores.push(() => model.mockRestore());
+      const agent = await fromConfig({
+        settingsOwner: builtCallerSettingsOwner,
+        settingsService: builtCallerSettings,
+        agentClient: builtCallerOwner.getAgentClient(),
+        providerManager: builtCallerManager,
+        config: builtCallerConfig,
+        mcpRuntime: builtCallerMcp,
+        messageBus: builtCallerPolicy.session.messageBus,
+        sessionId,
+        prepareSessionTools: (_config, _bus, tools) =>
+          tools.registerTool(externalTool),
+        onApproval: (confirmation) => {
+          approvals.push(confirmation.toolCallId);
+          return ToolConfirmationOutcome.ProceedOnce;
+        },
+      });
+      agents.push(agent);
+      return {
+        agent,
+        readCallerHistory: () => builtCallerOwner.getAgentClient().getHistory(),
+        modelEntered,
+        modelRelease,
+        toolEntered,
+        toolRelease,
+        approvals,
+        calls: () => calls,
+        requests: () => requests,
+      };
     }
-    const historyA = JSON.stringify(await a.callerClient.getHistory());
-    const historyB = JSON.stringify(await b.agent.getHistory());
-    expect(historyA).toContain('alpha-external-output:alpha-invocation-1');
-    expect(historyA).not.toContain('beta-external-output');
-    expect(historyB).toContain('beta-external-output:beta-invocation-1');
-    expect(historyB).not.toContain('alpha-external-output');
-    const next = await start(b.agent);
-    successful(next);
-    expect(b.calls()).toStrictEqual(['beta-invocation-1', 'beta-invocation-2']);
-    expect(b.requests()).toHaveLength(4);
-    expect(JSON.stringify(b.requests()[3])).toContain(
-      'beta-external-output:beta-invocation-2',
-    );
-    expect(JSON.stringify(await b.agent.getHistory())).not.toContain(
-      'alpha-external-output',
-    );
-  } finally {
-    abort.abort();
-    releases.forEach((release) => release());
-    await Promise.all(pending);
+
+    function start(agent: Agent): Promise<Observation> {
+      const operation = collect(agent, abort.signal);
+      pending.push(operation);
+      return operation;
+    }
+
     try {
-      await Promise.all(agents.map((agent) => agent.dispose()));
-    } finally {
-      restores.forEach((restore) => restore());
-      for (const built of [...configs].reverse()) {
-        await built.config.dispose();
-        await built.cleanup();
+      const a = await owner('alpha', label);
+      const b = await owner('beta', sameLabel ? label : `${label}-other`);
+      const first = start(a.agent);
+      await reached(a.modelEntered.promise, first, 'alpha model');
+      const second = start(b.agent);
+      await reached(b.modelEntered.promise, second, 'beta model');
+      b.modelRelease.release();
+      await reached(b.toolEntered.promise, second, 'beta tool');
+      a.modelRelease.release();
+      await reached(a.toolEntered.promise, first, 'alpha tool');
+      a.toolRelease.release();
+      const firstResult = await first;
+      successful(firstResult);
+      await a.agent.dispose();
+      b.toolRelease.release();
+      const secondResult = await second;
+      successful(secondResult);
+
+      for (const [current, other, result, name] of [
+        [a, b, firstResult, 'alpha'],
+        [b, a, secondResult, 'beta'],
+      ] as const) {
+        const invocation = `${name}-invocation-1`;
+        expect(current.calls()).toStrictEqual([invocation]);
+        expect(current.approvals).toStrictEqual([invocation]);
+        expect(
+          result.events.filter((event) => event.type === 'tool-call'),
+        ).toStrictEqual([
+          {
+            type: 'tool-call',
+            call: {
+              id: invocation,
+              name: 'owner_record',
+              args: { invocation },
+            },
+          },
+        ]);
+        const results = result.events.filter(
+          (event) => event.type === 'tool-result',
+        );
+        expect(results).toHaveLength(1);
+        expect(results[0]?.result).toMatchObject({
+          id: invocation,
+          name: 'owner_record',
+          isError: false,
+        });
+        const ownOutput = `${name}-external-output:${invocation}`;
+        const otherInvocation = other.calls()[0];
+        expect(JSON.stringify(results)).toContain(ownOutput);
+        expect(JSON.stringify(results)).not.toContain(otherInvocation);
+        expect(current.requests()).toHaveLength(2);
+        expect(JSON.stringify(current.requests()[1])).toContain(ownOutput);
+        expect(JSON.stringify(current.requests()[1])).not.toContain(
+          otherInvocation,
+        );
       }
-      restoreEnvironment(previous);
-      await rm(root, { recursive: true, force: true });
+      const historyA = JSON.stringify(await a.readCallerHistory());
+      const historyB = JSON.stringify(await b.agent.getHistory());
+      expect(historyA).toContain('alpha-external-output:alpha-invocation-1');
+      expect(historyA).not.toContain('beta-external-output');
+      expect(historyB).toContain('beta-external-output:beta-invocation-1');
+      expect(historyB).not.toContain('alpha-external-output');
+      const next = await start(b.agent);
+      successful(next);
+      expect(b.calls()).toStrictEqual([
+        'beta-invocation-1',
+        'beta-invocation-2',
+      ]);
+      expect(b.requests()).toHaveLength(4);
+      expect(JSON.stringify(b.requests()[3])).toContain(
+        'beta-external-output:beta-invocation-2',
+      );
+      expect(JSON.stringify(await b.agent.getHistory())).not.toContain(
+        'alpha-external-output',
+      );
+    } finally {
+      abort.abort();
+      releases.forEach((release) => release());
+      await Promise.all(pending);
+      try {
+        await Promise.all(agents.map((agent) => agent.dispose()));
+      } finally {
+        restores.forEach((restore) => restore());
+        await runCleanupSteps([...callerCloses].reverse());
+        restoreEnvironment(previous);
+        await rm(root, { recursive: true, force: true });
+      }
     }
   }
-}
 
-import { usePromptFixture } from './helpers/prompt-fixture.js';
-
-describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
   usePromptFixture();
 
   it('keeps distinct-label owners isolated through execution and disposal', async () => {
@@ -385,3 +606,21 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
     expect(await exerciseOwners(true)).toBeUndefined();
   }, 30_000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

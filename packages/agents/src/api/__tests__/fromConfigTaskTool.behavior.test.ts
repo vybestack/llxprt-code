@@ -1,12 +1,36 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { requireInstructionReads } from '../../core/chat-system-prompt.js';
+import { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import {
+  fromConfig,
+  createAgentClient,
+  createTaskRegistration,
+  type Agent,
+  type AgentEvent,
+} from '@vybestack/llxprt-code-agents';
+import { drain, countType } from './helpers/agentHarness.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { requireInstructionReads } from '../../core/chat-system-prompt.js';
-
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 function requirePaths(
   paths: WorkspacePathOperations | undefined,
 ): WorkspacePathOperations {
@@ -14,8 +38,6 @@ function requirePaths(
     throw new Error('Fixture factory requires workspace paths');
   return paths;
 }
-import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 
 /**
  * @plan:ISSUE-3222
@@ -34,36 +56,40 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtim
  * excludeTools governance must never be overridden by the reconcile.
  */
 
-import { describe, it, expect } from 'bun:test';
-import * as fc from 'fast-check';
-import {
-  fromConfig,
-  assembleAgentActivationBootstrap,
-  createAgentClient,
-  createTaskRegistration,
-  type Agent,
-  type AgentEvent,
-  type ProviderActivationIntent,
-} from '@vybestack/llxprt-code-agents';
-import {
-  buildFactoryLessConfig,
-  buildTestMcpRuntime,
-  buildCliStyleConfig,
-  type CallerAgentRuntimeFactories,
-} from './helpers/buildCliStyleConfig.js';
-import {
-  drain,
-  countType,
-  ASYNC_PROPERTY_TIMEOUT_MS,
-} from './helpers/agentHarness.js';
-import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
-
 /** The agent runtime's projected tool-name surface. */
 function agentToolNames(agent: Agent): readonly string[] {
   return agent.tools.list().map((tool) => tool.name);
 }
 
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}
 describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-AC2', () => {
+  let promptDirectory: string;
+
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  useOwnedCredentials();
+
   it('T3a a Config the caller initialized WITHOUT a task-tool registration gains the shipped task tool on adoption @requirement:REQ-3222-AC2 @scenario:caller-initialized-reconcile @given:a minimal Config with an agentClientFactory but NO taskToolRegistration, initialized by the caller so the registry is built without the task tool @when:fromConfig({ config, sessionId, messageBus }) @then:the returned Agent\'s runtime lists the shipped "task" tool and a turn still drives', async () => {
     const callerFactories: CallerAgentRuntimeFactories = {
       agentClientFactory: (
@@ -83,17 +109,72 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
           requireInstructionReads(instructions),
         ),
     };
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      callerFactories,
+
+    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
     );
+    const builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories =
+      callerFactories;
+    const builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{},
+      }),
+    );
+    const builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    const builtFactorylessPolicy = new RuntimePolicyOwner(
+      builtFactorylessConfig,
+    );
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    const builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+    const builtFactorylessNoClient = undefined;
+    const builtFactorylessNoManager = undefined;
+    const builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
     const runtimeId = 'issue3222-fromconfig-tasktool-reconcile';
     const callerMcp = await buildTestMcpRuntime(
-      built.config,
-      built.messageBus,
+      builtFactorylessConfig,
+      builtFactorylessPolicy.session.messageBus,
       {},
       undefined,
-      built.policyOwner,
+      builtFactorylessPolicy,
     );
     try {
       // The caller initializes the Config THEMSELVES: the registry is built
@@ -102,15 +183,15 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
       const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
+        settingsOwner: builtFactorylessSettingsOwner,
+        settingsService: builtFactorylessSettings,
+        agentClient: builtFactorylessNoClient,
+        providerManager: builtFactorylessNoManager,
+        runtimeFactoryBindings: builtFactorylessFactories,
+        config: builtFactorylessConfig,
         sessionId: runtimeId,
-        messageBus: built.messageBus,
-        policyOwner: built.policyOwner,
+        messageBus: builtFactorylessPolicy.session.messageBus,
+        policyOwner: builtFactorylessPolicy,
         mcpRuntime: callerMcp,
       });
       try {
@@ -128,7 +209,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       }
     } finally {
       await callerMcp.dispose();
-      await built.cleanup();
+      await builtFactorylessClose();
     }
   });
 
@@ -153,17 +234,72 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         ),
       taskToolRegistration: callerRegistration,
     };
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      callerFactories,
+
+    const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
     );
+    const builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories =
+      callerFactories;
+    const builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{},
+      }),
+    );
+    const builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    const builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    const builtFactorylessPolicy = new RuntimePolicyOwner(
+      builtFactorylessConfig,
+    );
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    const builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+    const builtFactorylessNoClient = undefined;
+    const builtFactorylessNoManager = undefined;
+    const builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
     const runtimeId = 'issue3222-fromconfig-tasktool-callersupplied';
     const callerMcp = await buildTestMcpRuntime(
-      built.config,
-      built.messageBus,
+      builtFactorylessConfig,
+      builtFactorylessPolicy.session.messageBus,
       {},
       undefined,
-      built.policyOwner,
+      builtFactorylessPolicy,
     );
     try {
       await callerMcp.initialize();
@@ -171,18 +307,18 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
       const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
+        settingsOwner: builtFactorylessSettingsOwner,
+        settingsService: builtFactorylessSettings,
+        agentClient: builtFactorylessNoClient,
+        providerManager: builtFactorylessNoManager,
         runtimeFactoryBindings: {
-          ...built.runtimeFactoryBindings,
+          ...builtFactorylessFactories,
           taskToolRegistration: () => preAdoptionRegistration,
         },
-        config: built.config,
+        config: builtFactorylessConfig,
         sessionId: runtimeId,
-        messageBus: built.messageBus,
-        policyOwner: built.policyOwner,
+        messageBus: builtFactorylessPolicy.session.messageBus,
+        policyOwner: builtFactorylessPolicy,
         mcpRuntime: callerMcp,
       });
       try {
@@ -194,356 +330,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       }
     } finally {
       await callerMcp.dispose();
-      await built.cleanup();
-    }
-  });
-
-  it('T3c excludeTools governance is never overridden: a caller-excluded task tool stays absent after the reconcile @requirement:REQ-3222-AC2 @scenario:exclusion-respected @given:a caller-initialized Config with excludeTools ["task"] and NO taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the shipped task tool is still NOT registered (the deny-list wins over the reconcile)', async () => {
-    const callerFactories: CallerAgentRuntimeFactories = {
-      agentClientFactory: (
-        config,
-        runtimeState,
-        readMcpInstructions = () => undefined,
-        mediaStore,
-        workspacePaths,
-        instructions,
-      ) =>
-        createAgentClient(
-          config,
-          runtimeState,
-          readMcpInstructions,
-          mediaStore,
-          requirePaths(workspacePaths),
-          requireInstructionReads(instructions),
-        ),
-    };
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      callerFactories,
-      { excludeTools: ['task'] },
-    );
-    const runtimeId = 'issue3222-fromconfig-tasktool-excluded';
-    const callerMcp = await buildTestMcpRuntime(
-      built.config,
-      built.messageBus,
-      {},
-      undefined,
-      built.policyOwner,
-    );
-    try {
-      await callerMcp.initialize();
-      expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
-
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
-        sessionId: runtimeId,
-        messageBus: built.messageBus,
-        policyOwner: built.policyOwner,
-        mcpRuntime: callerMcp,
-      });
-      try {
-        expect(agent.tools.get('task')).toBeUndefined();
-        expect(agentToolNames(agent)).not.toContain('task');
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await callerMcp.dispose();
-      await built.cleanup();
-    }
-  });
-
-  it('T3d a preflight-installed default registration still reaches the LIVE registry: preflightAgentActivation between caller initialization and fromConfig adoption must not suppress the reconcile @requirement:REQ-3222-AC2 @scenario:preflight-then-adopt @given:a caller-initialized CLI-style Config (agent-client factory present, NO taskToolRegistration, registry built without the task tool) on which preflightAgentActivation then installed the DEFAULT registration as a field @when:fromConfig({ config, sessionId, messageBus, activation, activationPreflightToken }) adopts the SAME Config consuming the preflight token @then:the LIVE registry has the shipped task tool and the agent runtime lists "task" (a registration FIELD installed by an earlier agent entrypoint is not caller provenance)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const runtimeId = 'issue3222-fromconfig-tasktool-preflight';
-    try {
-      // The caller-initialized precondition (same state T3a builds): the
-      // registry was built while the registration was absent — here via the
-      // CLI-style builder, whose initialize runs before any task-tool
-      // registration exists, mirroring the CLI-at-preflight Config.
-      expect(built.mcpRuntime.toolSelection.getTool('task')).toBeUndefined();
-      expect(built.agentClient.tools.getTool('task')).toBeDefined();
-
-      // The reviewer sequence's middle step: preflight runs BEFORE fromConfig
-      // and installs the DEFAULT task-tool registration as a field. The
-      // registry is not reconciled here — the field is consumed only at
-      // registry construction, which already happened.
-      const intent: ProviderActivationIntent = {
-        provider: 'fake',
-        cliOverrides: { key: 'sk-test-key' },
-        authMode: 'auto',
-      };
-      const manager = built.providerManager;
-
-      const operation = await assembleAgentActivationBootstrap(
-        built.config,
-        built.settingsService,
-        manager,
-        null,
-        () => undefined,
-        'borrowed',
-        built.agentClient,
-        built.mcpRuntime,
-      );
-      const preflight = await operation.preflight(intent);
-      expect(preflight.authFailed).toBe(false);
-      const token = preflight.token;
-      expect(token).toBeDefined();
-      if (!token)
-        throw new Error('Preflight did not produce an activation token');
-      expect(built.mcpRuntime.toolSelection.getTool('task')).toBeUndefined();
-      expect(
-        operation.sessionClient.getAgentClient().tools.getTool('task'),
-      ).toBeDefined();
-
-      // Adoption with the preflight token (the CLI flow: preflight, then
-      // fromConfig consuming the completed activation instead of re-running).
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
-        sessionId: runtimeId,
-        messageBus: built.messageBus,
-        policyOwner: built.policyOwner,
-        mcpRuntime: built.mcpRuntime,
-        activation: intent,
-        activationPreflight: { operation, token },
-      });
-      try {
-        // The default registration preflight installed must reach the LIVE
-        // registry: "a registration exists" is not "the caller supplied it".
-        expect(agent.tools.get('task')).toBeDefined();
-        expect(agentToolNames(agent)).toContain('task');
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it(
-    'T3a-PROP for any non-empty sessionId, a caller-initialized Config without a task-tool registration gains the shipped task tool on adoption @requirement:REQ-3222-AC2 @scenario:property-reconcile @given:any non-empty sessionId @when:fromConfig({ config, sessionId, messageBus }) @then:the agent runtime lists the "task" tool for every generated sessionId',
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-          const callerFactories: CallerAgentRuntimeFactories = {
-            agentClientFactory: (
-              config,
-              runtimeState,
-              readMcpInstructions = () => undefined,
-              mediaStore,
-              workspacePaths,
-              instructions,
-            ) =>
-              createAgentClient(
-                config,
-                runtimeState,
-                readMcpInstructions,
-                mediaStore,
-                requirePaths(workspacePaths),
-                requireInstructionReads(instructions),
-              ),
-          };
-          const built = await buildFactoryLessConfig(
-            'plain-text.jsonl',
-            callerFactories,
-          );
-          const callerMcp = await buildTestMcpRuntime(
-            built.config,
-            built.messageBus,
-            {},
-            undefined,
-            built.policyOwner,
-          );
-          try {
-            await callerMcp.initialize();
-            const agent: Agent = await fromConfig({
-              settingsOwner: built.settingsOwner,
-              settingsService: built.settingsService,
-              agentClient: built.agentClient,
-              providerManager: built.providerManager,
-              runtimeFactoryBindings: built.runtimeFactoryBindings,
-              config: built.config,
-              sessionId,
-              messageBus: built.messageBus,
-              policyOwner: built.policyOwner,
-              mcpRuntime: callerMcp,
-            });
-            try {
-              return agentToolNames(agent).includes('task');
-            } finally {
-              await agent.dispose();
-            }
-          } finally {
-            await callerMcp.dispose();
-            await built.cleanup();
-          }
-        }),
-        { numRuns: 5 },
-      );
-    },
-    ASYNC_PROPERTY_TIMEOUT_MS,
-  );
-});
-function createReadinessFactory(
-  prepareTokenizer: (providerName: string, model?: string) => Promise<void>,
-  countTokens: (providerName: string, model?: string) => number,
-): RuntimeTokenizerFactory {
-  return {
-    prepareTokenizer,
-    getTokenizer: (providerName, model) => ({
-      fallbackPolicy: 'deny',
-      countTokens: () => countTokens(providerName, model),
-    }),
-    estimatePrompt: async (request) => ({
-      count: await request.legacyEstimate(),
-      method: 'calibrated',
-      family: 'test-readiness',
-      estimatorVersion: 'test-readiness-v1',
-      assetRevision: 'none',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
-}
-
-describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:REQ-3217-003', () => {
-  it('awaits post-activation provider/model preparation before returning a usable Agent', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const preparationStarted = readinessSignal();
-    const releasePreparation = readinessSignal();
-    const events: string[] = [];
-    let prepared = false;
-    const factory = createReadinessFactory(
-      async (providerName, model) => {
-        events.push(`prepare:${providerName}:${model ?? ''}`);
-        preparationStarted.resolve();
-        await releasePreparation.promise;
-        prepared = true;
-        events.push('prepared');
-      },
-      (providerName, model) => {
-        if (!prepared) {
-          throw new Error('tokenizer used before preparation completed');
-        }
-        events.push(`tokenize:${providerName}:${model ?? ''}`);
-        return 7;
-      },
-    );
-
-    try {
-      const pendingAgent = fromConfig({
-        tokenizerFactory: factory,
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        activation: {
-          provider: 'fake',
-          model: 'ready-model',
-          authMode: 'auto',
-        },
-      });
-      await preparationStarted.promise;
-      let completed = false;
-      const observedAgent = pendingAgent.then((agent) => {
-        completed = true;
-        return agent;
-      });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(completed).toBe(false);
-
-      releasePreparation.resolve();
-      const agent = await observedAgent;
-      try {
-        await agent.agentClient.startChat(await agent.agentClient.getHistory());
-        expect(built.providerManager.getTokenizerFactory?.()).toBe(factory);
-
-        const turnEvents = await drain(agent.stream('hello'));
-        expect(countType(turnEvents, 'done')).toBe(1);
-        expect(events[0]).toBe('prepare:fake:ready-model');
-        expect(events[1]).toBe('prepared');
-        expect(
-          events.some((event) => event === 'tokenize:fake:ready-model'),
-        ).toBe(true);
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      releasePreparation.resolve();
-      await built.cleanup();
-    }
-  });
-
-  it('rejects with the causal preparation failure reached through authoritative post-activation state without allowing an ownerless accessor', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const failure = new Error('mandatory tokenizer readiness failed causally');
-    const runtimeId = 'from-config-rejected-tokenizer-readiness';
-    // Mutate the Config's provider field to stale state. The isolated runtime
-    // manager still has 'fake' active (authoritative). fromConfig must derive
-    // the readiness target from the manager, not from this stale Config field.
-    Object.defineProperty(built.config, 'getProvider', {
-      value: () => 'stale-config-provider',
-    });
-    let readinessTarget:
-      | { readonly provider: string; readonly model: string }
-      | undefined;
-    const tokenizerFactory = createReadinessFactory(
-      async (providerName, model) => {
-        readinessTarget = { provider: providerName, model: model ?? '' };
-        throw failure;
-      },
-      () => {
-        throw new Error('unreachable tokenizer use');
-      },
-    );
-
-    try {
-      await expect(
-        fromConfig({
-          settingsOwner: built.settingsOwner,
-          settingsService: built.settingsService,
-          agentClient: built.agentClient,
-          providerManager: built.providerManager,
-          runtimeFactoryBindings: built.runtimeFactoryBindings,
-          config: built.config,
-          mcpRuntime: built.mcpRuntime,
-          sessionId: runtimeId,
-          tokenizerFactory,
-        }),
-      ).rejects.toBe(failure);
-      // Authoritative post-activation manager state ('fake'/'fake-model')
-      // reached readiness — NOT the stale Config provider
-      // ('stale-config-provider').
-      expect(readinessTarget).toStrictEqual({
-        provider: 'fake',
-        model: 'fake-model',
-      });
-      expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
-        'Provider reads require an explicit session owner',
-      );
-    } finally {
-      await built.cleanup();
+      await builtFactorylessClose();
     }
   });
 });
-
-function readinessSignal() {
-  let resolve = (): void => {};
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { resolve, promise };
-}

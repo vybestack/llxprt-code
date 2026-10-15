@@ -1,19 +1,23 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it } from 'bun:test';
-import {
-  mkdir,
-  mkdtemp,
-  readdir,
-  realpath,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
+
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   ProviderFileLifecycle,
@@ -22,10 +26,7 @@ import {
   type ProviderFileScope,
 } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 import { fromConfig } from '../fromConfig.js';
-import {
-  buildFactoryLessConfig,
-  type BuiltFactoryLessConfig,
-} from './helpers/buildCliStyleConfig.js';
+
 import { makeToken } from './helpers/provider-auth-fixtures.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
@@ -61,6 +62,18 @@ async function retainFile(
 }
 
 describe('fromConfig ownership effects', () => {
+  let directory: string;
+  let builtFactorylessPreviousReplay: string | undefined;
+  let builtFactorylessDirectory: string;
+  let builtFactorylessConfig: Config;
+  let builtFactorylessSettings: SettingsService;
+  let builtFactorylessSettingsOwner: SessionSettingsOwner;
+  let builtFactorylessPolicy: RuntimePolicyOwner;
+  let builtFactorylessFactories: ReturnType<
+    typeof createAgentRuntimeFactoryBindings
+  >;
+  let builtFactorylessClose: () => Promise<void>;
+
   const credentials = useOwnedCredentials();
   const cleanups: Array<() => Promise<void>> = [];
 
@@ -68,34 +81,88 @@ describe('fromConfig ownership effects', () => {
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
 
-  async function fixture(): Promise<BuiltFactoryLessConfig> {
-    const directory = await realpath(
+  async function fixture(): Promise<void> {
+    directory = await realpath(
       await mkdtemp(join(tmpdir(), 'from-config-ownership-effects-')),
     );
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      {},
-      {
-        workingDir: directory,
-        sessionId: 'caller-config-scope',
-        folderTrust: true,
-        mcpEnabled: false,
-        skillsSupport: false,
-        recording: { enabled: false },
-        telemetry: { enabled: false },
-        settings: { jitContextEnabled: false },
-      },
+
+    builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
     );
-    cleanups.push(built.cleanup);
-    return built;
+    builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
+    builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{
+          workingDir: directory,
+          sessionId: 'caller-config-scope',
+          folderTrust: true,
+          mcpEnabled: false,
+          skillsSupport: false,
+          recording: { enabled: false },
+          telemetry: { enabled: false },
+          settings: { jitContextEnabled: false },
+        },
+      }),
+    );
+    builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    builtFactorylessPolicy = new RuntimePolicyOwner(builtFactorylessConfig);
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+
+    builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
+    cleanups.push(builtFactorylessClose);
   }
 
   it('keeps a caller token transport usable after disposing its owned OAuth facade', async () => {
-    const built = await fixture();
+    await fixture();
     const store = credentials().authority.createTokenStore();
     const agent = await fromConfig({
-      ...built,
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      settingsOwner: builtFactorylessSettingsOwner,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
       credentialAuthority: credentials().authority,
       tokenStore: store,
     });
@@ -115,21 +182,31 @@ describe('fromConfig ownership effects', () => {
   });
 
   it('deletes owned files in both session scopes without deleting retained or caller-scope files', async () => {
-    const built = await fixture();
-    const directory = join(built.config.getTargetDir(), 'provider-files');
+    await fixture();
+    const directory = join(
+      builtFactorylessConfig.getTargetDir(),
+      'provider-files',
+    );
     await mkdir(directory);
     const owner = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
     const agent = await fromConfig({
-      ...built,
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      settingsOwner: builtFactorylessSettingsOwner,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
       credentialAuthority: credentials().authority,
       sessionId: 'adopted-runtime-scope',
       providerFileLifecycle: owner,
     });
     cleanups.push(() => agent.dispose());
-    expect(agent.getRuntimeId()).not.toBe(built.config.getSessionId());
+    expect(agent.getRuntimeId()).not.toBe(
+      builtFactorylessConfig.getSessionId(),
+    );
     for (const [fileId, scopeId] of [
       ['owned-runtime', agent.getRuntimeId()],
-      ['owned-config', built.config.getSessionId()],
+      ['owned-config', builtFactorylessConfig.getSessionId()],
     ]) {
       await (await retainFile(owner, directory, fileId, scopeId)).release();
       await (
@@ -166,20 +243,25 @@ describe('fromConfig ownership effects', () => {
       'workspace-file',
     ]);
     expect(owner.retainsScope('session', agent.getRuntimeId())).toBe(false);
-    expect(owner.retainsScope('session', built.config.getSessionId())).toBe(
-      false,
-    );
+    expect(
+      owner.retainsScope('session', builtFactorylessConfig.getSessionId()),
+    ).toBe(false);
     expect(owner.retainsScope('session', 'another-caller-scope')).toBe(true);
     expect(owner.retainsScope('workspace', agent.getRuntimeId())).toBe(true);
     expect(owner.snapshot().retainedFiles).toBe(2);
-    expect(built.config.getSessionId()).toBe('caller-config-scope');
+    expect(builtFactorylessConfig.getSessionId()).toBe('caller-config-scope');
   });
 
   it('joins concurrent disposal while a real file lease delays exactly-once owned token closure', async () => {
-    const built = await fixture();
+    await fixture();
     const owner = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
     const agent = await fromConfig({
-      ...built,
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      settingsOwner: builtFactorylessSettingsOwner,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
       credentialAuthority: credentials().authority,
       sessionId: 'concurrent-adoption-scope',
       providerFileLifecycle: owner,
@@ -187,7 +269,7 @@ describe('fromConfig ownership effects', () => {
     cleanups.push(() => agent.dispose());
     const lease = await retainFile(
       owner,
-      built.config.getTargetDir(),
+      builtFactorylessConfig.getTargetDir(),
       'held-file',
       agent.getRuntimeId(),
     );
@@ -218,9 +300,21 @@ describe('fromConfig ownership effects', () => {
 
     expect(settled).toBe(3);
     expect(owner.snapshot().retainedFiles).toBe(0);
-    expect(await readdir(built.config.getTargetDir())).not.toContain(
+    expect(await readdir(builtFactorylessConfig.getTargetDir())).not.toContain(
       'held-file',
     );
     expect(credentials().snapshot()).toStrictEqual([1]);
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

@@ -1,3 +1,15 @@
+import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,14 +17,13 @@
  */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { TokenStore } from '@vybestack/llxprt-code-auth';
 import { fromConfig } from '../fromConfig.js';
-import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
+
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 function fileAdmittedCredentials(
@@ -47,6 +58,21 @@ function fileAdmittedCredentials(
 }
 
 describe('fromConfig acquired-prefix rollback', () => {
+  let directory: string;
+  let builtFactorylessPreviousReplay: string | undefined;
+  let builtFactorylessDirectory: string;
+  let builtFactorylessConfig: Config;
+  let builtFactorylessSettings: SettingsService;
+  let builtFactorylessSettingsOwner: SessionSettingsOwner;
+  let builtFactorylessPolicy: RuntimePolicyOwner;
+  let builtFactorylessFactories: ReturnType<
+    typeof createAgentRuntimeFactoryBindings
+  >;
+  let builtFactorylessClose: () => Promise<void>;
+  let released: string[];
+  let authority: ReturnType<typeof fileAdmittedCredentials>;
+  let listeners: () => number;
+
   const credentials = useOwnedCredentials();
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => {
@@ -54,7 +80,7 @@ describe('fromConfig acquired-prefix rollback', () => {
   });
 
   async function fixture() {
-    const directory = await realpath(
+    directory = await realpath(
       await mkdtemp(join(tmpdir(), 'adoption-acquisition-')),
     );
     cleanups.push(() => rm(directory, { recursive: true, force: true }));
@@ -64,42 +90,91 @@ describe('fromConfig acquired-prefix rollback', () => {
       join(directory, 'config-home'),
       process.env.LLXPRT_CONFIG_HOME ?? directory,
     );
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      {},
-      {
-        workingDir: directory,
-        sessionId: 'acquisition-caller',
-        folderTrust: true,
-        mcpEnabled: false,
-        skillsSupport: false,
-        recording: { enabled: false },
-        telemetry: { enabled: false },
-        settings: { jitContextEnabled: false },
-      },
+
+    builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
     );
-    cleanups.push(built.cleanup);
-    const released: string[] = [];
-    const authority = fileAdmittedCredentials(
+    builtFactorylessDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
+    );
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories = {};
+    builtFactorylessConfig = new Config(
+      toConfigParameters({
+        ...{
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: builtFactorylessDirectory,
+        },
+        ...{
+          workingDir: directory,
+          sessionId: 'acquisition-caller',
+          folderTrust: true,
+          mcpEnabled: false,
+          skillsSupport: false,
+          recording: { enabled: false },
+          telemetry: { enabled: false },
+          settings: { jitContextEnabled: false },
+        },
+      }),
+    );
+    builtFactorylessSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtFactorylessConfig.getInitialSettings(),
+    ))
+      builtFactorylessSettings.set(key, value);
+    builtFactorylessSettingsOwner = new SessionSettingsOwner(
+      builtFactorylessSettings,
+    );
+    builtFactorylessSettingsOwner.bindTelemetry(builtFactorylessConfig);
+    builtFactorylessSettingsOwner.initializeProviderSelection(
+      builtFactorylessConfig.getProvider(),
+      builtFactorylessConfig.getModel(),
+    );
+    builtFactorylessPolicy = new RuntimePolicyOwner(builtFactorylessConfig);
+    const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
+    builtFactorylessFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...(builtFactorylessSupplied.agentClientFactory
+        ? { agentClientFactory: builtFactorylessSupplied.agentClientFactory }
+        : {}),
+      ...(builtFactorylessTask
+        ? { taskToolRegistration: () => builtFactorylessTask }
+        : {}),
+    };
+
+    builtFactorylessClose = settleFactorylessRelease.bind(
+      undefined,
+      [
+        () => builtFactorylessSettingsOwner.dispose(),
+        () => builtFactorylessPolicy.dispose(),
+        () => builtFactorylessConfig.dispose(),
+        () => rm(builtFactorylessDirectory, { recursive: true, force: true }),
+      ],
+      builtFactorylessPreviousReplay,
+    );
+
+    cleanups.push(builtFactorylessClose);
+    released = [];
+    authority = fileAdmittedCredentials(
       credentials().authority,
       directory,
       released,
     );
-    const listeners = () =>
-      built.settingsService
+    listeners = () =>
+      builtFactorylessSettings
         .eventNames()
         .reduce(
-          (total, event) => total + built.settingsService.listenerCount(event),
+          (total, event) =>
+            total + builtFactorylessSettings.listenerCount(event),
           0,
         );
-    return { built, authority, directory, listeners, released };
   }
 
   it.each(['keys', 'tokens'])(
     'releases only the acquired prefix when credential %s admission fails on disk',
     async (stage) => {
-      const { built, authority, directory, listeners, released } =
-        await fixture();
+      await fixture();
       const before = listeners();
       const files = new ProviderFileLifecycle({ maxFiles: 2, maxBytes: 1024 });
       const uploaded = join(directory, 'prefix-file');
@@ -120,14 +195,18 @@ describe('fromConfig acquired-prefix rollback', () => {
           deletion: 'delete',
           zeroDataRetention: 'incompatible-while-retained',
         },
-        scopeId: built.config.getSessionId(),
+        scopeId: builtFactorylessConfig.getSessionId(),
         deleteRemote: () => rm(uploaded),
       });
       await retained.lease.release();
       await rm(join(directory, stage));
       await expect(
         fromConfig({
-          ...built,
+          config: builtFactorylessConfig,
+          settingsService: builtFactorylessSettings,
+          policyOwner: builtFactorylessPolicy,
+          messageBus: builtFactorylessPolicy.session.messageBus,
+          runtimeFactoryBindings: builtFactorylessFactories,
           settingsOwner: undefined,
           credentialAuthority: authority,
           providerFileLifecycle: files,
@@ -137,13 +216,13 @@ describe('fromConfig acquired-prefix rollback', () => {
       expect(listeners() - before).toBe(0);
       expect(released.length).toBe(stage === 'keys' ? 0 : 1);
       expect(credentials().snapshot()).toStrictEqual([]);
-      built.settingsOwner.writeUserParameter('after-failure', 11);
-      expect(built.settingsService.get('after-failure')).toBe(11);
+      builtFactorylessSettingsOwner.writeUserParameter('after-failure', 11);
+      expect(builtFactorylessSettings.get('after-failure')).toBe(11);
     },
   );
 
   it('preserves a multi-leaf external acquisition failure without reporting its leaves again as cleanup failures', async () => {
-    const { built, authority, directory, released } = await fixture();
+    await fixture();
     const external = new (class extends CredentialAuthority {
       override createProviderKeyStorage(): ReturnType<
         CredentialAuthority['createProviderKeyStorage']
@@ -169,7 +248,11 @@ describe('fromConfig acquired-prefix rollback', () => {
       }
     })();
     const error: unknown = await fromConfig({
-      ...built,
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
       settingsOwner: undefined,
       credentialAuthority: external,
     }).catch((failure: unknown) => failure);
@@ -189,15 +272,18 @@ describe('fromConfig acquired-prefix rollback', () => {
   });
 
   it('releases the acquired token transport when OAuth construction rejects external host configuration', async () => {
-    const { built, authority, directory, listeners, released } =
-      await fixture();
+    await fixture();
     const before = listeners();
     const home = process.env.LLXPRT_CONFIG_HOME;
     await writeFile(join(directory, 'config-home'), 'relative-config-home');
     try {
       await expect(
         fromConfig({
-          ...built,
+          config: builtFactorylessConfig,
+          settingsService: builtFactorylessSettings,
+          policyOwner: builtFactorylessPolicy,
+          messageBus: builtFactorylessPolicy.session.messageBus,
+          runtimeFactoryBindings: builtFactorylessFactories,
           settingsOwner: undefined,
           credentialAuthority: authority,
         }),
@@ -213,13 +299,16 @@ describe('fromConfig acquired-prefix rollback', () => {
   });
 
   it('keeps the actual acquisition error first and joins an independent key release failure', async () => {
-    const { built, authority, directory, listeners, released } =
-      await fixture();
+    await fixture();
     const before = listeners();
     await rm(join(directory, 'tokens'));
     await rm(join(directory, 'key-close'));
     const error = await fromConfig({
-      ...built,
+      config: builtFactorylessConfig,
+      settingsService: builtFactorylessSettings,
+      policyOwner: builtFactorylessPolicy,
+      messageBus: builtFactorylessPolicy.session.messageBus,
+      runtimeFactoryBindings: builtFactorylessFactories,
       settingsOwner: undefined,
       credentialAuthority: authority,
     }).catch((failure: unknown) => failure);
@@ -241,8 +330,7 @@ describe('fromConfig acquired-prefix rollback', () => {
   });
 
   it('releases credentials and settings after real provider registration cannot read its responses file', async () => {
-    const { built, authority, directory, listeners, released } =
-      await fixture();
+    await fixture();
     const before = listeners();
     const previous = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_FAKE_RESPONSES = join(
@@ -252,7 +340,11 @@ describe('fromConfig acquired-prefix rollback', () => {
     try {
       await expect(
         fromConfig({
-          ...built,
+          config: builtFactorylessConfig,
+          settingsService: builtFactorylessSettings,
+          policyOwner: builtFactorylessPolicy,
+          messageBus: builtFactorylessPolicy.session.messageBus,
+          runtimeFactoryBindings: builtFactorylessFactories,
           settingsOwner: undefined,
           credentialAuthority: authority,
         }),
@@ -266,3 +358,15 @@ describe('fromConfig acquired-prefix rollback', () => {
     expect(listeners() - before).toBe(0);
   });
 });
+
+async function settleFactorylessRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previous: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previous;
+  }
+}

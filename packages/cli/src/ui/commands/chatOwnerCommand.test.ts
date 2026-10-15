@@ -7,7 +7,10 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { bindChatOwnerOperations } from './chatCommandHost.js';
@@ -33,47 +36,61 @@ function ownerActions(agent: Agent) {
 }
 
 describe('owner-backed /chat command route', () => {
+  useRecordingPrompts();
   it('creates, lists, renames and deletes through one active owner and durable JSONL', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
-      await agent.setHistory([human('seed'), ai('reply')]);
-      await agent.session.setRecording({ enabled: true });
-      const action = ownerActions(agent);
-      const context = createMockCommandContext({ services: { agent } });
-      const path = agent.session.getRecording().path;
-      if (!path) throw new Error('No owner recording');
-      expect(await action('save')(context, 'first')).toMatchObject({
-        messageType: 'info',
-      });
-      await action('list')(context, '');
-      expect(context.ui.addItem).toHaveBeenCalledWith({
-        type: 'chat_list',
-        chats: [expect.objectContaining({ name: 'first' })],
-      });
-      expect(await action('rename')(context, 'first renamed')).toMatchObject({
-        messageType: 'info',
-      });
-      expect(await action('delete')(context, 'renamed')).toMatchObject({
-        type: 'confirm_action',
-      });
-      context.overwriteConfirmed = true;
-      expect(await action('delete')(context, 'renamed')).toMatchObject({
-        messageType: 'info',
-      });
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(replay.ok).toBe(true);
-      expect(replay.checkpoints).toContainEqual(
-        expect.objectContaining({ name: 'renamed', deleted: true }),
-      );
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-      expect(await readFile(path, 'utf8')).toContain('"checkpoint_deleted"');
-    });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        _borrow,
+        chatsDir,
+      ) => {
+        await agent.setHistory([human('seed'), ai('reply')]);
+        await agent.session.setRecording({ enabled: true });
+        const action = ownerActions(agent);
+        const context = createMockCommandContext({ services: { agent } });
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('No owner recording');
+        expect(await action('save')(context, 'first')).toMatchObject({
+          messageType: 'info',
+        });
+        await action('list')(context, '');
+        expect(context.ui.addItem).toHaveBeenCalledWith({
+          type: 'chat_list',
+          chats: [expect.objectContaining({ name: 'first' })],
+        });
+        expect(await action('rename')(context, 'first renamed')).toMatchObject({
+          messageType: 'info',
+        });
+        expect(await action('delete')(context, 'renamed')).toMatchObject({
+          type: 'confirm_action',
+        });
+        context.overwriteConfirmed = true;
+        expect(await action('delete')(context, 'renamed')).toMatchObject({
+          messageType: 'info',
+        });
+        const replay = await replaySession(
+          path,
+          basename(config.projectTempDir),
+        );
+        if (!replay.ok) throw new Error(replay.error);
+        expect(replay.ok).toBe(true);
+        expect(replay.checkpoints).toContainEqual(
+          expect.objectContaining({ name: 'renamed', deleted: true }),
+        );
+        expect(
+          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+        ).toHaveLength(1);
+        expect(await readFile(path, 'utf8')).toContain('"checkpoint_deleted"');
+      },
+    );
   }, 30000);
 
   it('refuses collisions until confirmation and overwrites create, rename and name', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async (agent, config) => {
       await agent.setHistory([human('seed')]);
       await agent.session.setRecording({ enabled: true });
       const action = ownerActions(agent);
@@ -114,51 +131,66 @@ describe('owner-backed /chat command route', () => {
   }, 30000);
 
   it('restores and clears owner history with UI-only replay and no duplicate client history write', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
-      await agent.setHistory([
-        human('first'),
-        ai('one'),
-        human('second'),
-        ai('two'),
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      const action = ownerActions(agent);
-      const context = createMockCommandContext({ services: { agent } });
-      const client = agent.agentClient;
-      const setHistory = spyOn(client, 'setHistory');
-      try {
-        const restored = await action('restore')(context, '1');
-        expect(restored).toBeUndefined();
-        expect(setHistory).not.toHaveBeenCalled();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain(
-          'second',
-        );
-        expect(context.ui.loadHistory).toHaveBeenCalledWith([
-          expect.objectContaining({ type: 'user', text: 'first' }),
-          expect.objectContaining({ type: 'gemini', text: 'one' }),
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        _borrow,
+        chatsDir,
+      ) => {
+        await agent.setHistory([
+          human('first'),
+          ai('one'),
+          human('second'),
+          ai('two'),
         ]);
-        await agent.setHistory([human('first'), ai('one'), human('third')]);
-        expect(await action('clear')(context, '')).toBeUndefined();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain('third');
-        expect(context.ui.clear).toHaveBeenCalled();
-      } finally {
-        setHistory.mockRestore();
-      }
-      const path = agent.session.getRecording().path;
-      if (!path) throw new Error('No owner recording');
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(JSON.stringify(replay.history)).not.toContain('third');
-      const raw = await readFile(path, 'utf8');
-      expect(raw).toContain('"rewind"');
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-    });
+        await agent.session.setRecording({ enabled: true });
+        const action = ownerActions(agent);
+        const context = createMockCommandContext({ services: { agent } });
+        const client = agent.agentClient;
+        const setHistory = spyOn(client, 'setHistory');
+        try {
+          const restored = await action('restore')(context, '1');
+          expect(restored).toBeUndefined();
+          expect(setHistory).not.toHaveBeenCalled();
+          expect(JSON.stringify(await agent.getHistory())).not.toContain(
+            'second',
+          );
+          expect(context.ui.loadHistory).toHaveBeenCalledWith([
+            expect.objectContaining({ type: 'user', text: 'first' }),
+            expect.objectContaining({ type: 'gemini', text: 'one' }),
+          ]);
+          await agent.setHistory([human('first'), ai('one'), human('third')]);
+          expect(await action('clear')(context, '')).toBeUndefined();
+          expect(JSON.stringify(await agent.getHistory())).not.toContain(
+            'third',
+          );
+          expect(context.ui.clear).toHaveBeenCalled();
+        } finally {
+          setHistory.mockRestore();
+        }
+        const path = agent.session.getRecording().path;
+        if (!path) throw new Error('No owner recording');
+        const replay = await replaySession(
+          path,
+          basename(config.projectTempDir),
+        );
+        if (!replay.ok) throw new Error(replay.error);
+        expect(JSON.stringify(replay.history)).not.toContain('third');
+        const raw = await readFile(path, 'utf8');
+        expect(raw).toContain('"rewind"');
+        expect(
+          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+        ).toHaveLength(1);
+      },
+    );
   }, 30000);
 
   it('preserves live and durable history on restore failure and does not repaint UI', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async (agent, config) => {
       await agent.setHistory([human('first'), ai('one'), human('second')]);
       await agent.session.setRecording({ enabled: true });
       const action = ownerActions(agent);
@@ -191,7 +223,15 @@ describe('owner-backed /chat command route', () => {
 
   it('isolates borrowed sibling and resolves closed checkpoints by ID', async () => {
     await withRecordingLifetimeFixture(
-      async ({ agent, borrow, config, chatsDir }) => {
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+        chatsDir,
+      ) => {
         const sibling = await borrow();
         await agent.setHistory([human('owner')]);
         await agent.session.setRecording({ enabled: true });
@@ -226,41 +266,61 @@ describe('owner-backed /chat command route', () => {
     );
   }, 30000);
   it('resumes a checkpoint through the same owner with UI history replay', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
-      await agent.setHistory([human('branch-point'), ai('first')]);
-      await agent.session.setRecording({ enabled: true });
-      await agent.session.createCheckpoint('branch');
-      await agent.setHistory([
-        human('branch-point'),
-        ai('first'),
-        human('later'),
-      ]);
-      const action = ownerActions(agent);
-      const context = createMockCommandContext({ services: { agent } });
-      expect(await action('resume')(context, 'branch')).toBeUndefined();
-      expect(context.ui.loadHistory).toHaveBeenCalledWith([
-        expect.objectContaining({ type: 'user', text: 'branch-point' }),
-        expect.objectContaining({ type: 'gemini', text: 'first' }),
-      ]);
-      expect(context.ui.clear).not.toHaveBeenCalled();
-      expect(JSON.stringify(await agent.getHistory())).not.toContain('later');
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-    });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        _config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        _borrow,
+        chatsDir,
+      ) => {
+        await agent.setHistory([human('branch-point'), ai('first')]);
+        await agent.session.setRecording({ enabled: true });
+        await agent.session.createCheckpoint('branch');
+        await agent.setHistory([
+          human('branch-point'),
+          ai('first'),
+          human('later'),
+        ]);
+        const action = ownerActions(agent);
+        const context = createMockCommandContext({ services: { agent } });
+        expect(await action('resume')(context, 'branch')).toBeUndefined();
+        expect(context.ui.loadHistory).toHaveBeenCalledWith([
+          expect.objectContaining({ type: 'user', text: 'branch-point' }),
+          expect.objectContaining({ type: 'gemini', text: 'first' }),
+        ]);
+        expect(context.ui.clear).not.toHaveBeenCalled();
+        expect(JSON.stringify(await agent.getHistory())).not.toContain('later');
+        expect(
+          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+        ).toHaveLength(1);
+      },
+    );
   }, 30000);
   it('reads empty history from the owner without opening a second recorder', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
-      await agent.session.setRecording({ enabled: true });
-      const action = ownerActions(agent);
-      const context = createMockCommandContext({ services: { agent } });
-      expect(await action('clear')(context, '')).toMatchObject({
-        content: 'No conversation to clear.',
-      });
-      expect(await agent.session.getHistory()).toHaveLength(0);
-      expect(
-        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-      ).toHaveLength(1);
-    });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        _config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        _borrow,
+        chatsDir,
+      ) => {
+        await agent.session.setRecording({ enabled: true });
+        const action = ownerActions(agent);
+        const context = createMockCommandContext({ services: { agent } });
+        expect(await action('clear')(context, '')).toMatchObject({
+          content: 'No conversation to clear.',
+        });
+        expect(await agent.session.getHistory()).toHaveLength(0);
+        expect(
+          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+        ).toHaveLength(1);
+      },
+    );
   }, 30000);
 });

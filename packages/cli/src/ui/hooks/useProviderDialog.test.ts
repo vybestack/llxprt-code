@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
@@ -12,7 +10,12 @@ import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
 import { readFile } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // The provider service is the external boundary; dialog and message delivery stay real.
 const runtime = {
@@ -33,6 +36,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 const { useProviderDialog } = await import('./useProviderDialog.js');
 
 describe('provider switch notices', () => {
+  useRecordingPrompts();
   it('delivers endpoint, model and authentication notices to the message history', async () => {
     const messages: Array<{
       type: MessageType;
@@ -64,7 +68,7 @@ describe('provider switch notices', () => {
     unmount();
   });
   it('records a provider selection in the Agent session exactly once', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);

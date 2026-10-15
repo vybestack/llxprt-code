@@ -15,7 +15,10 @@ import {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook } from '../../__tests__/render.js';
 import { useChatCommand } from '../hooks/useChatCommand.js';
@@ -44,7 +47,7 @@ function loaderFor(chatCommand: SlashCommand): BuiltinCommandLoader {
 
 async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
   let recorded = '';
-  await withRecordingLifetimeFixture(async ({ agent }) => {
+  await withRecordingLifetimeFixture(async (agent) => {
     await agent.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
     ]);
@@ -67,10 +70,11 @@ async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
 }
 
 describe('interactive /chat command registry', () => {
+  useRecordingPrompts();
   it('uses the Agent session for explicit owner mode in sync and async loads', async () => {
     const sync = await saveCheckpoint('agent');
     expect(sync).toContain('checkpoint');
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.session.setRecording({ enabled: true });
       const registered = registeredChat(agent, 'agent');
       const command = (
@@ -98,7 +102,7 @@ describe('interactive /chat command registry', () => {
         blocks: [{ type: 'text', text: 'raw hello' }],
       });
       await recording.flush();
-      await withRecordingLifetimeFixture(async ({ agent }) => {
+      await withRecordingLifetimeFixture(async (agent) => {
         await agent.session.setRecording({ enabled: true });
         const registered = registeredChat(agent, undefined, {
           getCurrentRecording: () => recording,
@@ -106,10 +110,11 @@ describe('interactive /chat command registry', () => {
           getCurrentLockHandle: () => null,
           setRecording: () => undefined,
         });
-        const save = loaderFor(registered)
+        const command = loaderFor(registered)
           .loadCommandsSync()
-          .find((item) => item.name === 'chat')
-          ?.subCommands?.find((item) => item.name === 'save');
+          .find((item) => item.name === 'chat');
+        expect(command).toBe(registered);
+        const save = command?.subCommands?.find((item) => item.name === 'save');
         if (!save?.action) throw new Error('Missing /chat save');
         expect(
           await save.action(
