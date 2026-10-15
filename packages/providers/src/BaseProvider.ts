@@ -56,14 +56,18 @@ import {
   readsRequestRowsAtTransport,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
-import { extractModelParams } from './providerModelParams.js';
+import {
+  readProviderModelParams,
+  readProviderSetting,
+  writeProviderModelParams,
+  writeProviderSetting,
+} from './BaseProviderSettings.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import { resolveRuntimeAuthToken } from './utils/authToken.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -1046,20 +1050,7 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     fallback?: T,
   ): Promise<T | undefined> {
-    try {
-      const settings = await this.owner.readProviderData();
-      const value = settings[key];
-      const shouldUseFallback = isFalsyLikeValue(value);
-      return shouldUseFallback ? fallback : (value as T);
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to get ${key} from SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-      return fallback;
-    }
+    return readProviderSetting(this.owner, this.name, key, fallback);
   }
 
   /**
@@ -1069,18 +1060,7 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     value: T,
   ): Promise<void> {
-    try {
-      await this.owner.writeProviderData({
-        [key]: value,
-      });
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to set ${key} in SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-    }
+    await writeProviderSetting(this.owner, this.name, key, value);
   }
 
   /**
@@ -1131,19 +1111,7 @@ export abstract class BaseProvider implements IProvider {
   protected async getModelParamsFromSettings(): Promise<
     Record<string, unknown> | undefined
   > {
-    try {
-      const settings = await this.owner.readProviderData();
-
-      return extractModelParams(settings);
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to get model params from SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-      return undefined;
-    }
+    return readProviderModelParams(this.owner, this.name);
   }
 
   /**
@@ -1152,15 +1120,7 @@ export abstract class BaseProvider implements IProvider {
   protected async setModelParamsInSettings(
     params: Record<string, unknown> | undefined,
   ): Promise<void> {
-    if (params === undefined) {
-      await this.owner.writeProviderData({
-        temperature: undefined,
-        max_tokens: undefined,
-      });
-      return;
-    }
-
-    await this.owner.writeProviderData(params);
+    await writeProviderModelParams(this.owner, params);
   }
 
   /**
@@ -1181,20 +1141,6 @@ export abstract class BaseProvider implements IProvider {
     }
     return getProviderCustomHeaders(this.providerConfig);
   }
-}
-
-// Import ProviderSettings type to avoid circular dependency
-/**
- * Helper function to check if a value is falsy-like.
- * Used for determining when to use fallback values for provider settings.
- */
-function isFalsyLikeValue(value: unknown): boolean {
-  // Check undefined/null first
-  if (value === undefined || value === null) return true;
-  // Check false, empty string, or 0
-  if (value === false || value === '' || value === 0) return true;
-  // Check NaN for numbers
-  return typeof value === 'number' && Number.isNaN(value);
 }
 
 export interface ProviderSettings {

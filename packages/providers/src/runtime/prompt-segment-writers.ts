@@ -8,7 +8,10 @@ import { withSerializationCleanup } from './responses-serialization-lifecycle.js
 /** Forms written next to the estimator form; each is a copy of the key. */
 export type ExtraSegmentForm = 'wire' | 'dump';
 
-const ALL_EXTRA_FORMS: readonly ExtraSegmentForm[] = ['wire', 'dump'];
+const ALL_EXTRA_FORMS: readonly ExtraSegmentForm[] = Object.freeze([
+  'wire',
+  'dump',
+] as const);
 
 /** What the writers need from the request: costs are priced per model. */
 export interface SegmentWriterOptions {

@@ -71,17 +71,21 @@ type ProjectionIdentity = Pick<
   'protocol' | 'method' | 'projectionRevision'
 >;
 
-const ANTHROPIC_IDENTITY: ProjectionIdentity = {
-  protocol: 'anthropic-messages',
-  method: 'messages/v1',
-  projectionRevision: PROJECTION_REVISION,
-};
+function anthropicIdentity(): ProjectionIdentity {
+  return Object.freeze({
+    protocol: 'anthropic-messages',
+    method: 'messages/v1',
+    projectionRevision: PROJECTION_REVISION,
+  });
+}
 
-const CHAT_IDENTITY: ProjectionIdentity = {
-  protocol: 'openai-chat',
-  method: 'chat/completions/v1',
-  projectionRevision: PROJECTION_REVISION,
-};
+function chatIdentity(): ProjectionIdentity {
+  return Object.freeze({
+    protocol: 'openai-chat',
+    method: 'chat/completions/v1',
+    projectionRevision: PROJECTION_REVISION,
+  });
+}
 
 function buildEstimationProjection(
   requestBody: unknown,
@@ -326,7 +330,7 @@ export function projectAnthropicPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['anthropic-messages'],
-    ANTHROPIC_IDENTITY,
+    anthropicIdentity(),
     options,
   );
 }
@@ -369,14 +373,14 @@ export function projectAnthropicPromptEnvelopeFromSource(
   source: Gpt56SourceProjection,
   options: SourceProjectionOptions,
 ): PromptEnvelopeProjection {
-  return projectFromSource(ANTHROPIC_IDENTITY, source, options);
+  return projectFromSource(anthropicIdentity(), source, options);
 }
 
 export function projectOpenAIChatPromptEnvelopeFromSource(
   source: Gpt56SourceProjection,
   options: SourceProjectionOptions,
 ): PromptEnvelopeProjection {
-  return projectFromSource(CHAT_IDENTITY, source, options);
+  return projectFromSource(chatIdentity(), source, options);
 }
 
 export function projectOpenAIChatPromptEnvelope(
@@ -386,7 +390,7 @@ export function projectOpenAIChatPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['openai-chat'],
-    CHAT_IDENTITY,
+    chatIdentity(),
     options,
   );
 }
