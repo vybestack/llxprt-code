@@ -26,7 +26,7 @@ import {
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import { type UserPromptEvent } from '@vybestack/llxprt-code-telemetry';
-import type { StreamEventAgent } from './streamEventAgent.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -48,26 +48,6 @@ import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
-import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from '../../utils/modelIdentity.js';
-
-/**
- * Shared content-prefix identity resolver. Reads fresh runtime state at call
- * time (no dependencies on component state/props), so a single stable reference
- * can be reused by both ContentEventDeps and StreamEventDeps without risk of
- * staleness (issue #2263).
- */
-function defaultGetContentPrefixIdentity(
-  agent: StreamEventAgent,
-): string | null {
-  try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
-  } catch {
-    return null;
-  }
-}
 import {
   processContentEvent,
   type ContentEventDeps,
@@ -133,10 +113,11 @@ interface StreamEventHandlersResult {
 
 interface StreamEventHandlerDeps {
   runtime: StreamRuntime;
-  // @plan:ISSUE-2376 — the Agent surface supplies named-tool lookup
-  // (agent.tools.get) for @file processing; threaded alongside the #2384
-  // StreamRuntime rather than through getToolRegistry.
-  agent: StreamEventAgent;
+  getProviderContextLimit: Agent['getProviderContextLimit'];
+  getContentPrefixIdentity: () => string | null;
+  getToolHandle: Agent['tools']['get'];
+  findResource: Agent['mcp']['findResource'];
+  readResource: Agent['mcp']['readResource'];
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   removeItems?: RemoveHistoryItems;
@@ -524,13 +505,13 @@ function useMaxSessionTurnsHandler(deps: StreamEventHandlerDeps) {
 }
 
 function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
-  const { addItem, runtime, onCancelSubmit } = deps;
+  const { addItem, runtime, onCancelSubmit, getProviderContextLimit } = deps;
   return useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
       const limit = getTokenLimitForConfiguredContext(
         runtime,
-        deps.agent.getProviderContextLimit(),
+        getProviderContextLimit(),
       );
       const isLessThan75Percent =
         limit > 0 && remainingTokenCount < limit * 0.75;
@@ -540,7 +521,7 @@ function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
           ' Please try reducing the size of your message or use the `/compress` command to compress the chat history.';
       addItem({ type: 'info', text }, Date.now());
     },
-    [addItem, runtime, onCancelSubmit, deps.agent],
+    [addItem, runtime, onCancelSubmit, getProviderContextLimit],
   );
 }
 
@@ -578,11 +559,10 @@ function useContentEventDeps(
       thinkingBlocksRef: deps.thinkingBlocksRef,
       turnCancelledRef: deps.turnCancelledRef,
       setPendingHistoryItem: deps.setPendingHistoryItem,
-      getContentPrefixIdentity: () =>
-        defaultGetContentPrefixIdentity(deps.agent),
+      getContentPrefixIdentity: deps.getContentPrefixIdentity,
     }),
     [
-      deps.agent,
+      deps.getContentPrefixIdentity,
       deps.addItem,
       pendingResponse,
       deps.sanitizeContent,
@@ -599,11 +579,9 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
   return useMemo(
     () => ({
       runtime: deps.runtime,
-      getToolHandle: (name: string) => deps.agent.tools.get(name),
-      findResource: (identifier: string) =>
-        deps.agent.mcp.findResource(identifier),
-      readResource: (server: string, uri: string) =>
-        deps.agent.mcp.readResource(server, uri),
+      getToolHandle: deps.getToolHandle,
+      findResource: deps.findResource,
+      readResource: deps.readResource,
       logUserPrompt: (event: UserPromptEvent) =>
         deps.runtime.settings.logUserPrompt(event),
       addItem: deps.addItem,
@@ -617,7 +595,9 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
     }),
     [
       deps.runtime,
-      deps.agent,
+      deps.getToolHandle,
+      deps.findResource,
+      deps.readResource,
       deps.addItem,
       deps.onDebugMessage,
       deps.handleShellCommand,

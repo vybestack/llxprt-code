@@ -11,8 +11,7 @@
  * async-task-auto-trigger effect.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { createStreamEventAgent } from './streamEventAgent.js';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -72,9 +71,13 @@ export type SubmissionExecutor = (
  * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
  * fresh runtime state at call time so a single stable reference can be reused.
  */
-function defaultGetContentPrefixIdentity(agent: Agent): string | null {
+function defaultGetContentPrefixIdentity(
+  identity: Parameters<typeof createCliModelIdentityRuntime>[0],
+): string | null {
   try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
+    return resolveContentPrefixIdentity(
+      createCliModelIdentityRuntime(identity),
+    );
   } catch {
     return null;
   }
@@ -192,17 +195,44 @@ export interface UseSubmitQueryReturn {
   handleLoopDetectedEvent: () => void;
 }
 
-export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
-  const { startNewPrompt, getPromptCount } = useSessionStats();
-  const activeTurnRef = useRef(false);
-  const eventAgent = useMemo(
-    () => createStreamEventAgent(deps.agent),
+function useSubmissionEventHandlers(
+  deps: UseSubmitQueryDeps,
+): ReturnType<typeof useStreamEventHandlers> {
+  const getProviderContextLimit = useCallback(
+    () => deps.agent.getProviderContextLimit(),
     [deps.agent],
   );
-
-  const handlers = useStreamEventHandlers({
+  const getContentPrefixIdentity = useCallback(
+    () =>
+      defaultGetContentPrefixIdentity({
+        getProvider: () => deps.agent.getProvider(),
+        getModel: () => deps.agent.getModel(),
+        getCurrentSequenceModel: () => deps.agent.getCurrentSequenceModel(),
+        getActiveProfileName: () => deps.agent.getActiveProfileName(),
+      }),
+    [deps.agent],
+  );
+  const tools = deps.agent.tools;
+  const mcp = deps.agent.mcp;
+  const getToolHandle = useCallback<Agent['tools']['get']>(
+    (name) => tools.get(name),
+    [tools],
+  );
+  const findResource = useCallback<Agent['mcp']['findResource']>(
+    (identifier) => mcp.findResource(identifier),
+    [mcp],
+  );
+  const readResource = useCallback<Agent['mcp']['readResource']>(
+    (server, uri) => mcp.readResource(server, uri),
+    [mcp],
+  );
+  return useStreamEventHandlers({
     runtime: deps.runtime,
-    agent: eventAgent,
+    getProviderContextLimit,
+    getContentPrefixIdentity,
+    getToolHandle,
+    findResource,
+    readResource,
     settings: deps.settings,
     addItem: deps.addItem,
     removeItems: deps.removeItems,
@@ -231,6 +261,12 @@ export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
     lastModelIdentityRef: deps.lastModelIdentityRef,
     subagentManager: deps.subagentManager,
   });
+}
+
+export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
+  const { startNewPrompt, getPromptCount } = useSessionStats();
+  const activeTurnRef = useRef(false);
+  const handlers = useSubmissionEventHandlers(deps);
 
   const processAgentEvent = useProcessAgentEvent(deps, handlers, activeTurnRef);
 
