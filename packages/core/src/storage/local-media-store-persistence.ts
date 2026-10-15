@@ -171,6 +171,19 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     );
   }
 
+  /**
+   * Reads an object the caller already holds a reservation for. Reservations
+   * keep reclamation away from the object, so the read needs no store lock.
+   */
+  readReservedObjectVerified(
+    reference: MediaReferenceBlock,
+  ): Promise<Uint8Array> {
+    return this.readObjectVerifiedUnlocked(
+      reference.selectedObject,
+      'read reserved',
+    );
+  }
+
   async readObjectVerifiedUnlocked(
     reference: MediaStoredObject,
     operation: string,
@@ -318,21 +331,24 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     );
   }
 
-  async release(contentId: string, ownerId: string): Promise<void> {
-    validateContentId(contentId, 'release reference');
-    validateOwnerId(ownerId, contentId, 'release reference');
-    await this.runExclusive('release reference', contentId, async () => {
-      const ownerDigest = createHash('sha256').update(ownerId).digest('hex');
-      const record = await this.readReservationIfPresent(
-        contentId,
-        ownerDigest,
-      );
-      if (record === undefined) return;
-      for (const relatedContentId of record.relatedContentIds) {
-        await this.removeReservation(relatedContentId, ownerDigest);
-      }
-      await this.files.syncDirectory(this.files.reservationDirectory);
-    });
+  release(contentId: string, ownerId: string): Promise<void> {
+    return this.releaseAll([contentId], ownerId);
+  }
+
+  /** Releases the owner's reservations for every content id in one lock cycle. */
+  async releaseAll(
+    contentIds: readonly string[],
+    ownerId: string,
+  ): Promise<void> {
+    if (contentIds.length === 0) return;
+    for (const contentId of contentIds) {
+      validateContentId(contentId, 'release reference');
+      validateOwnerId(ownerId, contentId, 'release reference');
+    }
+    const lockContentId = contentIds.length === 1 ? contentIds[0] : undefined;
+    await this.runExclusive('release reference', lockContentId, () =>
+      this.releaseReservationsUnlocked(contentIds, ownerId),
+    );
   }
 
   async hasReservations(contentId: string): Promise<boolean> {

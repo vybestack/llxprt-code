@@ -89,6 +89,7 @@ describe('provider request ownership', () => {
           await resume.promise;
           return resolver.resolve(input);
         },
+        openReservations: (requestId) => resolver.openReservations(requestId),
       },
     });
     if (

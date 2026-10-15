@@ -28,6 +28,12 @@ export interface MediaAdmissionContext {
   readonly source: string;
   readonly preserveLegacyMimeParameters?: boolean;
   readonly reservationOwnerScope?: string;
+  /**
+   * Content ids the caller already admitted and reserved under this exact
+   * `reservationOwnerScope` and has not released. Admission takes their
+   * word instead of repeating the store round trips for each further row.
+   */
+  readonly heldReservations?: { has(contentId: string): boolean };
 }
 
 export interface MediaAdmissionRelease {
@@ -383,12 +389,14 @@ export class MediaAdmissionService {
         if (!isMediaReferenceBlock(block)) {
           throw new Error('Malformed media reference');
         }
-        const ownerId = ownerIdFor(context, mediaIndex, block.contentId);
-        await this.store.reserveAndReadVerified(block, ownerId);
-        this.recordReservation(reservations, {
-          contentId: block.contentId,
-          ownerId,
-        });
+        if (context.heldReservations?.has(block.contentId) !== true) {
+          const ownerId = ownerIdFor(context, mediaIndex, block.contentId);
+          await this.store.reserveAndReadVerified(block, ownerId);
+          this.recordReservation(reservations, {
+            contentId: block.contentId,
+            ownerId,
+          });
+        }
       } catch (error) {
         throw new MediaAdmissionError(
           context,
@@ -417,23 +425,28 @@ export class MediaAdmissionService {
   private async admitIdentity(
     block: InlineMediaBlock,
     source: NormalizedBase64Source,
+    alreadyHeld: boolean,
   ): Promise<MediaReferenceBlock> {
-    await this.store.preflightKnown(source.contentId, source.decodedByteLength);
+    if (!alreadyHeld)
+      await this.store.preflightKnown(
+        source.contentId,
+        source.decodedByteLength,
+      );
     const dimensions =
       block.dimensions ?? parseImageDimensionsFromBase64(source.payload);
-    return this.store.admitKnown(
-      {
-        contentId: source.contentId,
-        knownByteLength: source.decodedByteLength,
-        mimeType: block.mimeType,
-        ...(dimensions === undefined ? {} : { dimensions }),
-        semanticMetadata: block.semanticMetadata ?? {},
-        ...(block.providerFileIds === undefined
-          ? {}
-          : { providerFileIds: block.providerFileIds }),
-      },
-      async () => decodeCanonicalBase64(source),
-    );
+    const input = {
+      contentId: source.contentId,
+      knownByteLength: source.decodedByteLength,
+      mimeType: block.mimeType,
+      ...(dimensions === undefined ? {} : { dimensions }),
+      semanticMetadata: block.semanticMetadata ?? {},
+      ...(block.providerFileIds === undefined
+        ? {}
+        : { providerFileIds: block.providerFileIds }),
+    };
+    return alreadyHeld
+      ? this.store.identityReferenceForKnown(input)
+      : this.store.admitKnown(input, async () => decodeCanonicalBase64(source));
   }
 
   private async admitDerived(
@@ -488,17 +501,22 @@ export class MediaAdmissionService {
     try {
       const source = normalizeBase64Source(block.data);
       contentId = source.contentId;
+      const alreadyHeld =
+        block.originalData === undefined &&
+        context.heldReservations?.has(source.contentId) === true;
       const reference =
         block.originalData === undefined
-          ? await this.admitIdentity(block, source)
+          ? await this.admitIdentity(block, source, alreadyHeld)
           : await this.admitDerived(block, source);
       const presented = copyModelVisibleMetadata(block, reference);
-      const ownerId = ownerIdFor(context, mediaIndex, presented.contentId);
-      await this.store.reserve(presented, ownerId);
-      this.recordReservation(reservations, {
-        contentId: presented.contentId,
-        ownerId,
-      });
+      if (!alreadyHeld) {
+        const ownerId = ownerIdFor(context, mediaIndex, presented.contentId);
+        await this.store.reserve(presented, ownerId);
+        this.recordReservation(reservations, {
+          contentId: presented.contentId,
+          ownerId,
+        });
+      }
       return presented;
     } catch (error) {
       const knownContentId =

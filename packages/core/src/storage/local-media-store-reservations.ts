@@ -227,6 +227,28 @@ export abstract class LocalMediaStoreReservations {
     }
   }
 
+  /** Removes the owner's reservations for each content id; syncs once if any existed. */
+  protected async releaseReservationsUnlocked(
+    contentIds: readonly string[],
+    ownerId: string,
+  ): Promise<void> {
+    const ownerDigest = createHash('sha256').update(ownerId).digest('hex');
+    let removedAny = false;
+    for (const contentId of contentIds) {
+      const record = await this.readReservationIfPresent(
+        contentId,
+        ownerDigest,
+      );
+      if (record === undefined) continue;
+      for (const relatedContentId of record.relatedContentIds) {
+        await this.removeReservation(relatedContentId, ownerDigest);
+      }
+      removedAny = true;
+    }
+    if (removedAny)
+      await this.files.syncDirectory(this.files.reservationDirectory);
+  }
+
   protected async removeReservation(
     contentId: string,
     ownerDigest: string,

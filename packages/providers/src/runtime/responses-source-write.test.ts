@@ -56,7 +56,7 @@ describe('Responses serializer disk-write lifecycle', () => {
       // and the scratch directory cleanup failure the last; nothing else leaks in.
       const failures = leafFailures(outcome);
       expect(failures[0]).toBe(writeFailure);
-      expect(failures.at(-1)).toBe(cleanupFailure);
+      expect(failures[failures.length - 1]).toBe(cleanupFailure);
       expect(
         failures.every(
           (failure) => failure === writeFailure || failure === cleanupFailure,

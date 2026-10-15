@@ -23,6 +23,17 @@ export interface RequestMediaResolutionInput {
   readonly turnId: string;
   readonly aggregateBudgetBytes: number;
   readonly signal?: AbortSignal;
+  /**
+   * Reservations shared by every resolution of one streamed request. A content
+   * id reserved by an earlier resolution is read without another store round
+   * trip, and every reservation is released by `reservations.release()`.
+   */
+  readonly reservations?: RequestMediaReservations;
+}
+
+/** Reservations a streamed request holds across its rows, released together. */
+export interface RequestMediaReservations {
+  release(): Promise<void>;
 }
 
 export interface RequestMediaAccounting {
@@ -57,6 +68,7 @@ export interface ResolvedMediaRequest {
 
 export interface RequestMediaResolutionService {
   resolve(input: RequestMediaResolutionInput): Promise<ResolvedMediaRequest>;
+  openReservations(requestId: string): RequestMediaReservations;
 }
 
 interface SelectedReference {
@@ -234,6 +246,11 @@ function materializeContents(
 interface RequestResolutionResources {
   readonly ownerId: string;
   readonly reservedContentIds: string[];
+  /**
+   * The shared reservations of a streamed request: released in one store lock
+   * cycle, and not an active request of their own (its rows' resolutions are).
+   */
+  readonly sharedByRows: boolean;
   readonly encodedByContentId: Map<string, string>;
   readonly registeredCleanups: Array<() => void | Promise<void>>;
   resolvedContents: IContent[];
@@ -242,6 +259,39 @@ interface RequestResolutionResources {
   disposed: boolean;
   released: boolean;
   releasePromise: Promise<void> | undefined;
+}
+
+function newResources(
+  ownerId: string,
+  sharedByRows: boolean,
+): RequestResolutionResources {
+  return {
+    ownerId,
+    reservedContentIds: [],
+    sharedByRows,
+    encodedByContentId: new Map(),
+    registeredCleanups: [],
+    resolvedContents: [],
+    materializedBytes: 0,
+    readCount: 0,
+    disposed: false,
+    released: false,
+    releasePromise: undefined,
+  };
+}
+
+class HeldMediaReservations implements RequestMediaReservations {
+  readonly heldContentIds = new Set<string>();
+
+  constructor(
+    readonly owner: RequestMediaResolver,
+    readonly resources: RequestResolutionResources,
+    private readonly releaseResources: () => Promise<void>,
+  ) {}
+
+  release(): Promise<void> {
+    return this.releaseResources();
+  }
 }
 
 function uniqueReferencesByContentId(
@@ -307,6 +357,42 @@ export class RequestMediaResolver {
     return result;
   }
 
+  private async releaseReserved(
+    resources: RequestResolutionResources,
+    failures: unknown[],
+  ): Promise<number> {
+    if (resources.sharedByRows) {
+      try {
+        await this.store.releaseAll(
+          resources.reservedContentIds,
+          resources.ownerId,
+        );
+      } catch (error) {
+        failures.push(error);
+        return 0;
+      }
+      return resources.reservedContentIds.splice(0).length;
+    }
+    let released = 0;
+    for (
+      let index = resources.reservedContentIds.length - 1;
+      index >= 0;
+      index -= 1
+    ) {
+      try {
+        await this.store.release(
+          resources.reservedContentIds[index],
+          resources.ownerId,
+        );
+        resources.reservedContentIds.splice(index, 1);
+        released += 1;
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return released;
+  }
+
   private async dispose(resources: RequestResolutionResources): Promise<void> {
     const failures: unknown[] = [];
     if (!resources.disposed) {
@@ -328,26 +414,13 @@ export class RequestMediaResolver {
       this.materializedNormalizedBytes -= resources.materializedBytes;
       resources.materializedBytes = 0;
     }
-    let releasedReservationCount = 0;
-    for (
-      let index = resources.reservedContentIds.length - 1;
-      index >= 0;
-      index -= 1
-    ) {
-      try {
-        await this.store.release(
-          resources.reservedContentIds[index],
-          resources.ownerId,
-        );
-        resources.reservedContentIds.splice(index, 1);
-        releasedReservationCount += 1;
-      } catch (error) {
-        failures.push(error);
-      }
-    }
+    const releasedReservationCount = await this.releaseReserved(
+      resources,
+      failures,
+    );
     this.reservedContentCount -= releasedReservationCount;
     if (resources.reservedContentIds.length === 0) {
-      this.activeRequestCount -= 1;
+      if (!resources.sharedByRows) this.activeRequestCount -= 1;
       resources.released = true;
       this.pendingReleases.delete(resources);
     } else {
@@ -370,6 +443,7 @@ export class RequestMediaResolver {
     input: RequestMediaResolutionInput,
     unique: ReadonlyMap<string, SelectedReference>,
     resources: RequestResolutionResources,
+    held: HeldMediaReservations | undefined,
   ): Promise<void> {
     for (const entry of unique.values()) {
       throwIfAborted(input.signal);
@@ -377,10 +451,7 @@ export class RequestMediaResolver {
       resources.readCount += 1;
       let bytes: Uint8Array;
       try {
-        bytes = await this.store.reserveAndReadVerified(
-          entry.reference,
-          resources.ownerId,
-        );
+        bytes = await this.readReferenceBytes(entry.reference, resources, held);
       } catch (error) {
         throw new RequestMediaResolutionError(
           entry.reference.contentId,
@@ -389,8 +460,6 @@ export class RequestMediaResolver {
           { cause: error },
         );
       }
-      resources.reservedContentIds.push(entry.reference.contentId);
-      this.reservedContentCount += 1;
       throwIfAborted(input.signal);
       const encoded = Buffer.from(bytes).toString('base64');
       if (encoded.length !== entry.reference.normalizedBase64Length) {
@@ -404,6 +473,31 @@ export class RequestMediaResolver {
       resources.materializedBytes += encoded.length;
       this.materializedNormalizedBytes += encoded.length;
     }
+  }
+
+  /**
+   * Reserves the reference and reads it, unless the request's shared
+   * reservations already hold it, in which case only the read is needed.
+   */
+  private async readReferenceBytes(
+    reference: MediaReferenceBlock,
+    resources: RequestResolutionResources,
+    held: HeldMediaReservations | undefined,
+  ): Promise<Uint8Array> {
+    if (held?.heldContentIds.has(reference.contentId) === true)
+      return this.store.readReserved(reference);
+    const bytes = await this.store.reserveAndReadVerified(
+      reference,
+      resources.ownerId,
+    );
+    if (held === undefined) {
+      resources.reservedContentIds.push(reference.contentId);
+    } else {
+      held.heldContentIds.add(reference.contentId);
+      held.resources.reservedContentIds.push(reference.contentId);
+    }
+    this.reservedContentCount += 1;
+    return bytes;
   }
 
   private resolvedRequest(
@@ -442,6 +536,29 @@ export class RequestMediaResolver {
     };
   }
 
+  openReservations(requestId: string): RequestMediaReservations {
+    const resources = newResources(`${requestId}:${randomUUID()}`, true);
+    return new HeldMediaReservations(this, resources, () =>
+      this.release(resources),
+    );
+  }
+
+  private heldReservations(
+    reservations: RequestMediaReservations | undefined,
+  ): HeldMediaReservations | undefined {
+    if (reservations === undefined) return undefined;
+    if (
+      !(reservations instanceof HeldMediaReservations) ||
+      reservations.owner !== this
+    ) {
+      throw new Error('Media reservations were opened by a different resolver');
+    }
+    if (reservations.resources.disposed) {
+      throw new Error('Cannot resolve media against released reservations');
+    }
+    return reservations;
+  }
+
   async resolve(
     input: RequestMediaResolutionInput,
   ): Promise<ResolvedMediaRequest> {
@@ -451,21 +568,14 @@ export class RequestMediaResolver {
     const selectedBytes = selectedNormalizedBytes(input);
     throwIfAborted(input.signal);
     const unique = uniqueReferencesByContentId(selected);
-    const resources: RequestResolutionResources = {
-      ownerId: `${input.requestId}:${randomUUID()}`,
-      reservedContentIds: [],
-      encodedByContentId: new Map(),
-      registeredCleanups: [],
-      resolvedContents: [],
-      materializedBytes: 0,
-      readCount: 0,
-      disposed: false,
-      released: false,
-      releasePromise: undefined,
-    };
+    const held = this.heldReservations(input.reservations);
+    const resources = newResources(
+      held?.resources.ownerId ?? `${input.requestId}:${randomUUID()}`,
+      false,
+    );
     this.activeRequestCount += 1;
     try {
-      await this.materializeReferences(input, unique, resources);
+      await this.materializeReferences(input, unique, resources, held);
       resources.resolvedContents = materializeContents(
         input.contents,
         resources.encodedByContentId,

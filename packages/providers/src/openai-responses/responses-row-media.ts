@@ -3,12 +3,16 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
+  type RequestMediaReservations,
   type ResolvedMediaRequest,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 
 /** The captured media input of one request: id, aggregate budget and resolver. */
-export type RowsMediaInput = Parameters<typeof resolveRequestMedia>[0];
+export type RowsMediaInput = Omit<
+  Parameters<typeof resolveRequestMedia>[0],
+  'reservations'
+>;
 
 function hasReference(row: IContent): boolean {
   return row.blocks.some(
@@ -33,9 +37,12 @@ function rowMediaBytes(row: IContent): number {
  * Resolves stored media references one row at a time while the source rows
  * stream by, so no history-sized array ever exists. The aggregate request
  * budget is enforced across rows by shrinking the budget handed to each row's
- * resolution. Every resolved row's lease is registered on `owner` and is held
- * until the call that owns `owner` finishes; resolution failures release their
- * own partial reservations before they propagate.
+ * resolution. The rows share one set of store reservations, so a content id
+ * costs one store round trip however many rows reference it and all
+ * reservations are released together. Every resolved row's lease and the
+ * shared reservations are registered on `owner` and are held until the call
+ * that owns `owner` finishes; resolution failures release their own partial
+ * reservations before they propagate.
  */
 export async function* resolveRowsMedia(
   rows: AsyncIterable<IContent>,
@@ -46,19 +53,33 @@ export async function* resolveRowsMedia(
   const budget =
     media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   let used = 0;
+  let reservations: RequestMediaReservations | undefined;
   for await (const row of rows) {
     const bytes = rowMediaBytes(row);
     const remaining = budget - used;
     used += bytes;
+    if (reservations === undefined && hasReference(row)) {
+      reservations = media.resolver?.openReservations(media.requestId);
+      if (reservations !== undefined) {
+        const opened = reservations;
+        owner.registerCleanup(() => opened.release());
+      }
+    }
     yield bytes === 0
       ? row
-      : await resolveRow(row, media, remaining, owner, signal);
+      : await resolveRow(
+          row,
+          { ...media, reservations },
+          remaining,
+          owner,
+          signal,
+        );
   }
 }
 
 async function resolveRow(
   row: IContent,
-  media: RowsMediaInput,
+  media: Parameters<typeof resolveRequestMedia>[0],
   remaining: number,
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,

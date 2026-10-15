@@ -42,6 +42,15 @@ import {
 import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/media-reference-lifecycle.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
+function indexMediaReferences(
+  content: IContent,
+  references: HistoryMediaIndex,
+): void {
+  for (const reference of collectMediaReferences([content])) {
+    if (!references.has(reference.contentId)) references.set(reference);
+  }
+}
+
 function appendAdmittedRows(
   rows: readonly IContent[],
   references: HistoryMediaIndex,
@@ -51,8 +60,7 @@ function appendAdmittedRows(
   for (const content of rows) {
     options.ownership?.retain(content);
     try {
-      for (const reference of collectMediaReferences([content]))
-        references.set(reference);
+      indexMediaReferences(content, references);
       sink.appendValue(sanitizeProviderContentForSerialization(content));
     } finally {
       options.ownership?.release(content);
@@ -112,12 +120,15 @@ export function admitDeferredHistorySource(
 ): Promise<() => Promise<void>> {
   const admission = new MediaAdmissionService(store);
   const scope = `deferred-source:${randomUUID()}`;
+  const references = new HistoryMediaIndex();
+  // Every indexed content id was admitted and reserved under this scope, so
+  // later rows that repeat it need no further store round trips.
   const context = {
     turnId: scope,
     source: scope,
     reservationOwnerScope: scope,
+    heldReservations: references,
   };
-  const references = new HistoryMediaIndex();
   const release = async (): Promise<void> => {
     try {
       for (const reference of references.values(options.ownership)) {

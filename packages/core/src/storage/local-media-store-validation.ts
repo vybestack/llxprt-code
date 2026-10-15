@@ -17,6 +17,7 @@ import {
   MediaObjectCorruptError,
   MediaStoreError,
   type MediaAdmissionInput,
+  type MediaKnownAdmissionInput,
   type MediaTransformationInput,
   type PreparedAdmission,
   type ReservationRecord,
@@ -640,4 +641,43 @@ export function validateOwnerId(
       ),
     );
   }
+}
+
+export function validateKnownObjectByteLength(
+  knownByteLength: number,
+  contentId: string,
+): void {
+  if (!isPositiveSafeInteger(knownByteLength)) {
+    throw new MediaStoreError(
+      'validate known byte length',
+      contentId,
+      new Error('Known byte length must be a positive safe integer'),
+    );
+  }
+}
+
+/** Validates a known-content admission and derives the metadata it stores. */
+export function knownAdmissionIdentity(input: MediaKnownAdmissionInput): {
+  readonly metadata: MediaStoredObject;
+  readonly semanticMetadata: MediaSemanticMetadata;
+  readonly providerFileIds: Readonly<Record<string, string>> | undefined;
+} {
+  validateContentId(input.contentId, 'admit known object');
+  validateKnownObjectByteLength(input.knownByteLength, input.contentId);
+  return {
+    metadata: buildStoredObject(
+      input.contentId,
+      input.mimeType,
+      input.knownByteLength,
+      input.dimensions,
+    ),
+    semanticMetadata: validatedSemanticMetadata(
+      input.semanticMetadata,
+      input.contentId,
+    ),
+    providerFileIds: validatedProviderFileIds(
+      input.providerFileIds,
+      input.contentId,
+    ),
+  };
 }

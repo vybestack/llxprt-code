@@ -603,6 +603,7 @@ async function preservesGenerationAndReleaseFailures(): Promise<void> {
   };
   const mediaResolver: RequestMediaResolutionService = {
     resolve: async () => request,
+    openReservations: () => ({ release: async () => {} }),
   };
   generateContentStreamMock.mockResolvedValueOnce({
     [Symbol.asyncIterator]: () => ({
