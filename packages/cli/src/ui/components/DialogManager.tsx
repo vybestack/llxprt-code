@@ -404,8 +404,7 @@ function renderUtilityStoreDialog(
     case 'policies':
       return (
         <PoliciesDialog
-          config={config}
-          policy={state.commandContext.services.agent?.policy}
+          readPolicyRules={ctx.uiActions.readPolicyRules}
           addItem={addItem}
           onExit={() => close('policies')}
         />

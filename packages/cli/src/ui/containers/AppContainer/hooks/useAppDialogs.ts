@@ -10,6 +10,7 @@ import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
 import { bindAutoPromptOperation } from '../../../commands/subagentCommandHost.js';
+import { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
 import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
@@ -524,6 +525,16 @@ function useDialogActionsSync(
   }, [settingsStore, dialogActions]);
 }
 
+function useDialogPolicyReader(
+  policy: Parameters<typeof bindPolicyRulesReader>[0],
+  config: Pick<SlashCommandRuntime, 'getApprovalMode'>,
+) {
+  return useMemo(
+    () => bindPolicyRulesReader(policy, () => config.getApprovalMode()),
+    [policy, config],
+  );
+}
+
 export function useAppDialogs(params: AppDialogsParams) {
   const st = useDialogsStoreState(params.terminalStore, params.settingsStore);
   const core = useDialogsCore(params, st);
@@ -544,6 +555,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     () => bindAutoPromptOperation(agent, params.config),
     [agent, params.config],
   );
+  const readPolicyRules = useDialogPolicyReader(agent.policy, params.config);
   const subagents = useSubagentDialogCommands(
     agent.workspace.subagentDefinitions,
     agent.workspace.subagentWrites,
@@ -573,6 +585,7 @@ export function useAppDialogs(params: AppDialogsParams) {
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
     recordModelSwitch,
     ...subagents,
+    readPolicyRules,
     onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,

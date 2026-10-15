@@ -86,6 +86,7 @@ export function createStableAppCommands(
       latest.current.listSubagentProfiles(...args),
     generateSubagentPrompt: (...args) =>
       latest.current.generateSubagentPrompt(...args),
+    readPolicyRules: () => latest.current.readPolicyRules(),
     recordModelSwitch: (...args) => latest.current.recordModelSwitch(...args),
     handleThemeSelect: (...args) => latest.current.handleThemeSelect(...args),
     handleThemeHighlight: (...args) =>

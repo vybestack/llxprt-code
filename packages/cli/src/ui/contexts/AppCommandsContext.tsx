@@ -7,6 +7,7 @@
 import { createContext, useContext, useMemo, useRef } from 'react';
 import { createStableAppCommands } from './stableAppCommands.js';
 import type { ContinueTarget, EditorType } from '@vybestack/llxprt-code-core';
+import type { PolicyRulesReader } from '../hooks/policyRulesReaderHost.js';
 import type { SubagentManagerDialogProps } from '../components/SubagentManagement/types.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type { CommandContext } from '../commands/types.js';
@@ -33,6 +34,7 @@ export interface AppCommandData {
 export interface AppCommandBindings extends AppCommands, AppCommandData {}
 
 export interface AppCommands {
+  readPolicyRules: PolicyRulesReader;
   listSubagentDefinitions: SubagentManagerDialogProps['listSubagents'];
   loadSubagentDefinition: SubagentManagerDialogProps['loadSubagent'];
   saveSubagentDefinition: SubagentManagerDialogProps['saveSubagent'];
