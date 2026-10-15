@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gcAndSweep, heapStats } from 'bun:jsc';
 import { StageRowLog } from './stageRowLog.js';
 
 function sequence(seed: number): () => number {
@@ -79,6 +80,20 @@ describe('StageRowLog', () => {
     expect(() => log?.append('b')).toThrow('Stage row log is closed');
     expect(() => log?.read(0)).toThrow('Stage row log is closed');
     log.close();
+  });
+
+  it('returns its append buffer once the rows are read back', () => {
+    log = new StageRowLog(root, 'release');
+    for (let index = 0; index < 200; index++) log.append(text(index, 20));
+    gcAndSweep();
+    const buffered = heapStats().extraMemorySize;
+    expect(log.read(0)).toBe(text(0, 20));
+    gcAndSweep();
+    // The 64 KiB append buffer goes; the 32 KiB read window arrives.
+    expect(buffered - heapStats().extraMemorySize).toBeGreaterThan(16 * 1024);
+    log.append(text(200, 20));
+    expect(log.read(200)).toBe(text(200, 20));
+    expect(log.read(0)).toBe(text(0, 20));
   });
 
   it('does not create a log over an existing stage file', () => {

@@ -86,6 +86,8 @@ export class StageRowLog {
     this.check();
     if (!this.has(index))
       throw new RangeError('Stage row log index is out of range');
+    // Appends are done once rows are read back; a later append allocates again.
+    this.#payload.release();
     const offset =
       index === this.#cursorIndex ? this.#cursorOffset : this.offsetOf(index);
     const text = this.textAt(offset);

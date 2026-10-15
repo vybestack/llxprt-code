@@ -87,7 +87,11 @@ function verifyMemory(facts: {
     expect(sample.growth).toBeLessThan(2_097_152);
   }
 }
-async function measured(large: boolean, trap?: MemoryTrap): Promise<void> {
+async function measured(
+  large: boolean,
+  trap?: MemoryTrap,
+  verify = true,
+): Promise<void> {
   const originals: Array<WeakRef<IContent>> = [];
   const readRows: Array<WeakRef<IContent>> = [];
   const retainedRows: IContent[] = [];
@@ -153,7 +157,7 @@ async function measured(large: boolean, trap?: MemoryTrap): Promise<void> {
       artifact,
       heap: heapSize(),
     };
-    verifyMemory(facts);
+    if (verify) verifyMemory(facts);
   } finally {
     observer.restore();
     owner.close();
@@ -170,6 +174,10 @@ describe('real normalized boundary writer memory contracts', () => {
         })(),
       );
       expect(warm.row_count).toBe(1);
+      // One-time costs of the full 64-row path (decoder and writer buffers, JIT
+      // code) are paid before the baseline. The measured pass then has to stay
+      // flat on its own; the trap tests below still fail the same gates.
+      await measured(large, undefined, false);
       await measured(large);
     },
     120000,
