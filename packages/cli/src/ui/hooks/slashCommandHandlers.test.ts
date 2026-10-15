@@ -7,6 +7,7 @@
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import {
   createCommands,
   createDeps,
@@ -101,6 +102,9 @@ describe('slashCommandHandlers', () => {
             content: 'owner slash failure',
           })),
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
+          recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
+            recordSessionEvent: rawWrite,
+          }),
         },
         '/help',
       );
@@ -146,6 +150,11 @@ describe('slashCommandHandlers', () => {
               recordingOwner: 'agent',
               services: { ...deps.commandContext.services, agent: next },
             },
+            recordCommandError: bindCommandErrorRecorder(
+              next,
+              'agent',
+              undefined,
+            ),
             commands: createCommands(() => {
               throw new Error('resumed owner failure');
             }),

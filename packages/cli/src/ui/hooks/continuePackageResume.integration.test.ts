@@ -386,6 +386,7 @@ async function createHandlerDeps(
     slashCommandLogger: new DebugLogger('continue-package-resume-test'),
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
+    recordCommandError: async () => {},
   };
 }
 

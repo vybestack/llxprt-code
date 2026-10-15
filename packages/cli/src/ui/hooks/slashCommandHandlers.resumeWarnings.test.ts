@@ -168,6 +168,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       slashCommandLogger: new DebugLogger('test-slash'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
+      recordCommandError: async () => {},
     };
   }
 
