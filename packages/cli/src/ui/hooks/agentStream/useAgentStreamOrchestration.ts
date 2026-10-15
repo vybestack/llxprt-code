@@ -5,12 +5,10 @@
  */
 
 import { useCallback, useMemo, useRef } from 'react';
-import { resolveEmojiFilterMode } from '../../utils/iContentToHistoryItems.js';
 
 import {
   type EditorType,
   type LiveOutputUpdate,
-  type MessageBus,
   type ToolCall,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
@@ -39,7 +37,7 @@ import {
   useToolSchedulerSetup,
 } from './useAgentStreamLifecycle.js';
 import type { QueuedSubmission } from './types.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 import type { OperationLifecycleRegistry } from './operationLifecycle.js';
 
 export interface AgentStreamOrchestrationDeps {
@@ -61,7 +59,30 @@ export interface AgentStreamOrchestrationDeps {
   flushRecording: UseSubmitQueryDeps['flushRecording'];
   addItem: UseHistoryManagerReturn['addItem'];
   removeItems?: RemoveHistoryItems;
-  runtime: StreamRuntime;
+  readSessionId: UseSubmitQueryDeps['readSessionId'];
+  subscribeMcpUpdates: UseSubmitQueryDeps['subscribeMcpUpdates'];
+  resetBuckets: UseSubmitQueryDeps['resetBuckets'];
+  resetBucketSession: UseSubmitQueryDeps['resetBucketSession'];
+  ensureBucketsAuthenticated: UseSubmitQueryDeps['ensureBucketsAuthenticated'];
+  atCommandConfig: UseSubmitQueryDeps['atCommandConfig'];
+  logUserPrompt: UseSubmitQueryDeps['logUserPrompt'];
+  getModel: UseSubmitQueryDeps['getModel'];
+  getProvider: UseSubmitQueryDeps['getProvider'];
+  readSelectedProvider: UseSubmitQueryDeps['readSelectedProvider'];
+  readCitations: UseSubmitQueryDeps['readCitations'];
+  readProfileName: UseSubmitQueryDeps['readProfileName'];
+  readContextLimit: UseSubmitQueryDeps['readContextLimit'];
+  getMaxSessionTurns: UseSubmitQueryDeps['getMaxSessionTurns'];
+  readEmojiFilterMode: Parameters<typeof useStreamState>[1];
+  projectTempDir: string;
+  checkpointOperations: Parameters<typeof useStreamState>[3];
+  readTargetDir: Parameters<typeof useShellCommandSetup>[0]['readTargetDir'];
+  readUsePty: Parameters<typeof useShellCommandSetup>[0]['readUsePty'];
+  readShellExecutionConfig: Parameters<
+    typeof useShellCommandSetup
+  >[0]['readShellExecutionConfig'];
+  readPtyWidth: Parameters<typeof useShellCommandSetup>[0]['readPtyWidth'];
+  readPtyHeight: Parameters<typeof useShellCommandSetup>[0]['readPtyHeight'];
   settings: LoadedSettings;
   onDebugMessage: (message: string) => void;
   handleSlashCommand: (
@@ -77,7 +98,6 @@ export interface AgentStreamOrchestrationDeps {
   terminalWidth?: number;
   terminalHeight?: number;
   onEditorOpen: () => void;
-  runtimeMessageBus?: MessageBus;
   subagentManager?: UiSubagentManager;
   /**
    * Optional perf operation lifecycle registry (P06/P07). When undefined
@@ -126,11 +146,9 @@ export function useAgentStreamOrchestration(
 ): AgentStreamOrchestrationResult {
   const st = useStreamState(
     args.addItem,
-    () => resolveEmojiFilterMode(args.runtime.ephemeral),
-    args.runtime.projectTempDir,
-    args.runtime.checkpoint.getCheckpointingEnabled()
-      ? args.runtime.checkpoint.checkpoints
-      : undefined,
+    args.readEmojiFilterMode,
+    args.projectTempDir,
+    args.checkpointOperations,
   );
   const loopDetectedRef = useRef(false);
   const scheduler = useToolSchedulerState(args, st);
@@ -263,26 +281,11 @@ function useShell(
     setPendingHistoryItem: st.setPendingHistoryItem,
     setIsResponding: st.setIsResponding,
     onDebugMessage: args.onDebugMessage,
-    readTargetDir: useCallback(
-      () => args.runtime.session.getTargetDir(),
-      [args.runtime.session],
-    ),
-    readUsePty: useCallback(
-      () => args.runtime.shell.getShouldUseNodePtyShell(),
-      [args.runtime.shell],
-    ),
-    readShellExecutionConfig: useCallback(
-      () => args.runtime.shell.getShellExecutionConfig(),
-      [args.runtime.shell],
-    ),
-    readPtyWidth: useCallback(
-      () => args.runtime.shell.getPtyTerminalWidth(),
-      [args.runtime.shell],
-    ),
-    readPtyHeight: useCallback(
-      () => args.runtime.shell.getPtyTerminalHeight(),
-      [args.runtime.shell],
-    ),
+    readTargetDir: args.readTargetDir,
+    readUsePty: args.readUsePty,
+    readShellExecutionConfig: args.readShellExecutionConfig,
+    readPtyWidth: args.readPtyWidth,
+    readPtyHeight: args.readPtyHeight,
     appendShellHistory: args.appendShellHistory,
     setShellInputFocused: args.setShellInputFocused,
     terminalWidth: args.terminalWidth,
@@ -432,49 +435,20 @@ function useBuildSubmitQueryDeps({
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
   return {
     ...submissionState(st),
-    readSessionId: useCallback(
-      () => args.runtime.session.getSessionId(),
-      [args.runtime.session],
-    ),
-    subscribeMcpUpdates: useCallback(
-      (listener: () => void) => args.runtime.events.onMcpClientUpdate(listener),
-      [args.runtime.events],
-    ),
-    ...useTurnResetOperations(args.runtime.bucketFailover),
-    atCommandConfig: args.runtime.files,
-    logUserPrompt: useCallback(
-      (event: Parameters<UseSubmitQueryDeps['logUserPrompt']>[0]) =>
-        args.runtime.settings.logUserPrompt(event),
-      [args.runtime.settings],
-    ),
-    getModel: useCallback(
-      () => args.runtime.model.getModel(),
-      [args.runtime.model],
-    ),
-    getProvider: useCallback(
-      () => args.runtime.model.getProvider(),
-      [args.runtime.model],
-    ),
-    readSelectedProvider: useCallback(
-      () => args.runtime.settings.readSelectedProvider(),
-      [args.runtime.settings],
-    ),
-    readCitations: useCallback(
-      () => args.runtime.settings.readCitations(),
-      [args.runtime.settings],
-    ),
-    readProfileName: useCallback(
-      () => args.runtime.settings.readProfileName(),
-      [args.runtime.settings],
-    ),
-    readContextLimit: useCallback(
-      () => args.runtime.ephemeral.getEphemeralSetting('context-limit'),
-      [args.runtime.ephemeral],
-    ),
-    getMaxSessionTurns: useCallback(
-      () => args.runtime.sessionLimits.getMaxSessionTurns(),
-      [args.runtime.sessionLimits],
-    ),
+    readSessionId: args.readSessionId,
+    subscribeMcpUpdates: args.subscribeMcpUpdates,
+    resetBuckets: args.resetBuckets,
+    resetBucketSession: args.resetBucketSession,
+    ensureBucketsAuthenticated: args.ensureBucketsAuthenticated,
+    atCommandConfig: args.atCommandConfig,
+    logUserPrompt: args.logUserPrompt,
+    getModel: args.getModel,
+    getProvider: args.getProvider,
+    readSelectedProvider: args.readSelectedProvider,
+    readCitations: args.readCitations,
+    readProfileName: args.readProfileName,
+    readContextLimit: args.readContextLimit,
+    getMaxSessionTurns: args.getMaxSessionTurns,
     getProviderContextLimit: args.getProviderContextLimit,
     getContentPrefixIdentity: args.getContentPrefixIdentity,
     getToolHandle: args.getToolHandle,
@@ -498,19 +472,6 @@ function useBuildSubmitQueryDeps({
     runStreamRef,
     subagentManager: args.subagentManager,
     operationLifecycle: args.operationLifecycle,
-  };
-}
-
-function useTurnResetOperations(failover: StreamRuntime['bucketFailover']) {
-  return {
-    resetBuckets: useCallback(() => failover.resetBuckets?.(), [failover]),
-    resetBucketSession: useCallback(
-      () => failover.resetBucketSession?.(),
-      [failover],
-    ),
-    ensureBucketsAuthenticated: useCallback(async () => {
-      await failover.ensureBucketsAuthenticated?.();
-    }, [failover]),
   };
 }
 

@@ -324,7 +324,6 @@ describe('useAgentStream subagent isolation', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
       ),
     );
 
@@ -454,7 +453,6 @@ describe('useAgentStream subagent isolation', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
       ),
     );
 
@@ -531,7 +529,6 @@ describe('useAgentStream subagent isolation', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
       ),
     );
 
@@ -592,7 +589,6 @@ describe('useAgentStream subagent isolation', () => {
           onCancelSubmit: () => {},
           setShellInputFocused: () => {},
         },
-        undefined,
         undefined,
         undefined,
         undefined,
