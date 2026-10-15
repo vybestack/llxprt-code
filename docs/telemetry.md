@@ -172,7 +172,10 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
   it is included only when `telemetry.logApiBodies` is enabled (and
   `telemetry.logPrompts` is `true`), exported as `llxprt_code.api_request_chunk`
   records and a closing `llxprt_code.api_request_complete` record.
-- `llxprt_code.api_error`: provider API error
+- `llxprt_code.api_error`: provider API error, recorded when a request that
+  was handed to the provider fails. A request stopped before that point (a
+  BeforeModel hook block, an abort, a compression failure or a context
+  overflow) made no API call and is not recorded as one.
 - `llxprt_code.api_response`: provider API response (token counts, latency,
   `response_chars`). The response body is included only when
   `telemetry.logApiBodies` is enabled and `telemetry.logPrompts` is `true`,
