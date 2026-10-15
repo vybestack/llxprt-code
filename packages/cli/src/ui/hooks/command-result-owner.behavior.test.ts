@@ -112,6 +112,7 @@ async function dispatchFailure(
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     recordCommandError: bindCommandErrorRecorder(owner, 'agent', undefined),
+    loadCommandHistory: async () => {},
   };
   await processSlashCommand(deps, `/mcp auth ${server}`);
 }

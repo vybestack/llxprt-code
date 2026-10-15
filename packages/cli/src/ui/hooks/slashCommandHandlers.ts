@@ -24,8 +24,6 @@ import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
 import {
-  createEmojiFilter,
-  filterHistoryItems,
   iContentToHistoryItems,
   resolveEmojiFilterMode,
 } from '../utils/iContentToHistoryItems.js';
@@ -62,6 +60,9 @@ export interface SlashCommandHandlerDeps {
   config: CliUiRuntime | null;
   commandContext: CommandContext;
   recordCommandError: (message: string) => Promise<void>;
+  loadCommandHistory: (
+    result: Extract<ActionResult, { type: 'load_history' }>,
+  ) => Promise<void>;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   addMessage: (message: Message) => void;
@@ -314,7 +315,7 @@ async function handleActionResult(
     case 'dialog':
       return handleDialogResult(deps, result);
     case 'load_history':
-      return handleLoadHistoryResult(context, result);
+      return handleLoadHistoryResult(deps, result);
     case 'quit':
       deps.actions.quit(result.messages);
       return { type: 'handled' };
@@ -465,21 +466,10 @@ function openSubagentDialog(
 }
 
 async function handleLoadHistoryResult(
-  context: CommandContext,
+  deps: SlashCommandHandlerDeps,
   result: Extract<ActionResult, { type: 'load_history' }>,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (!agent) throw new Error('Session agent is unavailable');
-  await agent.setHistory(result.clientHistory);
-  // Display-only: replayed model text passes the same emoji filter as live
-  // output (issue #2888); clientHistory keeps the recorded text verbatim.
-  const emojiFilter = createEmojiFilter(
-    resolveEmojiFilterMode(context.services.config),
-  );
-  context.ui.clear();
-  filterHistoryItems(result.history, emojiFilter).forEach((item, index) => {
-    context.ui.addItem(item, index);
-  });
+  await deps.loadCommandHistory(result);
   return { type: 'handled' };
 }
 

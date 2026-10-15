@@ -1,3 +1,7 @@
+import {
+  bindFixtureHistoryLoader,
+  createCommands,
+} from '../../__tests__/command-history-result-fixture.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
  * @license
@@ -27,7 +31,7 @@ import {
   LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { IContent, Logger } from '@vybestack/llxprt-code-core';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { CommandContext } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import { MessageType } from '../types.js';
 import {
@@ -46,25 +50,6 @@ describe('slashCommandHandlers', () => {
   });
 
   type HistoryCall = [{ type: MessageType; text: string }, number];
-
-  function createCommands(
-    action: SlashCommand['action'],
-  ): readonly SlashCommand[] {
-    return [
-      {
-        name: 'help',
-        description: 'Show help',
-        kind: CommandKind.BUILT_IN,
-        action:
-          action ??
-          vi.fn(() => ({
-            type: 'message' as const,
-            messageType: 'info' as const,
-            content: 'ok',
-          })),
-      },
-    ];
-  }
 
   function createDeps(
     addItem: ReturnType<typeof vi.fn>,
@@ -123,6 +108,7 @@ describe('slashCommandHandlers', () => {
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
       recordCommandError: async () => {},
+      loadCommandHistory: async () => {},
       ...overrides,
     };
   }
@@ -519,6 +505,7 @@ describe('slashCommandHandlers', () => {
           : ({
               getEphemeralSetting: vi.fn().mockReturnValue(emojiMode),
             } as unknown as SlashCommandHandlerDeps['config']);
+      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
           name: 'loadhist',
@@ -657,6 +644,7 @@ describe('slashCommandHandlers', () => {
       const history: HistoryItemWithoutId[] = [
         { type: 'gemini', text: MODEL_TEXT },
       ];
+      deps.loadCommandHistory = bindFixtureHistoryLoader(deps.commandContext);
       deps.commands = [
         {
           name: 'loadhist',
