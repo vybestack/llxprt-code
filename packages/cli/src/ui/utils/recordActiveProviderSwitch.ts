@@ -129,3 +129,15 @@ export async function recordActiveProviderSwitch(
     reportFailure,
   );
 }
+
+export function bindModelSwitchRecording(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordEvent: RecordSessionEvent,
+  rawRecorder: ProviderSwitchRecorder | undefined,
+): ProviderSwitchRecorder['recordProviderSwitch'] {
+  if (recordingOwner === 'agent')
+    return (provider, model) =>
+      recordEvent({ type: 'provider_switch', provider, model });
+  return (provider, model) =>
+    rawRecorder?.recordProviderSwitch(provider, model);
+}

@@ -1,3 +1,4 @@
+import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -142,11 +143,11 @@ describe('useModelDialogHandler', () => {
           mockAddItem,
           store,
           'openai',
-          {
-            recordingOwner: 'agent',
-            services: { agent },
-            recordingIntegration: { recordProviderSwitch: rawWrite } as never,
-          },
+          bindModelSwitchRecording(
+            'agent',
+            (event) => agent.session.recordRecordingEvent(event),
+            { recordProviderSwitch: rawWrite },
+          ),
         ),
       );
       result.current(makeModel('openai', 'owner-model'));
@@ -170,7 +171,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -192,7 +193,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 
@@ -220,7 +221,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -244,7 +245,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -271,7 +272,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -305,7 +306,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 
