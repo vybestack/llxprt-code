@@ -1,3 +1,4 @@
+import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
 import {
   ChildAgentAssembly,
   type ChildAgentLaunch,
@@ -58,8 +59,8 @@ import { SessionClientOwner } from '../session/session-client-owner.js';
  * module-global state.
  */
 
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 import type { resolveAuthType } from './agentBootstrap.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -69,6 +70,8 @@ import {
   cleanupFailedCreatedAgent,
   finalizeAgent,
   initializeCreatedClient,
+  prepareAgentConfig,
+  resolveSchedulerFactory,
   startAgentSession,
 } from './createAgent.js';
 import type { CreatedAgentMcpOptions } from './createAgent.js';
@@ -87,7 +90,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { EditorCallbacks, AgentSchedulerHandle } from './config-types.js';
 import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import type {
@@ -107,7 +110,17 @@ import { completeAdoptedAgent } from './adopted-agent-completion.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
 import type { FromConfigOptions } from './config-types.js';
-import type { HostGitHubBrokerOwner } from './host-github-broker-owner.js';
+import {
+  assembleHostGitHubBroker,
+  type HostGitHubBrokerOwner,
+} from './host-github-broker-owner.js';
+import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import { prepareImageConstruction } from './session-image-assembly.js';
+import {
+  parseAgentConstruction,
+  agentMcpAssemblyOptions,
+} from './agent-construction-input.js';
+import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
 
 /**
  * Extra teardown context for {@link cleanupFailedRuntimeBootstrap} beyond the
@@ -396,65 +409,7 @@ function finishAdoptionAssembly(
   );
 }
 
-export function assemblePreferredAgent(
-  config: Config,
-  parsed: ParsedAgentConfig,
-  runtimeId: string,
-  suppliedStore: TokenStore | undefined,
-  messageBus: MessageBus,
-  tokenizerSelection: AgentConfig['tokenizerFactory'],
-  contentSelection: AgentConfig['contentGeneratorFactory'],
-  profileReads:
-    | NonNullable<AgentConfig['definitionOwner']>['profileReads']
-    | undefined,
-  authority: CredentialAuthority,
-  retainedFiles: readonly AgentRetainedProviderFile[],
-  cleanupPartial: () => Promise<void>,
-  mcpOptions: CreatedAgentMcpOptions,
-  resolvedAuth: ReturnType<typeof resolveAuthType>,
-  mediaOwner: SessionMediaOwner,
-  agentClientFactory: AgentClientFactory | undefined,
-  taskToolRegistration:
-    | AgentRuntimeFactoryBindings['taskToolRegistration']
-    | undefined,
-  policyOwner: RuntimePolicyOwner,
-  github: HostGitHubBrokerOwner | undefined,
-  onApproval: AgentConfig['onApproval'],
-  onOAuthPrompt: AgentConfig['onOAuthPrompt'],
-  editorCallbacks: EditorCallbacks | undefined,
-  schedulerHandles: AgentSchedulerHandle[],
-  schedulerFactory: SchedulerConstruction,
-  executeShellCommand: AgentConfig['executeShellCommand'],
-): Promise<Agent> {
-  return new PreferredAgentAssembly(
-    config,
-    parsed,
-    runtimeId,
-    suppliedStore,
-    messageBus,
-    tokenizerSelection,
-    contentSelection,
-    profileReads,
-    authority,
-    retainedFiles,
-    cleanupPartial,
-    mcpOptions,
-    resolvedAuth,
-    mediaOwner,
-    agentClientFactory,
-    taskToolRegistration,
-    policyOwner,
-    github,
-    onApproval,
-    onOAuthPrompt,
-    editorCallbacks,
-    schedulerHandles,
-    schedulerFactory,
-    executeShellCommand,
-  ).assemble();
-}
-
-class PreferredAgentAssembly {
+export class PreferredAgentAssembly {
   private settings!: SettingsService;
   private settingsOwner!: SessionSettingsOwner;
   private files!: ProviderFileLifecycle;
@@ -467,38 +422,147 @@ class PreferredAgentAssembly {
   private sessionClient: SessionClientOwner | undefined;
   private agent!: Agent;
 
+  private config!: Config;
+  private parsed!: ParsedAgentConfig;
+  private runtimeId!: string;
+  private suppliedStore: TokenStore | undefined;
+  private messageBus!: MessageBus;
+  private tokenizerSelection: AgentConfig['tokenizerFactory'];
+  private contentSelection: AgentConfig['contentGeneratorFactory'];
+  private profileReads:
+    | NonNullable<AgentConfig['definitionOwner']>['profileReads']
+    | undefined;
+  private authority!: CredentialAuthority;
+  private mcpOptions!: CreatedAgentMcpOptions;
+  private resolvedAuth!: ReturnType<typeof resolveAuthType>;
+  private mediaOwner!: SessionMediaOwner;
+  private agentClientFactory: AgentClientFactory | undefined;
+  private taskToolRegistration:
+    | AgentRuntimeFactoryBindings['taskToolRegistration']
+    | undefined;
+  private policyOwner!: RuntimePolicyOwner;
+  private github: HostGitHubBrokerOwner | undefined;
+  private onApproval: AgentConfig['onApproval'];
+  private onOAuthPrompt: AgentConfig['onOAuthPrompt'];
+  private editorCallbacks: EditorCallbacks | undefined;
+  private readonly schedulerHandles: AgentSchedulerHandle[] = [];
+  private schedulerFactory!: SchedulerConstruction;
+  private executeShellCommand: AgentConfig['executeShellCommand'];
+  private readonly workspaceRelease = new AcquisitionRelease();
+
   constructor(
-    private readonly config: Config,
-    private readonly parsed: ParsedAgentConfig,
-    private readonly runtimeId: string,
-    private readonly suppliedStore: TokenStore | undefined,
-    private readonly messageBus: MessageBus,
-    private readonly tokenizerSelection: AgentConfig['tokenizerFactory'],
-    private readonly contentSelection: AgentConfig['contentGeneratorFactory'],
-    private readonly profileReads:
-      | NonNullable<AgentConfig['definitionOwner']>['profileReads']
-      | undefined,
-    private readonly authority: CredentialAuthority,
+    private readonly rawConfig: AgentConfig,
     private readonly retainedFiles: readonly AgentRetainedProviderFile[],
-    private readonly cleanupPartial: () => Promise<void>,
-    private readonly mcpOptions: CreatedAgentMcpOptions,
-    private readonly resolvedAuth: ReturnType<typeof resolveAuthType>,
-    private readonly mediaOwner: SessionMediaOwner,
-    private readonly agentClientFactory: AgentClientFactory | undefined,
-    private readonly taskToolRegistration:
-      | AgentRuntimeFactoryBindings['taskToolRegistration']
-      | undefined,
-    private readonly policyOwner: RuntimePolicyOwner,
-    private readonly github: HostGitHubBrokerOwner | undefined,
-    private readonly onApproval: AgentConfig['onApproval'],
-    private readonly onOAuthPrompt: AgentConfig['onOAuthPrompt'],
-    private readonly editorCallbacks: EditorCallbacks | undefined,
-    private readonly schedulerHandles: AgentSchedulerHandle[],
-    private readonly schedulerFactory: SchedulerConstruction,
-    private readonly executeShellCommand: AgentConfig['executeShellCommand'],
+    private readonly settingsSnapshot: SettingsStateSnapshot | undefined,
   ) {}
 
   async assemble(): Promise<Agent> {
+    const authority =
+      this.rawConfig.credentialAuthority ??
+      new HostCredentialOwner(process.env).authority;
+    const images = prepareImageConstruction(this.rawConfig.imageOperation);
+    this.github = assembleHostGitHubBroker(this.rawConfig);
+    try {
+      const input = {
+        ...this.rawConfig,
+        credentialAuthority: authority,
+        imageOperation: images.selection,
+      };
+      await this.initializeWorkspace(input, authority);
+      await this.acquireProviders();
+      await this.finish();
+      return this.agent;
+    } catch (primary) {
+      const results = await Promise.allSettled([
+        this.github?.cleanupFailedConstruction(),
+        images.cleanupFailedConstruction(),
+      ]);
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(
+          [primary, ...failures],
+          'createAgent GitHub cleanup failed',
+        );
+      throw primary;
+    }
+  }
+
+  private async initializeWorkspace(
+    raw: AgentConfig,
+    authority: CredentialAuthority,
+  ): Promise<void> {
+    try {
+      const construction = parseAgentConstruction(raw);
+      this.parsed = construction.parsed;
+      this.runtimeId = construction.runtimeId;
+      this.resolvedAuth = construction.resolvedAuth;
+      this.suppliedStore = construction.tokenStore;
+      this.tokenizerSelection = raw.tokenizerFactory;
+      this.contentSelection = raw.contentGeneratorFactory;
+      this.profileReads = raw.definitionOwner?.profileReads;
+      this.authority = authority;
+      this.mcpOptions = agentMcpAssemblyOptions(raw, construction);
+      this.agentClientFactory =
+        construction.runtimeFactoryBindings?.agentClientFactory;
+      this.taskToolRegistration =
+        construction.runtimeFactoryBindings?.taskToolRegistration;
+      this.onApproval = construction.onApproval;
+      this.onOAuthPrompt = construction.onOAuthPrompt;
+      this.editorCallbacks = construction.editorCallbacks;
+      this.executeShellCommand = raw.executeShellCommand;
+      this.constructWorkspace(raw, construction.suppliedMediaOwner);
+    } catch (primary) {
+      await rejectPreferredAcquisition(
+        primary,
+        () => this.workspaceRelease.rollback(),
+        async () => {},
+      );
+    }
+  }
+
+  private constructWorkspace(
+    raw: AgentConfig,
+    suppliedMedia: SessionMediaOwner | undefined,
+  ): void {
+    const { params, forceConfirmations } = prepareAgentConfig(
+      this.parsed,
+      this.runtimeId,
+    );
+    this.schedulerFactory = resolveSchedulerFactory(
+      forceConfirmations,
+      raw.toolSchedulerFactory,
+      this.schedulerHandles,
+    );
+    const config = new Config({
+      ...params,
+      includeDirectories: [
+        ...(params.includeDirectories ?? []),
+        ...((this.parsed.harness?.includeProcessCwd ?? true)
+          ? [process.cwd()]
+          : []),
+      ],
+    });
+    this.workspaceRelease.acquire('policy', () => config.dispose());
+    this.config = config;
+    const policy = new RuntimePolicyOwner(config, raw.trustPort);
+    this.workspaceRelease.acquire('policy', () => policy.dispose());
+    this.policyOwner = policy;
+    if (forceConfirmations)
+      injectConfirmationForcingPolicy(policy.session.confirmation);
+    this.messageBus = policy.session.messageBus;
+    const media =
+      suppliedMedia ??
+      new SessionMediaOwner(
+        config.projectTempDir,
+        config.getMediaStoreQuotaByteLimit(),
+      );
+    this.workspaceRelease.acquire('policy', () => media.dispose());
+    this.mediaOwner = media;
+  }
+
+  private async acquireProviders(): Promise<void> {
     const release = new AcquisitionRelease();
     let settings: SettingsService;
     let settingsOwner: SessionSettingsOwner;
@@ -509,6 +573,8 @@ class PreferredAgentAssembly {
     let contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
     try {
       settings = new SettingsService();
+      if (this.settingsSnapshot !== undefined)
+        settings.restoreFromStateSnapshot(this.settingsSnapshot);
       settingsOwner = acquirePreferredSettings(
         this.config,
         settings,
@@ -555,23 +621,21 @@ class PreferredAgentAssembly {
         this.runtimeId,
         tokenizerFactory,
       );
+      this.settings = settings;
+      this.settingsOwner = settingsOwner;
+      this.files = files;
+      this.manager = manager;
+      this.oauth = oauth;
+      this.tokenizerFactory = tokenizerFactory;
+      this.contentGeneratorFactory = contentGeneratorFactory;
+      this.release = release;
     } catch (primary) {
-      return rejectPreferredAcquisition(
+      await rejectPreferredAcquisition(
         primary,
         () => release.close(),
-        this.cleanupPartial,
+        () => this.workspaceRelease.rollback(),
       );
     }
-    this.settings = settings;
-    this.settingsOwner = settingsOwner;
-    this.files = files;
-    this.manager = manager;
-    this.oauth = oauth;
-    this.tokenizerFactory = tokenizerFactory;
-    this.contentGeneratorFactory = contentGeneratorFactory;
-    this.release = release;
-    await this.finish();
-    return this.agent;
   }
 
   private async finish(): Promise<void> {
