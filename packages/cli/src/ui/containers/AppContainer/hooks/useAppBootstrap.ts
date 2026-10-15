@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
@@ -221,6 +221,44 @@ function useIdeClientCleanup(uiRuntime: UiRuntime): void {
   }, [uiRuntime]);
 }
 
+function useFeedbackRecording(
+  session: Pick<Agent['session'], 'recordRecordingEvent'>,
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingIntegrationRef:
+    | React.MutableRefObject<RecordingIntegration | null>
+    | undefined,
+) {
+  return useCallback(
+    (severity: 'warning' | 'error', message: string) => {
+      if (recordingOwner === 'agent') {
+        return session.recordRecordingEvent({
+          type: 'session_event',
+          severity,
+          message,
+        });
+      }
+      return recordingIntegrationRef?.current?.recordSessionEvent(
+        severity,
+        message,
+      );
+    },
+    [session, recordingOwner, recordingIntegrationRef],
+  );
+}
+
+function useMirroredTokenMetrics(
+  settingsStore: SettingsProfileStore,
+  tokenMetrics: ReturnType<typeof useTokenMetricsTracking>['tokenMetrics'],
+  historyTokenCount: number,
+): void {
+  useEffect(() => {
+    settingsStore.commands.setTokenMetrics(tokenMetrics);
+  }, [settingsStore, tokenMetrics]);
+  useEffect(() => {
+    settingsStore.commands.setHistoryTokenCount(historyTokenCount);
+  }, [settingsStore, historyTokenCount]);
+}
+
 /** Initializes recording, IDE prompt, messages, and token metrics */
 function useBootstrapEvents(
   props: AppBootstrapProps,
@@ -234,6 +272,8 @@ function useBootstrapEvents(
     recordingIntegration,
     initialRecordingService,
     initialLockHandle,
+    agent,
+    recordingOwner,
   } = props;
   const { recordingIntegrationRef, recordingSwapCallbacks } =
     useRecordingInfrastructure(
@@ -261,13 +301,16 @@ function useBootstrapEvents(
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   useExtensionAutoUpdate({ settings, onConsoleMessage: handleNewMessage });
-  useCoreEventHandlers({
-    handleNewMessage,
-    uiRuntime,
+  const readDebugMode = useCallback(
+    () => uiRuntime.app.getDebugMode(),
+    [uiRuntime],
+  );
+  const recordFeedback = useFeedbackRecording(
+    agent.session,
+    recordingOwner,
     recordingIntegrationRef,
-    recordingOwner: props.recordingOwner,
-    agent: props.agent,
-  });
+  );
+  useCoreEventHandlers({ handleNewMessage, readDebugMode, recordFeedback });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
     metrics: props.agent.metrics,
@@ -276,15 +319,11 @@ function useBootstrapEvents(
     recordingIntegrationRef,
     recordingOwner: props.recordingOwner,
   });
-  // Store mirrors: the footer renders token metrics from the settings store.
-  useEffect(() => {
-    props.settingsStore.commands.setTokenMetrics(tokenMetrics);
-  }, [props.settingsStore, tokenMetrics]);
-  useEffect(() => {
-    props.settingsStore.commands.setHistoryTokenCount(
-      sessionStats.historyTokenCount,
-    );
-  }, [props.settingsStore, sessionStats.historyTokenCount]);
+  useMirroredTokenMetrics(
+    props.settingsStore,
+    tokenMetrics,
+    sessionStats.historyTokenCount,
+  );
   return {
     recordingIntegrationRef,
     recordingSwapCallbacks,

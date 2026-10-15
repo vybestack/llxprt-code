@@ -7,7 +7,6 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ConsoleMessageItem } from '../types.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
@@ -26,17 +25,28 @@ describe('owner-backed UI feedback listener', () => {
       const recordingIntegrationRef = {
         current: { recordSessionEvent: rawWrite },
       };
-      const uiRuntime = { app: { getDebugMode: () => false } };
       const displayed: string[] = [];
       const { rerender, unmount } = renderHook(
         ({ owner }) =>
-          useCoreEventHandlers({
-            agent: owner,
-            recordingOwner: 'agent',
-            uiRuntime: uiRuntime as never,
-            recordingIntegrationRef: recordingIntegrationRef as never,
-            handleNewMessage: (message) => displayed.push(message.content),
-          }),
+          useCoreEventHandlers(
+            Object.assign(
+              { recordingIntegrationRef },
+              {
+                readDebugMode: () => false,
+                recordFeedback: (
+                  severity: 'warning' | 'error',
+                  message: string,
+                ) =>
+                  owner.session.recordRecordingEvent({
+                    type: 'session_event',
+                    severity,
+                    message,
+                  }),
+                handleNewMessage: (message: ConsoleMessageItem) =>
+                  displayed.push(message.content),
+              },
+            ),
+          ),
         { initialProps: { owner: agent } },
       );
       coreEvents.emitFeedback('warning', 'first owner feedback');
@@ -77,18 +87,12 @@ describe('owner-backed UI feedback listener', () => {
 
   it('surfaces a recording writer failure as a UI error instead of dropping the flush promise', async () => {
     const writerFailure = new Error('disk full');
-    const failingAgent = {
-      session: {
-        recordRecordingEvent: () => Promise.reject(writerFailure),
-      },
-    } as unknown as Agent;
-    const uiRuntime = { app: { getDebugMode: () => false } };
+    const recordFeedback = () => Promise.reject(writerFailure);
     const displayed: ConsoleMessageItem[] = [];
     const { unmount } = renderHook(() =>
       useCoreEventHandlers({
-        agent: failingAgent,
-        recordingOwner: 'agent',
-        uiRuntime: uiRuntime as never,
+        recordFeedback,
+        readDebugMode: () => false,
         handleNewMessage: (message) => displayed.push(message),
       }),
     );
