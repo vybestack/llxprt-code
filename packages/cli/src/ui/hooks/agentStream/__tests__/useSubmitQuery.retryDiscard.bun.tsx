@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -225,14 +226,14 @@ async function buildUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: await createMockAgent(),
+    ...submissionOperations(await createMockAgent(), undefined, undefined),
     addItem: deps.addItemRecorder.addItem,
     removeItems,
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
     onAuthError: vi.fn(),
-    recordingIntegration: undefined,
+
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem,
     pendingResponse: deps.pendingResponse,

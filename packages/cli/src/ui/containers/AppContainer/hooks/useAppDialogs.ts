@@ -164,6 +164,22 @@ function useQueueErrorTimeoutWiring(
   });
 }
 
+function useProviderDialogRecording(
+  session: Pick<Agent['session'], 'recordRecordingEvent'>,
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingIntegration: RecordingIntegration | undefined,
+) {
+  return useMemo(
+    () =>
+      bindModelSwitchRecording(
+        recordingOwner,
+        (event) => session.recordRecordingEvent(event),
+        recordingIntegration,
+      ),
+    [session, recordingOwner, recordingIntegration],
+  );
+}
+
 function useDialogsAuthProviders(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsStoreState>,
@@ -201,13 +217,19 @@ function useDialogsAuthProviders(
     addItem,
     p.settingsStore.commands.setEditorError,
   );
-  const addMessage = useDialogHistoryMessage(p.turnStore);
   const provider = useProviderDialog({
-    addMessage,
-    dialogs,
-    recordingIntegration,
-    recordingOwner: p.recordingOwner,
-    agent: p.agent,
+    addMessage: useDialogHistoryMessage(p.turnStore),
+    listProviders: runtime.listProviders,
+    getActiveProviderName: runtime.getActiveProviderName,
+    setProvider: runtime.setProvider,
+    getActiveModelName: runtime.getActiveModelName,
+    recordProviderSwitch: useProviderDialogRecording(
+      p.agent.session,
+      p.recordingOwner,
+      recordingIntegration,
+    ),
+    openProviderDialog: useCallback(() => dialogs.provider.open({}), [dialogs]),
+    closeProviderDialog: dialogs.provider.close,
   });
   useModelRuntimeSync({
     config,

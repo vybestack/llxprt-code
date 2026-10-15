@@ -16,7 +16,6 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   type MessageSenderType,
-  type RecordingIntegration,
   type ThinkingBlock,
   type ThoughtSummary,
   type ToolCallRequestInfo,
@@ -33,10 +32,6 @@ import { useSessionStats } from '../../contexts/SessionContext.js';
 import { useStreamEventHandlers } from './useStreamEventHandlers.js';
 import { dispatchAgentEvent } from './agentEventDispatcher.js';
 import type { AgentEventRouter } from './useAgentEventStream.js';
-import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from '../../utils/modelIdentity.js';
 import type { QueuedSubmission } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import { observeAgentEvent } from '../../../observation/jspWiring.js';
@@ -67,25 +62,16 @@ export type SubmissionExecutor = (
   fromQueue?: boolean,
 ) => Promise<SubmissionDisposition>;
 
-/**
- * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
- * fresh runtime state at call time so a single stable reference can be reused.
- */
-function defaultGetContentPrefixIdentity(
-  identity: Parameters<typeof createCliModelIdentityRuntime>[0],
-): string | null {
-  try {
-    return resolveContentPrefixIdentity(
-      createCliModelIdentityRuntime(identity),
-    );
-  } catch {
-    return null;
-  }
-}
-
 export interface UseSubmitQueryDeps {
   runtime: StreamRuntime;
-  agent: Agent;
+  getProviderContextLimit: Agent['getProviderContextLimit'];
+  getContentPrefixIdentity: () => string | null;
+  getToolHandle: Agent['tools']['get'];
+  findResource: Agent['mcp']['findResource'];
+  readResource: Agent['mcp']['readResource'];
+  setLastPromptTokenCount: Agent['metrics']['setLastPromptTokenCount'];
+  subscribeTaskNotifications: Agent['tasks']['subscribeNotifications'];
+  flushRecording: () => Promise<void>;
   addItem: (
     item: Omit<HistoryItem, 'id'>,
     timestamp?: number,
@@ -96,8 +82,6 @@ export interface UseSubmitQueryDeps {
   onDebugMessage: (message: string) => void;
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
   onAuthError: () => void;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -198,41 +182,13 @@ export interface UseSubmitQueryReturn {
 function useSubmissionEventHandlers(
   deps: UseSubmitQueryDeps,
 ): ReturnType<typeof useStreamEventHandlers> {
-  const getProviderContextLimit = useCallback(
-    () => deps.agent.getProviderContextLimit(),
-    [deps.agent],
-  );
-  const getContentPrefixIdentity = useCallback(
-    () =>
-      defaultGetContentPrefixIdentity({
-        getProvider: () => deps.agent.getProvider(),
-        getModel: () => deps.agent.getModel(),
-        getCurrentSequenceModel: () => deps.agent.getCurrentSequenceModel(),
-        getActiveProfileName: () => deps.agent.getActiveProfileName(),
-      }),
-    [deps.agent],
-  );
-  const tools = deps.agent.tools;
-  const mcp = deps.agent.mcp;
-  const getToolHandle = useCallback<Agent['tools']['get']>(
-    (name) => tools.get(name),
-    [tools],
-  );
-  const findResource = useCallback<Agent['mcp']['findResource']>(
-    (identifier) => mcp.findResource(identifier),
-    [mcp],
-  );
-  const readResource = useCallback<Agent['mcp']['readResource']>(
-    (server, uri) => mcp.readResource(server, uri),
-    [mcp],
-  );
   return useStreamEventHandlers({
     runtime: deps.runtime,
-    getProviderContextLimit,
-    getContentPrefixIdentity,
-    getToolHandle,
-    findResource,
-    readResource,
+    getProviderContextLimit: deps.getProviderContextLimit,
+    getContentPrefixIdentity: deps.getContentPrefixIdentity,
+    getToolHandle: deps.getToolHandle,
+    findResource: deps.findResource,
+    readResource: deps.readResource,
     settings: deps.settings,
     addItem: deps.addItem,
     removeItems: deps.removeItems,
@@ -355,8 +311,7 @@ function useProcessAgentEvent(
       const result = dispatchAgentEvent(
         event,
         {
-          setLastPromptTokenCount:
-            latestDeps.current.agent.metrics.setLastPromptTokenCount,
+          setLastPromptTokenCount: latestDeps.current.setLastPromptTokenCount,
           addItem: latestDeps.current.addItem,
           sanitizeContent: latestDeps.current.sanitizeContent,
           flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,
@@ -370,8 +325,7 @@ function useProcessAgentEvent(
           setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
           setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
           setThought: latestDeps.current.setThought,
-          getContentPrefixIdentity: () =>
-            defaultGetContentPrefixIdentity(latestDeps.current.agent),
+          getContentPrefixIdentity: latestDeps.current.getContentPrefixIdentity,
           ...latestHandlers.current,
         },
         agentBufferRef.current,
@@ -388,8 +342,13 @@ function useSubmitQueryEffects(
   submitQuery: ReturnType<typeof useSubmitQueryCallback>,
   scheduleNextQueuedSubmission: () => void,
 ) {
-  const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
-    deps;
+  const {
+    submitQueryRef,
+    streamingState,
+    runtime,
+    subscribeTaskNotifications,
+    enqueueSubmission,
+  } = deps;
   useEffect(() => {
     submitQueryRef.current = submitQuery;
   }, [submitQuery, submitQueryRef]);
@@ -420,7 +379,7 @@ function useSubmitQueryEffects(
         scheduleNextQueuedSubmission();
       });
 
-    const unsubscribe = agent.tasks.subscribeNotifications(
+    const unsubscribe = subscribeTaskNotifications(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -428,7 +387,12 @@ function useSubmitQueryEffects(
     return () => {
       unsubscribe();
     };
-  }, [agent, streamingState, scheduleNextQueuedSubmission, enqueueSubmission]);
+  }, [
+    subscribeTaskNotifications,
+    streamingState,
+    scheduleNextQueuedSubmission,
+    enqueueSubmission,
+  ]);
 }
 
 interface DrainLifecycle {

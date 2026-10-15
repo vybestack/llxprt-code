@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -188,9 +189,13 @@ function useOrchestration(
     [commandEffect],
   );
 
+  const submissionOps = useMemo(
+    () => submissionOperations(agent, undefined, undefined),
+    [agent],
+  );
   const submitDeps: UseSubmitQueryDeps = {
     runtime,
-    agent,
+    ...submissionOps,
     addItem,
     removeItems,
     settings: createLoadedSettings(),
@@ -238,7 +243,6 @@ function useOrchestration(
     isResponding,
     streamingState,
     subagentManager: undefined,
-    recordingIntegration: undefined,
   };
 
   const submitResult = useSubmitQuery(submitDeps);

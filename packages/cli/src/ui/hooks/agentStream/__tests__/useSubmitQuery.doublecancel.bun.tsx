@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -129,7 +130,7 @@ function createDeps(options: Partial<DoubleCancelDeps> = {}): DoubleCancelDeps {
 }
 
 interface SubmitQueryOverrides {
-  agent?: UseSubmitQueryDeps['agent'];
+  agent?: Parameters<typeof submissionOperations>[0];
   runtime?: StreamRuntime;
   queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
   queueOperations?: ReturnType<typeof createQueueOperations>;
@@ -139,7 +140,7 @@ interface SubmitQueryOverrides {
   addItem?: UseSubmitQueryDeps['addItem'];
   turnCancelledRef?: React.MutableRefObject<boolean>;
   drainSuppressedRef?: React.MutableRefObject<boolean>;
-  recordingIntegration?: UseSubmitQueryDeps['recordingIntegration'];
+  recordingIntegration?: Parameters<typeof submissionOperations>[1];
 }
 
 interface RenderSubmitQueryOptions {
@@ -160,14 +161,18 @@ async function createUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: overrides.agent ?? (await createMockAgent()),
+    ...submissionOperations(
+      overrides.agent ?? (await createMockAgent()),
+      overrides.recordingIntegration,
+      undefined,
+    ),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),
     settings: createLoadedSettings(),
     onDebugMessage: vi.fn(),
     onCancelSubmit: vi.fn(),
     onAuthError: vi.fn(),
-    recordingIntegration: overrides.recordingIntegration,
+
     sanitizeContent: (text: string) => ({ text, blocked: false }),
     flushPendingHistoryItem: deps.flushPendingHistoryItem,
     pendingResponse: new PendingResponseBuffer(undefined),

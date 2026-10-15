@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 import { CredentialAuthority } from '../../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
@@ -501,6 +502,11 @@ function renderHarness(options: {
   };
 
   const operations = agentStreamOperations(env.agent);
+  const submissionOps = submissionOperations(
+    env.agent,
+    options.recordingIntegration,
+    undefined,
+  );
   const hook = renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       const queue = useQueuedSubmissions();
@@ -524,14 +530,14 @@ function renderHarness(options: {
 
       const submitDeps: UseSubmitQueryDeps = {
         runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-        agent: env.agent,
+        ...submissionOps,
         addItem: handles.addItem,
         removeItems: vi.fn(),
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
         onAuthError: vi.fn(),
-        recordingIntegration: options.recordingIntegration,
+
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
         pendingResponse: new PendingResponseBuffer(undefined),

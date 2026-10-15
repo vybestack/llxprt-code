@@ -6,11 +6,10 @@
 
 import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-agents';
-import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import {
+  NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
+  type AgentProviderSwitchResult,
+} from '@vybestack/llxprt-code-agents';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -18,10 +17,16 @@ interface UseProviderDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
-  dialogs: DialogOpeners;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
-  agent?: Agent;
+  listProviders: () => string[];
+  getActiveProviderName: () => string;
+  setProvider: (name: string) => Promise<AgentProviderSwitchResult>;
+  getActiveModelName: () => string;
+  recordProviderSwitch: (
+    provider: string,
+    model: string,
+  ) => void | Promise<void>;
+  openProviderDialog: () => void;
+  closeProviderDialog: () => void;
 }
 
 function addProviderError(
@@ -52,10 +57,10 @@ function isNoActiveProviderSignal(error: unknown): boolean {
  * selection"; any other runtime failure propagates so callers can report it.
  */
 function resolveActiveProviderName(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  getActiveProviderName: () => string,
 ): string {
   try {
-    return runtime.getActiveProviderName();
+    return getActiveProviderName();
   } catch (e) {
     if (isNoActiveProviderSignal(e)) {
       return '';
@@ -66,12 +71,14 @@ function resolveActiveProviderName(
 
 export const useProviderDialog = ({
   addMessage,
-  dialogs,
-  recordingIntegration,
-  recordingOwner,
-  agent,
+  listProviders,
+  getActiveProviderName,
+  setProvider,
+  getActiveModelName,
+  recordProviderSwitch,
+  openProviderDialog,
+  closeProviderDialog,
 }: UseProviderDialogParams) => {
-  const runtime = useRuntimeApi();
   const [providers, setProviders] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
@@ -79,41 +86,29 @@ export const useProviderDialog = ({
     let loadedProviders: string[];
     let activeProvider: string;
     try {
-      loadedProviders = runtime.listProviders();
-      activeProvider = resolveActiveProviderName(runtime);
+      loadedProviders = listProviders();
+      activeProvider = resolveActiveProviderName(getActiveProviderName);
     } catch (e) {
       addProviderError(addMessage, 'Failed to load providers', e);
       return;
     }
     setProviders(loadedProviders);
     setCurrentProvider(activeProvider);
-    dialogs.provider.open({});
-  }, [addMessage, dialogs, runtime]);
+    openProviderDialog();
+  }, [addMessage, openProviderDialog, listProviders, getActiveProviderName]);
 
   const handleSelect = useCallback(
     async (providerName: string) => {
       try {
-        const prev = resolveActiveProviderName(runtime);
+        const prev = resolveActiveProviderName(getActiveProviderName);
         /**
          * @plan:PLAN-20250218-STATELESSPROVIDER.P06
          * @requirement:REQ-SP-005
          * @pseudocode:cli-runtime.md line 9
          */
-        const result = await runtime.setProvider(providerName);
-        const model = result.defaultModel ?? runtime.getActiveModelName();
-        if (recordingOwner === 'agent') {
-          if (!agent) throw new Error('Session agent is unavailable');
-          await agent.session.recordRecordingEvent({
-            type: 'provider_switch',
-            provider: result.nextProvider,
-            model,
-          });
-        } else {
-          recordingIntegration?.recordProviderSwitch(
-            result.nextProvider,
-            model,
-          );
-        }
+        const result = await setProvider(providerName);
+        const model = result.defaultModel ?? getActiveModelName();
+        await recordProviderSwitch(result.nextProvider, model);
         notifyProviderSwitch({
           addMessage,
           prevProvider: prev,
@@ -124,9 +119,16 @@ export const useProviderDialog = ({
       } catch (e) {
         addProviderError(addMessage, 'Failed to switch provider', e);
       }
-      dialogs.provider.close();
+      closeProviderDialog();
     },
-    [addMessage, dialogs, runtime, recordingIntegration, recordingOwner, agent],
+    [
+      addMessage,
+      closeProviderDialog,
+      getActiveProviderName,
+      setProvider,
+      getActiveModelName,
+      recordProviderSwitch,
+    ],
   );
 
   return {

@@ -9,6 +9,7 @@ import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
+import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 import { readFile } from 'node:fs/promises';
 
 /**
@@ -21,7 +22,10 @@ import { readFile } from 'node:fs/promises';
 const runtime = {
   getActiveProviderName: () => 'old',
   getActiveModelName: () => 'fallback-model',
+  listProviders: () => ['old', 'new'],
   setProvider: async (name: string) => ({
+    changed: true,
+    previousProvider: 'old',
     nextProvider: name.trim(),
     infoMessages: [
       'Endpoint: https://example.test',
@@ -48,7 +52,10 @@ describe('provider switch notices', () => {
     dialogs.provider.open({});
     const { result, unmount } = renderHook(() =>
       useProviderDialog({
-        dialogs,
+        ...runtime,
+        recordProviderSwitch: () => {},
+        openProviderDialog: () => dialogs.provider.open({}),
+        closeProviderDialog: dialogs.provider.close,
         addMessage: (message) => messages.push(message),
       }),
     );
@@ -77,13 +84,19 @@ describe('provider switch notices', () => {
       if (!path) throw new Error('No recording path');
       const store = createDialogStore();
       const rawWrite = vi.fn();
+      const recordProviderSwitch = bindModelSwitchRecording(
+        'agent',
+        (event) => agent.session.recordRecordingEvent(event),
+        { recordProviderSwitch: rawWrite },
+      );
       const { result, unmount } = renderHook(() =>
         useProviderDialog({
-          dialogs: createDialogOpeners(store),
+          ...runtime,
           addMessage: () => {},
-          recordingOwner: 'agent',
-          agent,
-          recordingIntegration: { recordProviderSwitch: rawWrite } as never,
+          recordProviderSwitch,
+          openProviderDialog: () =>
+            store.commands.openDialog({ kind: 'provider', payload: {} }),
+          closeProviderDialog: () => store.commands.closeDialog('provider'),
         }),
       );
       await act(async () => {

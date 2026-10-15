@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -152,6 +153,7 @@ async function renderWithRealQueue(
   };
 
   const agent = await createMockAgent();
+  const submissionOps = submissionOperations(agent, undefined, undefined);
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       // REAL queue store — not the createQueueOperations stub.
@@ -159,14 +161,14 @@ async function renderWithRealQueue(
 
       const submitDeps: UseSubmitQueryDeps = {
         runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-        agent,
+        ...submissionOps,
         addItem: handles.addItem,
         removeItems: vi.fn(),
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
         onAuthError: vi.fn(),
-        recordingIntegration: undefined,
+
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
         pendingResponse: new PendingResponseBuffer(undefined),

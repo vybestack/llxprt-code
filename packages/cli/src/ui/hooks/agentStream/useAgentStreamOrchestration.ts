@@ -6,6 +6,10 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from '../../utils/modelIdentity.js';
+import {
   type EditorType,
   type LiveOutputUpdate,
   type MessageBus,
@@ -260,7 +264,7 @@ function useSubmitForStream(
   runStreamRef: UseSubmitQueryDeps['runStreamRef'],
 ) {
   const result = useSubmitQuery(
-    buildSubmitQueryDeps({
+    useBuildSubmitQueryDeps({
       args,
       st,
       scheduleToolCalls,
@@ -392,7 +396,7 @@ interface BuildSubmitQueryDepsArgs {
   runStreamRef: UseSubmitQueryDeps['runStreamRef'];
 }
 
-function buildSubmitQueryDeps({
+function useBuildSubmitQueryDeps({
   args,
   st,
   scheduleToolCalls,
@@ -401,17 +405,76 @@ function buildSubmitQueryDeps({
   streamingState,
   runStreamRef,
 }: BuildSubmitQueryDepsArgs): UseSubmitQueryDeps {
+  const { agent, recordingOwner, recordingIntegration } = args;
+  const flushRecording = useCallback(async () => {
+    if (recordingOwner === 'agent') {
+      await agent.session.flushRecording();
+      return;
+    }
+    try {
+      await recordingIntegration?.flushAtTurnBoundary();
+    } catch {
+      /* non-fatal */
+    }
+  }, [agent, recordingOwner, recordingIntegration]);
+  const tools = agent.tools;
+  const mcp = agent.mcp;
   return {
+    ...submissionState(st),
     runtime: args.runtime,
-    agent: args.agent,
+    getProviderContextLimit: useCallback(
+      () => agent.getProviderContextLimit(),
+      [agent],
+    ),
+    getContentPrefixIdentity: useCallback(
+      () =>
+        defaultGetContentPrefixIdentity({
+          getProvider: () => agent.getProvider(),
+          getModel: () => agent.getModel(),
+          getCurrentSequenceModel: () => agent.getCurrentSequenceModel(),
+          getActiveProfileName: () => agent.getActiveProfileName(),
+        }),
+      [agent],
+    ),
+    getToolHandle: useCallback((name) => tools.get(name), [tools]),
+    findResource: useCallback(
+      (identifier) => mcp.findResource(identifier),
+      [mcp],
+    ),
+    readResource: useCallback(
+      (server, uri) => mcp.readResource(server, uri),
+      [mcp],
+    ),
+    setLastPromptTokenCount: useCallback(
+      (count) => agent.metrics.setLastPromptTokenCount(count),
+      [agent],
+    ),
+    subscribeTaskNotifications: useCallback(
+      (isBusy, triggerTurn) =>
+        agent.tasks.subscribeNotifications(isBusy, triggerTurn),
+      [agent],
+    ),
+    flushRecording,
     addItem: args.addItem,
     removeItems: args.removeItems,
     settings: args.settings,
     onDebugMessage: args.onDebugMessage,
     onCancelSubmit: args.onCancelSubmit,
     onAuthError: args.onAuthError,
-    recordingIntegration: args.recordingIntegration,
-    recordingOwner: args.recordingOwner,
+    scheduleToolCalls,
+    handleShellCommand,
+    handleSlashCommand: args.handleSlashCommand,
+    shellModeActive: args.shellModeActive,
+    loopDetectedRef,
+    streamingState,
+    runStreamRef,
+    subagentManager: args.subagentManager,
+    operationLifecycle: args.operationLifecycle,
+  };
+}
+
+function submissionState(st: BuildSubmitQueryDepsArgs['st']) {
+  return {
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     pendingResponse: st.pendingResponse,
@@ -433,22 +496,29 @@ function buildSubmitQueryDeps({
     setInitError: st.setInitError,
     setThought: st.setThought,
     setLastAgentActivityTime: st.setLastAgentActivityTime,
-    scheduleToolCalls,
     abortActiveStream: st.abortActiveStream,
-    handleShellCommand,
-    handleSlashCommand: args.handleSlashCommand,
     logger: st.logger,
-    shellModeActive: args.shellModeActive,
-    loopDetectedRef,
     lastProfileNameRef: st.lastProfileNameRef,
     lastModelInfoRef: st.lastModelInfoRef,
     lastModelIdentityRef: st.lastModelIdentityRef,
     abortControllerRef: st.abortControllerRef,
     submitQueryRef: st.submitQueryRef,
     isResponding: st.isResponding,
-    streamingState,
-    runStreamRef,
-    subagentManager: args.subagentManager,
-    operationLifecycle: args.operationLifecycle,
   };
+}
+
+/**
+ * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
+ * fresh runtime state at call time so a single stable reference can be reused.
+ */
+function defaultGetContentPrefixIdentity(
+  identity: Parameters<typeof createCliModelIdentityRuntime>[0],
+): string | null {
+  try {
+    return resolveContentPrefixIdentity(
+      createCliModelIdentityRuntime(identity),
+    );
+  } catch {
+    return null;
+  }
 }

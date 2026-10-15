@@ -1,3 +1,4 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -144,7 +145,13 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
   // excess-property checks that can misfire under incremental typecheck caches.
   const hookDeps: UseSubmitQueryDeps = {
     runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...submissionOperations(
+      createMockAgentClient() as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: deps.addItem,
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -188,9 +195,6 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
   };
   return renderHook(() => useSubmitQuery(hookDeps));
 }
