@@ -364,9 +364,22 @@ function useDialogsProfiles(p: AppDialogsParams) {
   });
   const toolsRaw = useToolsDialog({
     addMessage,
-    dialogs,
-    config,
-    agent,
+    listTools: useCallback(() => agent.tools.list(), [agent]),
+    readDisabledTools: useCallback(
+      () => config.getEphemeralSettings()['tools.disabled'],
+      [config],
+    ),
+    writeDisabledTools: useCallback(
+      (names: string[]) => {
+        config.setEphemeralSetting('tools.disabled', names);
+      },
+      [config],
+    ),
+    openToolsDialog: useCallback(
+      (action: 'enable' | 'disable') => dialogs.tools.open({ action }),
+      [dialogs],
+    ),
+    closeToolsDialog: dialogs.tools.close,
   });
   const data: ProfileDialogsData = {
     profiles: loadProfile.profiles,
