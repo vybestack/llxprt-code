@@ -226,6 +226,7 @@ async function run(
     const expected = await oracle(setup, mode);
     if (source) observer = observeModelBody(setup.history, retainBoundaryRows);
     const facts = await consume(setup, mode, hooks);
+    await observer?.settled();
     const path = join(root, 'model-hooks.jsonl');
     return {
       ...facts,

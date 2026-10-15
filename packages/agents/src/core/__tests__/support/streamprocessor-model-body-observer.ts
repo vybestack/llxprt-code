@@ -12,6 +12,12 @@ export interface ModelBodyObserver {
     closed: number;
     reads: number;
   };
+  /**
+   * Resolves once every observed request body has been fully read, errored or
+   * cancelled. A known-length request can be answered before the body stream
+   * reports its end, so facts must be read after this settles.
+   */
+  settled(): Promise<void>;
   restore(): void;
 }
 async function liveRows(references: Array<WeakRef<IContent>>): Promise<number> {
@@ -63,12 +69,15 @@ export function observeModelBody(
   let lastLive = -1;
   let boundaryFirst = -1;
   let boundaryLast = -1;
+  const bodies: Array<Promise<void>> = [];
   globalThis.fetch = Object.assign(
     async (...[input, init]: Parameters<typeof fetch>): Promise<Response> => {
       if (!(init?.body instanceof ReadableStream))
         throw new Error('Expected progressive source BODY');
       const reader = init.body.getReader();
       let first = true;
+      let finish!: () => void;
+      bodies.push(new Promise<void>((resolve) => (finish = resolve)));
       const body = new ReadableStream<Uint8Array>(
         {
           async pull(controller): Promise<void> {
@@ -79,6 +88,7 @@ export function observeModelBody(
                 boundaryLast = await liveRows(boundary.references);
                 reader.releaseLock();
                 controller.close();
+                finish();
                 return;
               }
               if (first) {
@@ -90,6 +100,7 @@ export function observeModelBody(
             } catch (error) {
               reader.releaseLock();
               controller.error(error);
+              finish();
             }
           },
           async cancel(reason): Promise<void> {
@@ -97,6 +108,7 @@ export function observeModelBody(
               await reader.cancel(reason);
             } finally {
               reader.releaseLock();
+              finish();
             }
           },
         },
@@ -109,6 +121,9 @@ export function observeModelBody(
   return {
     firstLive: () => firstLive,
     lastLive: () => lastLive,
+    settled: async () => {
+      await Promise.all(bodies);
+    },
     boundaryFacts: () => ({
       first: boundaryFirst,
       last: boundaryLast,
