@@ -32,7 +32,12 @@ import {
   writeResponseLog as writeResponseLogEntry,
   type ConversationLogContext,
 } from './logging/conversationResponseLogger.js';
-import { logApiRequestTelemetry as logApiRequestTelemetryEntry } from './logging/apiRequestLogger.js';
+import {
+  logApiRequestTelemetry as logApiRequestTelemetryEntry,
+  logSizedApiRequestTelemetry,
+} from './logging/apiRequestLogger.js';
+import { DeferredApiRequest } from './logging/deferredApiRequest.js';
+import { REQUEST_SIZE_SINK_KEY } from './logging/requestSizeReport.js';
 import {
   normalizeChatCompletionOptions,
   ensureRuntimeContext,
@@ -278,9 +283,7 @@ export class LoggingProviderWrapper implements IProvider {
 
     const policy = requestLoggingPolicy(normalizedOptions, activeConfig);
     const context = this.captureLoggingContext();
-    const resolvedModelName =
-      normalizedOptions.resolved?.model ?? context.defaultModelName;
-    await this.logPreSendRequest(
+    const deferredRequest = await this.logPreSendRequest(
       activeConfig,
       normalizedOptions,
       promptId,
@@ -288,7 +291,32 @@ export class LoggingProviderWrapper implements IProvider {
       policy,
       context,
     );
+    try {
+      yield* this.generateAttempts(
+        normalizedOptions,
+        activeConfig,
+        promptId,
+        conversationLoggingEnabled,
+        policy,
+        context,
+        deferredRequest,
+      );
+    } finally {
+      deferredRequest?.settle();
+    }
+  }
 
+  private async *generateAttempts(
+    normalizedOptions: GenerateChatOptions,
+    activeConfig: ProviderRequestDiagnostics,
+    promptId: string,
+    conversationLoggingEnabled: boolean,
+    policy: RequestLoggingPolicy,
+    context: ConversationLogContext & RequestSetupContext,
+    deferredRequest: DeferredApiRequest | undefined,
+  ): AsyncIterableIterator<IContent> {
+    const resolvedModelName =
+      normalizedOptions.resolved?.model ?? context.defaultModelName;
     // Inner retry/load-balancer transports own their attempts; a direct
     // provider leaves lifecycle ownership to this wrapper.
     const wrapperOwned = this.isWrapperLifecycleOwner();
@@ -308,6 +336,7 @@ export class LoggingProviderWrapper implements IProvider {
     const optionsWithLifecycle = this.buildLifecycleOptions(
       normalizedOptions,
       recorder,
+      deferredRequest,
     );
 
     // Start direct attempts before invocation so synchronous failures finalize.
@@ -408,12 +437,16 @@ export class LoggingProviderWrapper implements IProvider {
   private buildLifecycleOptions(
     normalizedOptions: GenerateChatOptions,
     recorder: AttemptRecorder,
+    deferredRequest: DeferredApiRequest | undefined,
   ): GenerateChatOptions {
     return {
       ...normalizedOptions,
       metadata: {
         ...(normalizedOptions.metadata ?? {}),
         [ATTEMPT_LIFECYCLE_KEY]: recorder satisfies AttemptLifecycleObserver,
+        ...(deferredRequest === undefined
+          ? {}
+          : { [REQUEST_SIZE_SINK_KEY]: deferredRequest.report }),
       },
     };
   }
@@ -473,7 +506,7 @@ export class LoggingProviderWrapper implements IProvider {
     conversationLoggingEnabled: boolean,
     policy: RequestLoggingPolicy,
     context: ConversationLogContext & RequestSetupContext,
-  ): Promise<void> {
+  ): Promise<DeferredApiRequest | undefined> {
     const artifact = conversationLoggingEnabled
       ? await logRequestIfEnabled(
           activeConfig,
@@ -484,6 +517,21 @@ export class LoggingProviderWrapper implements IProvider {
           policy,
         )
       : undefined;
+    if (!activeConfig.requestBodyLoggingEnabled) {
+      // No body to export: the provider reports the size of the request it
+      // builds, and the event is recorded then.
+      return new DeferredApiRequest((requestChars) =>
+        logSizedApiRequestTelemetry(
+          activeConfig,
+          normalizedOptions,
+          promptId,
+          context.defaultModelName,
+          context.debug,
+          policy,
+          requestChars,
+        ),
+      );
+    }
     await logApiRequestTelemetryEntry(
       activeConfig,
       normalizedOptions,
@@ -494,6 +542,7 @@ export class LoggingProviderWrapper implements IProvider {
       policy,
       artifact,
     );
+    return undefined;
   }
 
   private async *processStreamWithRecorder(

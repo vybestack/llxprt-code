@@ -32,11 +32,16 @@ import {
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
 
 export async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
+  reportRequestSize(
+    params.normalizedOptions.metadata,
+    await params.streamRequestBodyLength(),
+  );
   const transport = deps.getWebSocketTransport?.();
   if (params.isCodex && transport !== undefined) {
     yield* streamOverWebSocketWithRenewal(params, deps, transport);

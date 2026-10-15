@@ -56,6 +56,7 @@ import {
   captureRequestMediaInput,
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
 import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import { reportRequestSize } from '@vybestack/llxprt-code-providers/logging/requestSizeReport.js';
 import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
 
@@ -326,6 +327,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
+    onRequestBytes?: (bytes: number) => void,
   ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.captureOwnerPolicy();
@@ -344,6 +346,7 @@ export class GeminiProvider extends BaseProvider {
       vertexai: isVertex,
       ...this.buildVertexAIOptions(isVertex, vertexConfig),
       httpOptions: baseURL ? { ...httpOptions, baseUrl: baseURL } : httpOptions,
+      ...(onRequestBytes === undefined ? {} : { onRequestBytes }),
     };
   }
 
@@ -456,13 +459,16 @@ export class GeminiProvider extends BaseProvider {
       setup.shouldDumpError,
       setup.mapResponseToChunks,
       setup.reasoningConfig.includeInResponse,
-      () => this.createNonOAuthGenerator(setup),
+      () => this.createNonOAuthGenerator(setup, options.metadata),
       setup.baseURL,
       dumpHeaders,
     );
   }
 
-  private async createNonOAuthGenerator(setup: GeminiGenerationSetup): Promise<{
+  private async createNonOAuthGenerator(
+    setup: GeminiGenerationSetup,
+    metadata: Record<string, unknown> | undefined,
+  ): Promise<{
     generateContent: (
       params: GenerateContentParameters,
     ) => Promise<GenerateContentResponse>;
@@ -476,6 +482,7 @@ export class GeminiProvider extends BaseProvider {
         setup.authMode,
         setup.httpOptions,
         setup.baseURL,
+        (bytes) => reportRequestSize(metadata, bytes),
       ),
     );
     return client.models;

@@ -100,6 +100,7 @@ import {
 } from '../utils/request-media-resolution.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
@@ -756,6 +757,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const mergedHeaders = mergeInvocationHeaders(options, customHeaders);
     const dumpMode = ephemeralSettings?.dumpcontext as DumpMode | undefined;
 
+    reportRequestSize(options.metadata, spool.byteLength);
     const response = await executeApiRequest({
       client,
       spool,

@@ -198,6 +198,11 @@
       "bun": "./src/ProviderManager.ts",
       "import": "./dist/src/ProviderManager.js"
     },
+    "./logging/requestSizeReport.js": {
+      "types": "./dist/src/logging/requestSizeReport.d.ts",
+      "bun": "./src/logging/requestSizeReport.ts",
+      "import": "./dist/src/logging/requestSizeReport.js"
+    },
     "./logging/ProviderPerformanceTracker.js": {
       "bun": "./src/logging/ProviderPerformanceTracker.ts",
       "import": "./dist/src/logging/ProviderPerformanceTracker.js"

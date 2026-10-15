@@ -25,6 +25,7 @@ import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { createDeveloperRoleToSystemFetch } from './vercelDeveloperRoleFetch.js';
+import { withRequestSizeReport } from './vercelRequestSizeFetch.js';
 import { createReasoningCaptureFetch } from './vercelReasoningCapture.js';
 import type { CaptureBuffer } from './vercelReasoningCapture.js';
 import type { OpenAIVercelTool } from './schemaConverter.js';
@@ -203,9 +204,14 @@ export async function createOpenAIClient(
   }
 
   const headers = clientConfig.customHeaders;
+  // Innermost, so the reported size is that of the body actually sent.
+  const sizedFetch = withRequestSizeReport(
+    customFetch ?? fetch,
+    options.metadata,
+  );
   const fetchWithCompatibility = shouldForceSystemRole
-    ? createDeveloperRoleToSystemFetch(customFetch ?? fetch)
-    : customFetch;
+    ? createDeveloperRoleToSystemFetch(sizedFetch)
+    : sizedFetch;
 
   // The @ai-sdk/openai factory validates `apiKey` via `loadApiKey`, which throws
   // `LoadAPIKeyError` for `undefined` before any request is made. The guard above

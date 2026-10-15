@@ -339,13 +339,18 @@ export function logApiRequest(
   if (!telemetry.isEnabled()) return;
 
   // Strip bodies and local paths before export; both opt-ins govern API content.
-  const { request_text, request_artifact, ...eventWithoutBody } = event;
+  const { request_text, request_artifact, request_chars, ...eventWithoutBody } =
+    event;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...eventWithoutBody,
     'event.name': EVENT_API_REQUEST,
     'event.timestamp': new Date().toISOString(),
-    request_chars: request_artifact?.content_chars ?? request_text?.length ?? 0,
+    request_chars:
+      request_artifact?.content_chars ??
+      request_chars ??
+      request_text?.length ??
+      0,
   };
 
   if (isApiBodyExportAllowed(telemetry) && request_artifact !== undefined) {

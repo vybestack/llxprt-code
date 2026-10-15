@@ -277,6 +277,8 @@ export interface GeminiApiClientOptions {
   project?: string;
   location?: string;
   httpOptions?: HttpOptions;
+  /** Called with the byte length of each JSON request body just before it is posted. */
+  onRequestBytes?: (bytes: number) => void;
 }
 
 /**

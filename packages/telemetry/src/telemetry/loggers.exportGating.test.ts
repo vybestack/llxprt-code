@@ -213,6 +213,22 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     expect(responseAttrs.response_text).toBeUndefined();
   });
 
+  it('exports the reported request size when no body or artifact is present', async () => {
+    const config = makeConfig();
+    const selectedTelemetry = await root(config);
+
+    await logApiRequest(
+      config,
+      new ApiRequestEvent('m', 'p', undefined, undefined, 48213),
+      selectedTelemetry,
+    );
+
+    await selectedTelemetry.flush();
+    const requestAttrs = attributesAt(0);
+    expect(requestAttrs.request_chars).toBe(48213);
+    expect(requestAttrs.request_text).toBeUndefined();
+  });
+
   it('token counts remain present regardless of body gating', async () => {
     const config = makeConfig();
     const selectedTelemetry = await root(config);

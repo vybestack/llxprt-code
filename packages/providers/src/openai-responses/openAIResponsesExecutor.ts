@@ -469,12 +469,18 @@ function buildStreamParams(
   dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
 ): StreamResponsesParams {
   const source = requestContext.sourcePrompt.toEstimatorProjection();
+  // Both transports ask for the length; the segment files are measured once.
+  let bodyLength: Promise<number> | undefined;
   return {
     ...requestContext,
     streamRequestBody: () =>
       diskResponsesBodyBytes(requestContext.request, source, abortSignal),
     streamRequestBodyLength: () =>
-      diskResponsesBodyLength(requestContext.request, source, abortSignal),
+      (bodyLength ??= diskResponsesBodyLength(
+        requestContext.request,
+        source,
+        abortSignal,
+      )),
     streamWebSocketFrame: () =>
       diskResponsesBodyBytes(
         createFrameRequest(requestContext.request),

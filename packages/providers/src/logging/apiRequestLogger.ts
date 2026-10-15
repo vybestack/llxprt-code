@@ -61,3 +61,42 @@ export async function logApiRequestTelemetry(
     );
   }
 }
+
+/**
+ * Log the body-less `api_request` for a send that is not exporting its body,
+ * carrying the size the provider reported (absent when it never reported one).
+ * Synchronous: without an artifact or acknowledgement the event is a plain
+ * record, so the sender can emit it the moment its request body is final.
+ */
+export function logSizedApiRequestTelemetry(
+  activeConfig: ProviderRequestDiagnostics,
+  normalizedOptions: GenerateChatOptions,
+  promptId: string,
+  defaultModelName: string,
+  debug: DebugLogger,
+  policy: RequestLoggingPolicy,
+  requestChars: number | undefined,
+): void {
+  try {
+    const modelName = normalizedOptions.resolved?.model ?? defaultModelName;
+    const pending = activeConfig.recordApiRequest(
+      new ApiRequestEvent(
+        modelName,
+        promptId,
+        undefined,
+        undefined,
+        requestChars,
+      ),
+      { signal: getRequestSignal(normalizedOptions), acknowledged: false },
+    );
+    if (pending !== undefined) {
+      throw new Error('A body-less API request event cannot be acknowledged');
+    }
+  } catch (error) {
+    getRequestSignal(normalizedOptions)?.throwIfAborted();
+    if (policy.strictPreSend) throw error;
+    debug.warn(
+      () => `API request telemetry failed (fail-open): ${String(error)}`,
+    );
+  }
+}

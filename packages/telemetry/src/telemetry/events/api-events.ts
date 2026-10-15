@@ -14,12 +14,15 @@ export class ApiRequestEvent {
   prompt_id: string;
   request_text?: string;
   request_artifact?: RequestArtifactDescriptor;
+  /** Size of the serialized request body, reported by the provider that sent it. */
+  request_chars?: number;
 
   constructor(
     model: string,
     prompt_id: string,
     request_text?: string,
     request_artifact?: RequestArtifactDescriptor,
+    request_chars?: number,
   ) {
     this['event.name'] = 'api_request';
     this['event.timestamp'] = new Date().toISOString();
@@ -27,6 +30,7 @@ export class ApiRequestEvent {
     this.prompt_id = prompt_id;
     this.request_text = request_text;
     this.request_artifact = request_artifact;
+    this.request_chars = request_chars;
   }
 }
 

@@ -71,6 +71,7 @@ import {
   executeAnthropicApiCall,
   type AnthropicApiCall,
 } from './AnthropicApiExecution.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
 import {
   requestBodyForDump,
   sendRequestFromSpool,
@@ -718,18 +719,18 @@ export class AnthropicProvider extends BaseProvider {
     const { prepared, mediaRequest, effectiveOptions } = preparation;
     const recoveryBudget =
       getImageRecoveryState(effectiveOptions)?.recoveryBudget;
-    if (prepared !== undefined && recoveryBudget === undefined) {
-      return sendRequestFromSpool(prepared.spooled);
-    }
-    return sendRequestFromSpool(
-      await this.spoolSendRequest(
-        effectiveOptions,
-        isOAuth,
-        authToken,
-        mediaRequest,
-        recoveryBudget,
-      ),
-    );
+    const spooled =
+      prepared !== undefined && recoveryBudget === undefined
+        ? prepared.spooled
+        : await this.spoolSendRequest(
+            effectiveOptions,
+            isOAuth,
+            authToken,
+            mediaRequest,
+            recoveryBudget,
+          );
+    reportRequestSize(effectiveOptions.metadata, spooled.spool.byteLength);
+    return sendRequestFromSpool(spooled);
   }
 
   private async spoolSendRequest(
