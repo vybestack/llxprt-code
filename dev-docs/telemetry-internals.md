@@ -5,14 +5,19 @@ For the user-facing guide, see [docs/telemetry.md](../docs/telemetry.md).
 
 ## Initialization
 
-The config constructor (`packages/core/src/config/configConstructor.ts`) calls
-`initializeTelemetry(config)` whenever `config.telemetrySettings.enabled` is
-`true`. The call is unconditional within that branch — no source modification is
-required to enable telemetry.
+Agents assembly binds telemetry to the actual `SessionSettingsOwner` with
+`bindTelemetry(config)` before starting the session. Config supplies declarative
+telemetry settings; its constructor does not initialize an SDK or select an
+ambient telemetry owner. Each owned settings lifetime prepares its own
+`RootTelemetry` and UI aggregation state. Child assembly explicitly borrows its
+parent's telemetry root instead of creating a second aggregate.
 
-`initializeTelemetry` lives in `packages/telemetry/src/telemetry/sdk.ts`. It
-early-returns without starting the SDK when `getTelemetryEnabled()` returns
-`false`.
+`SessionSettingsOwner.startTelemetry(config)` memoizes startup, applies that
+owner's enabled setting, and emits the session-start event through the same root.
+Borrowed telemetry is not restarted by a child. The explicit SDK functions in
+`packages/telemetry/src/telemetry/sdk.ts` accept a `RootTelemetry`, not Config:
+`initializeTelemetry(root)` enables that root, and all reads, flushes and shutdown
+operations retain the supplied identity.
 
 ## SDK configuration
 
@@ -60,9 +65,13 @@ not as custom spans.
 
 ## Shutdown
 
-On `SIGTERM` or `SIGINT`, `shutdownTelemetry(config)` shuts down all three
-providers. The `flushTelemetry()` function force-flushes each provider, and
-shutdown also flushes pending local output before returning.
+The owning settings lifetime closes its `RootTelemetry` during joined session
+release, after accepted session work settles. A child or adopted facade does not
+close borrowed telemetry. Host signal handling must retire its own session;
+there is no process-wide telemetry owner selected by `SIGTERM` or `SIGINT`.
+
+`shutdownTelemetry(root)` closes the explicit root, and `flushTelemetry(root)`
+flushes that same root. Shutdown joins pending local output before returning.
 
 ## Key source files
 
@@ -73,4 +82,9 @@ shutdown also flushes pending local output before returning.
 - `packages/telemetry/src/telemetry/metrics.ts`: metric instrument initialization.
 - `packages/telemetry/src/telemetry/loggers.ts`: log event emission.
 - `packages/telemetry/src/telemetry/constants.ts`: canonical event/metric names.
-- `packages/core/src/config/configConstructor.ts`: calls `initializeTelemetry`.
+- `packages/core/src/session/session-settings-owner.ts`: binds, starts and retires
+  owned telemetry while preserving borrowed roots.
+- `packages/agents/src/api/preferred-provider-acquisition.ts`: binds the preferred
+  session's explicit settings/telemetry owner during agents-owned assembly.
+- `packages/agents/src/api/child-agent-assembly.ts`: preserves the explicit parent
+  telemetry root during child acquisition.

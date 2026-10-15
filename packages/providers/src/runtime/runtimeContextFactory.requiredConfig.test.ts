@@ -4,29 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @plan:ISSUE-3222
- * @requirement:REQ-3222-AC3
- *
- * createIsolatedRuntimeContext must require a caller-supplied Config: the
- * factory must stop constructing Config on behalf of agent callers (that is
- * agent-owned assembly now). Calling it without a config must fail fast with
- * a typed Error naming the missing config — never silently build one.
- *
- * RED basis (main @ 5bedbd238): the factory silently constructs a Config via
- * resolveRuntimeConfig when options.config is undefined.
- */
-
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createIsolatedRuntimeContext,
-  type IsolatedRuntimeContextOptions,
-} from './index.js';
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+import { captureAgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
+import type { AgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
-describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @requirement:REQ-3222-AC3', () => {
+describe('explicit Agent adoption and preflight construction requirements @plan:ISSUE-3222 @requirement:REQ-3222-AC3', () => {
+  const credentials = useOwnedCredentials();
   let previousConfigHome: string | undefined;
   let isolatedHome: string;
 
@@ -45,15 +33,18 @@ describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @require
     rmSync(isolatedHome, { recursive: true, force: true });
   });
 
-  it('throws a typed Error naming the missing config when called without one @requirement:REQ-3222-AC3 @scenario:missing-config @given:activation bindings registered (runtimeSettings import) and NO config option @when:createIsolatedRuntimeContext({ runtimeId }) @then:an Error is thrown whose message names the required config (no runtime is silently constructed)', () => {
-    expect(() =>
-      Reflect.apply(createIsolatedRuntimeContext, undefined, [
-        { runtimeId: 'issue3222-required-config' },
+  it('rejects missing caller Config before constructing an adopted Agent @requirement:REQ-3222-AC3', async () => {
+    await expect(
+      Reflect.apply(fromConfig, undefined, [
+        {
+          sessionId: 'issue3222-required-config',
+          credentialAuthority: credentials().authority,
+        },
       ]),
-    ).toThrow(/config/i);
+    ).rejects.toThrow(/config/i);
   });
 
-  it('no superseded-path option key remains on the options surface @requirement:REQ-3222-AC3 @scenario:superseded-options-removed @given:the five option keys the caller-owned-Config path made dead (settingsService, profileManager, model, debugMode, workspaceDir) @when:the IsolatedRuntimeContextOptions type is inspected @then:none of them is a key of the options type (TypeScript rejects them at every call site; this structural pin fails compilation if one is resurrected)', () => {
+  it('keeps the preflight data-only type free of superseded Config and service options @requirement:REQ-3222-AC3', () => {
     type SupersededOptionKey =
       | 'settingsService'
       | 'profileManager'
@@ -62,7 +53,7 @@ describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @require
       | 'workspaceDir';
     type ResurrectedOptionKey = Extract<
       SupersededOptionKey,
-      keyof IsolatedRuntimeContextOptions
+      keyof AgentPreflightHostInput
     >;
     // Non-distributive never-check: the annotation is `true` only while
     // no superseded key overlaps the options surface, and `never` (a
@@ -72,4 +63,21 @@ describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @require
       : never = true;
     expect(supersededKeysAreGone).toBe(true);
   });
+  it.each([
+    'settingsService',
+    'profileManager',
+    'model',
+    'debugMode',
+    'workspaceDir',
+  ])(
+    'rejects superseded preflight field %s before owner acquisition',
+    (field) => {
+      expect(() =>
+        captureAgentPreflightHostInput({
+          runtimeId: 'explicit-data-only',
+          [field]: 'unaccepted-input',
+        }),
+      ).toThrow(/[Uu]nrecognized/);
+    },
+  );
 });

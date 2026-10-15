@@ -1,224 +1,209 @@
-import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { Config } from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+import type { Agent } from '../../../agents/src/api/agent.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
-  activateIsolatedRuntimeContext,
-  createIsolatedRuntimeContext,
-} from './index.js';
-
-function sameLabelOwner() {
-  const settingsService = new SettingsService();
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  const config = new Config({
-    sessionId: 'shared-owner-label',
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'test-model',
-  });
-  return { config, settingsService, settingsOwner };
-}
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../../agents/src/core/subagent-cleanup.js';
+import {
+  ProviderFileLifecycle,
+  resolveProviderFilePolicy,
+} from '../providerFilePolicy.js';
 
 describe('isolated runtime owner activation', () => {
-  it('requires the explicit SDK owner even when an isolated owner is active', async () => {
-    const handle = (() => {
-      const capturedConfig17 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
+  let firstConfig: Config;
+  let secondConfig: Config;
+  let firstSettings: SettingsService;
+  let secondSettings: SettingsService;
+  let firstOwner: SessionSettingsOwner;
+  let secondOwner: SessionSettingsOwner;
+  let first: Agent;
+  let second: Agent;
 
-          config: capturedConfig17.config,
-          settingsOwner: capturedConfig17.settingsOwner,
-          runtimeId: 'sdk-owner',
-        },
-        capturedConfig17.settingsService,
-      );
-    })();
-    try {
-      await handle.activate();
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
-        'Provider reads require an explicit session owner',
-      );
-      expect('providerManager' in handle.config).toBe(false);
-    } finally {
-      await handle.cleanup();
-      await handle.config.dispose();
-    }
+  afterEach(async () => {
+    await runCleanupSteps(retiring.splice(0).reverse());
+  });
+
+  async function openConfigs(): Promise<void> {
+    const raw = await mkdtemp(join(tmpdir(), 'owner-activation-'));
+    retiring.push(() => rm(raw, { recursive: true, force: true }));
+    const directory = await realpath(raw);
+    firstConfig = new Config({
+      sessionId: 'shared-owner-label',
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      model: 'test-model',
+    });
+    const configA = firstConfig;
+    retiring.push(() => configA.dispose());
+    secondConfig = new Config({
+      sessionId: 'shared-owner-label',
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      model: 'test-model',
+    });
+    const configB = secondConfig;
+    retiring.push(() => configB.dispose());
+    firstSettings = new SettingsService();
+    secondSettings = new SettingsService();
+    firstOwner = new SessionSettingsOwner(firstSettings);
+    const ownerA = firstOwner;
+    retiring.push(() => ownerA.dispose());
+    ownerA.bindTelemetry(configA);
+    secondOwner = new SessionSettingsOwner(secondSettings);
+    const ownerB = secondOwner;
+    retiring.push(() => ownerB.dispose());
+    ownerB.bindTelemetry(configB);
+  }
+
+  async function openFirst(runtimeId: string | undefined): Promise<void> {
+    first = await fromConfig({
+      config: firstConfig,
+      settingsService: firstSettings,
+      settingsOwner: firstOwner,
+      sessionId: runtimeId,
+      credentialAuthority: credentials().authority,
+    });
+    const agent = first;
+    retiring.push(() => agent.dispose());
+  }
+  async function openSecond(runtimeId: string | undefined): Promise<void> {
+    second = await fromConfig({
+      config: secondConfig,
+      settingsService: secondSettings,
+      settingsOwner: secondOwner,
+      sessionId: runtimeId,
+      credentialAuthority: credentials().authority,
+    });
+    const agent = second;
+    retiring.push(() => agent.dispose());
+  }
+
+  it('requires the explicit SDK owner even when an isolated owner is active', async () => {
+    await openConfigs();
+    await openFirst('sdk-owner');
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
+    );
+    expect('providerManager' in firstConfig).toBe(false);
   });
 
   it('keeps two concurrent owners with the same label independent', async () => {
-    const first = (() => {
-      const capturedConfig18 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig18.config,
-          settingsOwner: capturedConfig18.settingsOwner,
-          runtimeId: 'shared-label',
-          metadata: { credential: 'first' },
-        },
-        capturedConfig18.settingsService,
-      );
-    })();
-    const second = (() => {
-      const capturedConfig19 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig19.config,
-          settingsOwner: capturedConfig19.settingsOwner,
-          runtimeId: 'shared-label',
-          metadata: { credential: 'second' },
-        },
-        capturedConfig19.settingsService,
-      );
-    })();
-
-    try {
-      await Promise.all([
-        activateIsolatedRuntimeContext(first),
-        activateIsolatedRuntimeContext(second),
-      ]);
-      expect('providerManager' in first.config).toBe(false);
-      expect(first.providerManager).not.toBe(second.providerManager);
-      await first.cleanup();
-      expect('providerManager' in second.config).toBe(false);
-    } finally {
-      await Promise.all([first.cleanup(), second.cleanup()]);
-      await Promise.all([first.config.dispose(), second.config.dispose()]);
-    }
+    await openConfigs();
+    await Promise.all([openFirst('shared-label'), openSecond('shared-label')]);
+    expect('providerManager' in firstConfig).toBe(false);
+    expect(first.providerManager).not.toBe(second.providerManager);
+    await first.dispose();
+    expect('providerManager' in secondConfig).toBe(false);
   });
 
   it('assigns independent UUID identities to equal-label Config owners without caller IDs', async () => {
-    const first = (() => {
-      const capturedConfig20 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig20.config,
-          settingsOwner: capturedConfig20.settingsOwner,
-        },
-        capturedConfig20.settingsService,
-      );
-    })();
-    const second = (() => {
-      const capturedConfig21 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig21.config,
-          settingsOwner: capturedConfig21.settingsOwner,
-        },
-        capturedConfig21.settingsService,
-      );
-    })();
-    try {
-      expect(first.config.getSessionId()).toBe(second.config.getSessionId());
-      expect(first.runtimeId).toMatch(
-        /^cli-isolated-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i,
-      );
-      expect(second.runtimeId).not.toBe(first.runtimeId);
-      await Promise.all([first.activate(), second.activate()]);
-      expect('providerManager' in first.config).toBe(false);
-      await first.cleanup();
-      expect('providerManager' in second.config).toBe(false);
-    } finally {
-      await Promise.all([first.cleanup(), second.cleanup()]);
-      await Promise.all([first.config.dispose(), second.config.dispose()]);
-    }
+    await openConfigs();
+    await Promise.all([openFirst(undefined), openSecond(undefined)]);
+    expect(firstConfig.getSessionId()).toBe(secondConfig.getSessionId());
+    expect(first.getRuntimeId()).toMatch(
+      /^agent-[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i,
+    );
+    expect(second.getRuntimeId()).not.toBe(first.getRuntimeId());
+    expect('providerManager' in firstConfig).toBe(false);
+    await first.dispose();
+    expect('providerManager' in secondConfig).toBe(false);
   });
 
   it('an aborted same-label activation leaves the other owner usable', async () => {
-    const sibling = (() => {
-      const capturedConfig22 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig22.config,
-          settingsOwner: capturedConfig22.settingsOwner,
-          runtimeId: 'same-label-abort',
-          metadata: { profile: 'sibling' },
+    await openConfigs();
+    await openFirst('same-label-abort');
+    firstOwner.writeUserParameter('auth-key', 'sibling-credential');
+    await expect(
+      fromConfig({
+        config: secondConfig,
+        settingsService: secondSettings,
+        settingsOwner: secondOwner,
+        sessionId: 'same-label-abort',
+        credentialAuthority: credentials().authority,
+        prepareSessionTools: () => {
+          const error = new Error('activation aborted');
+          error.name = 'AbortError';
+          throw error;
         },
-        capturedConfig22.settingsService,
-      );
-    })();
-    const aborted = (() => {
-      const capturedConfig23 = sameLabelOwner();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          config: capturedConfig23.config,
-          settingsOwner: capturedConfig23.settingsOwner,
-          runtimeId: 'same-label-abort',
-          metadata: { profile: 'aborted' },
-          prepare: () => {
-            const error = new Error('activation aborted');
-            error.name = 'AbortError';
-            throw error;
-          },
-        },
-        capturedConfig23.settingsService,
-      );
-    })();
-    try {
-      await sibling.activate();
-      sibling.settingsOwner.writeUserParameter(
-        'auth-key',
-        'sibling-credential',
-      );
-      await expect(aborted.activate()).rejects.toThrow('activation aborted');
-      await aborted.cleanup();
-      expect(sibling.settingsOwner.readNamedParameter('auth-key')).toBe(
-        'sibling-credential',
-      );
-      expect('providerManager' in sibling.config).toBe(false);
-    } finally {
-      await Promise.all([sibling.cleanup(), aborted.cleanup()]);
-      await Promise.all([sibling.config.dispose(), aborted.config.dispose()]);
-    }
+      }),
+    ).rejects.toThrow('activation aborted');
+    expect(firstOwner.readNamedParameter('auth-key')).toBe(
+      'sibling-credential',
+    );
+    expect('providerManager' in firstConfig).toBe(false);
   });
 
   it('passes the exact owner Config and runtime ID to activation callbacks', async () => {
+    await openConfigs();
     const observed: string[] = [];
-    const owner = sameLabelOwner();
-    const handle = createIsolatedRuntimeContext(
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        config: owner.config,
-        settingsOwner: owner.settingsOwner,
-        runtimeId: 'callback-owner',
-        prepare: ({ config, runtimeId }) => {
-          expect(config).toBe(owner.config);
-          observed.push(runtimeId);
-        },
-        onCleanup: ({ config, runtimeId }) => {
-          expect(config).toBe(handle.config);
-          observed.push(runtimeId);
-        },
+    const files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    let admittedConfig: Config | undefined;
+    first = await fromConfig({
+      config: firstConfig,
+      settingsService: firstSettings,
+      settingsOwner: firstOwner,
+      sessionId: 'callback-owner',
+      credentialAuthority: credentials().authority,
+      providerFileLifecycle: files,
+      prepareSessionTools: (config) => {
+        expect(config).toBe(firstConfig);
+        admittedConfig = config;
+        observed.push('callback-owner');
       },
-      owner.settingsService,
-    );
+    });
+    const agent = first;
+    retiring.push(() => agent.dispose());
+    const path = join(firstConfig.getTargetDir(), 'remote-owner-file');
+    await writeFile(path, 'retained owner data');
     try {
-      await handle.activate();
-    } finally {
-      await handle.cleanup();
-      await handle.config.dispose();
+      const retained = await first.retainProviderFile({
+        cacheKey: 'callback-file',
+        fileId: path,
+        bytes: 19,
+        identity: {
+          provider: 'kimi',
+          baseURL: 'https://api.kimi.test/v1',
+          credentialHash: 'caller',
+        },
+        policy: resolveProviderFilePolicy({
+          configuredMode: 'session',
+          configuredRetentionMs: 60000,
+          configuredDeletion: 'delete',
+          providerFileReferences: true,
+          zeroDataRetention: 'incompatible-while-retained',
+          zeroDataRetentionRequired: false,
+        }),
+        deleteRemote: async (file) => {
+          await rm(file);
+          expect(admittedConfig).toBe(firstConfig);
+          observed.push(first.getRuntimeId());
+        },
+      });
+      await retained.lease.release();
+      await first.dispose();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () => first.dispose());
     }
     expect(observed).toStrictEqual(['callback-owner', 'callback-owner']);
   });

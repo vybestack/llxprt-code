@@ -1,63 +1,42 @@
-import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-
-/**
- * @plan:PLAN-20260621-COREAPIREMED.P04
- * @requirement:REQ-005.2
- *
- * RED contract for the providers `providerManager?: RuntimeProviderManager`
- * adoption seam that P05 will fulfill. The P03 stub DECLARED the optional
- * field on IsolatedRuntimeContextOptions but kept the construction site in
- * `createIsolatedRuntimeContext` UNCONDITIONAL (`new ProviderManager({...})`
- * at runtimeContextFactory.ts), so passing a caller-provided manager is
- * silently ignored — the handle carries a FRESH manager, not the supplied one.
- *
- * These are BEHAVIORAL identity / count / resolved-value tests. The fixture
- * `pm` is a REAL `ProviderManager` (which structurally satisfies the
- * `RuntimeProviderManager` option type), so it is passed DIRECTLY in the
- * options literal — NO intersection type, NO cast, NO mock theater.
- *
- * Load-bearing RED: T1 (`handle.providerManager === pm`) FAILS against the P03
- * stub because the factory builds its own manager. T3 (active-runtime resolves
- * the adopted manager), T4 (no second construction), and the "onCleanup
- * receives the adopted manager" half of T6 are ALSO RED until P05 lands the
- * `??` adoption. T2 and the default-freshness property legitimately stay GREEN
- * (current behavior); the suite as a whole is RED because the adoption tests
- * fail for behavioral (identity-mismatch) reasons.
- */
-
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
-import { MessageBus } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ProviderManager } from '../../ProviderManager.js';
-import type { IProvider } from '../../IProvider.js';
+import { mkdtemp, rm, realpath, writeFile } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
-  createIsolatedRuntimeContext,
-  type IsolatedRuntimeContextHandle,
-  type RuntimeActivationBindings,
-} from '../runtimeContextFactory.js';
-
-const activationBindings: RuntimeActivationBindings = {
-  resetInfrastructure: () => {},
-  setRuntimeContext: () => {},
-  registerInfrastructure: () => {},
-  linkProviderManager: (config, manager) =>
-    configureProviderRuntimeFactories(config, manager),
-};
-
-/**
- * A real, minimal IProvider registered onto the fixture manager so that T3 can
- * observe the adopted manager's state (listProviders / getActiveProviderName)
- * through the handle WITHOUT standing up a live network provider.
- */
+  Config,
+  type RuntimeProviderManager,
+  MessageBus,
+} from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  ProviderManager,
+  ProviderFileLifecycle,
+  resolveProviderFilePolicy,
+} from '../../index.js';
+import type { IProvider } from '../../IProvider.js';
+import type { OAuthManager } from '../../auth/oauth-manager.js';
+import { configureProviderRuntimeFactories } from '../../composition/index.js';
+import {
+  acquireAdoptedProviderManager,
+  acquireAdoptedOAuth,
+  activateAdoptedProviders,
+} from '../../../../agents/src/api/adopted-provider-assembly.js';
+import { releaseAdoptedFileScope } from '../../../../agents/src/api/adoption-release.js';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../../agents/src/core/subagent-cleanup.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 class StubAdoptedProvider implements IProvider {
   readonly name = 'p04-adopted-stub';
   async getModels(): Promise<never[]> {
@@ -71,73 +50,6 @@ class StubAdoptedProvider implements IProvider {
   }
 }
 
-async function cleanupIfNotCaptured(
-  captured: { providerManager: unknown } | undefined,
-  handle: IsolatedRuntimeContextHandle,
-): Promise<void> {
-  if (captured === undefined) {
-    await handle.cleanup().catch(() => undefined);
-  }
-}
-
-/** Builds a real ProviderManager the way the providers test suite bootstraps one. */
-function buildRealManager(): ProviderManager {
-  const settingsService = new SettingsService();
-  const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
-  );
-}
-
-/** Builds a manager that already has a registered+active provider (for T3). */
-function buildSeededManager(): {
-  manager: ProviderManager;
-  settingsService: SettingsService;
-  config: Config;
-  provider: StubAdoptedProvider;
-} {
-  const settingsService = new SettingsService();
-  const config = createRuntimeConfigStub(settingsService);
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
-  );
-  const provider = new StubAdoptedProvider();
-  manager.registerProvider(provider);
-  settingsService.set('activeProvider', provider.name);
-  manager.setActiveProvider(provider.name);
-  return { manager, settingsService, config, provider };
-}
-
-/**
- * Minimal caller-supplied Config for the isolated runtime (issue #3222):
- * providers no longer constructs one on the caller's behalf.
- */
-function buildIsolatedTestConfig(runtimeId: string, model: string): Config {
-  return new Config({
-    sessionId: runtimeId,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    model,
-    debugMode: false,
-  });
-}
-
-/**
- * Counts real ProviderManager constructions WITHOUT replacing the constructor.
- * The spy wraps the original so the real object is still built; we only tally
- * invocations as a numeric count (asserted with `toBe`, never via the banned
- * call-count matcher).
- */
 function trackProviderManagerConstructions(): {
   count: () => number;
   restore: () => void;
@@ -172,37 +84,292 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: supplied manager is adopted verbatim
    * @given a real ProviderManager `pm`
    * @when createIsolatedRuntimeContext({ providerManager: pm }) resolves
-   * @then handle.providerManager === pm (instance identity)
+   * @then selectedManager === pm (instance identity)
    *
    * LOAD-BEARING RED (CRIT-2): the P03 stub builds a fresh manager
    * unconditionally, so this assertion FAILS until P05 adds the `??` adoption.
    */
+
+  const credentials = useOwnedCredentials();
+  const callerRetiring: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await runCleanupSteps(callerRetiring.splice(0).reverse());
+  });
+  const seededProvider = new StubAdoptedProvider();
+  function buildRealManager(): ProviderManager {
+    const directory = mkdtempSync(join(tmpdir(), 'manager-caller-'));
+    callerRetiring.push(() => rm(directory, { recursive: true, force: true }));
+    const settings = new SettingsService();
+    const config = new Config({
+      sessionId: 'caller-manager',
+      targetDir: directory,
+      cwd: directory,
+      model: 'caller-model',
+      debugMode: false,
+    });
+    callerRetiring.push(() => config.dispose());
+    const owner = new SessionSettingsOwner(settings);
+    callerRetiring.push(() => owner.dispose());
+    owner.bindTelemetry(config);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      undefined,
+      credentials().authority,
+      owner,
+    );
+    callerRetiring.push(() => manager.dispose());
+    return manager;
+  }
+  function buildSeededManager(): ProviderManager {
+    const manager = buildRealManager();
+    manager.registerProvider(seededProvider);
+    manager.setActiveProvider(seededProvider.name);
+    return manager;
+  }
+
+  let selectedManager: RuntimeProviderManager;
+  let selectedFiles: ProviderFileLifecycle;
+  let selectedRuntimeId: string;
+  let selectedConfig: Config;
+  let selectedSettings: SettingsService;
+  let selectedOwner: SessionSettingsOwner;
+  let selectedOAuth: OAuthManager;
+  const selectedClosing: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeSelected();
+  });
+  async function openSelected(
+    runtimeId: string,
+    model: string,
+    supplied: RuntimeProviderManager | undefined,
+    bus: MessageBus | undefined,
+  ): Promise<void> {
+    const closing = selectedClosing;
+    try {
+      const raw = await mkdtemp(join(tmpdir(), 'adopted-manager-'));
+      closing.push(() => rm(raw, { recursive: true, force: true }));
+      const directory = await realpath(raw);
+      const config = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      selectedConfig = config;
+      closing.push(() => config.dispose());
+      const release = new AcquisitionRelease();
+      let complete = false;
+      closing.push(() => (complete ? release.close() : release.rollback()));
+      const settings = new SettingsService();
+      selectedSettings = settings;
+      const owner = new SessionSettingsOwner(settings);
+      selectedOwner = owner;
+      release.acquire('settings', () => owner.dispose());
+      owner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      selectedFiles = files;
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      selectedManager = acquireAdoptedProviderManager(
+        supplied,
+        config,
+        settings,
+        owner,
+        files,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      selectedOAuth = acquireAdoptedOAuth(
+        undefined,
+        undefined,
+        bus ?? policy.session.messageBus,
+        config,
+        settings,
+        selectedManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+      );
+      selectedRuntimeId = runtimeId;
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () => closeSelected());
+    }
+  }
+  async function activateSelected(): Promise<void> {
+    await activateAdoptedProviders(
+      selectedConfig,
+      selectedSettings,
+      selectedOwner,
+      selectedManager,
+      selectedOAuth,
+      selectedRuntimeId,
+      false,
+      configureProviderRuntimeFactories(selectedConfig, selectedManager)
+        .tokenizerFactory,
+    );
+  }
+  async function closeSelected(): Promise<void> {
+    await runCleanupSteps(selectedClosing.splice(0).reverse());
+  }
+
+  let firstManager: RuntimeProviderManager;
+  const firstClosing: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeFirst();
+  });
+  async function openFirst(
+    runtimeId: string,
+    model: string,
+    supplied: RuntimeProviderManager | undefined,
+    bus: MessageBus | undefined,
+  ): Promise<void> {
+    const closing = firstClosing;
+    try {
+      const raw = await mkdtemp(join(tmpdir(), 'adopted-manager-'));
+      closing.push(() => rm(raw, { recursive: true, force: true }));
+      const directory = await realpath(raw);
+      const config = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      closing.push(() => config.dispose());
+      const release = new AcquisitionRelease();
+      let complete = false;
+      closing.push(() => (complete ? release.close() : release.rollback()));
+      const settings = new SettingsService();
+      const owner = new SessionSettingsOwner(settings);
+      release.acquire('settings', () => owner.dispose());
+      owner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      firstManager = acquireAdoptedProviderManager(
+        supplied,
+        config,
+        settings,
+        owner,
+        files,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      acquireAdoptedOAuth(
+        undefined,
+        undefined,
+        bus ?? policy.session.messageBus,
+        config,
+        settings,
+        firstManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+      );
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () => closeFirst());
+    }
+  }
+  async function closeFirst(): Promise<void> {
+    await runCleanupSteps(firstClosing.splice(0).reverse());
+  }
+
+  let secondManager: RuntimeProviderManager;
+  const secondClosing: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    await closeSecond();
+  });
+  async function openSecond(
+    runtimeId: string,
+    model: string,
+    supplied: RuntimeProviderManager | undefined,
+    bus: MessageBus | undefined,
+  ): Promise<void> {
+    const closing = secondClosing;
+    try {
+      const raw = await mkdtemp(join(tmpdir(), 'adopted-manager-'));
+      closing.push(() => rm(raw, { recursive: true, force: true }));
+      const directory = await realpath(raw);
+      const config = new Config({
+        sessionId: runtimeId,
+        targetDir: directory,
+        cwd: directory,
+        model,
+        debugMode: false,
+      });
+      closing.push(() => config.dispose());
+      const release = new AcquisitionRelease();
+      let complete = false;
+      closing.push(() => (complete ? release.close() : release.rollback()));
+      const settings = new SettingsService();
+      const owner = new SessionSettingsOwner(settings);
+      release.acquire('settings', () => owner.dispose());
+      owner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      secondManager = acquireAdoptedProviderManager(
+        supplied,
+        config,
+        settings,
+        owner,
+        files,
+        runtimeId,
+        credentials().authority,
+        release,
+      );
+      acquireAdoptedOAuth(
+        undefined,
+        undefined,
+        bus ?? policy.session.messageBus,
+        config,
+        settings,
+        secondManager,
+        runtimeId,
+        undefined,
+        credentials().authority,
+        release,
+      );
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () => closeSecond());
+    }
+  }
+  async function closeSecond(): Promise<void> {
+    await runCleanupSteps(secondClosing.splice(0).reverse());
+  }
   it('IDENTITY — providerManager: pm yields handle.providerManager === pm', async () => {
     const pm = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig5 = buildIsolatedTestConfig(
-        'p04-pm-identity',
-        'p04-identity-model',
-      );
-      const capturedConfig5Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          activationBindings,
-          runtimeId: 'p04-pm-identity',
-          config: capturedConfig5,
-          providerManager: pm,
-          prepare: async () => {},
-        },
-        capturedConfig5Settings,
-      );
-    })();
+    await openSelected('p04-pm-identity', 'p04-identity-model', pm, undefined);
 
     try {
-      expect(handle.providerManager).toBe(pm);
+      expect(selectedManager).toBe(pm);
     } finally {
-      await handle.cleanup();
+      await closeSelected();
     }
   });
 
@@ -211,36 +378,24 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: omitted manager falls back to a fresh construction
    * @given no providerManager option
    * @when createIsolatedRuntimeContext resolves
-   * @then handle.providerManager is a freshly built manager !== any caller-held pm
+   * @then selectedManager is a freshly built manager !== any caller-held pm
    *
    * Legitimately GREEN now (current default-path behavior).
    */
   it('DEFAULT — omitting providerManager yields a fresh manager !== a caller-held pm', async () => {
     const callerHeld = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig6 = buildIsolatedTestConfig(
-        'p04-pm-default',
-        'p04-default-model',
-      );
-      const capturedConfig6Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          activationBindings,
-          runtimeId: 'p04-pm-default',
-          config: capturedConfig6,
-          prepare: async () => {},
-        },
-        capturedConfig6Settings,
-      );
-    })();
+    await openSelected(
+      'p04-pm-default',
+      'p04-default-model',
+      undefined,
+      undefined,
+    );
 
     try {
-      expect(handle.providerManager).toBeDefined();
-      expect(handle.providerManager).not.toBe(callerHeld);
+      expect(selectedManager).toBeDefined();
+      expect(selectedManager).not.toBe(callerHeld);
     } finally {
-      await handle.cleanup();
+      await closeSelected();
     }
   });
 
@@ -255,44 +410,25 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * seeded provider would not be visible through a divergent fresh manager.
    */
   it('ADOPTED ACTIVATION — after activate, the handle resolves the adopted manager and its provider state', async () => {
-    const { manager: pm, provider } = buildSeededManager();
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig7 = buildIsolatedTestConfig(
-        'p04-pm-adopted-activation',
-        'p04-adopted-model',
-      );
-      const capturedConfig7Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          activationBindings,
-          runtimeId: 'p04-pm-adopted-activation',
-          config: capturedConfig7,
-          providerManager: pm,
-          prepare: async () => {},
-        },
-        capturedConfig7Settings,
-      );
-    })();
+    const pm = buildSeededManager();
+    const provider = seededProvider;
+    await openSelected(
+      'p04-pm-adopted-activation',
+      'p04-adopted-model',
+      pm,
+      undefined,
+    );
 
     try {
-      await handle.activate({
-        runtimeId: handle.runtimeId,
-        metadata: { source: 'p04-adopted-activation' },
-      });
+      await activateSelected();
 
       // identity first
-      expect(handle.providerManager).toBe(pm);
+      expect(selectedManager).toBe(pm);
       // then observe resolved provider state THROUGH the handle's manager
-      expect(handle.providerManager.listProviders()).toStrictEqual([
-        provider.name,
-      ]);
-      expect(handle.providerManager.getActiveProviderName()).toBe(
-        provider.name,
-      );
+      expect(selectedManager.listProviders()).toStrictEqual([provider.name]);
+      expect(selectedManager.getActiveProviderName()).toBe(provider.name);
     } finally {
-      await handle.cleanup();
+      await closeSelected();
     }
   });
 
@@ -310,32 +446,19 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const pm = buildRealManager();
     const tracker = trackProviderManagerConstructions();
 
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig8 = buildIsolatedTestConfig(
-        'p04-pm-no-second',
-        'p04-no-second-model',
-      );
-      const capturedConfig8Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          activationBindings,
-          runtimeId: 'p04-pm-no-second',
-          config: capturedConfig8,
-          providerManager: pm,
-          prepare: async () => {},
-        },
-        capturedConfig8Settings,
-      );
-    })();
+    await openSelected(
+      'p04-pm-no-second',
+      'p04-no-second-model',
+      pm,
+      undefined,
+    );
 
     try {
       expect(tracker.count()).toBe(0);
       // identity implies the same: the supplied manager survived unchanged
-      expect(handle.providerManager).toBe(pm);
+      expect(selectedManager).toBe(pm);
     } finally {
-      await handle.cleanup();
+      await closeSelected();
       tracker.restore();
     }
   });
@@ -345,38 +468,24 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: messageBus and providerManager adoption seams are independent
    * @given a real MessageBus and a real ProviderManager
    * @when createIsolatedRuntimeContext({ messageBus, providerManager }) resolves
-   * @then handle.providerManager === pm (the providers seam honors its input)
+   * @then selectedManager === pm (the providers seam honors its input)
    *
    * RED until P05 on the providerManager half (identity mismatch).
    */
   it('INDEPENDENT SEAMS — messageBus and providerManager adoption compose', async () => {
     const providedBus = new MessageBus(undefined, false);
     const pm = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig9 = buildIsolatedTestConfig(
-        'p04-pm-independent',
-        'p04-independent-model',
-      );
-      const capturedConfig9Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          activationBindings,
-          runtimeId: 'p04-pm-independent',
-          config: capturedConfig9,
-          messageBus: providedBus,
-          providerManager: pm,
-          prepare: async () => {},
-        },
-        capturedConfig9Settings,
-      );
-    })();
+    await openSelected(
+      'p04-pm-independent',
+      'p04-independent-model',
+      pm,
+      providedBus,
+    );
 
     try {
-      expect(handle.providerManager).toBe(pm);
+      expect(selectedManager).toBe(pm);
     } finally {
-      await handle.cleanup();
+      await closeSelected();
     }
   });
 
@@ -395,49 +504,55 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    */
   it('CLEANUP CONTRACT — onCleanup receives the adopted manager and cleanup disposes neither manager', async () => {
     const pm = buildRealManager();
-    let captured: { providerManager: unknown } | undefined;
-    const handle: IsolatedRuntimeContextHandle = (() => {
-      const capturedConfig10 = buildIsolatedTestConfig(
-        'p04-pm-cleanup',
-        'p04-cleanup-model',
-      );
-      const capturedConfig10Settings = new SettingsService();
-      return createIsolatedRuntimeContext(
-        {
-          credentialAuthority: new CredentialAuthority(),
 
-          activationBindings,
-          runtimeId: 'p04-pm-cleanup',
-          config: capturedConfig10,
-          providerManager: pm,
-          prepare: async () => {},
-          onCleanup: (ctx) => {
-            captured = { providerManager: ctx.providerManager };
-          },
-        },
-        capturedConfig10Settings,
-      );
-    })();
+    await openSelected('p04-pm-cleanup', 'p04-cleanup-model', pm, undefined);
 
+    let captured: RuntimeProviderManager | undefined;
+    const remotePath = join(
+      selectedConfig.getTargetDir(),
+      'adopted-remote-file',
+    );
+    await writeFile(remotePath, 'retained caller-owned provider file');
+    const retained = await selectedFiles.retain({
+      cacheKey: 'cleanup-observation',
+      fileId: remotePath,
+      bytes: 35,
+      identity: {
+        provider: 'openai',
+        baseURL: 'https://example.invalid',
+        credentialHash: 'caller-credential',
+      },
+      policy: resolveProviderFilePolicy({
+        configuredMode: 'session',
+        configuredRetentionMs: 60000,
+        configuredDeletion: 'delete',
+        providerFileReferences: true,
+        zeroDataRetention: 'incompatible-while-retained',
+        zeroDataRetentionRequired: false,
+      }),
+      scopeId: selectedRuntimeId,
+      deleteRemote: async (file) => {
+        await rm(file);
+        captured = selectedManager;
+      },
+    });
+    await retained.lease.release();
     const disposeBefore = (pm as unknown as { disposed?: boolean }).disposed;
 
     try {
-      await handle.activate({
-        runtimeId: handle.runtimeId,
-        metadata: { source: 'p04-cleanup' },
-      });
-      await handle.cleanup();
+      await activateSelected();
+      await closeSelected();
 
       // onCleanup received the SAME manager the caller supplied
       expect(captured).toBeDefined();
-      expect(captured?.providerManager).toBe(pm);
+      expect(captured).toBe(pm);
       // cleanup introduced no disposal on either manager
       const disposeAfter = (pm as unknown as { disposed?: boolean }).disposed;
       expect(disposeAfter).toBe(disposeBefore);
       expect(disposeAfter).toBeUndefined();
     } finally {
       // ensure cleanup ran even if an assertion threw
-      await cleanupIfNotCaptured(captured, handle);
+      await closeSelected();
     }
   });
 
@@ -446,7 +561,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: any supplied manager is adopted verbatim (property)
    * @given arbitrary runtimeId strings and a real ProviderManager
    * @when createIsolatedRuntimeContext({ providerManager: pm }) resolves
-   * @then handle.providerManager === pm for every generated input
+   * @then selectedManager === pm for every generated input
    */
   it('PROP — for any runtimeId, a supplied providerManager is adopted verbatim', async () => {
     await fc.assert(
@@ -456,31 +571,18 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           .filter((s) => !s.includes('\0')),
         async (runtimeId: string) => {
           const pm = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle = (() => {
-            const capturedConfig11 = buildIsolatedTestConfig(
-              `p04-prop-${runtimeId}`,
-              'p04-prop-model',
-            );
-            const capturedConfig11Settings = new SettingsService();
-            return createIsolatedRuntimeContext(
-              {
-                credentialAuthority: new CredentialAuthority(),
-
-                activationBindings,
-                runtimeId: `p04-prop-${runtimeId}`,
-                config: capturedConfig11,
-                providerManager: pm,
-                prepare: async () => {},
-              },
-              capturedConfig11Settings,
-            );
-          })();
+          await openSelected(
+            `p04-prop-${runtimeId}`,
+            'p04-prop-model',
+            pm,
+            undefined,
+          );
 
           try {
-            expect(handle.providerManager).toBe(pm);
+            expect(selectedManager).toBe(pm);
             return true;
           } finally {
-            await handle.cleanup();
+            await closeSelected();
           }
         },
       ),
@@ -492,7 +594,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: adoption never leaks across calls when omitted (property)
    * @given arbitrary runtimeId strings and a caller-held manager
    * @when createIsolatedRuntimeContext (NO providerManager option) resolves
-   * @then handle.providerManager !== callerHeld for every generated input
+   * @then selectedManager !== callerHeld for every generated input
    */
   it('PROP — omitting providerManager never adopts a caller-held manager', async () => {
     await fc.assert(
@@ -502,30 +604,18 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           .filter((s) => !s.includes('\0')),
         async (runtimeId: string) => {
           const callerHeld = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle = (() => {
-            const capturedConfig12 = buildIsolatedTestConfig(
-              `p04-prop-omit-${runtimeId}`,
-              'p04-prop-omit-model',
-            );
-            const capturedConfig12Settings = new SettingsService();
-            return createIsolatedRuntimeContext(
-              {
-                credentialAuthority: new CredentialAuthority(),
-
-                activationBindings,
-                runtimeId: `p04-prop-omit-${runtimeId}`,
-                config: capturedConfig12,
-                prepare: async () => {},
-              },
-              capturedConfig12Settings,
-            );
-          })();
+          await openSelected(
+            `p04-prop-omit-${runtimeId}`,
+            'p04-prop-omit-model',
+            undefined,
+            undefined,
+          );
 
           try {
-            expect(handle.providerManager).not.toBe(callerHeld);
+            expect(selectedManager).not.toBe(callerHeld);
             return true;
           } finally {
-            await handle.cleanup();
+            await closeSelected();
           }
         },
       ),
@@ -537,7 +627,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    * @scenario: supplied manager stays identity-stable across arbitrary models (property)
    * @given arbitrary model identifiers and a real ProviderManager
    * @when createIsolatedRuntimeContext({ providerManager: pm, model }) resolves
-   * @then handle.providerManager === pm regardless of the model string
+   * @then selectedManager === pm regardless of the model string
    */
   it('PROP — a supplied providerManager is adopted regardless of the model option', async () => {
     await fc.assert(
@@ -545,31 +635,13 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,32}$/),
         async (model: string) => {
           const pm = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle = (() => {
-            const capturedConfig13 = buildIsolatedTestConfig(
-              'p04-prop-model-var',
-              model,
-            );
-            const capturedConfig13Settings = new SettingsService();
-            return createIsolatedRuntimeContext(
-              {
-                credentialAuthority: new CredentialAuthority(),
-
-                activationBindings,
-                runtimeId: 'p04-prop-model-var',
-                config: capturedConfig13,
-                providerManager: pm,
-                prepare: async () => {},
-              },
-              capturedConfig13Settings,
-            );
-          })();
+          await openSelected('p04-prop-model-var', model, pm, undefined);
 
           try {
-            expect(handle.providerManager).toBe(pm);
+            expect(selectedManager).toBe(pm);
             return true;
           } finally {
-            await handle.cleanup();
+            await closeSelected();
           }
         },
       ),
@@ -589,51 +661,27 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,16}$/),
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,16}$/),
         async (idA: string, idB: string) => {
-          const handleA: IsolatedRuntimeContextHandle = (() => {
-            const capturedConfig14 = buildIsolatedTestConfig(
-              `p04-prop-distinct-${idA}`,
-              'p04-prop-distinct',
-            );
-            const capturedConfig14Settings = new SettingsService();
-            return createIsolatedRuntimeContext(
-              {
-                credentialAuthority: new CredentialAuthority(),
-
-                activationBindings,
-                runtimeId: `p04-prop-distinct-${idA}`,
-                config: capturedConfig14,
-                prepare: async () => {},
-              },
-              capturedConfig14Settings,
-            );
-          })();
-          const handleB: IsolatedRuntimeContextHandle = (() => {
-            const capturedConfig15 = buildIsolatedTestConfig(
-              `p04-prop-distinct-${idB}`,
-              'p04-prop-distinct',
-            );
-            const capturedConfig15Settings = new SettingsService();
-            return createIsolatedRuntimeContext(
-              {
-                credentialAuthority: new CredentialAuthority(),
-
-                activationBindings,
-                runtimeId: `p04-prop-distinct-${idB}`,
-                config: capturedConfig15,
-                prepare: async () => {},
-              },
-              capturedConfig15Settings,
-            );
-          })();
+          await openFirst(
+            `p04-prop-distinct-${idA}`,
+            'p04-prop-distinct',
+            undefined,
+            undefined,
+          );
+          await openSecond(
+            `p04-prop-distinct-${idB}`,
+            'p04-prop-distinct',
+            undefined,
+            undefined,
+          );
 
           try {
-            expect(handleA.providerManager).not.toBe(handleB.providerManager);
-            expect(handleA.providerManager).toBeDefined();
-            expect(handleB.providerManager).toBeDefined();
+            expect(firstManager).not.toBe(secondManager);
+            expect(firstManager).toBeDefined();
+            expect(secondManager).toBeDefined();
             return true;
           } finally {
-            await handleA.cleanup();
-            await handleB.cleanup();
+            await closeFirst();
+            await closeSecond();
           }
         },
       ),
