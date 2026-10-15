@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
  * Behavioral tests for the #3221 Agent-facade Task boundary.
@@ -27,7 +28,6 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createTaskAgent } from '../config/config.js';
-import { Task } from './task.js';
 import type { ToolConfirmation } from '@vybestack/llxprt-code-agents';
 
 const WORKSPACE = mkdtempSync(join(tmpdir(), 'a2a-taskfacade-'));
@@ -50,7 +50,7 @@ async function disposeAgent(agent: Agent): Promise<void> {
 }
 
 async function drainTypes(agent: Agent, text: string): Promise<string[]> {
-  const task = await Task.create('task-id', 'context-id', agent);
+  const task = createOwnedTask('task-id', 'context-id', agent);
   const types: string[] = [];
   for await (const event of task.acceptUserMessage(
     { userMessage: { parts: [{ kind: 'text', text }] } } as never,
@@ -107,7 +107,7 @@ describe('Task over the Agent facade (#3221)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('task-id', 'context-id', agent);
+      const task = createOwnedTask('task-id', 'context-id', agent);
       const metadata = task.getMetadata();
       expect(metadata.id).toBe('task-id');
       expect(metadata.contextId).toBe('context-id');
@@ -131,7 +131,7 @@ describe('Task over the Agent facade (#3221)', () => {
           status: 'disconnecting',
         },
       ]);
-      const task = await Task.create('task-id', 'context-id', agent);
+      const task = createOwnedTask('task-id', 'context-id', agent);
       expect(task.getMetadata().mcpServers).toMatchObject([
         { name: 'transient-server', status: MCPServerStatus.DISCONNECTING },
       ]);
@@ -145,7 +145,7 @@ describe('Task over the Agent facade (#3221)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('task-id', 'context-id', agent);
+      const task = createOwnedTask('task-id', 'context-id', agent);
       expect('agentFacade' in task).toBe(false);
       // Steer text delegates to the Agent facade (no-op without an active turn).
       expect(() => task.injectSteerText('steer')).not.toThrow();
@@ -158,7 +158,7 @@ describe('Task over the Agent facade (#3221)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('task-id', 'context-id', agent);
+      const task = createOwnedTask('task-id', 'context-id', agent);
       expect(() => task.cancelTurn()).not.toThrow();
     } finally {
       await disposeAgent(agent);
@@ -169,7 +169,7 @@ describe('Task over the Agent facade (#3221)', () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
-      const task = await Task.create('task-id', 'context-id', agent);
+      const task = createOwnedTask('task-id', 'context-id', agent);
       const confirmation: ToolConfirmation = {
         confirmationId: 'confirm-1',
         toolCallId: 'call-1',
@@ -217,7 +217,7 @@ describe('Task over the Agent facade (#3221)', () => {
         },
       );
       try {
-        const task = await Task.create('facade-tool', 'ctx', agent);
+        const task = createOwnedTask('facade-tool', 'ctx', agent);
         const events: string[] = [];
         for await (const event of task.acceptUserMessage(
           {

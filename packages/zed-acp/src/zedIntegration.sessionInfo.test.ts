@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import type { Session } from './zedIntegration.js';
+import type { Session } from './zed-session.js';
 import {
   buildFakeAgent,
   buildScriptedAgent,

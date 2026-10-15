@@ -23,7 +23,7 @@ import {
   DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import { TerminalManager } from './zed-terminal-manager.js';
 import { TERMINAL_DISCONTINUITY_NOTICE } from './terminalOutputDelta.js';
 import {
@@ -395,7 +395,30 @@ describe('Zed terminal execution', () => {
     );
     const session = new Session(
       'test-session-id',
-      agent,
+      (input, options) => agent.stream(input, options),
+      () => agent.getModel(),
+      (model) => agent.setModel(model),
+      () => agent.listAvailableModels(),
+      () => agent.getProviderContextLimit(),
+      () => agent.getApprovalMode(),
+      (mode) => agent.setApprovalMode(mode),
+      () => agent.getHistory(),
+      (options) => agent.compress(options),
+      () => agent.dispose(),
+      (name) => agent.tools.get(name),
+      () => agent.tools.list(),
+      (id, decision, payload, requiresConfirmation) =>
+        agent.tools.respondToConfirmation(
+          id,
+          decision,
+          payload,
+          requiresConfirmation,
+        ),
+      () => agent.session.getRecordingTitle(),
+      (title) => agent.session.recordRecordingTitle(title),
+      () => agent.memory.getFilePaths(),
+      () => agent.profiles.list(),
+      () => agent.tasks.list(),
       projectZedSessionSettings(
         buildMinimalConfig(),
         agent,
@@ -481,7 +504,30 @@ describe('Zed terminal execution', () => {
     );
     const session = new Session(
       'test-session-id',
-      agent,
+      (input, options) => agent.stream(input, options),
+      () => agent.getModel(),
+      (model) => agent.setModel(model),
+      () => agent.listAvailableModels(),
+      () => agent.getProviderContextLimit(),
+      () => agent.getApprovalMode(),
+      (mode) => agent.setApprovalMode(mode),
+      () => agent.getHistory(),
+      (options) => agent.compress(options),
+      () => agent.dispose(),
+      (name) => agent.tools.get(name),
+      () => agent.tools.list(),
+      (id, decision, payload, requiresConfirmation) =>
+        agent.tools.respondToConfirmation(
+          id,
+          decision,
+          payload,
+          requiresConfirmation,
+        ),
+      () => agent.session.getRecordingTitle(),
+      (title) => agent.session.recordRecordingTitle(title),
+      () => agent.memory.getFilePaths(),
+      () => agent.profiles.list(),
+      () => agent.tasks.list(),
       projectZedSessionSettings(
         buildMinimalConfig(),
         agent,

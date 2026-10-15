@@ -11,7 +11,6 @@ import {
 } from './zed-config-options.js';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
-import { projectZedSessionAgent } from './zed-session-ports.js';
 import { resolveZedContextWindowSize } from './zed-helpers.js';
 
 describe('ACP model selection without provider-manager authority', () => {
@@ -70,7 +69,11 @@ describe('ACP model selection without provider-manager authority', () => {
       mcpRuntime: owner.mcpRuntime,
     });
     try {
-      const port = projectZedSessionAgent(agent);
+      const port = {
+        getModel: () => agent.getModel(),
+        listAvailableModels: () => agent.listAvailableModels(),
+        getProviderContextLimit: () => agent.getProviderContextLimit(),
+      };
       expect(
         ['providerManager', 'agentClient', 'sessionClient'].filter(
           (key) => key in port,

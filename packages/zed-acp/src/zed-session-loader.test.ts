@@ -166,7 +166,7 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
     ];
     const { agent, getHistory } = buildAgent(history);
 
-    const items = await readAgentHistoryAsIContent(agent);
+    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
 
     expect(getHistory).toHaveBeenCalledTimes(1);
     expect(items).toStrictEqual(history);
@@ -175,7 +175,7 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
 
   it('returns an empty array for a fresh unprompted session (empty live history → zero replay updates)', async () => {
     const { agent } = buildAgent([]);
-    const items = await readAgentHistoryAsIContent(agent);
+    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
     expect(items).toStrictEqual([]);
   });
 });

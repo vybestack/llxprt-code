@@ -389,7 +389,10 @@ export function subscribeSessionTodos(
 }
 
 export async function sendZedSessionUpdate(
-  connection: acp.AgentSideConnection,
+  connection: Pick<
+    acp.AgentSideConnection,
+    'sessionUpdate' | 'requestPermission'
+  >,
   sessionId: string,
   update: acp.SessionUpdate,
   logger: DebugLogger,

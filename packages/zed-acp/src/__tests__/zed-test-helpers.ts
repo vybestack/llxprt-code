@@ -19,7 +19,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import type { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 
-import { Session } from '../zedIntegration.js';
+import { Session } from '../zed-session.js';
 
 export type ConfirmationCapture = {
   confirmationId: string;
@@ -584,7 +584,30 @@ export function createSession(
 ): Session {
   return new Session(
     'test-session-id',
-    agent,
+    (input, options) => agent.stream(input, options),
+    () => agent.getModel(),
+    (model) => agent.setModel(model),
+    () => agent.listAvailableModels(),
+    () => agent.getProviderContextLimit(),
+    () => agent.getApprovalMode(),
+    (mode) => agent.setApprovalMode(mode),
+    () => agent.getHistory(),
+    (options) => agent.compress(options),
+    () => agent.dispose(),
+    (name) => agent.tools.get(name),
+    () => agent.tools.list(),
+    (id, decision, payload, requiresConfirmation) =>
+      agent.tools.respondToConfirmation(
+        id,
+        decision,
+        payload,
+        requiresConfirmation,
+      ),
+    () => agent.session.getRecordingTitle(),
+    (title) => agent.session.recordRecordingTitle(title),
+    () => agent.memory.getFilePaths(),
+    () => agent.profiles.list(),
+    () => agent.tasks.list(),
     projectZedSessionSettings(
       config,
       agent,

@@ -51,7 +51,6 @@ import {
   mapOutcomeStringToEnum,
 } from './task-support.js';
 import { resolveTimestamp } from './task-runtime-helpers.js';
-import { createTaskRuntime, type TaskRuntime } from './task-runtime.js';
 
 /**
  * Maps the public McpServerInfo status projection onto the a2a protocol's
@@ -87,7 +86,6 @@ export class Task {
   taskState: TaskState;
   eventBus?: ExecutionEventBus;
 
-  private readonly agent: TaskRuntime;
   private readonly autoExecute: boolean;
   private promptCount = 0;
   private currentPromptId: string;
@@ -123,36 +121,23 @@ export class Task {
   constructor(
     taskId: string,
     contextId: string,
-    agent: TaskRuntime,
+    private readonly streamTurn: Agent['stream'],
+    private readonly injectSteer: Agent['injectSteer'],
+    private readonly readModel: Agent['getModel'],
+    private readonly readProvider: Agent['getProvider'],
+    private readonly listTools: Agent['listTools'],
+    private readonly listMcpServers: Agent['mcp']['listServers'],
+    private readonly respondToConfirmation: Agent['tools']['respondToConfirmation'],
+    private readonly disposeAgent: () => Promise<void>,
     eventBus?: ExecutionEventBus,
     autoExecute = false,
-    private readonly disposeAgent: () => Promise<void> = () =>
-      Promise.resolve(),
   ) {
     this.id = taskId;
     this.contextId = contextId;
-    this.agent = agent;
     this.eventBus = eventBus;
     this.autoExecute = autoExecute;
     this.taskState = 'submitted';
     this.currentPromptId = '';
-  }
-
-  static async create(
-    taskId: string,
-    contextId: string,
-    agent: Agent,
-    eventBus?: ExecutionEventBus,
-    autoExecute = false,
-  ): Promise<Task> {
-    return new Task(
-      taskId,
-      contextId,
-      createTaskRuntime(agent),
-      eventBus,
-      autoExecute,
-      () => agent.dispose(),
-    );
   }
 
   async dispose(): Promise<void> {
@@ -163,7 +148,7 @@ export class Task {
   }
 
   getMetadata(): TaskMetadata {
-    const tools = this.agent.listTools();
+    const tools = this.listTools();
     const toolByKey = new Map(
       tools.map((tool) => [`${tool.server ?? ''}.${tool.name}`, tool]),
     );
@@ -178,7 +163,7 @@ export class Task {
         parameterSchema: info?.parametersSchema,
       };
     };
-    const mcpServers = this.agent.listMcpServers().map((server) => ({
+    const mcpServers = this.listMcpServers().map((server) => ({
       name: server.name,
       status: mapPublicMcpStatus(server.status),
       tools: (server.tools ?? []).map((tool) =>
@@ -194,7 +179,7 @@ export class Task {
       id: this.id,
       contextId: this.contextId,
       taskState: this.taskState,
-      model: this.modelInfo?.model ?? this.agent.getModel(),
+      model: this.modelInfo?.model ?? this.readModel(),
       mcpServers,
       availableTools,
     };
@@ -216,7 +201,7 @@ export class Task {
       traceId?: string;
     } = {
       coderAgent: coderAgentMessage,
-      model: this.modelInfo?.model ?? this.agent.getModel(),
+      model: this.modelInfo?.model ?? this.readModel(),
     };
 
     if (metadataError) {
@@ -329,7 +314,7 @@ export class Task {
       const controller = new AbortController();
       this.turnAbortController = controller;
       const turnSignal = AbortSignal.any([aborted, controller.signal]);
-      const stream = this.agent.stream(llmParts, {
+      const stream = this.streamTurn(llmParts, {
         signal: turnSignal,
         promptId: this.currentPromptId,
       }) as AsyncGenerator<AgentEvent, void, unknown>;
@@ -454,7 +439,7 @@ export class Task {
    * active; the Agent stashes the message until the next tool boundary.
    */
   injectSteerText(text: string): void {
-    this.agent.injectSteer(text);
+    this.injectSteer(text);
   }
 
   // ── Confirmation handling (public Agent confirmation API) ──────────────────
@@ -486,7 +471,7 @@ export class Task {
         confirmation.toolCallId +
         '.',
     );
-    this.agent.respondToConfirmation(
+    this.respondToConfirmation(
       confirmation.confirmationId,
       ToolConfirmationOutcome.ProceedOnce,
     );
@@ -555,7 +540,7 @@ export class Task {
       // fire-onto-bus, so a process-global env window around this call would
       // shield nothing while exposing other tasks to transient mutation.
       // Real isolation needs a facade-level credential-context API.
-      this.agent.respondToConfirmation(
+      this.respondToConfirmation(
         confirmation.confirmationId,
         confirmationOutcome,
         confirmPayload,
@@ -763,11 +748,11 @@ export class Task {
     ) {
       return undefined;
     }
-    return this.modelInfo?.model ?? this.agent.getModel();
+    return this.modelInfo?.model ?? this.readModel();
   }
 
   private getProviderName(): string | undefined {
-    const providerName = this.agent.getProvider().trim();
+    const providerName = this.readProvider().trim();
     return providerName === '' || providerName === UNCONFIGURED_PROVIDER
       ? undefined
       : providerName;

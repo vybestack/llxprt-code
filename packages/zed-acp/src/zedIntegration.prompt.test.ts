@@ -9,7 +9,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { todoEvents } from '@vybestack/llxprt-code-core';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import { STREAM_BLOCKED_MESSAGE } from './zed-stream-batcher.js';
 import {
   buildFakeAgent,
