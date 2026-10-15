@@ -242,7 +242,7 @@ function buildOrchestrator(options: BuildOptions): {
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    async *streamHistory() {},
+    readLastHistoryRow: vi.fn().mockResolvedValue(undefined),
     getSessionTurnCount: vi.fn().mockReturnValue(2),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),

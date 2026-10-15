@@ -279,7 +279,7 @@ function buildHarness(options: HarnessOptions): Harness {
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    async *streamHistory() {},
+    readLastHistoryRow: vi.fn().mockResolvedValue(undefined),
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),

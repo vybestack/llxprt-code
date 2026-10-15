@@ -29,7 +29,10 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, Turn } from './turn.js';
-import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
+import {
+  bindChatHistoryTail,
+  createClientIdeFixture,
+} from './__tests__/client-ide-fixture.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import {
   fromAsync,
@@ -549,6 +552,7 @@ describe('Agent Client (client.ts): IDE context', () => {
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -612,6 +616,7 @@ describe('Agent Client (client.ts): stream return', () => {
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -687,6 +692,7 @@ describe('Agent Client (client.ts): session limit', () => {
         getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
         getContextLimit: vi.fn().mockReturnValue(1000000),
       };
+      bindChatHistoryTail(mockChat, () => []);
       client['chat'] = mockChat as ChatSession;
 
       const mockGenerator: Partial<ContentGenerator> = {

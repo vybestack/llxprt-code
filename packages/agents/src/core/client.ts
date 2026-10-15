@@ -47,7 +47,10 @@ import { resetClientHistory } from './clientResetHistory.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { createClientHistoryReader } from './clientHistoryReader.js';
+import {
+  createClientHistoryReader,
+  createClientLastRowReader,
+} from './clientHistoryReader.js';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -293,7 +296,7 @@ export class AgentClient
           this.currentSequenceModel,
           this.chat,
         ),
-      streamHistory: (signal) => this.streamHistory(signal),
+      readLastHistoryRow: () => this.readLastHistoryRow(),
       getSessionTurnCount: () => this.sessionTurnCount,
       incrementSessionTurnCount: () => {
         this.sessionTurnCount++;
@@ -526,6 +529,11 @@ export class AgentClient
   }
 
   readonly streamHistory = createClientHistoryReader(
+    () => this.chat,
+    () => this._storedHistoryService,
+  );
+
+  readonly readLastHistoryRow = createClientLastRowReader(
     () => this.chat,
     () => this._storedHistoryService,
   );

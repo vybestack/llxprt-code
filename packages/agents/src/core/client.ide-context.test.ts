@@ -23,7 +23,10 @@ import {
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
+import {
+  bindChatHistoryTail,
+  createClientIdeFixture,
+} from './__tests__/client-ide-fixture.js';
 import {
   setupAgentClient,
   type MockResponseShape,
@@ -212,6 +215,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 let client: AgentClient;
 let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 let mockChat: Partial<ChatSession>;
+let tail: ReturnType<typeof bindChatHistoryTail>;
 
 async function checkSkippedPendingContext(): Promise<unknown> {
   // Arrange: History ends with a tool_call from the model
@@ -300,6 +304,17 @@ async function checkOrdinaryContext(): Promise<unknown> {
     JSON.stringify(call[0]).includes("user's editor context"),
   );
   return contextCall;
+}
+
+async function sendOrdinaryMessage(): Promise<void> {
+  const stream = client.sendMessageStream(
+    [{ type: 'text', text: 'A message' }],
+    new AbortController().signal,
+    'prompt-id-history-reads',
+  );
+  for await (const _ of stream) {
+    // consume stream
+  }
 }
 
 async function skipInitialContext(): Promise<IContent[]> {
@@ -616,6 +631,10 @@ async function setupIdeContextClient(): Promise<void> {
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
     getContextLimit: vi.fn().mockReturnValue(1000000),
   };
+  tail = bindChatHistoryTail(
+    mockChat,
+    () => mockChat.getHistory!() as unknown as IContent[],
+  );
   client['chat'] = mockChat as ChatSession;
 
   const mockGenerator: Partial<ContentGenerator> = {
@@ -697,6 +716,25 @@ describe('AgentClient (client.ts)', () => {
 
       it('should send a context DELTA on the next message after a skipped context', async () => {
         expect(await checkContextDeltaAfterSkip()).toContain('fileC.ts');
+      });
+
+      it('reads no history when IDE mode is off', async () => {
+        ide.setEnabled(false);
+        const historyScans = vi.spyOn(client, 'streamHistory');
+
+        await sendOrdinaryMessage();
+
+        expect(tail.tailReads()).toBe(0);
+        expect(historyScans).not.toHaveBeenCalled();
+      });
+
+      it('reads only the last history row when IDE mode is on', async () => {
+        const historyScans = vi.spyOn(client, 'streamHistory');
+
+        await sendOrdinaryMessage();
+
+        expect(tail.tailReads()).toBe(1);
+        expect(historyScans).not.toHaveBeenCalled();
       });
     });
   });

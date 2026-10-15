@@ -249,7 +249,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getChat: () => mockChat as unknown as ChatSession,
     ...buildModelInfoServices(),
     getEffectiveModelIdentity: identityFn,
-    async *streamHistory() {},
+    readLastHistoryRow: vi.fn().mockResolvedValue(undefined),
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),

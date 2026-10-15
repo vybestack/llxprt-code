@@ -20,3 +20,18 @@ export function createClientHistoryReader(
     if (stored !== undefined) yield* stored.streamRawHistory(signal);
   };
 }
+
+/** Reads the newest history row through the journal's tail read, not a scan. */
+export function createClientLastRowReader(
+  readChat: () => ChatSession | undefined,
+  readStoredHistory: () => HistoryService | undefined,
+): () => Promise<IContent | undefined> {
+  return async (): Promise<IContent | undefined> => {
+    const chat = readChat();
+    if (chat !== undefined) {
+      await chat.waitForIdle();
+      return chat.getHistoryService().getLastContent();
+    }
+    return readStoredHistory()?.getLastContent();
+  };
+}

@@ -62,9 +62,7 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
     return this.getLastContent('ai');
   }
 
-  protected getLastContent(
-    speaker?: IContent['speaker'],
-  ): IContent | undefined {
+  getLastContent(speaker?: IContent['speaker']): IContent | undefined {
     return this.journal.withRowSummary((summary) =>
       summary.lastContent(speaker),
     );

@@ -63,9 +63,8 @@ export interface MessageStreamDeps {
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
   getEffectiveModelIdentity: () => EffectiveModelIdentity;
-  streamHistory: (
-    signal?: AbortSignal,
-  ) => AsyncGenerator<IContent, void, unknown>;
+  /** The newest history row, or undefined when history is empty. */
+  readLastHistoryRow: () => Promise<IContent | undefined>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
@@ -441,29 +440,27 @@ export class MessageStreamOrchestrator {
    * @requirement:REQ-005.4
    */
   private async _injectIdeContext(): Promise<void> {
-    const { ideContextTracker, getChat, streamHistory } = this.deps;
-    let empty = true;
-    let hasPendingToolCall = false;
-    for await (const row of streamHistory()) {
-      empty = false;
-      hasPendingToolCall =
-        row.speaker === 'ai' &&
-        row.blocks.some((block) => block.type === 'tool_call');
-    }
+    const { ideContextTracker, getChat, readLastHistoryRow } = this.deps;
+    if (!ideContextTracker.isEnabled()) return;
 
-    if (ideContextTracker.isEnabled() && !hasPendingToolCall) {
-      const { contextParts, newIdeContext } =
-        ideContextTracker.getContextParts(empty);
-      if (contextParts.length > 0) {
-        getChat().addHistory(
-          iContentFromBlocks(
-            [{ type: 'text', text: contextParts.join('\n') }],
-            'human',
-          ),
-        );
-      }
-      ideContextTracker.recordSentContext(newIdeContext);
+    const lastRow = await readLastHistoryRow();
+    const hasPendingToolCall =
+      lastRow?.speaker === 'ai' &&
+      lastRow.blocks.some((block) => block.type === 'tool_call');
+    if (hasPendingToolCall) return;
+
+    const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
+      lastRow === undefined,
+    );
+    if (contextParts.length > 0) {
+      getChat().addHistory(
+        iContentFromBlocks(
+          [{ type: 'text', text: contextParts.join('\n') }],
+          'human',
+        ),
+      );
     }
+    ideContextTracker.recordSentContext(newIdeContext);
   }
 
   private async *_runRetryLoop(
