@@ -1,3 +1,4 @@
+import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
 import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -361,7 +362,7 @@ async function createHandlerDeps(
     recordingSwapCallbacks: callbacks,
   });
   const continueCommand = createContinueCommandForTest(() => commandContext);
-  return {
+  const deps: SlashCommandHandlerDeps = {
     commands: [continueCommand],
     config: {
       ...composeFixtureRuntime(config),
@@ -371,7 +372,6 @@ async function createHandlerDeps(
         settingsOwner,
       ),
     },
-    sessionPersistence: persistence,
     commandContext,
     actions: createActions(),
     addItem: commandContext.ui.addItem,
@@ -381,16 +381,19 @@ async function createHandlerDeps(
     setPendingItem: () => {},
     setSessionShellAllowlist: () => {},
     setConfirmationRequest: () => {},
-    recordingSwapCallbacks: callbacks,
     confirmationLogger: new DebugLogger('continue-package-confirmation-test'),
     slashCommandLogger: new DebugLogger('continue-package-resume-test'),
     beginSlashCommandAction: () => new AbortController(),
     endSlashCommandAction: () => {},
     resumeOwnedSession: null,
     isMcpDiscoveryPending: () => false,
+    resumeRawSession: null,
+    replayResumedHistory: () => {},
     recordCommandError: async () => {},
     loadCommandHistory: async () => {},
   };
+  installFixtureRawResume(deps, persistence, callbacks);
+  return deps;
 }
 
 async function disposeActiveState(state: ActiveRecordingState): Promise<void> {

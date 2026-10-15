@@ -107,6 +107,8 @@ describe('command discovery owner', () => {
       slashCommandLogger: new DebugLogger('discovery-command'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
+      resumeRawSession: null,
+      replayResumedHistory: () => {},
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
       resumeOwnedSession: null,

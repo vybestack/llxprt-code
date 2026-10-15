@@ -1,3 +1,9 @@
+import { createHandlerDeps as createDeps } from '../../__tests__/command-handler-fixture.js';
+import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
+import {
+  performResume,
+  type RecordingSwapCallbacks,
+} from '../../services/performResume.js';
 import {
   bindFixtureHistoryLoader,
   bindFixtureOwnerResume,
@@ -13,7 +19,6 @@ import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { createDirectoryCommand } from '../commands/directoryCommand.js';
 import { bindDirectoryCommand } from '../commands/directoryCommandHost.js';
 import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
@@ -26,12 +31,8 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import {
-  DebugLogger,
-  getProjectHash,
-  LocalMediaStore,
-} from '@vybestack/llxprt-code-core';
-import type { IContent, Logger } from '@vybestack/llxprt-code-core';
+import { getProjectHash, LocalMediaStore } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import type { CommandContext } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import { MessageType } from '../types.js';
@@ -51,70 +52,6 @@ describe('slashCommandHandlers', () => {
   });
 
   type HistoryCall = [{ type: MessageType; text: string }, number];
-
-  function createDeps(
-    addItem: ReturnType<typeof vi.fn>,
-    overrides: Partial<SlashCommandHandlerDeps> = {},
-  ): SlashCommandHandlerDeps {
-    return {
-      commands: createCommands(undefined),
-      config: null,
-      commandContext: {
-        runtimeApi: createMockRuntimeApi(),
-        refreshProviderAliases: vi.fn(async () => {}),
-        oauthControl:
-          {} as SlashCommandHandlerDeps['commandContext']['oauthControl'],
-        signal: new AbortController().signal,
-        services: {
-          config: null,
-          agent: null,
-          settings:
-            {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
-          git: undefined,
-          logger: new DebugLogger('test') as unknown as Logger,
-        },
-        ui: {
-          addItem,
-          clear: vi.fn(),
-          setDebugMessage: vi.fn(),
-          pendingItem: null,
-          setPendingItem: vi.fn(),
-          loadHistory: vi.fn(),
-          toggleCorgiMode: vi.fn(),
-          toggleDebugProfiler: vi.fn(),
-          toggleVimEnabled: vi.fn(),
-          setLlxprtMdFileCount: vi.fn(),
-          updateHistoryTokenCount: vi.fn(),
-          reloadCommands: vi.fn(),
-          extensionsUpdateState: new Map(),
-          dispatchExtensionStateUpdate: vi.fn(),
-          addConfirmUpdateExtensionRequest: vi.fn(),
-        },
-        session: {
-          stats:
-            {} as SlashCommandHandlerDeps['commandContext']['session']['stats'],
-          sessionShellAllowlist: new Set(),
-        },
-      },
-      actions: {} as SlashCommandHandlerDeps['actions'],
-      addItem,
-      addMessage: vi.fn(),
-      setIsProcessing: vi.fn(),
-      setLocalIsProcessing: vi.fn(),
-      setPendingItem: vi.fn(),
-      setSessionShellAllowlist: vi.fn(),
-      setConfirmationRequest: vi.fn(),
-      confirmationLogger: new DebugLogger('test-confirmation'),
-      slashCommandLogger: new DebugLogger('test-slash'),
-      beginSlashCommandAction: () => new AbortController(),
-      endSlashCommandAction: () => {},
-      resumeOwnedSession: null,
-      isMcpDiscoveryPending: () => false,
-      recordCommandError: async () => {},
-      loadCommandHistory: async () => {},
-      ...overrides,
-    };
-  }
 
   it('explains unknown MCP commands using the Agent discovery state without Config', async () => {
     const deps = createDeps(vi.fn());
@@ -171,6 +108,8 @@ describe('slashCommandHandlers', () => {
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
+          resumeRawSession: null,
+          replayResumedHistory: () => {},
           recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
             recordSessionEvent: rawWrite,
           }),
@@ -210,6 +149,8 @@ describe('slashCommandHandlers', () => {
           },
           resumeOwnedSession: null,
           isMcpDiscoveryPending: () => false,
+          resumeRawSession: null,
+          replayResumedHistory: () => {},
           recordCommandError: bindCommandErrorRecorder(
             next,
             'agent',
@@ -701,8 +642,8 @@ describe('slashCommandHandlers', () => {
         agentClient: owner.agentClient,
         providerManager: owner.providerManager,
       });
-      deps.recordingSwapCallbacks = {} as never;
-      deps.sessionPersistence = {
+      const callbacks = {} as never;
+      const persistence = {
         mediaStore: new LocalMediaStore({
           rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
           quotaBytes: 1024,
@@ -712,7 +653,7 @@ describe('slashCommandHandlers', () => {
         },
       };
       // Injected instead of vi.mock: bun module mocks leak across test files.
-      deps.performResumeFn = performResumeMock;
+      installFixtureRawResume(deps, persistence, callbacks, performResumeMock);
       deps.commands = [
         {
           name: 'resumecmd',
@@ -778,7 +719,7 @@ describe('slashCommandHandlers', () => {
         deps.config = composeFixtureRuntime(config);
         deps.commandContext.services.config = composeFixtureRuntime(config);
         deps.commandContext.services.agent = agent;
-        deps.recordingSwapCallbacks = {
+        const callbacks: RecordingSwapCallbacks = {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
@@ -786,8 +727,7 @@ describe('slashCommandHandlers', () => {
             throw new Error('Mocked resume must not swap recordings');
           },
         };
-        deps.sessionPersistence = persistence;
-        deps.performResumeFn = async (_sessionRef, context) => {
+        const resume: typeof performResume = async (_sessionRef, context) => {
           const bytes = await context.mediaStore?.readVerified(reference);
           if (bytes === undefined) throw new Error('Missing owner media store');
           return {
@@ -811,6 +751,7 @@ describe('slashCommandHandlers', () => {
             ],
           };
         };
+        installFixtureRawResume(deps, persistence, callbacks, resume);
         deps.commands = [
           {
             name: 'continue',

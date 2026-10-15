@@ -88,6 +88,8 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         endSlashCommandAction: () => {},
         resumeOwnedSession: null,
         isMcpDiscoveryPending: () => false,
+        resumeRawSession: null,
+        replayResumedHistory: () => {},
         recordCommandError: async () => {},
         loadCommandHistory: async () => {},
       };
