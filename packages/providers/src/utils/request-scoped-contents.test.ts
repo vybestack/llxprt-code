@@ -56,9 +56,9 @@ describe('request-owned progressive history', () => {
     await expect(reader.next()).rejects.toThrow(
       'Request contents were disposed',
     );
-    await expect(
-      owner.stream()[Symbol.asyncIterator]().next(),
-    ).rejects.toThrow('Request contents were disposed');
+    await expect(owner.stream()[Symbol.asyncIterator]().next()).rejects.toThrow(
+      'Request contents were disposed',
+    );
   });
 });
 
