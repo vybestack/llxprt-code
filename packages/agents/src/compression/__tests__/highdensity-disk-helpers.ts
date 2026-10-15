@@ -7,7 +7,7 @@ import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/histor
 import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
-import { HighDensityStrategy } from '../HighDensityStrategy.js';
+import { HighDensityArrayOracle } from './support/highdensity-array-oracle.js';
 import {
   middleoutSetup,
   middleoutRow,
@@ -78,7 +78,7 @@ export async function highdensityOracle(
     undefined,
     logger,
   );
-  const result = await new HighDensityStrategy().compress({
+  const result = await new HighDensityArrayOracle().compress({
     ...metadata,
     history: buildCuratedHistory(logger, raw, false),
   });

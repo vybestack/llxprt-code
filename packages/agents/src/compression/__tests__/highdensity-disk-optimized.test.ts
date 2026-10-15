@@ -11,7 +11,7 @@ import {
   highdensitySetup,
   HighdensityPreparationHistory,
 } from './highdensity-disk-helpers.js';
-import { HighDensityStrategy } from '../HighDensityStrategy.js';
+import { HighDensityArrayOracle } from './support/highdensity-array-oracle.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { collectRows } from './truncation-stream-helpers.js';
 
@@ -48,7 +48,7 @@ async function optimized(size: number): Promise<number> {
         undefined,
         logger,
       );
-      const legacy = await new HighDensityStrategy().compress({
+      const legacy = await new HighDensityArrayOracle().compress({
         ...metadata,
         history: buildCuratedHistory(logger, source, false),
       });

@@ -3,7 +3,8 @@
  * @requirement REQ-HD-011.3, REQ-HD-011.4, REQ-HD-012.2
  */
 import { describe, it, expect } from 'bun:test';
-import { HighDensityStrategy } from '../HighDensityStrategy.js';
+import { compressHighDensityViaDisk } from './support/highdensity-disk-adapter.js';
+import { resultHistory } from './high-density-compress-helpers.js';
 import { compressTopDownViaDisk } from './support/topdown-disk-adapter.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -70,18 +71,20 @@ function makeContext(
 
 describe('HighDensityStrategy ignores activeTodos (REQ-HD-011.4)', () => {
   it('compress result is unaffected by activeTodos', async () => {
-    const strategy = new HighDensityStrategy();
     const contextWithout = makeContext({ activeTodos: undefined });
     const contextWith = makeContext({
       activeTodos:
         '- [pending] Fix the auth bug\n- [in_progress] Refactor DB layer',
     });
 
-    const resultWithout = await strategy.compress(contextWithout);
-    const resultWith = await strategy.compress(contextWith);
+    const resultWithout = await compressHighDensityViaDisk(contextWithout);
+    const resultWith = await compressHighDensityViaDisk(contextWith);
 
-    expect(resultWith.metadata.strategyUsed).toBe('high-density');
-    expect(resultWith.newHistory.length).toBe(resultWithout.newHistory.length);
+    expect(resultWithout.kind).toBe('applied');
+    expect(resultWith.kind).toBe('applied');
+    expect(resultHistory(resultWith).length).toBe(
+      resultHistory(resultWithout).length,
+    );
   });
 });
 

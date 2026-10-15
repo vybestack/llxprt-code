@@ -9,8 +9,8 @@
  * @requirement REQ-HD-008.1, REQ-HD-008.2, REQ-HD-008.3, REQ-HD-008.4,
  *              REQ-HD-008.5, REQ-HD-008.6
  *
- * Behavioral tests for the HighDensityStrategy.compress() method.
- * compress() performs deterministic (no-LLM) compression by summarizing
+ * Behavioral tests for the HighDensityStrategy.compressDisk() route.
+ * compressDisk() performs deterministic (no-LLM) compression by summarizing
  * tool responses outside a preserved tail and optionally truncating
  * oldest entries to meet a target token budget.
  *
@@ -24,11 +24,15 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { StrategyCompressionResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  compressHighDensityViaDisk,
+  type HighDensityDiskOutcome,
+} from './support/highdensity-disk-adapter.js';
+import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import {
   buildCompressContext,
   buildMixedHistory,
-  createStrategy,
+  compressCountingLlmCalls,
   makeAiText,
   makeAiToolCall,
   makeHumanMessage,
@@ -40,7 +44,7 @@ import {
 } from './high-density-compress-helpers.js';
 
 function collectToolResponses(
-  result: StrategyCompressionResult,
+  result: HighDensityDiskOutcome,
 ): ToolResponseBlock[] {
   return resultHistory(result)
     .filter((e) => e.speaker === 'tool')
@@ -48,7 +52,7 @@ function collectToolResponses(
     .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
 }
 
-function assertToolCallsHaveResponses(result: StrategyCompressionResult): void {
+function assertToolCallsHaveResponses(result: HighDensityDiskOutcome): void {
   const history = resultHistory(result);
   for (const entry of history.filter((e) => e.speaker === 'ai')) {
     for (const id of entry.blocks
@@ -69,7 +73,7 @@ function assertToolCallsHaveResponses(result: StrategyCompressionResult): void {
 }
 
 function assertSummarizedToolResponsesUnderLimit(
-  result: StrategyCompressionResult,
+  result: HighDensityDiskOutcome,
   bigContent: string,
 ): void {
   for (const block of collectToolResponses(result)) {
@@ -79,7 +83,7 @@ function assertSummarizedToolResponsesUnderLimit(
 }
 
 function assertToolResponseMentionsSummary(
-  result: StrategyCompressionResult,
+  result: HighDensityDiskOutcome,
   keywords: string[],
 ): void {
   for (const block of collectToolResponses(result)) {
@@ -100,7 +104,7 @@ function assertAiTailEntriesMatchOriginal(
 }
 
 function assertNonTailToolResponsesAreStrings(
-  result: StrategyCompressionResult,
+  result: HighDensityDiskOutcome,
   tailSize: number,
 ): void {
   const history = resultHistory(result);
@@ -116,7 +120,6 @@ function assertNonTailToolResponsesAreStrings(
 
 const observeSummary = async () => {
   resetCallIds();
-  const strategy = createStrategy();
 
   const { entry: readAi, callId: readId } = makeAiToolCall('read_file', {
     file_path: '/workspace/src/file.ts',
@@ -146,7 +149,7 @@ const observeSummary = async () => {
     preserveThreshold: 0.2,
   });
 
-  const result = await strategy.compress(ctx);
+  const result = await compressHighDensityViaDisk(ctx);
 
   // Check that summaries reference tool names
   const toolEntries = resultHistory(result).filter((e) => e.speaker === 'tool');
@@ -172,7 +175,6 @@ const observeSummary = async () => {
 
 const observeHumans = async () => {
   resetCallIds();
-  const strategy = createStrategy();
 
   const human1 = makeHumanMessage('First question');
   const { entry: aiCall, callId } = makeAiToolCall('read_file', {
@@ -188,7 +190,7 @@ const observeHumans = async () => {
     preserveThreshold: 0.2,
   });
 
-  const result = await strategy.compress(ctx);
+  const result = await compressHighDensityViaDisk(ctx);
 
   const humanEntries = resultHistory(result).filter(
     (e) => e.speaker === 'human',
@@ -215,7 +217,6 @@ const observeHumans = async () => {
 
 const observeAiContent = async () => {
   resetCallIds();
-  const strategy = createStrategy();
 
   const ai1 = makeAiText('My analysis is thorough');
   const { entry: aiCall, callId } = makeAiToolCall('write_file', {
@@ -232,7 +233,7 @@ const observeAiContent = async () => {
     preserveThreshold: 0.2,
   });
 
-  const result = await strategy.compress(ctx);
+  const result = await compressHighDensityViaDisk(ctx);
 
   // AI text entries should be unchanged
   const aiTextEntries = resultHistory(result).filter(
@@ -271,7 +272,11 @@ const observeAiContent = async () => {
 function createPropertyRunner(): {
   arbHistory: fc.Arbitrary<IContent[]>;
   runProperty: (
-    body: (history: IContent[], result: StrategyCompressionResult) => void,
+    body: (
+      history: IContent[],
+      result: HighDensityDiskOutcome,
+      llmCalls: number,
+    ) => void,
     opts?: { preserveThreshold?: number; contextLimit?: number },
   ) => Promise<void>;
 } {
@@ -319,16 +324,20 @@ function createPropertyRunner(): {
 
   /** Run a property, providing the compressed-or-original history and result. */
   async function runProperty(
-    body: (history: IContent[], result: StrategyCompressionResult) => void,
+    body: (
+      history: IContent[],
+      result: HighDensityDiskOutcome,
+      llmCalls: number,
+    ) => void,
     opts: { preserveThreshold?: number; contextLimit?: number } = {},
   ): Promise<void> {
     await fc.assert(
       fc.asyncProperty(arbHistory, async (history) => {
         resetCallIds();
-        const result = await createStrategy().compress(
+        const { result, llmCalls } = await compressCountingLlmCalls(
           buildCompressContext({ history, ...opts }),
         );
-        body(history, result);
+        body(history, result, llmCalls);
       }),
       { numRuns: 30 },
     );
@@ -349,7 +358,7 @@ function createOutputLengthProperty(arbHistory: fc.Arbitrary<IContent[]>): {
   }> = [];
   const outputLengthProperty = fc.asyncProperty(arbHistory, async (history) => {
     resetCallIds();
-    const result = await createStrategy().compress(
+    const result = await compressHighDensityViaDisk(
       buildCompressContext({ history }),
     );
     const out = result.kind === 'applied' ? resultHistory(result) : history;
@@ -377,7 +386,7 @@ function createHumanMessageProperty(arbHistory: fc.Arbitrary<IContent[]>): {
     arbHistory,
     async (history) => {
       resetCallIds();
-      const result = await createStrategy().compress(
+      const result = await compressHighDensityViaDisk(
         buildCompressContext({
           history,
           preserveThreshold: 0.5,
@@ -398,44 +407,44 @@ function createHumanMessageProperty(arbHistory: fc.Arbitrary<IContent[]>): {
   return { humanMessageObservations, humanMessagePreservationProperty };
 }
 
-function createMetadataCountProperty(arbHistory: fc.Arbitrary<IContent[]>): {
-  metadataCountObservations: Array<{
-    originalCount: number;
+function createRowCountProperty(arbHistory: fc.Arbitrary<IContent[]>): {
+  rowCountObservations: Array<{
     historyLength: number;
-    compressedCount: number;
+    droppedCount: number;
     outputLength: number;
+    candidateRows: number;
   }>;
-  metadataCountProperty: fc.IAsyncProperty<[IContent[]]>;
+  rowCountProperty: fc.IAsyncProperty<[IContent[]]>;
 } {
-  const metadataCountObservations: Array<{
-    originalCount: number;
+  const rowCountObservations: Array<{
     historyLength: number;
-    compressedCount: number;
+    droppedCount: number;
     outputLength: number;
+    candidateRows: number;
   }> = [];
-  const metadataCountProperty = fc.asyncProperty(
-    arbHistory,
-    async (history) => {
-      resetCallIds();
-      const result = await createStrategy().compress(
-        buildCompressContext({ history }),
-      );
-      const out = result.kind === 'applied' ? resultHistory(result) : history;
-      metadataCountObservations.push({
-        originalCount: result.metadata.originalMessageCount,
-        historyLength: history.length,
-        compressedCount: result.metadata.compressedMessageCount,
-        outputLength: out.length,
-      });
-      return (
-        result.metadata.originalMessageCount === history.length &&
-        result.metadata.compressedMessageCount <=
-          result.metadata.originalMessageCount &&
-        result.metadata.compressedMessageCount === out.length
-      );
-    },
-  );
-  return { metadataCountObservations, metadataCountProperty };
+  const rowCountProperty = fc.asyncProperty(arbHistory, async (history) => {
+    resetCallIds();
+    const result = await compressHighDensityViaDisk(
+      buildCompressContext({ history }),
+    );
+    rowCountObservations.push(
+      result.kind === 'applied'
+        ? {
+            historyLength: history.length,
+            droppedCount: result.start,
+            outputLength: result.newHistory.length,
+            candidateRows: 0,
+          }
+        : {
+            historyLength: history.length,
+            droppedCount: 0,
+            outputLength: history.length,
+            candidateRows: result.candidateRows,
+          },
+    );
+    return true;
+  });
+  return { rowCountObservations, rowCountProperty };
 }
 
 // -------------------------------------------------------------------------
@@ -449,13 +458,12 @@ function registerNoLlmCallTests(): void {
      * @requirement REQ-HD-008.1
      * @pseudocode high-density-compress.md lines 10-91
      */
-    it('compress does not call resolveProvider', async () => {
-      const strategy = createStrategy();
+    it('compressDisk does not call resolveProvider', async () => {
       const history = buildMixedHistory(10);
       const ctx = buildCompressContext({ history });
 
       // If resolveProvider throws and compress succeeds, it proves no LLM call was made
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
 
       expect(result).toBeDefined();
       expect(result.kind).toBe('applied');
@@ -465,14 +473,15 @@ function registerNoLlmCallTests(): void {
      * @plan PLAN-20260211-HIGHDENSITY.P13
      * @requirement REQ-HD-008.1
      */
-    it('metadata.llmCallMade is always false', async () => {
-      const strategy = createStrategy();
+    it('llmCallMade is always false: the disk route asks for no provider and the strategy requires none', async () => {
       const history = buildMixedHistory(12);
       const ctx = buildCompressContext({ history });
 
-      const result = await strategy.compress(ctx);
+      const { result, llmCalls } = await compressCountingLlmCalls(ctx);
 
-      expect(result.metadata.llmCallMade).toBe(false);
+      expect(result.kind).toBe('applied');
+      expect(llmCalls).toBe(0);
+      expect(new HighDensityStrategy().requiresLLM).toBe(false);
     });
   });
 }
@@ -488,7 +497,6 @@ function registerTailPreservationTests(): void {
      * @requirement REQ-HD-008.2
      */
     it('recent tail entries are preserved intact', async () => {
-      const strategy = createStrategy();
       const history = buildMixedHistory(10);
       const tailSize = Math.floor(history.length * 0.3);
       const ctx = buildCompressContext({
@@ -496,7 +504,7 @@ function registerTailPreservationTests(): void {
         preserveThreshold: 0.3,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
       expect(result.kind).toBe('applied');
 
       // The last tailSize entries in newHistory should match the last tailSize in original
@@ -515,7 +523,6 @@ function registerTailPreservationTests(): void {
      */
     it('tail boundary does not split tool_call/tool_response pairs', async () => {
       resetCallIds();
-      const strategy = createStrategy();
       // Carefully craft history where tail boundary falls between a tool_call and its response
       const human1 = makeHumanMessage('Question 1');
       const { entry: ai1, callId: cid1 } = makeAiToolCall('read_file', {
@@ -539,7 +546,7 @@ function registerTailPreservationTests(): void {
         preserveThreshold: 0.3,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
       expect(result.kind).toBe('applied');
 
       expect(resultHistory(result).length).toBeLessThanOrEqual(history.length);
@@ -551,7 +558,6 @@ function registerTailPreservationTests(): void {
      * @requirement REQ-HD-008.2
      */
     it('tail covering entire history returns history unchanged', async () => {
-      const strategy = createStrategy();
       const history = [
         makeHumanMessage('Hello'),
         makeAiText('Hi there'),
@@ -562,10 +568,11 @@ function registerTailPreservationTests(): void {
         preserveThreshold: 1.0,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
 
-      expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('tail-covers-all');
+      // The disk noop carries no reason or counts; the observable fact is
+      // that history is left as-is and no partial candidate remains.
+      expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
     });
   });
 }
@@ -582,7 +589,6 @@ function registerToolResponseTests(): void {
      */
     it('tool responses outside tail are summarized to short strings', async () => {
       resetCallIds();
-      const strategy = createStrategy();
 
       const human = makeHumanMessage('Read the file');
       const { entry: aiCall, callId } = makeAiToolCall('read_file', {
@@ -603,9 +609,9 @@ function registerToolResponseTests(): void {
         preserveThreshold: 0.2,
       });
 
-      const result = await strategy.compress(ctx);
+      const { result, llmCalls } = await compressCountingLlmCalls(ctx);
 
-      expect(result.metadata.llmCallMade).toBe(false);
+      expect(llmCalls).toBe(0);
       assertSummarizedToolResponsesUnderLimit(result, bigContent);
     });
 
@@ -625,7 +631,6 @@ function registerToolResponseTests(): void {
      */
     it('summary for responses with file paths includes the path', async () => {
       resetCallIds();
-      const strategy = createStrategy();
 
       const { entry: aiCall, callId } = makeAiToolCall('read_file', {
         file_path: '/workspace/src/important.ts',
@@ -643,9 +648,9 @@ function registerToolResponseTests(): void {
         preserveThreshold: 0.3,
       });
 
-      const result = await strategy.compress(ctx);
+      const { result, llmCalls } = await compressCountingLlmCalls(ctx);
 
-      expect(result.metadata.llmCallMade).toBe(false);
+      expect(llmCalls).toBe(0);
       assertToolResponseMentionsSummary(result, [
         'read_file',
         'important.ts',
@@ -659,7 +664,6 @@ function registerToolResponseTests(): void {
      */
     it('tool responses inside tail are NOT summarized', async () => {
       resetCallIds();
-      const strategy = createStrategy();
 
       const human1 = makeHumanMessage('First question');
       const ai1 = makeAiText('First answer');
@@ -675,12 +679,13 @@ function registerToolResponseTests(): void {
         preserveThreshold: 1.0,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
 
       // Tail covers all → structural noop; history unchanged means the tail
       // tool response is preserved verbatim (NOT summarized).
-      expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('tail-covers-all');
+      // The disk noop carries no reason or counts; the observable fact is
+      // that history is left as-is and no partial candidate remains.
+      expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
     });
   });
 }
@@ -734,18 +739,20 @@ function registerResultShapeTests(): void {
      * @plan PLAN-20260211-HIGHDENSITY.P13
      * @requirement REQ-HD-008.5
      */
-    it('result has correct metadata shape', async () => {
-      const strategy = createStrategy();
+    it('result has the correct shape: strategy identity, no LLM call, consistent row counts', async () => {
       const history = buildMixedHistory(15);
       const ctx = buildCompressContext({ history });
 
-      const result = await strategy.compress(ctx);
+      const { result, llmCalls } = await compressCountingLlmCalls(ctx);
 
-      expect(result.metadata.originalMessageCount).toBe(history.length);
-      expect(result.metadata.strategyUsed).toBe('high-density');
-      expect(result.metadata.llmCallMade).toBe(false);
-      expect(typeof result.metadata.compressedMessageCount).toBe('number');
-      expect(result.metadata.compressedMessageCount).toBeGreaterThanOrEqual(0);
+      if (result.kind !== 'applied') {
+        throw new Error('Expected the high-density disk route to apply');
+      }
+      expect(new HighDensityStrategy().name).toBe('high-density');
+      expect(llmCalls).toBe(0);
+      expect(result.start + result.newHistory.length).toBe(history.length);
+      expect(typeof result.newHistory.length).toBe('number');
+      expect(result.newHistory.length).toBeGreaterThanOrEqual(0);
     });
 
     /**
@@ -753,11 +760,10 @@ function registerResultShapeTests(): void {
      * @requirement REQ-HD-008.5
      */
     it('newHistory is a proper IContent array', async () => {
-      const strategy = createStrategy();
       const history = buildMixedHistory(8);
       const ctx = buildCompressContext({ history });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
       expect(result.kind).toBe('applied');
 
       expect(Array.isArray(resultHistory(result))).toBe(true);
@@ -781,7 +787,6 @@ function registerTokenTargetTests(): void {
      * @requirement REQ-HD-008.6
      */
     it('target token calculation is approximately threshold × contextLimit × 0.6', async () => {
-      const strategy = createStrategy();
       // Create a large history that will need substantial compression
       const history = buildMixedHistory(40);
 
@@ -792,7 +797,7 @@ function registerTokenTargetTests(): void {
         currentTokenCount: 120000,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
       expect(result.kind).toBe('applied');
 
       // Target = 0.85 × 128000 × 0.6 = 65,280
@@ -812,7 +817,6 @@ function registerTokenTargetTests(): void {
      */
     it('aggressive truncation removes oldest entries when summarization insufficient', async () => {
       resetCallIds();
-      const strategy = createStrategy();
 
       // Create a history with very large entries
       const history: IContent[] = [];
@@ -838,7 +842,7 @@ function registerTokenTargetTests(): void {
         preserveThreshold: 0.2,
       });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
       expect(result.kind).toBe('applied');
 
       // Some entries should be removed from the front
@@ -857,36 +861,28 @@ function registerEdgeCaseTests(): void {
      * @plan PLAN-20260211-HIGHDENSITY.P13
      */
     it('empty history returns empty result', async () => {
-      const strategy = createStrategy();
       const ctx = buildCompressContext({ history: [] });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
 
-      expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('empty-history');
-      expect(result.metadata.originalMessageCount).toBe(0);
-      expect(result.metadata.compressedMessageCount).toBe(
-        result.metadata.originalMessageCount,
-      );
+      // The disk noop carries no reason or counts; the observable fact is
+      // that history is left as-is and no partial candidate remains.
+      expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
     });
 
     /**
      * @plan PLAN-20260211-HIGHDENSITY.P13
      */
     it('single entry history is preserved', async () => {
-      const strategy = createStrategy();
       const single = makeHumanMessage('Only entry');
       const ctx = buildCompressContext({ history: [single] });
 
-      const result = await strategy.compress(ctx);
+      const result = await compressHighDensityViaDisk(ctx);
 
       // Single entry: tail (size 1) covers the whole history → structural noop
-      expect(result.kind).toBe('noop');
-      expect(result.reason).toBe('tail-covers-all');
-      expect(result.metadata.originalMessageCount).toBe(1);
-      expect(result.metadata.compressedMessageCount).toBe(
-        result.metadata.originalMessageCount,
-      );
+      // The disk noop carries no reason or counts; the observable fact is
+      // that history is left as-is and no partial candidate remains.
+      expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
     });
   });
 }
@@ -951,39 +947,43 @@ function registerPropertyTests(): void {
 
     const observeAiTail = createAiTailObserver(runProperty);
 
-    it('metadata.llmCallMade is always false (property)', async () => {
+    it('llmCallMade is always false (property): no run asks for a provider', async () => {
+      let runs = 0;
+      await runProperty((_history, _result, llmCalls) => {
+        expect(llmCalls).toBe(0);
+        runs++;
+      });
+      expect(runs).toBeGreaterThan(0);
+    });
+
+    it('strategy identity is always high-density and every run is applied or noop', async () => {
       await runProperty((_history, result) => {
-        expect(result.metadata.llmCallMade).toBe(false);
+        expect(new HighDensityStrategy().name).toBe('high-density');
+        expect(['applied', 'noop']).toContain(result.kind);
       });
     });
 
-    it('metadata.strategyUsed is always high-density', async () => {
-      await runProperty((_history, result) => {
-        expect(result.metadata.strategyUsed).toBe('high-density');
-      });
-    });
-
-    it('metadata counts are consistent with input', async () => {
-      await fc.assert(metadataCountProperty, { numRuns: 30 });
+    it('row counts are consistent with input', async () => {
+      await fc.assert(rowCountProperty, { numRuns: 30 });
       expect(
-        metadataCountObservations.map(({ originalCount }) => originalCount),
+        rowCountObservations.map(
+          ({ droppedCount, outputLength, candidateRows }) =>
+            droppedCount + outputLength + candidateRows,
+        ),
       ).toStrictEqual(
-        metadataCountObservations.map(({ historyLength }) => historyLength),
+        rowCountObservations.map(({ historyLength }) => historyLength),
       );
       expect(
-        metadataCountObservations.filter(
-          ({ compressedCount, originalCount }) =>
-            compressedCount > originalCount,
+        rowCountObservations.filter(
+          ({ outputLength, historyLength }) => outputLength > historyLength,
         ),
       ).toStrictEqual([]);
       expect(
-        metadataCountObservations.map(({ compressedCount }) => compressedCount),
-      ).toStrictEqual(
-        metadataCountObservations.map(({ outputLength }) => outputLength),
-      );
+        rowCountObservations.filter(({ candidateRows }) => candidateRows > 0),
+      ).toStrictEqual([]);
     });
-    const { metadataCountObservations, metadataCountProperty } =
-      createMetadataCountProperty(arbHistory);
+    const { rowCountObservations, rowCountProperty } =
+      createRowCountProperty(arbHistory);
 
     it('tool response results outside tail are strings (summarized)', async () => {
       let asserted = false;
@@ -1002,7 +1002,7 @@ function registerPropertyTests(): void {
   });
 }
 
-describe('HighDensityStrategy.compress() @plan PLAN-20260211-HIGHDENSITY.P13', () => {
+describe('HighDensityStrategy.compressDisk() @plan PLAN-20260211-HIGHDENSITY.P13', () => {
   beforeEach(() => {
     resetCallIds();
   });
