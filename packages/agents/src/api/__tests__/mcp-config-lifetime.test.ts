@@ -191,6 +191,7 @@ describe('MCP Config lifetime deletion', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -246,6 +247,7 @@ describe('MCP Config lifetime deletion', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

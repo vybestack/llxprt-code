@@ -44,6 +44,7 @@ export async function initializeCallerClient(
       oauth,
       runtimeId,
       tokenizer,
+      undefined,
     );
     await mcp.initialize();
     const activation = await executeProviderActivation(

@@ -47,6 +47,10 @@ export function parseAgentConstruction(
     githubBrokerClient: _githubBrokerClient,
     disposeGitHubBroker: _disposeGitHubBroker,
     imageOperation: _imageOperation,
+    sessionOverrides: _sessionOverrides,
+    oauthSettings: _oauthSettings,
+    providerContributions: _providerContributions,
+    parentTrustPort,
     onApproval,
     onOAuthPrompt,
     mcpHost: hostInput,
@@ -69,6 +73,8 @@ export function parseAgentConstruction(
     ...validatable
   } = rawConfig;
   validateHostTransports(_filesystemService, _executeShellCommand);
+  if (parentTrustPort !== undefined && trustPort !== undefined)
+    throw new Error('Agent cannot combine borrowed and inherited trust');
   if (
     _filesystemService !== undefined &&
     (filesystemOwner !== undefined || filesystemOwnership === 'caller')
@@ -109,12 +115,13 @@ export function parseAgentConstruction(
 export function agentMcpAssemblyOptions(
   raw: AgentConfig,
   construction: ReturnType<typeof parseAgentConstruction>,
+  trustPort: AgentConfig['trustPort'],
 ): McpAssemblyOptions &
   Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'> {
   return {
     imageOperation: raw.imageOperation,
     credentialAuthority: raw.credentialAuthority,
-    trustPort: raw.trustPort,
+    trustPort,
     idePort: raw.idePort,
     mcpHost: { ...construction.hostInput },
     mcpTokenStorage: construction.mcpTokenStorage,

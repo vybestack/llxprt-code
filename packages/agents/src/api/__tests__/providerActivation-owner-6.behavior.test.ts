@@ -223,6 +223,7 @@ describe('provider-or-oauth preserves profile-auth ephemerals across switch (#23
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -279,6 +280,7 @@ describe('provider-or-oauth preserves profile-auth ephemerals across switch (#23
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

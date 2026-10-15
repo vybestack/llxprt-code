@@ -152,6 +152,7 @@ describe('production filesystem roots', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -192,6 +193,7 @@ describe('production filesystem roots', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

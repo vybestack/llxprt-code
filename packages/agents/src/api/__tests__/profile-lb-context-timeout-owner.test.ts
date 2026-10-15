@@ -178,6 +178,7 @@ describe('Load balancer model-discovery timeout', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -228,6 +229,7 @@ describe('Load balancer model-discovery timeout', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

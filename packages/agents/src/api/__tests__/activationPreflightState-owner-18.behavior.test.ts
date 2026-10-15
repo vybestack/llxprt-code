@@ -174,6 +174,7 @@ describe('activation public admission lifetime', () => {
       built_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       built_builtCallerRelease,
+      undefined,
     );
     const built_builtCallerMedia = new SessionMediaOwner(
       built_builtCallerConfig.projectTempDir,
@@ -219,6 +220,7 @@ describe('activation public admission lifetime', () => {
         built_builtCallerOAuth,
         built_builtCallerRuntimeId,
         built_builtCallerTokenizer,
+        undefined,
       );
       await built_builtCallerMcp.initialize();
       const built_activation = await executeProviderActivation(
@@ -362,6 +364,7 @@ describe('activation public admission lifetime', () => {
       other_builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       other_builtCallerRelease,
+      undefined,
     );
     const other_builtCallerMedia = new SessionMediaOwner(
       other_builtCallerConfig.projectTempDir,
@@ -407,6 +410,7 @@ describe('activation public admission lifetime', () => {
         other_builtCallerOAuth,
         other_builtCallerRuntimeId,
         other_builtCallerTokenizer,
+        undefined,
       );
       await other_builtCallerMcp.initialize();
       const other_activation = await executeProviderActivation(

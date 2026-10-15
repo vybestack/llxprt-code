@@ -1,5 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
-import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -33,8 +33,7 @@ import { assertDefined } from '../__tests__/assertions.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestAgent,
 } from './test-utils.js';
 
 function createStubProvider(name: string): IProvider {
@@ -66,7 +65,8 @@ describe('CLI model parameter command integration', () => {
   const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let settingsOwner: SessionSettingsOwner;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
   let settingsService: SettingsService;
   let preflight: AgentProfilePreflight;
   let providerManager: RuntimeProviderManager;
@@ -97,10 +97,12 @@ describe('CLI model parameter command integration', () => {
         providerManager = manager;
       },
     );
-    sessionRoot = await initializeTestSessionRoot(
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    sessionRoot = await initializeTestAgent(
       config,
       providerManager,
       settingsService,
+      settingsOwner,
     );
     providerManager.registerProvider(createStubProvider('alpha'));
     await providerManager.setActiveProvider('alpha');
@@ -121,7 +123,7 @@ describe('CLI model parameter command integration', () => {
             providerManager.getActiveProviderName(),
           ),
         setEphemeralSetting: (key: string, value: unknown) =>
-          sessionRoot.agent.setEphemeralSetting(key, value),
+          sessionRoot.setEphemeralSetting(key, value),
       },
       services: {
         config: config as unknown as typeof context.services.config,
@@ -129,7 +131,7 @@ describe('CLI model parameter command integration', () => {
           settingsService as unknown as typeof context.services.settings,
       },
     });
-    const agent = sessionRoot.agent;
+    const agent = sessionRoot;
     setCommand = createSetCommand({
       getEphemeralSettings: () => agent.getEphemeralSettings(),
       setEphemeralSetting: (key, value) =>
@@ -149,9 +151,7 @@ describe('CLI model parameter command integration', () => {
 
   it('sets provider-scoped model params via /set modelparam', async () => {
     await runSetCommand('modelparam temperature 0.9');
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.9,
     });
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.9);
@@ -159,16 +159,12 @@ describe('CLI model parameter command integration', () => {
 
   it('clears model params using /set unset modelparam', async () => {
     await runSetCommand('modelparam max_tokens 4096');
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       max_tokens: 4096,
     });
 
     await runSetCommand('unset modelparam max_tokens');
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').max_tokens,
     ).toBeUndefined();
@@ -180,11 +176,11 @@ describe('CLI model parameter command integration', () => {
 
     const snapshot = buildRuntimeProfileSnapshot({
       providerName: providerManager.getActiveProviderName() ?? '',
-      modelName: sessionRoot.agent.getModel(),
+      modelName: sessionRoot.getModel(),
       providerSettings: settingsService.getProviderSettings(
         providerManager.getActiveProviderName() ?? '',
       ),
-      ephemeralSettings: sessionRoot.agent.getEphemeralSettings(),
+      ephemeralSettings: sessionRoot.getEphemeralSettings(),
     });
     expect(snapshot.provider).toBe('alpha');
     expect(snapshot.modelParams).toStrictEqual({
@@ -195,18 +191,15 @@ describe('CLI model parameter command integration', () => {
 
   it('supports clearing params directly through helper', async () => {
     await runSetCommand('modelparam temperature 0.7');
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({
       temperature: 0.7,
     });
 
     clearActiveModelParam(
       'temperature',
-      ...modelParamInputs(sessionRoot, providerManager),
+      settingsService,
+      providerManager.getActiveProviderName(),
     );
-    expect(
-      sessionRoot.agent.providerReads.getActiveModelParams(),
-    ).toStrictEqual({});
+    expect(sessionRoot.providerReads.getActiveModelParams()).toStrictEqual({});
   });
 });

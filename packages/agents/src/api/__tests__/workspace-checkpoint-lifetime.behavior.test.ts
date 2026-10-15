@@ -209,6 +209,7 @@ describe('public Agent workspace checkpoint lifetime', () => {
         callerCallerOAuth,
         callerCallerRuntimeId,
         callerCallerTokenizer,
+        undefined,
       );
       await callerCallerMcp.initialize();
       await activatecallerCallerClient(selection.activation);
@@ -264,6 +265,7 @@ describe('public Agent workspace checkpoint lifetime', () => {
       callerCallerMcp.profileDefinitions,
       callerCredentials().authority,
       callerCallerRelease,
+      undefined,
     );
   }
   async function activatecallerCallerClient(

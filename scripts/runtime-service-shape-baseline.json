@@ -10,19 +10,19 @@
     },
     "cli": {
       "runtime-service-bag-parameter": 525,
-      "runtime-service-bundle": 711
+      "runtime-service-bundle": 709
     },
     "core": {
       "runtime-service-bag-parameter": 0,
       "runtime-service-bundle": 0
     },
     "providers": {
-      "runtime-service-bundle": 25,
-      "runtime-service-bag-parameter": 12
+      "runtime-service-bundle": 1,
+      "runtime-service-bag-parameter": 1
     },
     "zed-acp": {
-      "runtime-service-bundle": 30,
-      "runtime-service-bag-parameter": 7
+      "runtime-service-bundle": 16,
+      "runtime-service-bag-parameter": 5
     }
   }
 }

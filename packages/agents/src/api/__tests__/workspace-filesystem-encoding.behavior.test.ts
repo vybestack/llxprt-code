@@ -201,6 +201,7 @@ describe('production filesystem roots', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -257,6 +258,7 @@ describe('production filesystem roots', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

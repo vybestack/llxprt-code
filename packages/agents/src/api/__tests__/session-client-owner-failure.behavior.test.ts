@@ -188,6 +188,7 @@ describe('Session client replacement failure', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -228,6 +229,7 @@ describe('Session client replacement failure', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
@@ -359,6 +361,7 @@ describe('Session client replacement failure', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -399,6 +402,7 @@ describe('Session client replacement failure', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
@@ -533,6 +537,7 @@ describe('Session client owner policy persistence at disposal', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -573,6 +578,7 @@ describe('Session client owner policy persistence at disposal', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

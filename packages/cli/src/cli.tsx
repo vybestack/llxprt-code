@@ -216,7 +216,6 @@ async function handleZedAcpIntegration(
   await runZedIntegration(config, profileApplication, {
     trustPort,
     profileDefinitions,
-    providerManager,
     onExitCleanup: runExitCleanup,
     providerInputs: createZedProviderInputs(
       providerContributions,
@@ -354,7 +353,7 @@ async function constructForegroundAgentAndDispatch(
  *    data (`bootstrapRuntimeAndConfig`). No MessageBus and no Config.initialize
  *    happen here — both are owned by agent construction. The pre-Config
  *    provider-runtime assembly (identity, session bus, provider/OAuth managers)
- *    is owned by the providers package (`assembleCliProviderRuntime`).
+ *    is owned by agents (`prepareAgentPreflight`).
  * 2. Declarative preflight (pre-agent): the CLI assembles a declarative
  *    activation intent and calls the operation’s `preflight`
  *    agent-bootstrap entrypoint (via `activateConfiguredProvider`), which OWNS

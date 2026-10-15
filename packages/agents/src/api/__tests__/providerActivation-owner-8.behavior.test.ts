@@ -225,6 +225,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -281,6 +282,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

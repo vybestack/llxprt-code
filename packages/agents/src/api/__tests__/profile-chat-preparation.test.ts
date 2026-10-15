@@ -193,6 +193,7 @@ describe('profile-chat-preparation', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -248,6 +249,7 @@ describe('profile-chat-preparation', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(
@@ -401,6 +403,7 @@ describe('profile-chat-preparation', () => {
         otherCallerOAuth,
         otherCallerRuntimeId,
         otherCallerTokenizer,
+        undefined,
       );
       await otherCallerMcp.initialize();
       await activateotherCallerClient(selection.activation);
@@ -456,6 +459,7 @@ describe('profile-chat-preparation', () => {
       otherCallerMcp.profileDefinitions,
       otherCredentials().authority,
       otherCallerRelease,
+      undefined,
     );
   }
   async function activateotherCallerClient(

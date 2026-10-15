@@ -562,6 +562,7 @@ class ExtensionDisposalOwner {
       this.mcp.profileDefinitions,
       this.credentials.authority,
       this.release,
+      undefined,
     );
   }
   private async bindClient(): Promise<void> {
@@ -598,6 +599,7 @@ class ExtensionDisposalOwner {
       this.oauth,
       this.runtimeId,
       this.tokenizer,
+      undefined,
     );
     await this.mcp.initialize();
     const activation = await executeProviderActivation(

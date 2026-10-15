@@ -1,4 +1,6 @@
 import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
+import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionImageSelection } from './session-image-assembly.js';
@@ -28,7 +30,10 @@ import type {
   RuntimeProviderManager,
   UnreadableRecording,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  SettingsService,
+  SessionOverrideReads,
+} from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20260617-COREAPI.P03
  * @requirement:REQ-002, REQ-006, REQ-017
@@ -141,6 +146,31 @@ export interface AgentTelemetry {
   readonly logPrompts?: boolean;
   readonly outfile?: string;
   readonly redactSensitiveData?: boolean;
+  readonly logApiBodies?: boolean;
+  readonly logApiBodyMaxChars?: number;
+  readonly outfileMaxBytes?: number;
+  readonly outfileMaxFiles?: number;
+  readonly logConversations?: boolean;
+  readonly logResponses?: boolean;
+  readonly maxConversationHistory?: number;
+  readonly conversationLogPath?: string;
+  readonly maxLogFiles?: number;
+  readonly maxLogSizeMB?: number;
+  readonly retentionDays?: number;
+  readonly redactFilePaths?: boolean;
+  readonly redactUrls?: boolean;
+  readonly redactEmails?: boolean;
+  readonly redactPersonalInfo?: boolean;
+  readonly customRedactionPatterns?: ReadonlyArray<{
+    readonly name: string;
+    readonly pattern: RegExp;
+    readonly replacement: string;
+    readonly enabled: boolean;
+  }>;
+  readonly enableDataRetention?: boolean;
+  readonly conversationExpirationDays?: number;
+  readonly maxConversationsStored?: number;
+  readonly perf?: { readonly enabled?: boolean; readonly memory?: boolean };
 }
 
 export interface AgentCompression {
@@ -307,6 +337,10 @@ export interface AgentConfig
   extends MemoryOwnershipOptions,
     HostGitHubBrokerSelection,
     SessionImageSelection {
+  readonly sessionOverrides?: SessionOverrideReads;
+  readonly oauthSettings?: IOAuthSettingsProvider | null;
+  readonly providerContributions?: ProviderContributionRegistry;
+  readonly parentTrustPort?: WorkspaceTrustControlPort;
   readonly trustPort?: WorkspaceTrustControlPort;
   readonly idePort?: WorkspaceIdePort;
   readonly mediaOwner?: SessionMediaOwner;

@@ -342,6 +342,7 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
         builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         builtCallerRelease,
+        undefined,
       );
       const builtCallerMedia = new SessionMediaOwner(
         builtCallerConfig.projectTempDir,
@@ -385,6 +386,7 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
           builtCallerOAuth,
           builtCallerRuntimeId,
           builtCallerTokenizer,
+          undefined,
         );
         await builtCallerMcp.initialize();
         const activation = await executeProviderActivation(

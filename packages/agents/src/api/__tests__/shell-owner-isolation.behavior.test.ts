@@ -213,6 +213,7 @@ describe('Public Agent managed shell ownership (#2616)', () => {
         builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         builtCallerRelease,
+        undefined,
       );
       const builtCallerMedia = new SessionMediaOwner(
         builtCallerConfig.projectTempDir,
@@ -624,6 +625,7 @@ describe('Public Agent managed shell ownership (#2616)', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,

@@ -214,6 +214,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
         fixtureCallerOAuth,
         fixtureCallerRuntimeId,
         fixtureCallerTokenizer,
+        undefined,
       );
       await fixtureCallerMcp.initialize();
       await activatefixtureCallerClient(selection.activation);
@@ -272,6 +273,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       fixtureCallerMcp.profileDefinitions,
       fixtureCredentials().authority,
       fixtureCallerRelease,
+      undefined,
     );
   }
 

@@ -295,6 +295,7 @@ describe('skill reload reaches the model @issue:3379', () => {
         callerCallerMcp.profileDefinitions,
         callerCredentials().authority,
         callerCallerRelease,
+        undefined,
       );
       const callerCallerMedia = new SessionMediaOwner(
         callerCallerConfig.projectTempDir,
@@ -338,6 +339,7 @@ describe('skill reload reaches the model @issue:3379', () => {
           callerCallerOAuth,
           callerCallerRuntimeId,
           callerCallerTokenizer,
+          undefined,
         );
         await callerCallerMcp.initialize();
         const activation = await executeProviderActivation(

@@ -193,6 +193,7 @@ describe('public Agent workspace LSP lifetime', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -248,6 +249,7 @@ describe('public Agent workspace LSP lifetime', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

@@ -224,6 +224,7 @@ describe('Zed ACP provider ownership', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -280,6 +281,7 @@ describe('Zed ACP provider ownership', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
 
@@ -367,7 +369,6 @@ describe('Zed ACP provider ownership', () => {
         trustPort: firstCallerMcp.trust,
         createSessionSettings: () =>
           firstCallerSettingsOwner.createChildStore(),
-        providerManager: firstCallerManager,
         profileApplication: application,
         profileDefinitions: firstCallerMcp.profileDefinitions,
         providerInputs: { credentialAuthority: firstCredentials().authority },
@@ -528,6 +529,7 @@ describe('Zed ACP provider ownership', () => {
         nextCallerOAuth,
         nextCallerRuntimeId,
         nextCallerTokenizer,
+        undefined,
       );
       await nextCallerMcp.initialize();
       await activatenextCallerClient(selection.activation);
@@ -581,6 +583,7 @@ describe('Zed ACP provider ownership', () => {
       nextCallerMcp.profileDefinitions,
       nextCredentials().authority,
       nextCallerRelease,
+      undefined,
     );
   }
 
@@ -667,7 +670,6 @@ describe('Zed ACP provider ownership', () => {
         config: nextCallerConfig,
         trustPort: nextCallerMcp.trust,
         createSessionSettings: () => nextCallerSettingsOwner.createChildStore(),
-        providerManager: nextCallerManager,
         profileApplication: application,
         profileDefinitions: nextCallerMcp.profileDefinitions,
         providerInputs: { credentialAuthority: nextCredentials().authority },

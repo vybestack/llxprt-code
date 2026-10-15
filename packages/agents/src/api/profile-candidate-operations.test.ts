@@ -158,6 +158,7 @@ describe('profile candidate operations', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
     const firstCallerMedia = new SessionMediaOwner(
       firstCallerConfig.projectTempDir,
@@ -201,6 +202,7 @@ describe('profile candidate operations', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -328,6 +330,7 @@ describe('profile candidate operations', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
     const secondCallerMedia = new SessionMediaOwner(
       secondCallerConfig.projectTempDir,
@@ -371,6 +374,7 @@ describe('profile candidate operations', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       const activation = await executeProviderActivation(

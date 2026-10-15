@@ -691,6 +691,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -746,6 +747,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

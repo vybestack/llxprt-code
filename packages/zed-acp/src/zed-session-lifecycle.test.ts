@@ -1,3 +1,4 @@
+import { useOwnedCredentials as installOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,7 +7,7 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 const definitionFixture = installZedDefinitionFixture();
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+const credentials = installOwnedCredentials();
 import { unusedProfileApplication } from './test-profile-application.js';
 
 import type { ZedAgent } from './zedIntegration.js';
@@ -34,14 +35,15 @@ function makeTmpRoot(): string {
 
 const emptyChatsLister: ChatSessionFileLister = async () => [];
 
-const mockFromConfig = vi.fn();
+const mockCreateAgent = vi.fn();
 
 const mockDeleteSessionById = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (...args: unknown[]) =>
+    mockCreateAgent(...args),
 }));
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
@@ -69,6 +71,11 @@ function buildStubAgent(options: {
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   let disposedCount = 0;
   const agent = {
+    workspace: {
+      getProjectRoot: () => process.cwd(),
+      getWorkingDirectory: () => process.cwd(),
+    },
+    settings: { subscribeModelChanges: () => () => undefined },
     getApprovalMode: () => 'default',
     setApprovalMode: vi.fn(),
     async dispose() {
@@ -124,10 +131,11 @@ async function makeZedAgent(
     config,
     new RecordingConnection() as unknown as acp.AgentSideConnection,
     unusedProfileApplication,
-    createConnectionProviderManager(config, settingsService),
     () => new SettingsService({ sessionSource: settingsService }),
     emptyChatsLister,
     definitionFixture(),
+    undefined,
+    { credentialAuthority: credentials().authority },
   );
   await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
@@ -142,7 +150,7 @@ function defaultNotFoundDelete(): void {
 
 describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
   afterEach(() => {
-    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockCreateAgent.mockImplementation(actual.createAgentFromSettingsSnapshot);
     mockDeleteSessionById.mockImplementation(actualActual.deleteSessionById);
     while (tmpRoots.length > 0) {
       const root = tmpRoots.pop();
@@ -153,14 +161,14 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
   });
 
   beforeEach(() => {
-    mockFromConfig.mockReset();
+    mockCreateAgent.mockReset();
     mockDeleteSessionById.mockReset();
     defaultNotFoundDelete();
   });
 
   it('succeeds when closing then deleting an unrecorded session (new→close→delete)', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -203,7 +211,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('rejects a second delete after successful close→delete with -32002', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -222,7 +230,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('delete of a live unrecorded session succeeds (existing behavior preserved)', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -239,7 +247,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('preserves a retry marker when live-session deletion throws', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -262,7 +270,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('preserves a retry marker when live-session deletion returns an internal error', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -294,7 +302,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
         await disposeGate;
       },
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -321,7 +329,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('consumes the known-closed marker when persisted deletion succeeds (result.ok)', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -351,7 +359,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('preserves the known-closed marker when storage throws, allowing a subsequent retry', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -380,7 +388,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('coexistence of live session and known-closed marker: first delete succeeds, second rejects -32002', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 
@@ -414,7 +422,7 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
 
   it('preserves the known-closed marker when storage resolves an internal error, allowing a subsequent retry', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const root = makeTmpRoot();
     const zedAgent = await makeZedAgent(root);
 

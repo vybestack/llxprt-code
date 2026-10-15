@@ -220,6 +220,7 @@ describe('public Agent workspace definition lifetime', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -276,6 +277,7 @@ describe('public Agent workspace definition lifetime', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
 
@@ -445,6 +447,7 @@ describe('public Agent workspace definition lifetime', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient(selection.activation);
@@ -501,6 +504,7 @@ describe('public Agent workspace definition lifetime', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
 

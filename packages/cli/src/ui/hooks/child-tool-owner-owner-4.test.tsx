@@ -226,6 +226,7 @@ describe('Mounted CLI child execution ownership', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -269,6 +270,7 @@ describe('Mounted CLI child execution ownership', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(

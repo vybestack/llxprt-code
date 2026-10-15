@@ -1,3 +1,4 @@
+import { AggregateDisposeError } from '../../agents/src/api/disposeErrors.js';
 import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
@@ -8,7 +9,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   buildZedSessionAgent,
@@ -27,27 +28,18 @@ function buildHost(): Config {
     targetDir: process.cwd(),
     debugMode: false,
     model: 'cleanup-test-model',
+    provider: 'openai',
   });
   return host;
 }
 function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
-  );
-  managers.push(manager);
   const connection = new acp.AgentSideConnection(
     (connection) =>
       new ZedAgent(
         config,
         connection,
         unusedProfileApplication,
-        manager,
         () => new SettingsService({ sessionSource: settingsService }),
       ),
     acp.ndJsonStream(
@@ -66,7 +58,6 @@ function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
     undefined,
     crypto.randomUUID(),
     process.cwd(),
-    new DebugLogger('acp-cleanup-test'),
     settingsService,
     trust,
     { credentialAuthority: new CredentialAuthority() },
@@ -88,24 +79,41 @@ describe('ACP session infrastructure cleanup', () => {
   });
 
   it('releases Config subscriptions when the owned manager throws synchronously during disposal', async () => {
+    const owners: SessionSettingsOwner[] = [];
+    const start = SessionSettingsOwner.prototype.startTelemetry;
+    vi.spyOn(
+      SessionSettingsOwner.prototype,
+      'startTelemetry',
+    ).mockImplementation(function (this: SessionSettingsOwner, ...args) {
+      owners.push(this);
+      return start.apply(this, args);
+    });
     const built = await buildSession(buildHost(), trust);
+    const owner = owners.at(0);
+    if (!owner) throw new Error('Missing session telemetry owner');
     let notifications = 0;
-    built.settingsOwner.onTelemetrySettingsChange(() => notifications++);
-    await built.settingsOwner.updateTelemetrySettings({ enabled: true });
+    owner.onTelemetrySettingsChange(() => notifications++);
+    await owner.updateTelemetrySettings({ enabled: true });
     expect(notifications).toBeGreaterThan(0);
 
-    await built.agent.dispose();
     const failure = new Error('owned manager disposal failed');
     vi.spyOn(ProviderManager.prototype, 'dispose').mockImplementation(() => {
       throw failure;
     });
-    await expect(built.disposeConfig()).rejects.toThrow(
-      'ACP session infrastructure cleanup failed',
-    );
+    const rejected: unknown = await built
+      .dispose()
+      .catch((error: unknown) => error);
+    if (!(rejected instanceof AggregateDisposeError))
+      throw new Error('Missing Agent disposal aggregation');
+    const leaves = (error: unknown): unknown[] =>
+      error instanceof AggregateError || error instanceof AggregateDisposeError
+        ? error.errors.flatMap(leaves)
+        : [error];
+    expect(leaves(rejected)).toContain(failure);
     await expect(
-      built.settingsOwner.updateTelemetrySettings({ enabled: false }),
+      owner.updateTelemetrySettings({ enabled: false }),
     ).rejects.toThrow('Session settings owner is closed');
-    expect(built.settingsOwner.telemetry.isEnabled()).toBe(false);
+    expect(owner.telemetry.isEnabled()).toBe(false);
     expect(notifications).toBe(1);
   });
 
@@ -137,9 +145,7 @@ describe('ACP session infrastructure cleanup', () => {
       throw new Error('Expected aggregated startup and cleanup failure');
     expect(reported.errors[0]).toBe(startup);
     const infrastructure = reported.errors[1];
-    if (!(infrastructure instanceof AggregateError))
-      throw new Error('Expected manager infrastructure error');
-    expect(infrastructure.errors).toContain(cleanup);
+    expect(infrastructure).toBe(cleanup);
     const failedOwner = failedOwners.at(0);
     if (!failedOwner) throw new Error('Session telemetry was not initialized');
     await expect(

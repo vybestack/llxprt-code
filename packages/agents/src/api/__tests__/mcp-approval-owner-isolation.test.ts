@@ -261,6 +261,7 @@ describe('MCP public tool approval owner isolation', () => {
           builtCallerMcp.profileDefinitions,
           builtCredentials().authority,
           builtCallerRelease,
+          undefined,
         );
         const builtCallerMedia = new SessionMediaOwner(
           builtCallerConfig.projectTempDir,
@@ -306,6 +307,7 @@ describe('MCP public tool approval owner isolation', () => {
               builtCallerOAuth,
               builtCallerRuntimeId,
               builtCallerTokenizer,
+              undefined,
             );
             await builtCallerMcp.initialize();
             const activation = await executeProviderActivation(
@@ -610,6 +612,7 @@ describe('MCP public tool approval owner isolation', () => {
           ownerCCallerMcp.profileDefinitions,
           ownerCCredentials().authority,
           ownerCCallerRelease,
+          undefined,
         );
         const ownerCCallerMedia = new SessionMediaOwner(
           ownerCCallerConfig.projectTempDir,
@@ -655,6 +658,7 @@ describe('MCP public tool approval owner isolation', () => {
               ownerCCallerOAuth,
               ownerCCallerRuntimeId,
               ownerCCallerTokenizer,
+              undefined,
             );
             await ownerCCallerMcp.initialize();
             const activation = await executeProviderActivation(

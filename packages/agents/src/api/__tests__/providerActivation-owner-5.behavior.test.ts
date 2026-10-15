@@ -211,6 +211,7 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -267,6 +268,7 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

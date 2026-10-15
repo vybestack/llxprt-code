@@ -31,6 +31,7 @@ function settingsControl(owner: SessionSettingsOwner) {
     owner.clearSessionOverride.bind(owner),
     () => {},
     () => {},
+    owner.subscribeModelChanges.bind(owner),
   );
 }
 import {

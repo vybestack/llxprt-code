@@ -106,6 +106,7 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       await settingsOwner.startTelemetry(config);
       manager.setRuntimeContext(
@@ -187,6 +188,7 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
       undefined,
       credentials().authority,
       explicitRelease,
+      undefined,
     );
     populateProviderManager(
       manager,

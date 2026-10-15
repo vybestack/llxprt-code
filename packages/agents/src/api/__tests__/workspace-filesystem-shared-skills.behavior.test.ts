@@ -209,6 +209,7 @@ describe('shared production skill resource admission', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -264,6 +265,7 @@ describe('shared production skill resource admission', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
   async function activatefirstCallerClient(
@@ -417,6 +419,7 @@ describe('shared production skill resource admission', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient(selection.activation);
@@ -472,6 +475,7 @@ describe('shared production skill resource admission', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
   async function activatesecondCallerClient(

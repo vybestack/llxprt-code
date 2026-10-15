@@ -1,3 +1,4 @@
+import { useOwnedCredentials as installOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,8 +7,8 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 const definitionFixture = installZedDefinitionFixture();
+const credentials = installOwnedCredentials();
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 
 import type { ZedAgent } from './zedIntegration.js';
@@ -77,12 +78,13 @@ function recordedFilesLister(...sessionIds: string[]): ChatSessionFileLister {
   return async () => names;
 }
 
-const mockFromConfig = vi.fn();
+const mockCreateAgent = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (...args: unknown[]) =>
+    mockCreateAgent(...args),
 }));
 
 interface StubAgentHandle {
@@ -130,6 +132,11 @@ function buildStubAgent(options: {
     getEphemeralSetting: (key: string) => settingsOwner.readNamedParameter(key),
     setEphemeralSetting: (key: string, value: unknown) =>
       settingsOwner.writeUserParameter(key, value),
+    workspace: {
+      getProjectRoot: () => process.cwd(),
+      getWorkingDirectory: () => process.cwd(),
+    },
+    settings: { subscribeModelChanges: () => () => undefined },
     getApprovalMode: () => 'default',
     setApprovalMode: vi.fn(),
     dispose,
@@ -190,10 +197,11 @@ async function makeZedAgent(
     config,
     connection as unknown as acp.AgentSideConnection,
     unusedProfileApplication,
-    createConnectionProviderManager(config, settingsService),
     () => new SettingsService({ sessionSource: settingsService }),
     sessionFileLister,
     definitionFixture(),
+    undefined,
+    { credentialAuthority: credentials().authority },
   );
   await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
@@ -206,21 +214,21 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
   // resolved-value expectation (single mockResolvedValue or ordered
   // mockResolvedValueOnce chain), so the strict build-count / call-order
   // assertions are self-contained and order-independent. This replaces the
-  // scattered inline mockFromConfig.mockReset() calls the individual tests used
+  // scattered inline mockCreateAgent.mockReset() calls the individual tests used
   // to need.
   beforeEach(() => {
-    mockFromConfig.mockReset();
+    mockCreateAgent.mockReset();
   });
 
   afterEach(() => {
-    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockCreateAgent.mockImplementation(actual.createAgentFromSettingsSnapshot);
   });
 
   it('continues creating a session when optional recording setup fails', async () => {
     const stub = buildStubAgent({
       recordingError: new Error('recording unavailable'),
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const zedAgent = await makeZedAgent(
       new RecordingConnection(),
       emptyChatsLister,
@@ -237,7 +245,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
   it('disposes a new session when initial command advertisement fails', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const connection = new RecordingConnection();
     connection.failSessionUpdateAfter(0, new Error('transport unavailable'));
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
@@ -252,7 +260,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const stub = buildStubAgent({
       liveHistory: [modelMessage('must not replay')],
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection, async () => []);
     const created = await zedAgent.newSession({
@@ -287,7 +295,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
   it('closeSession disposes a live session and is idempotent', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const zedAgent = await makeZedAgent(
       new RecordingConnection(),
       async () => [],
@@ -311,7 +319,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
   it('resumeSession rejects a live session when cwd does not match', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const zedAgent = await makeZedAgent(
       new RecordingConnection(),
       async () => [],
@@ -332,7 +340,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
   it('deleteSession succeeds for a live session before recording materializes', async () => {
     const stub = buildStubAgent({});
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const zedAgent = await makeZedAgent(
       new RecordingConnection(),
       async () => [],
@@ -354,7 +362,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
   it('closeSession succeeds and removes the session even when agent disposal fails', async () => {
     const stub = buildStubAgent({});
     stub.dispose.mockRejectedValueOnce(new Error('dispose failed'));
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
     const zedAgent = await makeZedAgent(
       new RecordingConnection(),
       async () => [],
@@ -383,10 +391,11 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       config,
       connection as unknown as acp.AgentSideConnection,
       unusedProfileApplication,
-      createConnectionProviderManager(config, settingsService),
       () => new SettingsService({ sessionSource: settingsService }),
       undefined,
       definitionFixture(),
+      undefined,
+      { credentialAuthority: credentials().authority },
     );
     const response = await zedAgent.initialize(buildInitializeRequest());
     expect(response.agentCapabilities?.loadSession).toBe(true);
@@ -428,7 +437,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       },
     ];
     const stub = buildStubAgent({ resumeHistory: history });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection);
@@ -462,7 +471,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const stub = buildStubAgent({
       resumeError: new Error('No sessions found for this project'),
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection);
@@ -493,7 +502,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         'Failed to resume session: Failed to replay session: Missing or corrupt session_start event',
       ),
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection);
@@ -546,7 +555,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'retry session' }] },
       ],
     });
-    mockFromConfig
+    mockCreateAgent
       .mockResolvedValueOnce(firstStub.agent)
       .mockResolvedValueOnce(failingStub.agent)
       .mockResolvedValueOnce(retryStub.agent);
@@ -619,7 +628,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // The top-level beforeEach (FINDING F2) already reset the mock; this test
     // just establishes its ordered two-agent resolution for the build-count
     // assertion below.
-    mockFromConfig
+    mockCreateAgent
       .mockResolvedValueOnce(firstStub.agent)
       .mockResolvedValueOnce(secondStub.agent);
 
@@ -645,7 +654,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // finding a matching file, routed to the disk path.
     expect(listerSpy).toHaveBeenCalledTimes(1);
     // Disk path: a fresh agent was built + resumed for the reconnect...
-    expect(mockFromConfig).toHaveBeenCalledTimes(2);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(2);
     expect(secondStub.resume).toHaveBeenCalledWith('dup-session');
     // ...and the prior session's agent was disposed when the second load replaced it.
     expect(firstStub.dispose).toHaveBeenCalledTimes(1);
@@ -666,7 +675,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const stub = buildStubAgent({ liveHistory: [], streamText: 'still alive' });
     // The top-level beforeEach (F2) reset the mock; set this test's single
     // resolution for the strict fromConfig build-count assertions below.
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     // Empty chats dir → no on-disk recording for the unprompted session → the
@@ -678,7 +687,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       mcpServers: [],
     } as acp.NewSessionRequest);
     // newSession built exactly one agent.
-    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
 
     const response = await zedAgent.loadSession({
       sessionId: created.sessionId,
@@ -700,7 +709,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     expect(stub.resume).toHaveBeenCalledTimes(0);
     // No SECOND agent was built — the ORIGINAL session was re-attached, not
     // rebuilt.
-    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
     // Nothing was disposed: the live session survived the load.
     expect(stub.dispose).toHaveBeenCalledTimes(0);
 
@@ -712,7 +721,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       } as acp.PromptRequest),
     ).resolves.toBeDefined();
     // Still the SAME agent (never rebuilt/disposed) served the prompt.
-    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
     expect(stub.dispose).toHaveBeenCalledTimes(0);
   });
 
@@ -727,7 +736,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'DISK not used' }] },
       ],
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
@@ -761,7 +770,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     });
     // beforeEach (F2) already reset the mock; set this test's single resolution
     // for the fromConfig build-count assertion below.
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
@@ -799,7 +808,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         prompt: [{ type: 'text', text: 'recovered?' }],
       } as acp.PromptRequest),
     ).rejects.toThrow(/Session not found/);
-    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
   });
 
   // ─── FINDING A: strict history-replay delivery ────────────────────────────
@@ -810,7 +819,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'lost transcript' }] },
       ],
     });
-    mockFromConfig.mockResolvedValue(stub.agent);
+    mockCreateAgent.mockResolvedValue(stub.agent);
 
     const connection = new RecordingConnection();
     // Dead transport: every session/update rejects, starting with the first.
@@ -858,7 +867,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'retry ok' }] },
       ],
     });
-    mockFromConfig
+    mockCreateAgent
       .mockResolvedValueOnce(failingStub.agent)
       .mockResolvedValueOnce(retryStub.agent);
 
@@ -936,6 +945,11 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     });
     const firstDispose = vi.fn(async () => undefined);
     const firstAgent = {
+      workspace: {
+        getProjectRoot: () => process.cwd(),
+        getWorkingDirectory: () => process.cwd(),
+      },
+      settings: { subscribeModelChanges: () => () => undefined },
       getApprovalMode: () => 'default',
       setApprovalMode: vi.fn(),
       getHistory: vi.fn(async () => []),
@@ -958,7 +972,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     // The top-level beforeEach (F2) already reset the mock; establish this
     // test's ordered two-agent resolution for the build-count assertion below.
-    mockFromConfig
+    mockCreateAgent
       .mockResolvedValueOnce(firstAgent)
       .mockResolvedValueOnce(secondStub.agent);
 
@@ -991,7 +1005,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // The first load built its agent and called resume (now parked on the gate);
     // the second is serialized behind it, so it has NOT built an agent and its
     // resume has NOT been called — proving the two same-id loads do not race.
-    expect(mockFromConfig).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
     expect(firstResume).toHaveBeenCalledTimes(1);
     expect(secondStub.resume).toHaveBeenCalledTimes(0);
 

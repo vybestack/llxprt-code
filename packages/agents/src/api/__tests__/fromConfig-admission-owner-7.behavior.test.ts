@@ -230,6 +230,7 @@ describe('fromConfig admission before resource effects', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -273,6 +274,7 @@ describe('fromConfig admission before resource effects', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(

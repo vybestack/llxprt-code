@@ -215,6 +215,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -265,6 +266,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

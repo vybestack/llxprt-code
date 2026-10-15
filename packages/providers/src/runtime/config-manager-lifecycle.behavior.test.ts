@@ -211,6 +211,7 @@ describe('Config-independent provider owner lifecycle', () => {
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
     try {
       await activateAdoptedProviders(
@@ -283,6 +284,7 @@ describe('Config-independent provider owner lifecycle', () => {
       undefined,
       credentials().authority,
       release,
+      undefined,
     );
     const provider = new CacheProvider();
     manager.registerProvider(provider);

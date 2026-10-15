@@ -212,6 +212,7 @@ describe('public Agent recording finalizer join', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient(selection.activation);
@@ -262,6 +263,7 @@ describe('public Agent recording finalizer join', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(

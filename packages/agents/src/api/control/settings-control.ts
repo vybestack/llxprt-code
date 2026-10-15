@@ -12,6 +12,7 @@ export interface AgentSettingsControl {
   getSessionSetting(key: string): unknown;
   setSessionSetting(key: string, value: unknown): void;
   clearSessionSetting(key: string): void;
+  readonly subscribeModelChanges: SessionSettingsOwner['subscribeModelChanges'];
 }
 
 export function assembleSettingsControl(
@@ -23,8 +24,13 @@ export function assembleSettingsControl(
   clearSessionOverride: SessionSettingsOwner['clearSessionOverride'],
   assertReadAdmission: () => void,
   assertWriteAdmission: () => void,
+  subscribeModelChanges: SessionSettingsOwner['subscribeModelChanges'],
 ): AgentSettingsControl {
   return {
+    subscribeModelChanges: (listener) => {
+      assertReadAdmission();
+      return subscribeModelChanges(listener);
+    },
     getEphemeralSetting: (key) => {
       assertReadAdmission();
       return readNamedParameter(key);

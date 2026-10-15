@@ -336,6 +336,7 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -392,6 +393,7 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
 

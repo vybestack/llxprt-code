@@ -186,6 +186,7 @@ describe('session-owned model notifications', () => {
         aCallerOAuth,
         aCallerRuntimeId,
         aCallerTokenizer,
+        undefined,
       );
       await aCallerMcp.initialize();
       await activateACallerClient();
@@ -236,6 +237,7 @@ describe('session-owned model notifications', () => {
       aCallerMcp.profileDefinitions,
       aCredentials().authority,
       aCallerRelease,
+      undefined,
     );
   }
   async function activateACallerClient(): Promise<void> {
@@ -420,6 +422,7 @@ describe('session-owned model notifications', () => {
         bCallerOAuth,
         bCallerRuntimeId,
         bCallerTokenizer,
+        undefined,
       );
       await bCallerMcp.initialize();
       await activateBCallerClient();
@@ -470,6 +473,7 @@ describe('session-owned model notifications', () => {
       bCallerMcp.profileDefinitions,
       bCredentials().authority,
       bCallerRelease,
+      undefined,
     );
   }
   async function activateBCallerClient(): Promise<void> {

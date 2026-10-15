@@ -1,11 +1,10 @@
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { readFileSync } from 'node:fs';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,7 +15,6 @@ import {
   WorkspaceTrustLifecycle,
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
-  type RuntimePolicyOwner,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -37,7 +35,8 @@ import type { AgentActivationOperation } from '../activationPreflightState.js';
 import { fromConfig } from '../fromConfig.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import { cleanupFailedCreatedAgent } from '../createAgent.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 
 function transferred(
   operation: AgentProfilePreflight,
@@ -139,23 +138,19 @@ describe('preflight acquired lifetime', () => {
     });
   }
 
-  it('keeps successful legacy key and token transport ownership on their receiving owners', async () => {
-    const runtime = await assembleCliProviderRuntime({
-      runtimeId: 'legacy-successful-close',
-      settingsService: new SettingsService(),
-      config: undefined,
-      credentialAuthority: credentials().authority,
-    });
+  it('keeps successful key and token transport ownership on the receiving preflight owner', async () => {
+    const operation = await prepareAgentPreflight(
+      { runtimeId: 'successful-close' },
+      credentials().authority,
+      new SettingsService(),
+    );
     try {
-      await runtime.oauthManager?.getTokenStore().listProviders();
-      runtime.providerManager.dispose?.();
-      await runtime.oauthManager?.dispose();
-      runtime.providerManager.dispose?.();
-      await runtime.oauthManager?.dispose();
+      await operation.dispose();
+      await operation.dispose();
       expect(credentials().snapshot()).toStrictEqual([1]);
       expect(credentials().keySnapshot()).toStrictEqual([1]);
     } finally {
-      runtime.registration.dispose();
+      await operation.dispose();
     }
   });
 
@@ -201,19 +196,18 @@ describe('preflight acquired lifetime', () => {
     expect(credentials().snapshot()).toStrictEqual([1]);
     expect(credentials().keySnapshot()).toStrictEqual([1]);
   });
-  it('joins legacy assembly rollback before reporting failed population', async () => {
-    const { root, config } = await fixture();
+  it('joins preflight assembly rollback before reporting failed population', async () => {
+    const { root } = await fixture();
     const previous = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_FAKE_RESPONSES = join(root, 'legacy-missing.jsonl');
     try {
       await expect(
         Promise.resolve().then(() =>
-          assembleCliProviderRuntime({
-            credentialAuthority: credentials().authority,
-            settingsService: new SettingsService(),
-            config,
-            runtimeId: 'legacy-failure',
-          }),
+          prepareAgentPreflight(
+            { runtimeId: 'failed-population' },
+            credentials().authority,
+            new SettingsService(),
+          ),
         ),
       ).rejects.toThrow('legacy-missing');
     } finally {
@@ -224,39 +218,36 @@ describe('preflight acquired lifetime', () => {
     expect(credentials().keySnapshot()).toStrictEqual([0, 1]);
   });
 
-  it('joins policy persistence failure before legacy acquisition rejection and keeps the primary failure first', async () => {
-    const { config, settings } = await fixture();
+  it('joins policy persistence failure before preferred failed-bootstrap rejection and keeps the primary failure first', async () => {
+    const { config } = await fixture();
     const home = process.env.LLXPRT_CONFIG_HOME;
     if (home === undefined) throw new Error('Missing isolated config home');
     await writeFile(join(home, 'policies'), 'not a directory');
-    const registration = beginCliRuntimeRegistration(settings, config, {
-      runtimeId: 'policy-rollback',
+    const policy = new RuntimePolicyOwner(config);
+    const media = new SessionMediaOwner(
+      config.projectTempDir,
+      config.getMediaStoreQuotaByteLimit(),
+    );
+    const keys = credentials().authority.createProviderKeyStorage();
+    policy.session.messageBus.publish({
+      type: MessageBusType.UPDATE_POLICY,
+      toolName: 'read_file',
+      persist: true,
     });
-    const authority = new (class extends CredentialAuthority {
-      override createProviderKeyStorage(): ReturnType<
-        CredentialAuthority['createProviderKeyStorage']
-      > {
-        return credentials().authority.createProviderKeyStorage();
-      }
-      override createTokenStore(): ReturnType<
-        CredentialAuthority['createTokenStore']
-      > {
-        registration.messageBus.publish({
-          type: MessageBusType.UPDATE_POLICY,
-          toolName: 'read_file',
-          persist: true,
-        });
-        readFileSync(join(home, 'missing-token-source'));
-        return credentials().authority.createTokenStore();
-      }
-    })();
-    const failure: unknown = await assembleCliProviderRuntime({
-      credentialAuthority: authority,
-      settingsService: settings,
+    let primary: unknown;
+    try {
+      readFileSync(join(home, 'missing-token-source'));
+    } catch (error) {
+      primary = error;
+    }
+    const failure: unknown = await cleanupFailedCreatedAgent(
+      primary,
+      () => keys.close(),
       config,
-      runtimeId: 'policy-rollback',
-      registration,
-    }).catch((error: unknown) => error);
+      media,
+      undefined,
+      () => policy.dispose(),
+    ).catch((error: unknown) => error);
     if (!(failure instanceof AggregateError))
       throw new Error('Missing joined policy failure');
     expect(failure.errors[0]).toMatchObject({
@@ -269,7 +260,6 @@ describe('preflight acquired lifetime', () => {
       expect.objectContaining({ code: 'EEXIST', path: join(home, 'policies') }),
     ]);
     expect(credentials().keySnapshot()).toStrictEqual([0, 1]);
-    registration.dispose();
   });
 
   it('joins concurrent close while a real lease holds file deletion', async () => {

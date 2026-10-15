@@ -200,6 +200,7 @@ describe('Load balancer member credentials at use time', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -250,6 +251,7 @@ describe('Load balancer member credentials at use time', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

@@ -204,6 +204,7 @@ describe('profile-preparation-cancellation', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -259,6 +260,7 @@ describe('profile-preparation-cancellation', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(
@@ -412,6 +414,7 @@ describe('profile-preparation-cancellation', () => {
         otherCallerOAuth,
         otherCallerRuntimeId,
         otherCallerTokenizer,
+        undefined,
       );
       await otherCallerMcp.initialize();
       await activateotherCallerClient(selection.activation);
@@ -467,6 +470,7 @@ describe('profile-preparation-cancellation', () => {
       otherCallerMcp.profileDefinitions,
       otherCredentials().authority,
       otherCallerRelease,
+      undefined,
     );
   }
   async function activateotherCallerClient(

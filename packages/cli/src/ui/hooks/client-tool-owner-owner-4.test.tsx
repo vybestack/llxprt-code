@@ -220,6 +220,7 @@ describe('Agent-owned CLI client tools', () => {
       configCallerMcp.profileDefinitions,
       configCredentials().authority,
       configCallerRelease,
+      undefined,
     );
     const configCallerMedia = new SessionMediaOwner(
       configCallerConfig.projectTempDir,
@@ -263,6 +264,7 @@ describe('Agent-owned CLI client tools', () => {
         configCallerOAuth,
         configCallerRuntimeId,
         configCallerTokenizer,
+        undefined,
       );
       await configCallerMcp.initialize();
       const activation = await executeProviderActivation(

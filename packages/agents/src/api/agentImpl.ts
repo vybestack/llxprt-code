@@ -288,14 +288,13 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
   protected assertFileAdmission(): void {
     this.coordinator.assertSettingsAdmission();
   }
-  readonly modelParameters: Agent['modelParameters'] =
-    assembleModelParameterControl(
-      (provider, key, value) =>
-        this.deps.settingsService.setProviderSetting(provider, key, value),
-      () => this.deps.providerManager.getActiveProviderName(),
-      () => this.providerState.modelParams,
-      () => this.coordinator.assertNoCommit(),
-    );
+  readonly modelParameters = assembleModelParameterControl(
+    (provider, key, value) =>
+      this.deps.settingsService.setProviderSetting(provider, key, value),
+    () => this.deps.providerManager.getActiveProviderName(),
+    () => this.providerState.modelParams,
+    () => this.coordinator.assertNoCommit(),
+  );
   readonly settings: Agent['settings'] = assembleSettingsControl(
     (key) => this.deps.settingsOwner.readNamedParameter(key),
     () => this.deps.settingsOwner.captureNamedParameters(),
@@ -305,6 +304,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
     (key) => this.deps.settingsOwner.clearSessionOverride(key),
     () => this.coordinator.assertSettingsAdmission(),
     () => this.assertProfileIdle(),
+    (listener) => this.deps.settingsOwner.subscribeModelChanges(listener),
   );
   readonly toolFormat: Agent['toolFormat'] = assembleToolFormatControl(
     () => this.deps.settingsOwner.readToolFormat(),

@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,7 +27,7 @@ import {
   createContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
-import { initializeTestSessionRoot } from './test-utils.js';
+import { initializeTestAgent } from './test-utils.js';
 
 import {
   Config,
@@ -204,20 +205,22 @@ describe('explicit provider primitive owners', () => {
         });
 
         // Initialize the explicit Agent owner on this manager.
-        const owner = await initializeTestSessionRoot(
+        const settingsOwner = new SessionSettingsOwner(settingsService);
+        const owner = await initializeTestAgent(
           config,
           manager,
           settingsService,
+          settingsOwner,
         );
         const selectedFactories = configureProviderRuntimeFactories(
           config,
           manager,
         );
         manager.setActiveProvider('test-provider');
-        await owner.agent.sessionClient.refreshAuth();
+        await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
-          ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
+          ...createContentGeneratorConfig({ model: owner.getModel() }),
           contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
         };
         expect(contentGenConfig).toBeDefined();
@@ -319,20 +322,22 @@ describe('explicit provider primitive owners', () => {
         });
 
         // Initialize the explicit Agent owner before refreshing generation.
-        const owner = await initializeTestSessionRoot(
+        const settingsOwner = new SessionSettingsOwner(settingsService);
+        const owner = await initializeTestAgent(
           config,
           manager,
           settingsService,
+          settingsOwner,
         );
         const selectedFactories = configureProviderRuntimeFactories(
           config,
           manager,
         );
         manager.setActiveProvider('test-provider');
-        await owner.agent.sessionClient.refreshAuth();
+        await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
-          ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
+          ...createContentGeneratorConfig({ model: owner.getModel() }),
           contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
         };
         expect(contentGenConfig.model).toBe('test-model');

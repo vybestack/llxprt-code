@@ -62,25 +62,6 @@ void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
 }));
 
-const actualActual = {
-  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
-};
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ...actualActual,
-  switchActiveProvider: vi.fn(async () => ({
-    changed: true,
-    previousProvider: null,
-    nextProvider: 'gemini',
-    infoMessages: [],
-  })),
-  setActiveModel: vi.fn(),
-  setActiveModelParam: vi.fn(),
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(() => ({})),
-  loadProfileByName: vi.fn(),
-  applyCliArgumentOverrides: vi.fn(async () => {}),
-}));
-
 void vi.mock('./config/extension.js', () => ({
   ExtensionStorage: {
     getUserExtensionsDir: vi.fn(() => '/tmp/extensions'),

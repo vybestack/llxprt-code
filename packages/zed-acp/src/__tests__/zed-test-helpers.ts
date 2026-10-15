@@ -5,7 +5,10 @@
  */
 
 import { installZedFilesystemFixture } from './zed-filesystem-fixture.js';
-import { projectZedSessionSettings } from '../zed-session-ports.js';
+import {
+  projectZedSessionSettings,
+  captureZedSessionView,
+} from '../zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -586,7 +589,7 @@ export function createSession(
     'test-session-id',
     agent,
     projectZedSessionSettings(
-      config,
+      captureZedSessionView(config),
       agent,
       fixtureFilesystem().files,
       fixtureFilesystem().ignore,

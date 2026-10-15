@@ -223,6 +223,7 @@ describe('fromConfig admission before resource effects', () => {
         builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         builtCallerRelease,
+        undefined,
       );
       const builtCallerMedia = new SessionMediaOwner(
         builtCallerConfig.projectTempDir,
@@ -266,6 +267,7 @@ describe('fromConfig admission before resource effects', () => {
           builtCallerOAuth,
           builtCallerRuntimeId,
           builtCallerTokenizer,
+          undefined,
         );
         await builtCallerMcp.initialize();
         const activation = await executeProviderActivation(
@@ -414,6 +416,7 @@ describe('fromConfig admission before resource effects', () => {
         otherCallerMcp.profileDefinitions,
         otherCredentials().authority,
         otherCallerRelease,
+        undefined,
       );
       const otherCallerMedia = new SessionMediaOwner(
         otherCallerConfig.projectTempDir,
@@ -457,6 +460,7 @@ describe('fromConfig admission before resource effects', () => {
           otherCallerOAuth,
           otherCallerRuntimeId,
           otherCallerTokenizer,
+          undefined,
         );
         await otherCallerMcp.initialize();
         const activation = await executeProviderActivation(

@@ -109,6 +109,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
       await activateForeground();
@@ -129,6 +130,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       foregroundConfig.getSessionId(),
       configureProviderRuntimeFactories(foregroundConfig, foregroundManager)
         .tokenizerFactory,
+      undefined,
     );
   }
 
@@ -206,6 +208,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -225,6 +228,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       firstConfig.getSessionId(),
       configureProviderRuntimeFactories(firstConfig, firstManager)
         .tokenizerFactory,
+      undefined,
     );
   }
   async function closeFirst(): Promise<void> {
@@ -305,6 +309,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -324,6 +329,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       secondConfig.getSessionId(),
       configureProviderRuntimeFactories(secondConfig, secondManager)
         .tokenizerFactory,
+      undefined,
     );
   }
 

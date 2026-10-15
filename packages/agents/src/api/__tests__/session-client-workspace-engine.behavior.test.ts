@@ -134,6 +134,7 @@ describe('Explicit session client lifetime', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -174,6 +175,7 @@ describe('Explicit session client lifetime', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();

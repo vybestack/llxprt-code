@@ -231,6 +231,7 @@ describe('MCP saved approval lifetime', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -274,6 +275,7 @@ describe('MCP saved approval lifetime', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(

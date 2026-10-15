@@ -312,6 +312,7 @@ export class ChildAgentAssembly {
       this.settings,
       this.config,
       this.oauth,
+      undefined,
     );
     this.manager.setTokenizerFactory(this.tokenizer);
     this.manager.setConfig(this.config);

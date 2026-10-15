@@ -253,6 +253,7 @@ describe('CLI provider bootstrap across owners', () => {
               item.settingsOwner.clearSessionOverride.bind(item.settingsOwner),
               () => {},
               () => {},
+              item.settingsOwner.subscribeModelChanges.bind(item.settingsOwner),
             ),
             assembleToolFormatControl(
               item.settingsOwner.readToolFormat.bind(item.settingsOwner),

@@ -18,10 +18,56 @@ function control(owner: SessionSettingsOwner, assertWrite: () => void) {
     owner.clearSessionOverride.bind(owner),
     () => {},
     assertWrite,
+    owner.subscribeModelChanges.bind(owner),
   );
 }
 
 describe('settings operation ports', () => {
+  it('routes actual owner model notifications independently and stops forwarding after unsubscribe', async () => {
+    const first = new SessionSettingsOwner(new SettingsService());
+    const second = new SessionSettingsOwner(new SettingsService());
+    const seen: string[] = [];
+    const peer: string[] = [];
+    const unsubscribe = control(first, () => {}).subscribeModelChanges(
+      (profile) => {
+        if (profile) seen.push(profile.model);
+      },
+    );
+    const unsubscribePeer = control(second, () => {}).subscribeModelChanges(
+      (profile) => {
+        if (profile) peer.push(profile.model);
+      },
+    );
+    try {
+      first.publishModelProfile({
+        model: 'first-model',
+        displayLabel: 'first',
+      });
+      second.publishModelProfile({ model: 'peer-model', displayLabel: 'peer' });
+      expect(seen).toStrictEqual(['first-model']);
+      expect(peer).toStrictEqual(['peer-model']);
+      unsubscribe();
+      first.publishModelProfile({
+        model: 'retired-listener',
+        displayLabel: 'first',
+      });
+      await first.dispose();
+      second.publishModelProfile({
+        model: 'continued-peer',
+        displayLabel: 'peer',
+      });
+      expect(seen).toStrictEqual(['first-model']);
+      expect(peer).toStrictEqual(['peer-model', 'continued-peer']);
+      expect(() =>
+        control(first, () => {}).subscribeModelChanges(() => {}),
+      ).toThrow('Session settings owner is closed');
+    } finally {
+      unsubscribe();
+      unsubscribePeer();
+      await Promise.all([first.dispose(), second.dispose()]);
+    }
+  });
+
   it('keeps equal-label owners independent and clears only the selected override', () => {
     const a = new SessionSettingsOwner(new SettingsService());
     const b = new SessionSettingsOwner(new SettingsService());

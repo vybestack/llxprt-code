@@ -147,6 +147,7 @@ describe('MCP extension lifetime ownership', () => {
       builtMcp.profileDefinitions,
       credentials().authority,
       builtRelease,
+      undefined,
     );
     const builtMedia = new SessionMediaOwner(
       builtConfig.projectTempDir,
@@ -187,6 +188,7 @@ describe('MCP extension lifetime ownership', () => {
         builtOAuth,
         builtRuntimeId,
         builtTokenizer,
+        undefined,
       );
       await builtMcp.initialize();
       await builtOwner.initializeTools();
@@ -310,6 +312,7 @@ describe('MCP extension lifetime ownership', () => {
         builtMcp.profileDefinitions,
         credentials().authority,
         builtRelease,
+        undefined,
       );
       const builtMedia = new SessionMediaOwner(
         builtConfig.projectTempDir,
@@ -350,6 +353,7 @@ describe('MCP extension lifetime ownership', () => {
           builtOAuth,
           builtRuntimeId,
           builtTokenizer,
+          undefined,
         );
         await builtMcp.initialize();
         await builtOwner.initializeTools();

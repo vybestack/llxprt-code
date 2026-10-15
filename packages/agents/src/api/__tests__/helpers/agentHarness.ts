@@ -78,7 +78,7 @@ export type {
   DoneReason,
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
-export function internalConfig(agent: Agent): Config {
+export function internalConfig(agent: object): Config {
   if (
     !('deps' in agent) ||
     !isRecord(agent.deps) ||

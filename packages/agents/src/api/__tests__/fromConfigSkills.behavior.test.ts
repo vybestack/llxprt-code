@@ -259,6 +259,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       await activatebuiltCallerClient(selection.activation);
@@ -314,6 +315,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
   }
   async function activatebuiltCallerClient(

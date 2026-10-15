@@ -195,6 +195,7 @@ describe('Load balancer policy at the profile owner', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient();
@@ -245,6 +246,7 @@ describe('Load balancer policy at the profile owner', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(): Promise<void> {

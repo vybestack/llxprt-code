@@ -227,6 +227,7 @@ describe('Zed ACP provider ownership', () => {
         ownerCallerOAuth,
         ownerCallerRuntimeId,
         ownerCallerTokenizer,
+        undefined,
       );
       await ownerCallerMcp.initialize();
       await activateownerCallerClient(selection.activation);
@@ -283,6 +284,7 @@ describe('Zed ACP provider ownership', () => {
       ownerCallerMcp.profileDefinitions,
       ownerCredentials().authority,
       ownerCallerRelease,
+      undefined,
     );
   }
 
@@ -370,7 +372,6 @@ describe('Zed ACP provider ownership', () => {
         trustPort: ownerCallerMcp.trust,
         createSessionSettings: () =>
           ownerCallerSettingsOwner.createChildStore(),
-        providerManager: ownerCallerManager,
         profileApplication: application,
         profileDefinitions: ownerCallerMcp.profileDefinitions,
         providerInputs: { credentialAuthority: ownerCredentials().authority },

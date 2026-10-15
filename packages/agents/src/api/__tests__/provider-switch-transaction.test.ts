@@ -200,6 +200,7 @@ describe('provider switch transaction ownership', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       await activatefirstCallerClient(selection.activation);
@@ -255,6 +256,7 @@ describe('provider switch transaction ownership', () => {
       firstCallerMcp.profileDefinitions,
       firstCredentials().authority,
       firstCallerRelease,
+      undefined,
     );
   }
   async function activatefirstCallerClient(
@@ -408,6 +410,7 @@ describe('provider switch transaction ownership', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       await activatesecondCallerClient(selection.activation);
@@ -463,6 +466,7 @@ describe('provider switch transaction ownership', () => {
       secondCallerMcp.profileDefinitions,
       secondCredentials().authority,
       secondCallerRelease,
+      undefined,
     );
   }
   async function activatesecondCallerClient(

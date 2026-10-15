@@ -291,6 +291,7 @@ describe('filesystem workspace extension ownership', () => {
       builtCallerMcp.profileDefinitions,
       builtCredentials().authority,
       builtCallerRelease,
+      undefined,
     );
     const builtCallerMedia = new SessionMediaOwner(
       builtCallerConfig.projectTempDir,
@@ -334,6 +335,7 @@ describe('filesystem workspace extension ownership', () => {
         builtCallerOAuth,
         builtCallerRuntimeId,
         builtCallerTokenizer,
+        undefined,
       );
       await builtCallerMcp.initialize();
       const activation = await executeProviderActivation(

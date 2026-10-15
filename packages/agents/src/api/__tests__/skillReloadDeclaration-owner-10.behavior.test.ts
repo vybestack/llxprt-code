@@ -295,6 +295,7 @@ describe('workspace skill required publication ports', () => {
         callerCallerMcp.profileDefinitions,
         callerCredentials().authority,
         callerCallerRelease,
+        undefined,
       );
       const callerCallerMedia = new SessionMediaOwner(
         callerCallerConfig.projectTempDir,
@@ -338,6 +339,7 @@ describe('workspace skill required publication ports', () => {
           callerCallerOAuth,
           callerCallerRuntimeId,
           callerCallerTokenizer,
+          undefined,
         );
         await callerCallerMcp.initialize();
         const activation = await executeProviderActivation(

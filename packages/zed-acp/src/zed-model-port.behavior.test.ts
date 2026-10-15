@@ -157,6 +157,7 @@ describe('ACP model selection without provider-manager authority', () => {
         ownerCallerOAuth,
         ownerCallerRuntimeId,
         ownerCallerTokenizer,
+        undefined,
       );
       await ownerCallerMcp.initialize();
       await activateownerCallerClient();
@@ -212,6 +213,7 @@ describe('ACP model selection without provider-manager authority', () => {
       ownerCallerMcp.profileDefinitions,
       ownerCredentials().authority,
       ownerCallerRelease,
+      undefined,
     );
   }
   async function activateownerCallerClient(): Promise<void> {

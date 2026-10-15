@@ -259,6 +259,7 @@ describe('interactive runtime owner bridge', () => {
         firstCallerOAuth,
         firstCallerRuntimeId,
         firstCallerTokenizer,
+        undefined,
       );
       await firstCallerMcp.initialize();
       const activation = await executeProviderActivation(
@@ -444,6 +445,7 @@ describe('interactive runtime owner bridge', () => {
         secondCallerOAuth,
         secondCallerRuntimeId,
         secondCallerTokenizer,
+        undefined,
       );
       await secondCallerMcp.initialize();
       const activation = await executeProviderActivation(

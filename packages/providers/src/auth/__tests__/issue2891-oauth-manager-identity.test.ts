@@ -112,6 +112,7 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {
@@ -199,6 +200,7 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
         undefined,
         credentials().authority,
         release,
+        undefined,
       );
       acquisitionComplete = true;
     } catch (primary) {

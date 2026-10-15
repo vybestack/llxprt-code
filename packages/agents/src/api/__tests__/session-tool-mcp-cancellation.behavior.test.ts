@@ -192,6 +192,7 @@ describe('physical MCP tool cancellation', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient(selection.activation);
@@ -242,6 +243,7 @@ describe('physical MCP tool cancellation', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
   async function activateCallerClient(

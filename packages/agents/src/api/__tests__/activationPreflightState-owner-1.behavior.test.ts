@@ -169,6 +169,7 @@ describe('activation bootstrap receipts', () => {
         built_builtCallerMcp.profileDefinitions,
         builtCredentials().authority,
         built_builtCallerRelease,
+        undefined,
       );
       const built_builtCallerMedia = new SessionMediaOwner(
         built_builtCallerConfig.projectTempDir,
@@ -215,6 +216,7 @@ describe('activation bootstrap receipts', () => {
           built_builtCallerOAuth,
           built_builtCallerRuntimeId,
           built_builtCallerTokenizer,
+          undefined,
         );
         await built_builtCallerMcp.initialize();
         const built_activation = await executeProviderActivation(

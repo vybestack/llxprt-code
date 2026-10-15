@@ -295,6 +295,7 @@ describe('workspace skill publication compensation', () => {
         callerCallerMcp.profileDefinitions,
         callerCredentials().authority,
         callerCallerRelease,
+        undefined,
       );
       const callerCallerMedia = new SessionMediaOwner(
         callerCallerConfig.projectTempDir,
@@ -338,6 +339,7 @@ describe('workspace skill publication compensation', () => {
           callerCallerOAuth,
           callerCallerRuntimeId,
           callerCallerTokenizer,
+          undefined,
         );
         await callerCallerMcp.initialize();
         const activation = await executeProviderActivation(

@@ -224,6 +224,7 @@ describe('workspace registrar and skill reload root admission', () => {
         callerOAuth,
         callerRuntimeId,
         callerTokenizer,
+        undefined,
       );
       await callerMcp.initialize();
       await activateCallerClient(selection.activation);
@@ -275,6 +276,7 @@ describe('workspace registrar and skill reload root admission', () => {
       callerMcp.profileDefinitions,
       credentials().authority,
       callerRelease,
+      undefined,
     );
   }
 
