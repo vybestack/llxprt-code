@@ -342,6 +342,7 @@ function DialogManagerHarness({
   });
   const bindings = createAppCommandBindings('DialogManager', {
     buffer,
+    generatePromptContent: null,
     commandContext: createMockCommandContext(),
     inputHistory: [],
   });

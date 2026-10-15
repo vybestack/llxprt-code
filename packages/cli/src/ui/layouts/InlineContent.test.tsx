@@ -33,6 +33,7 @@ function ComposerHarness(props: InlineContentProps) {
     'InlineContent',
     {
       buffer,
+      generatePromptContent: null,
       commandContext: createMockCommandContext(),
       inputHistory: [],
     },

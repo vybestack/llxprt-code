@@ -226,6 +226,7 @@ export function buildAppCommands(
   return {
     buffer: input.buffer,
     commandContext: input.commandContext,
+    generatePromptContent: input.generatePromptContent,
     inputHistory: input.inputHistoryStore.inputHistory,
     handleUserInputSubmit: input.handleUserInputSubmit,
     handleSteer: input.handleSteer,

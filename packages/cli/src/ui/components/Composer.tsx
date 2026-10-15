@@ -125,6 +125,7 @@ export const Composer = ({
       config={config}
       slashCommands={slashCommands ?? []}
       commandContext={data.commandContext}
+      generatePromptContent={data.generatePromptContent}
       shellModeActive={shellModeActive}
       setShellModeActive={commands.setShellModeActive}
       onEscapePromptChange={commands.handleEscapePromptChange}

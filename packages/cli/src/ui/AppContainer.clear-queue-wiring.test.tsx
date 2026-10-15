@@ -109,6 +109,11 @@ function createHarness(initialQueueCommandsAvailable = true) {
       {
         buffer,
         commandContext: createMockCommandContext(),
+        generatePromptContent: async () => {
+          throw new Error(
+            'Queue controls must not generate prompt completions',
+          );
+        },
         inputHistoryStore: { inputHistory: [] },
         handleUserInputSubmit: (text) => {
           submitted.push(`${currentRevision}:${text}`);

@@ -192,6 +192,7 @@ type InputPromptState = Pick<
   | 'config'
   | 'slashCommands'
   | 'commandContext'
+  | 'generatePromptContent'
   | 'enableFuzzyFiltering'
   | 'shellModeActive'
   | 'setShellModeActive'
@@ -242,6 +243,7 @@ const useCompletionState = ({
   config,
   slashCommands,
   commandContext,
+  generatePromptContent,
   enableFuzzyFiltering,
   shellModeActive,
 }: Pick<
@@ -250,6 +252,7 @@ const useCompletionState = ({
   | 'config'
   | 'slashCommands'
   | 'commandContext'
+  | 'generatePromptContent'
   | 'shellModeActive'
   | 'enableFuzzyFiltering'
 >): CompletionState => {
@@ -264,6 +267,7 @@ const useCompletionState = ({
     reverseSearchActive,
     shellModeActive,
     config,
+    generatePromptContent,
   );
   const reverseSearchCompletion = useReverseSearchCompletion(
     buffer,

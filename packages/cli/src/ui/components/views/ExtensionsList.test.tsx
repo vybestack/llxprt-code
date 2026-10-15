@@ -28,6 +28,7 @@ function ExtensionsListHarness({
   const commandContext = createMockCommandContext();
   const value = createAppCommandBindings('ExtensionsList', {
     buffer,
+    generatePromptContent: null,
     commandContext: {
       ...commandContext,
       ui: { ...commandContext.ui, extensionsUpdateState },
