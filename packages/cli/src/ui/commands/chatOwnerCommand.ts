@@ -15,6 +15,7 @@ import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
+import { historyLimitsFromSettings } from '../utils/historyLimitsFromSettings.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type {
   CommandContext,
@@ -82,6 +83,8 @@ async function replayUiHistory(
     await resumeHistoryWindow(
       history,
       resolveEmojiFilterMode(context.services.config),
+      undefined,
+      historyLimitsFromSettings(context.services.settings),
     ),
   );
 }

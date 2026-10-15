@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn, type Mock } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
@@ -307,4 +307,31 @@ describe('owner-backed /chat command route', () => {
       }
     });
   }, 30000);
+
+  it('replays a restored transcript up to the configured historyMaxItems', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      const pairs = 1000;
+      await agent.setHistory(
+        Array.from({ length: pairs }, (_unused, index) => [
+          human(`question ${index}`),
+          ai(`answer ${index}`),
+        ]).flat(),
+      );
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({
+        services: {
+          agent,
+          settings: { merged: { ui: { historyMaxItems: pairs * 2 } } },
+        },
+      });
+
+      expect(await action('restore')(context, '1')).toBeUndefined();
+
+      const [loaded] = (
+        context.ui.loadHistory as Mock<(items: readonly unknown[]) => void>
+      ).mock.calls[0];
+      expect(loaded).toHaveLength((pairs - 1) * 2);
+      expect(loaded.at(-1)).toMatchObject({ text: `answer ${pairs - 2}` });
+    });
+  }, 60000);
 });
