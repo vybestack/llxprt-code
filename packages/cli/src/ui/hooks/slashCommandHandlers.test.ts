@@ -1,3 +1,4 @@
+import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -121,6 +122,7 @@ describe('slashCommandHandlers', () => {
       slashCommandLogger: new DebugLogger('test-slash'),
       beginSlashCommandAction: () => new AbortController(),
       endSlashCommandAction: () => {},
+      recordCommandError: async () => {},
       ...overrides,
     };
   }
@@ -177,6 +179,9 @@ describe('slashCommandHandlers', () => {
             content: 'owner slash failure',
           })),
           recordingIntegration: { recordSessionEvent: rawWrite } as never,
+          recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
+            recordSessionEvent: rawWrite,
+          }),
         },
         '/help',
       );
@@ -211,6 +216,11 @@ describe('slashCommandHandlers', () => {
             recordingOwner: 'agent',
             services: { ...deps.commandContext.services, agent: next },
           },
+          recordCommandError: bindCommandErrorRecorder(
+            next,
+            'agent',
+            undefined,
+          ),
           commands: createCommands(() => {
             throw new Error('resumed owner failure');
           }),

@@ -61,6 +61,7 @@ export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
   config: CliUiRuntime | null;
   commandContext: CommandContext;
+  recordCommandError: (message: string) => Promise<void>;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   addMessage: (message: Message) => void;
@@ -309,7 +310,7 @@ async function handleActionResult(
         toolArgs: result.toolArgs,
       };
     case 'message':
-      return handleMessageResult(deps, context, result);
+      return handleMessageResult(deps, result);
     case 'dialog':
       return handleDialogResult(deps, result);
     case 'load_history':
@@ -337,7 +338,6 @@ async function handleActionResult(
 
 async function handleMessageResult(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   result: Extract<ActionResult, { type: 'message' }>,
 ): Promise<SlashCommandProcessorResult> {
   deps.addItem(
@@ -349,17 +349,7 @@ async function handleMessageResult(
     Date.now(),
   );
   if (result.messageType === 'error') {
-    if (context.recordingOwner === 'agent') {
-      const agent = context.services.agent;
-      if (!agent) throw new Error('Session agent is unavailable');
-      await agent.session.recordRecordingEvent({
-        type: 'session_event',
-        severity: 'error',
-        message: result.content,
-      });
-    } else {
-      deps.recordingIntegration?.recordSessionEvent('error', result.content);
-    }
+    await deps.recordCommandError(result.content);
   }
   return { type: 'handled' };
 }
@@ -826,20 +816,7 @@ async function handleCommandError(
   }
   const errorText = error instanceof Error ? error.message : String(error);
   deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
-  if (
-    Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
-      ?.value === 'agent'
-  ) {
-    const agent = deps.commandContext.services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'error',
-      message: errorText,
-    });
-  } else {
-    deps.recordingIntegration?.recordSessionEvent('error', errorText);
-  }
+  await deps.recordCommandError(errorText);
 }
 
 function finalizeCommand(

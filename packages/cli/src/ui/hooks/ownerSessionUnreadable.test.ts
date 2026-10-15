@@ -85,6 +85,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         slashCommandLogger: new DebugLogger('test-slash'),
         beginSlashCommandAction: () => new AbortController(),
         endSlashCommandAction: () => {},
+        recordCommandError: async () => {},
       };
 
       await processSlashCommand(deps, `/continue ${sourceId}`);

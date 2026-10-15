@@ -1,3 +1,4 @@
+import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -543,6 +544,11 @@ function buildHandlerDeps(
   cancellation: SlashCommandCancellation,
 ): SlashCommandHandlerDeps {
   return {
+    recordCommandError: bindCommandErrorRecorder(
+      args.agent,
+      args.recordingOwner,
+      args.recordingIntegration,
+    ),
     commands: state.commands,
     config: args.config,
     commandContext,

@@ -114,6 +114,7 @@ describe('useSlashCommandActions', () => {
             slashCommandLogger: new DebugLogger('test'),
             beginSlashCommandAction: () => new AbortController(),
             endSlashCommandAction: () => {},
+            recordCommandError: async () => {},
           },
           '/theme',
         );
@@ -535,6 +536,7 @@ describe('domain dialog routes', () => {
           slashCommandLogger: new DebugLogger('test'),
           beginSlashCommandAction: () => new AbortController(),
           endSlashCommandAction: () => {},
+          recordCommandError: async () => {},
         },
         '/subagent show researcher',
       );
