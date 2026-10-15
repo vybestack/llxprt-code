@@ -70,10 +70,11 @@ describe('adopted recording instance path', () => {
           },
           { seq: 2, type: 'content' },
           { seq: 3, type: 'session_event' },
-          { seq: 4, type: 'chronology_bind' },
-          { seq: 5, type: 'replace_begin' },
-          { seq: 6, type: 'content', payload: { tx: expect.any(String) } },
-          { seq: 7, type: 'replace_commit', payload: { rowCount: 1 } },
+          // Resume leaves the one source row unchanged, so it writes no
+          // chronology_bind for it.
+          { seq: 4, type: 'replace_begin' },
+          { seq: 5, type: 'content', payload: { tx: expect.any(String) } },
+          { seq: 6, type: 'replace_commit', payload: { rowCount: 1 } },
         ]);
         expect(await owner.agent.session.listSessions()).toHaveLength(1);
         expect(chatsDir).toBe(internalConfig(owner.agent).projectChatsDir);
