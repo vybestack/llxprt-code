@@ -58,8 +58,13 @@ import { createOAuthControl } from '../../runtime/createOAuthControl.js';
 import {
   OAuthControlProvider,
   useOAuthControl,
+  type OAuthControl,
 } from './OAuthControlContext.js';
 import { createAuthCommand } from '../commands/authCommand.js';
+import type {
+  SlashCommand,
+  SlashCommandActionReturn,
+} from '../commands/types.js';
 
 /**
  * @license
@@ -552,30 +557,23 @@ describe('interactive runtime owner bridge', () => {
       expect(
         rightStatus.find((status) => status.provider === 'codex')?.oauthEnabled,
       ).not.toBe(true);
-      // The command is registered against the right owner. The invocation
-      // carries the left owner's control, which must not be consulted.
+      // The command is registered against the right owner. Invoking it with
+      // a context carrying the left owner's control (which must not be
+      // consulted) and with the right owner's own control must both report
+      // the right owner's status.
       const authCommand = createAuthCommand(rightControl, () => true);
-      if (!authCommand.action) throw new Error('auth command has no action');
-      const invocationContext = createMockCommandContext({
-        oauthControl: leftControl,
-      });
-      Object.defineProperty(invocationContext, 'runtimeApi', {
-        get: () => {
-          throw new Error(
-            'OAuth status must not resolve a generic runtime API',
-          );
-        },
-      });
-      const statusResult = await authCommand.action(
-        invocationContext,
-        'claudecode',
-      );
-      expect(statusResult).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('ENABLED'),
-      });
-      expect(JSON.stringify(statusResult)).not.toContain('access_token');
+      for (const invocationControl of [leftControl, rightControl]) {
+        const statusResult = await runAuthStatus(
+          authCommand,
+          invocationControl,
+        );
+        expect(statusResult).toMatchObject({
+          type: 'message',
+          messageType: 'info',
+          content: expect.stringContaining('ENABLED'),
+        });
+        expect(JSON.stringify(statusResult)).not.toContain('access_token');
+      }
       expect(JSON.stringify(leftStatus)).not.toContain('access_token');
       expect(JSON.stringify(rightStatus)).not.toContain('access_token');
       left.unmount();
@@ -599,6 +597,22 @@ describe('interactive runtime owner bridge', () => {
     }
   }, 30000);
 });
+
+async function runAuthStatus(
+  authCommand: SlashCommand,
+  invocationControl: OAuthControl,
+): Promise<void | SlashCommandActionReturn> {
+  if (!authCommand.action) throw new Error('auth command has no action');
+  const invocationContext = createMockCommandContext({
+    oauthControl: invocationControl,
+  });
+  Object.defineProperty(invocationContext, 'runtimeApi', {
+    get: () => {
+      throw new Error('OAuth status must not resolve a generic runtime API');
+    },
+  });
+  return authCommand.action(invocationContext, 'claudecode');
+}
 
 function requireCallerActivation(
   result: Awaited<ReturnType<typeof executeProviderActivation>>,
