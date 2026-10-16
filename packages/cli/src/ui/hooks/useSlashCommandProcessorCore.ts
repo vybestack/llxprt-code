@@ -34,6 +34,7 @@ import { useHostCommands } from './useHostCommands.js';
 import { useResourceCommands } from './useResourceCommands.js';
 import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
+import { bindAboutDetails } from '../commands/aboutCommandHost.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useSetCommand } from './useSetCommand.js';
@@ -534,6 +535,24 @@ function useCommandHandler(
   return useCallback((...input) => processSlashCommand(deps, ...input), [deps]);
 }
 
+function useAboutDetails(
+  api: ReturnType<typeof useRuntimeApi>,
+  config: CliUiRuntime | null,
+  settings: LoadedSettings,
+) {
+  return useMemo(
+    () => bindAboutDetails(api, config, settings),
+    [api, config, settings],
+  );
+}
+
+function useOptionalBound<Owner, Args extends unknown[], Result>(
+  owner: Owner,
+  operation: ((this: Owner, ...args: Args) => Result) | undefined,
+): ((...args: Args) => Result) | null {
+  return useMemo(() => operation?.bind(owner) ?? null, [owner, operation]);
+}
+
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
@@ -551,10 +570,11 @@ export function useSlashCommandProcessorCore(
     args.addItem,
   );
   const presentationCommands = usePresentationCommands(
-    args.agent,
-    args.config,
-    args.settings,
-    api,
+    useAboutDetails(api, config, settings),
+    config?.getTargetDir(),
+    useOptionalBound(agent?.hooks, agent?.hooks.triggerSessionEnd),
+    useBound(agent?.session, agent?.session.startNewSession ?? missingSession),
+    useBound(agent?.hooks, agent?.hooks.triggerSessionStart ?? missingSession),
     args.addItem,
     args.actions.setDebugMessage,
     session.updateHistoryTokenCount,
@@ -566,15 +586,6 @@ export function useSlashCommandProcessorCore(
     args.actions.toggleDebugProfiler,
   );
 
-  const historyCommandOwners = useHistoryCommandOwners(
-    args.agent,
-    args.config,
-    api,
-    args.settings,
-    useOAuthControl(),
-    args.loadHistory,
-    args.addItem,
-  );
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
   const providerCommands = useCredentialCommands(
@@ -590,7 +601,15 @@ export function useSlashCommandProcessorCore(
   const state = useRegisteredCommands(
     args,
     presentationCommands,
-    historyCommandOwners,
+    useHistoryCommandOwners(
+      args.agent,
+      args.config,
+      api,
+      args.settings,
+      useOAuthControl(),
+      args.loadHistory,
+      args.addItem,
+    ),
     providerCommands,
     pending.setPendingItem,
     reloadCommandsRef,
