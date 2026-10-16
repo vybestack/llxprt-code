@@ -11,6 +11,38 @@ import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 
 import { useMemo } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+function useMcpOwnerCommand(
+  mcp: Agent['mcp'] | undefined,
+  isConfigured: boolean,
+  settings: LoadedSettings,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
+): SlashCommand {
+  const auth = useMcpAuthRegistration(
+    mcp,
+    isConfigured,
+    settings,
+    addItem,
+    reloadCommands,
+  );
+  return useMcpRegistration(mcp, isConfigured, auth, addItem, reloadCommands);
+}
+
+function noProvider(): never {
+  throw new Error(
+    'Cannot switch provider: the interactive Agent is not available. Restart the session.',
+  );
+}
+
+function useProviderSwitcher(
+  switchProvider: Agent['setProvider'],
+): Parameters<typeof useProviderCommand>[3] {
+  return useMemo(
+    () => (name, options) => switchProvider(name, undefined, options),
+    [switchProvider],
+  );
+}
+
 import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
@@ -160,8 +192,6 @@ export function useCredentialCommands(
   const oauthControl = useOAuthControl();
   const recordSwitch = useSwitch(agent?.session, rawRecording, recordingOwner);
 
-  const auth = agent?.auth;
-
   return useMemoCredentialRegistry({
     ...useModelSelectionCommands(
       useBound(api, api.setActiveModel),
@@ -169,7 +199,15 @@ export function useCredentialCommands(
       useBound(api, api.setActiveToolFormatOverride),
       recordSwitch,
     ),
-    providerCommand: useProviderCommand(agent, refreshAliases, recordSwitch),
+    providerCommand: useProviderCommand(
+      useBound(api, api.getActiveProviderName),
+      useBound(api, api.providerStatus),
+      useBound(api, api.getActiveModelName),
+      useProviderSwitcher(useBound(agent, agent?.setProvider ?? noProvider)),
+      useBound(api, api.getActiveProviderAliasConfig),
+      refreshAliases,
+      recordSwitch,
+    ),
     baseurlCommand: useBaseurlRegistration(
       useBound(agent, agent?.getProvider ?? unavailableProvider),
       useBound(agent?.auth, agent?.auth.setBaseUrl ?? unavailableProvider),
@@ -179,8 +217,8 @@ export function useCredentialCommands(
     ),
     logoutCommand: useLogoutRegistration(
       useBound(agent, agent?.listProviders ?? unavailableProvider),
-      useBound(auth, auth?.status ?? unavailableProvider),
-      useBound(auth, auth?.logout ?? unavailableProvider),
+      useBound(agent?.auth, agent?.auth.status ?? unavailableProvider),
+      useBound(agent?.auth, agent?.auth.logout ?? unavailableProvider),
       useBound(oauthControl, oauthControl.logout),
       agent !== null,
       useBound(oauthControl, oauthControl.getSupportedProviders),
@@ -204,16 +242,10 @@ export function useCredentialCommands(
     ),
     authCommand: useAuthOwnerCommand(oauthControl, settings),
     quotaCommand: useQuotaCommand(),
-    mcpCommand: useMcpRegistration(
+    mcpCommand: useMcpOwnerCommand(
       agent?.mcp,
       config !== null,
-      useMcpAuthRegistration(
-        agent?.mcp,
-        config !== null,
-        settings,
-        addItem,
-        reloadCommands,
-      ),
+      settings,
       addItem,
       reloadCommands,
     ),

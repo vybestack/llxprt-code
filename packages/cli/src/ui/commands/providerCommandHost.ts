@@ -5,29 +5,29 @@
  */
 
 import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import type { ProviderCommandOperations } from './providerCommand.js';
 
-function readActiveProviderName(api: RuntimeApi): string | null {
-  try {
-    return api.getActiveProviderName();
-  } catch {
-    return api.providerStatus().providerName ?? null;
-  }
-}
-
 export function bindProviderCommandOperations(
-  api: RuntimeApi,
+  readProvider: () => string,
+  readStatus: () => { providerName?: string | null },
+  readModel: ProviderCommandOperations['getActiveModelName'],
+  resolveAlias: ProviderCommandOperations['resolveActiveProviderAliasConfig'],
   switchProvider: ProviderCommandOperations['switchProvider'],
   refreshProviderAliases: () => Promise<void>,
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ): ProviderCommandOperations {
   return {
-    getActiveProviderName: () => readActiveProviderName(api),
-    getActiveModelName: () => api.getActiveModelName(),
+    getActiveProviderName: () => {
+      try {
+        return readProvider();
+      } catch {
+        return readStatus().providerName ?? null;
+      }
+    },
+    getActiveModelName: readModel,
     switchProvider,
     recordProviderSwitch,
-    resolveActiveProviderAliasConfig: () => api.getActiveProviderAliasConfig(),
+    resolveActiveProviderAliasConfig: resolveAlias,
     writeProviderAlias: writeProviderAliasConfig,
     refreshProviderAliases,
   };

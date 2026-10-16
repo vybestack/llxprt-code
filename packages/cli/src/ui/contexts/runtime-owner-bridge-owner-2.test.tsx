@@ -663,7 +663,10 @@ describe('interactive runtime owner bridge', () => {
       const noRecording = async (): Promise<void> => {};
       const leftAction = createProviderCommand(
         bindProviderCommandOperations(
-          captured.left,
+          captured.left.getActiveProviderName.bind(captured.left),
+          captured.left.providerStatus.bind(captured.left),
+          captured.left.getActiveModelName.bind(captured.left),
+          captured.left.getActiveProviderAliasConfig.bind(captured.left),
           (name, options) => a.setProvider(name, undefined, options),
           captured.leftRefresh,
           noRecording,
@@ -671,7 +674,10 @@ describe('interactive runtime owner bridge', () => {
       ).action;
       const rightAction = createProviderCommand(
         bindProviderCommandOperations(
-          captured.right,
+          captured.right.getActiveProviderName.bind(captured.right),
+          captured.right.providerStatus.bind(captured.right),
+          captured.right.getActiveModelName.bind(captured.right),
+          captured.right.getActiveProviderAliasConfig.bind(captured.right),
           (name, options) => b.setProvider(name, undefined, options),
           captured.rightRefresh,
           noRecording,
