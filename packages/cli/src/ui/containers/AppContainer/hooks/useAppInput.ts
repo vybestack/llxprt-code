@@ -89,6 +89,7 @@ export interface AppInputParams {
   readInitialPrompt: () => string | undefined;
   isAgentClientPresent: () => boolean;
   injectInputSteer: (text: string) => void;
+  endInputHookSession: Parameters<typeof useExitHandling>[0]['endHookSession'];
   readIdeMode: Parameters<typeof useInputKeybindings>[0]['readIdeMode'];
   readInteractiveShellEnabled: Parameters<
     typeof useInputKeybindings
@@ -283,7 +284,7 @@ function useInputCoreProcessors(p: AppInputParams) {
   );
   const exitResult = useExitHandling({
     handleSlashCommand: slashResult.handleSlashCommand,
-    config: p.streamRuntime.hooks,
+    endHookSession: p.endInputHookSession,
     onBeforeExit: disposeAgentBeforeExit,
   });
   setQuittingMessagesRef.current = exitResult.setQuittingMessages;

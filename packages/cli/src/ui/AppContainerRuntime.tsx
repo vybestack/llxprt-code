@@ -220,6 +220,10 @@ function useAppInputRuntime(
   return useAppInput({
     projectTempDir: props.uiRuntime.projectTempDir,
     injectInputSteer: useBound(props.agent, props.agent.injectSteer),
+    endInputHookSession: useBound(
+      props.uiRuntime.hooks,
+      props.uiRuntime.hooks.endHookSession,
+    ),
     readInitialPrompt: useBound(
       props.uiRuntime.app,
       props.uiRuntime.app.getQuestion,
