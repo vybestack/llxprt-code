@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { CommitAck } from '../../journal/groupWriter.js';
+import { pulledRows } from './journalDetachedStream.js';
+import type { IContent } from './IContent.js';
 import {
   rowsUnchanged,
   truncationCut,
@@ -49,6 +51,29 @@ export class JournalDetachedPublication {
       } else if (!rowsUnchanged(previous, next)) {
         await this.replaceRows(previous, next, signal);
       }
+      signal?.throwIfAborted();
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
+
+  /**
+   * Publishes the rows `produce` pushes as one `replace` group. The producer
+   * is run by the writer's pulls, one row ahead at most, and a failure of the
+   * producer aborts the group before its trailer.
+   */
+  async publishStreamed(
+    produce: (put: (row: IContent) => Promise<void>) => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    try {
+      signal?.throwIfAborted();
+      this.admittedCount++;
+      this.lastAck = await this.store.replaceStreamed(
+        pulledRows(produce),
+        signal,
+      );
       signal?.throwIfAborted();
     } catch (error) {
       this.failure = error;

@@ -246,6 +246,21 @@ export class JournalHistoryStore {
     return this.requireAck(this.enqueueTurn(count, replaceEdits(rows)));
   }
 
+  /**
+   * Like {@link replaceFrom}, for a source whose row count is known only when
+   * it ends (a transform streaming its output). The tentative count is not
+   * moved when the group is queued; the ack's count becomes the length. The
+   * caller must hold the store quiet around it, as the mutation FIFO does.
+   */
+  async replaceStreamed(
+    rows: AsyncIterable<IContent>,
+    signal?: AbortSignal,
+  ): Promise<CommitAck> {
+    this.assertUsable();
+    signal?.throwIfAborted();
+    return this.requireAck(this.enqueueTurn(undefined, replaceEdits(rows)));
+  }
+
   /** Brackets one logical publication. Fan-out holds are the work of S06; until then it only counts. */
   openPublication(): HistoryPublicationScope {
     this.publicationDepth++;
@@ -615,10 +630,10 @@ export class JournalHistoryStore {
   }
 
   private enqueueTurn(
-    rowsAfter: number,
+    rowsAfter: number | undefined,
     build: EditBuilder,
   ): Promise<CommitAck | undefined> {
-    this.tentativeRows = rowsAfter;
+    if (rowsAfter !== undefined) this.tentativeRows = rowsAfter;
     this.admitted++;
     const turn = this.queue.then(() => this.runStep(rowsAfter, build));
     this.queue = turn.then(() => undefined);
@@ -649,14 +664,16 @@ export class JournalHistoryStore {
   }
 
   private async runStep(
-    rowsAfter: number,
+    rowsAfter: number | undefined,
     build: EditBuilder,
   ): Promise<CommitAck | undefined> {
     if (this.failure !== undefined) return undefined;
     try {
       const edits = await build(this.session.store.snapshot());
       const group = await this.session.store.commitDetailed(edits);
-      if (group.after.rows !== rowsAfter) {
+      if (rowsAfter === undefined) {
+        this.tentativeRows = group.after.rows;
+      } else if (group.after.rows !== rowsAfter) {
         throw new Error(
           `The journal holds ${group.after.rows} rows after commit ${group.ack.commitSeq}, the history promised ${rowsAfter}`,
         );
