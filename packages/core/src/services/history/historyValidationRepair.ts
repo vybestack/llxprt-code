@@ -1,5 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
+import type {
+  HistoryJournalOp,
+  HistoryRepair,
+  HistoryRepairRequest,
+  HistoryStorePort,
+} from './historyStorePort.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { IContent, ToolCallBlock } from './IContent.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -174,4 +180,34 @@ export class HistoryValidationRepair {
       }
     }
   }
+}
+
+/**
+ * The old store's validateAndFix, moved here from HistoryService unchanged:
+ * the repair is captured from the fold's cursor and published as journal ops.
+ * A failure closes the repair before it propagates.
+ */
+export function repairHistoryRows(
+  journal: HistoryJournalStore,
+  request: HistoryRepairRequest,
+): HistoryRepair {
+  const repair = new HistoryValidationRepair(request.ownership);
+  try {
+    const captured = journal.capturePendingFold();
+    try {
+      journal.adoptMutationBoundary(captured.durableTail);
+    } finally {
+      captured.release();
+    }
+    journal.withReadRows((cursor) => repair.capture(cursor, request.stamp));
+    repair.publish(journal);
+  } catch (error) {
+    repair.close();
+    throw error;
+  }
+  return {
+    inserted: repair.inserted,
+    rollback: () => repair.rollback(journal),
+    close: () => repair.close(),
+  };
 }

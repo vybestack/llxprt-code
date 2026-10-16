@@ -87,7 +87,6 @@ import type { HistoryStorePort } from './historyStorePort.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import { SpanWindow } from './historySpanWindow.js';
 import { HistoryMutationFifo } from './historyMutationFifo.js';
-import { compensateMutation } from './planHistoryMutation.js';
 import { HistoryMutationPublication } from './historyMutationPublication.js';
 import {
   rollbackMutationEffects,
@@ -820,7 +819,7 @@ export abstract class HistoryServiceCore
   async registerMediaOwner(owner: HistoryMediaOwner): Promise<void> {
     this.runSynchronousHistoryMutation(() => {
       this.mediaOwner = owner;
-      this.journal.withReadRows((cursor) => owner.adopt(cursor.rows()));
+      this.journal.adoptMediaOwner(owner);
     });
   }
 
@@ -990,7 +989,6 @@ export abstract class HistoryServiceCore
       restorePendingChronologyFailure(previousHistory, failures);
       const compensated = await this.compensateAdmittedMutation(
         publication,
-        previousHistory,
         input,
         failures,
       );
@@ -1015,16 +1013,14 @@ export abstract class HistoryServiceCore
    */
   private async compensateAdmittedMutation(
     publication: HistoryMutationPublication,
-    previousHistory: HistoryMutationSnapshot,
     input: HistoryMutationInput,
     failures: unknown[],
   ): Promise<boolean> {
     if (publication.admittedCount === 0) return true;
     this.invalidatePendingSyncs();
     try {
-      await compensateMutation(
-        this.journal,
-        previousHistory,
+      await this.journal.compensate(
+        publication.compensationMark,
         input,
         publication.replacements,
       );

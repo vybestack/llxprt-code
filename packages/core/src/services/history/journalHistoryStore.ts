@@ -6,7 +6,13 @@ import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
-import type { HistoryJournalOp } from './historyStorePort.js';
+import type {
+  HistoryClearRequest,
+  HistoryJournalOp,
+} from './historyStorePort.js';
+import { mergeRemovedInteriorSpans } from './contextRange.js';
+import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import { historyMutationFailure } from './historyMutationEffects.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import {
@@ -140,6 +146,69 @@ export class JournalHistoryStore {
   async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     await this.waitForDurable();
     return new JournalDumpSnapshot(this.session.store.snapshot());
+  }
+
+  /**
+   * Removes every row and publishes the spans the clear leaves behind. The
+   * first and last chronology numbers come from the row headers of the
+   * version the clear removes. It runs inside the service's mutation FIFO, so
+   * no other operation is queued between the read and the rewind.
+   *
+   * A rollback needs the removed version back, which is `restore(version)`
+   * (S05); until then a failing publish with rollback on says so.
+   */
+  async clear(request: HistoryClearRequest): Promise<void> {
+    await this.waitForDurable();
+    const snapshot = this.session.store.snapshot();
+    if (snapshot.rows !== this.tentativeRows) {
+      throw new Error('History changed while it was being cleared');
+    }
+    const spans = await this.spansAfterClear(snapshot, request.spans);
+    if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
+    try {
+      request.publish(spans);
+    } catch (error) {
+      if (!request.rollbackOnFailure) throw error;
+      request.restore();
+      throw historyMutationFailure(error, [
+        new Error('not implemented: S05 (restore the rows of a failed clear)'),
+      ]);
+    }
+  }
+
+  private async spansAfterClear(
+    snapshot: VersionSnapshot,
+    earlier: readonly RemovedInteriorSpan[],
+  ): Promise<RemovedInteriorSpan[]> {
+    if (snapshot.rows === 0) return mergeRemovedInteriorSpans(earlier);
+    const start = Number((await snapshot.entryAt(0)).chronologySeq);
+    const end = Number(
+      (await snapshot.entryAt(snapshot.rows - 1)).chronologySeq,
+    );
+    return mergeRemovedInteriorSpans([
+      ...earlier.filter((span) => span.start > end),
+      { start, end, reason: 'cleared' },
+    ]);
+  }
+
+  validateAndFix(): never {
+    throw new Error('not implemented: S04 (tool-pairing repair)');
+  }
+
+  adoptMediaOwner(): never {
+    throw new Error('not implemented: S04 (media owner adoption)');
+  }
+
+  captureCompensation(): never {
+    throw new Error('not implemented: S05 (restore(version) compensation)');
+  }
+
+  compensate(): never {
+    throw new Error('not implemented: S05 (restore(version) compensation)');
+  }
+
+  captureDetached(): never {
+    throw new Error('not implemented: S05 (detached publication)');
   }
 
   /** Settles the queue, then closes the journal. */

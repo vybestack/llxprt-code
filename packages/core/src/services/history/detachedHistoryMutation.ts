@@ -15,7 +15,6 @@ import type {
 import { DensitySpanRows } from './densitySpanRows.js';
 import { detachedHistorySink } from './detachedHistoryDensity.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
-import { captureDetachedHistory } from './detachedHistoryCapture.js';
 import { DetachedHistoryPublication } from './detachedHistoryPublication.js';
 import {
   historyMutationFailure,
@@ -208,12 +207,8 @@ export async function withDetachedHistoryMutation(
     previous = new DetachedHistoryJournal(host.ownership);
     next = new DetachedHistoryJournal(host.ownership);
     densitySpans = new DensitySpanRows();
-    await captureDetachedHistory(
-      host.journal,
-      previous,
-      host.ownership,
-      options.signal,
-      () => host.waitForTokenUpdates(),
+    await host.journal.captureDetached(previous, options.signal, () =>
+      host.waitForTokenUpdates(),
     );
     await transformCandidate(
       task,
@@ -263,12 +258,8 @@ export async function restoreDetachedHistory(
   const previous = new DetachedHistoryJournal(host.ownership);
   const spans = new DensitySpanRows();
   try {
-    await captureDetachedHistory(
-      host.journal,
-      previous,
-      host.ownership,
-      undefined,
-      () => host.waitForTokenUpdates(),
+    await host.journal.captureDetached(previous, undefined, () =>
+      host.waitForTokenUpdates(),
     );
     await commitDetachedHistory(
       host,

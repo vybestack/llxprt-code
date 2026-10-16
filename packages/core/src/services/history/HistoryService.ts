@@ -16,12 +16,11 @@
 
 import { rewriteToolResponse } from './historyToolRewrite.js';
 import { StagedProfileReplacement } from './historyProfileReplacement.js';
-import { HistoryValidationRepair } from './historyValidationRepair.js';
+import type { HistoryRepair } from './historyStorePort.js';
 import {
   removeHistoryTail,
   RemovalObserverFailure,
 } from './historyRemoveTail.js';
-import { clearHistoryRows } from './historyClearRows.js';
 import { withFallbackRestoreRows } from './historyFallbackRows.js';
 import {
   withMergedHistoryRows,
@@ -489,8 +488,7 @@ export class HistoryService extends HistoryServiceReads {
   private clearInternal(rebuilding: boolean): void {
     const previousTokens = this.totalTokens;
     const previousSpans = this.spanWindow.get();
-    clearHistoryRows({
-      journal: this.journal,
+    this.journal.clear({
       spans: previousSpans,
       rollbackOnFailure: !rebuilding,
       publish: (spans) => {
@@ -661,22 +659,15 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   private validateAndFixInternal(): void {
-    const repair = new HistoryValidationRepair(this.mutationOwnership);
     const chronology = this.chronology.snapshot();
+    let repair: HistoryRepair;
     try {
-      const captured = this.journal.capturePendingFold();
-      try {
-        this.journal.adoptMutationBoundary(captured.durableTail);
-      } finally {
-        captured.release();
-      }
-      this.journal.withReadRows((cursor) =>
-        repair.capture(cursor, (row) => this.chronology.stamp(row)),
-      );
-      repair.publish(this.journal);
+      repair = this.journal.validateAndFix({
+        ownership: this.mutationOwnership,
+        stamp: (row) => this.chronology.stamp(row),
+      });
     } catch (error) {
       this.chronology.restore(chronology);
-      repair.close();
       throw error;
     }
     if (repair.inserted.length === 0) {
@@ -700,7 +691,7 @@ export class HistoryService extends HistoryServiceReads {
         }
       } catch (error) {
         try {
-          repair.rollback(this.journal);
+          repair.rollback();
         } finally {
           this.totalTokens = oldTokens;
           this.chronology.restore(chronology);

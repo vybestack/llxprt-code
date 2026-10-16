@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
+import type {
+  HistoryCompensationMark,
+  HistoryJournalOp,
+  HistoryStorePort,
+} from './historyStorePort.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -16,6 +20,7 @@ export class HistoryMutationPublication {
   private releaseOwners = (): void => {};
   private releaseEnvelopeOwners = (): void => {};
   private origin: string | undefined;
+  private compensation: HistoryCompensationMark | undefined;
 
   constructor(
     private readonly journal: HistoryStorePort,
@@ -28,7 +33,7 @@ export class HistoryMutationPublication {
   ): void | Promise<void> {
     const streaming = input.streamPublication === true;
     // Before anything is admitted: compensation restores these origins.
-    this.journal.withReadRows((cursor) => previous.captureOrigins(cursor));
+    this.compensation = this.journal.captureCompensation(previous);
     this.origin =
       input.options.origin === undefined
         ? undefined
@@ -48,6 +53,13 @@ export class HistoryMutationPublication {
         ),
       );
     for (const op of plan) this.admit(op);
+  }
+
+  /** What the store needs to undo this publication; set by `publish`, which runs before any admission. */
+  get compensationMark(): HistoryCompensationMark {
+    if (this.compensation === undefined)
+      throw new Error('The publication captured nothing to compensate');
+    return this.compensation;
   }
 
   private async publishStream(

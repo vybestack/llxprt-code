@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
+import type {
+  HistoryCompensationMark,
+  HistoryJournalOp,
+  HistoryStorePort,
+} from './historyStorePort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
@@ -98,6 +102,17 @@ function contentOp(
   return origin === undefined
     ? { kind: 'content', content }
     : { kind: 'content', content, origin };
+}
+
+/**
+ * The old store's compensation mark: the snapshot of the rows before the
+ * mutation, whose captured origins let a compensation put them back.
+ */
+export class SnapshotCompensationMark implements HistoryCompensationMark {
+  constructor(
+    readonly store: HistoryStorePort,
+    readonly previous: HistoryMutationSnapshot,
+  ) {}
 }
 
 /**

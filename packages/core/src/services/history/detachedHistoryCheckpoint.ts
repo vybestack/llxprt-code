@@ -2,7 +2,6 @@
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
-import { captureDetachedHistory } from './detachedHistoryCapture.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 
 export async function withDetachedHistoryCheckpoint<T>(
@@ -17,13 +16,7 @@ export async function withDetachedHistoryCheckpoint<T>(
   let outcome: { value: T } | { error: unknown };
   try {
     await enqueue(() =>
-      captureDetachedHistory(
-        journal,
-        checkpoint,
-        ownership,
-        signal,
-        settleTokens,
-      ),
+      journal.captureDetached(checkpoint, signal, settleTokens),
     );
     signal?.throwIfAborted();
     outcome = { value: await execute(checkpoint) };

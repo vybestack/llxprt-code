@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryStorePort } from './historyStorePort.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import { expect } from 'bun:test';
 import type { IContent } from './IContent.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
@@ -68,7 +69,7 @@ export async function expectTicketCallersReleased(
 }
 
 export function expectTicketCursorRows(
-  journal: HistoryStorePort,
+  journal: HistoryJournalStore,
   owners: RowOwnership,
   size: number,
   expected: (index: number) => IContent,

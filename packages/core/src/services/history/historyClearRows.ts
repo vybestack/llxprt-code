@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryStorePort } from './historyStorePort.js';
+import type {
+  HistoryClearRequest,
+  HistoryStorePort,
+} from './historyStorePort.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import { replaceOwnedRowsOps, type OwnedRow } from './historyReplaceOps.js';
-import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
@@ -18,7 +21,7 @@ function* ownedClearedRows(
 }
 
 function restoreClearedRows(
-  journal: HistoryStorePort,
+  journal: Pick<HistoryStorePort, 'apply'>,
   cursor: HistoryReadCursor,
   admitted: boolean,
 ): unknown[] {
@@ -36,13 +39,19 @@ function restoreClearedRows(
   }
 }
 
-export function clearHistoryRows(input: {
-  readonly journal: HistoryStorePort;
-  readonly spans: readonly RemovedInteriorSpan[];
-  readonly rollbackOnFailure: boolean;
-  readonly publish: (spans: RemovedInteriorSpan[]) => void;
-  readonly restore: () => void;
-}): void {
+/** The old store's clear, moved here from HistoryService unchanged; it reads the fold's cursor. */
+export function clearHistoryRows(
+  input: HistoryClearRequest & {
+    readonly journal: Pick<
+      HistoryJournalStore,
+      | 'capturePendingFold'
+      | 'withReadRows'
+      | 'adoptMutationBoundary'
+      | 'openPublication'
+      | 'apply'
+    >;
+  },
+): void {
   const captured = input.journal.capturePendingFold();
   try {
     input.journal.adoptMutationBoundary(captured.durableTail);

@@ -89,12 +89,29 @@ import {
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
+  HistoryClearRequest,
+  HistoryCompensationMark,
   HistoryJournalAdoption,
   HistoryJournalOp,
   HistoryMutationMark,
   HistoryPublicationScope,
+  HistoryRepair,
+  HistoryRepairRequest,
   HistoryStorePort,
 } from './historyStorePort.js';
+import { clearHistoryRows } from './historyClearRows.js';
+import { repairHistoryRows } from './historyValidationRepair.js';
+import { captureDetachedHistory } from './detachedHistoryCapture.js';
+import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import type {
+  HistoryMediaOwner,
+  HistoryMutationInput,
+} from './historyBatchContracts.js';
+import type { OpenReplaceTracker } from './historyReplaceOps.js';
+import {
+  compensateMutation,
+  SnapshotCompensationMark,
+} from './planHistoryMutation.js';
 import type {
   CommitWatermark,
   SessionRecordLine,
@@ -381,6 +398,44 @@ export class HistoryJournalStore implements HistoryStorePort {
       );
     tx.abandon(arrayRowStore(durable));
     return durable;
+  }
+
+  clear(request: HistoryClearRequest): void {
+    clearHistoryRows({ journal: this, ...request });
+  }
+
+  validateAndFix(request: HistoryRepairRequest): HistoryRepair {
+    return repairHistoryRows(this, request);
+  }
+
+  adoptMediaOwner(owner: HistoryMediaOwner): void {
+    this.withReadRows((cursor) => owner.adopt(cursor.rows()));
+  }
+
+  /** Reads the origin of every row of `previous` now, before the mutation admits anything. */
+  captureCompensation(
+    previous: HistoryMutationSnapshot,
+  ): HistoryCompensationMark {
+    this.withReadRows((cursor) => previous.captureOrigins(cursor));
+    return new SnapshotCompensationMark(this, previous);
+  }
+
+  compensate(
+    mark: HistoryCompensationMark,
+    input: HistoryMutationInput,
+    replacements: OpenReplaceTracker,
+  ): Promise<void> {
+    if (!(mark instanceof SnapshotCompensationMark) || mark.store !== this)
+      throw new Error('The compensation mark was not captured by this store');
+    return compensateMutation(this, mark.previous, input, replacements);
+  }
+
+  captureDetached(
+    previous: DetachedHistoryJournal,
+    signal?: AbortSignal,
+    settleTokens?: () => Promise<void>,
+  ): Promise<void> {
+    return captureDetachedHistory(this, previous, signal, settleTokens);
   }
 
   /** Internal only. Capture binding, watermark, and pending membership in one turn. */

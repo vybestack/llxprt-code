@@ -9,6 +9,7 @@ import { buildContextRangeSnapshot } from './contextRange.js';
 import { computeStatistics } from './curationDebugLogger.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
+import { HistoryJournalStore } from './historyJournalStore.js';
 import type { IContent } from './IContent.js';
 
 /**
@@ -21,7 +22,10 @@ class RescanHistory extends HistoryService {
     readonly statistics: ReturnType<typeof computeStatistics>;
     readonly range: ReturnType<typeof buildContextRangeSnapshot>;
   } {
-    return this.journal.withReadRows((cursor) => {
+    const store = this.journal;
+    if (!(store instanceof HistoryJournalStore))
+      throw new Error('The differential oracle reads the old store');
+    return store.withReadRows((cursor) => {
       const rows = [...cursor.rows()];
       return {
         rows,

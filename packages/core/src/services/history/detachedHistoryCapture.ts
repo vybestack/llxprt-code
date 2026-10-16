@@ -1,12 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryStorePort } from './historyStorePort.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import { setImmediate } from 'node:timers/promises';
 import {
   foldPendingRows,
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
@@ -51,10 +50,13 @@ async function copyRows(
   signal?.throwIfAborted();
 }
 
+/** The old store's detached capture, moved here unchanged; it folds the journal once. */
 export async function captureDetachedHistory(
-  journal: HistoryStorePort,
+  journal: Pick<
+    HistoryJournalStore,
+    'capturePendingFold' | 'adoptMutationBoundary' | 'waitForDurable'
+  >,
   previous: DetachedHistoryJournal,
-  _ownership?: RowOwnership,
   signal?: AbortSignal,
   settleTokens?: () => Promise<void>,
 ): Promise<void> {

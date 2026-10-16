@@ -21,8 +21,14 @@ import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { HistoryRowSummary } from './historySummaryTracker.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
-import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
-import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
+import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import type {
+  HistoryMediaOwner,
+  HistoryMutationInput,
+} from './historyBatchContracts.js';
+import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import type { OpenReplaceTracker } from './historyReplaceOps.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
   CommitWatermark,
@@ -96,6 +102,36 @@ export interface HistoryPublicationScope {
   close(published: boolean): void;
 }
 
+/** One clear: the policy of HistoryService, the rows and their restore are the store's. */
+export interface HistoryClearRequest {
+  /** The interior spans removed before this clear. */
+  readonly spans: readonly RemovedInteriorSpan[];
+  readonly rollbackOnFailure: boolean;
+  /** Called once the rows are gone, with the spans including the cleared ones. */
+  readonly publish: (spans: RemovedInteriorSpan[]) => void;
+  /** Undoes what `publish` changed in the service when the clear is rolled back. */
+  readonly restore: () => void;
+}
+
+export interface HistoryRepairRequest {
+  readonly ownership?: RowOwnership;
+  /** Gives a row its chronology; called for rows that have one and for inserted rows. */
+  readonly stamp: (row: IContent) => IContent;
+}
+
+/** The tool-pairing repair a store has published; the caller owns `close`. */
+export interface HistoryRepair {
+  readonly inserted: Iterable<IContent> & { readonly length: number };
+  /** Takes the published repair back out of the store. */
+  rollback(): void;
+  close(): void;
+}
+
+/** Opaque proof that a store captured what its own compensation needs; see {@link HistoryStorePort.captureCompensation}. */
+export interface HistoryCompensationMark {
+  readonly store: HistoryStorePort;
+}
+
 /**
  * What HistoryService, the mutation planners and the detached history modules
  * need from the store behind them. `HistoryJournalStore` (the JSONL fold) is
@@ -154,17 +190,40 @@ export interface HistoryStorePort {
     execute: (view: HistoryRowView) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T>;
-  capturePendingFold(): PendingFoldSnapshot;
-  withReadRows<T>(
-    execute: (cursor: HistoryReadCursor) => T,
-    signal?: AbortSignal,
-  ): T;
   withRowSummary<T>(read: (summary: HistoryRowSummary) => T): T;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
   withMutationSnapshot<T>(
     execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T>;
+
+  // Whole operations. Each one reads the rows it needs itself, so the caller
+  // holds no cursor. They run inside HistoryService's synchronous mutation
+  // FIFO: the old store has applied the effect when the call returns, and a
+  // journal-backed store, whose reads are asynchronous, returns a promise
+  // that the flip of the default (S13) makes the service await.
+  clear(request: HistoryClearRequest): void;
+  validateAndFix(request: HistoryRepairRequest): HistoryRepair;
+  adoptMediaOwner(owner: HistoryMediaOwner): void;
+  /**
+   * Called before a publication admits anything: captures what
+   * {@link compensate} needs to put the previous rows back.
+   */
+  captureCompensation(
+    previous: HistoryMutationSnapshot,
+  ): HistoryCompensationMark;
+  /** Undoes the admitted prefix of a failed mutation published after `mark`. */
+  compensate(
+    mark: HistoryCompensationMark,
+    input: HistoryMutationInput,
+    replacements: OpenReplaceTracker,
+  ): Promise<void>;
+  /** Copies the current rows and their origins into `previous` once they are durable. */
+  captureDetached(
+    previous: DetachedHistoryJournal,
+    signal?: AbortSignal,
+    settleTokens?: () => Promise<void>,
+  ): Promise<void>;
 
   dispose(): Promise<void>;
 }
