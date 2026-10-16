@@ -8,7 +8,6 @@ import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js'
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { createImageCommand } from './imageCommand.js';
-import { bindImageCommand } from './imageCommandHost.js';
 import { assertTruthy } from '../../__tests__/assertions.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
@@ -69,13 +68,12 @@ function makeMockContext(overrides?: {
 }
 
 function createTestCommand(context: CommandOwnerFixture): SlashCommand {
-  return createImageCommand(
-    bindImageCommand(
-      context.services.config,
-      context.services.agent,
-      context.ui.addItem,
-    ),
-  );
+  const sessionClient = context.services.agent?.sessionClient;
+  return createImageCommand({
+    workspaceRoot: context.services.config?.getTargetDir(),
+    runImageOperation: sessionClient?.runImageOperation.bind(sessionClient),
+    addItem: context.ui.addItem,
+  });
 }
 
 const imageCommand = createImageCommand({

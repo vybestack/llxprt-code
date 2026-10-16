@@ -394,7 +394,13 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
       runImageOperation: undefined,
       addItem: () => 0,
     }),
-    bugCommand: createBugCommand(bindBugCommand(null, null, () => 0)),
+    bugCommand: createBugCommand(
+      bindBugCommand(
+        null,
+        () => undefined,
+        () => 0,
+      ),
+    ),
     policiesCommand: createPoliciesCommand({ getPolicyInfo: () => null }),
     continueCommand: createContinueCommand({
       isInteractive: () => false,

@@ -10,7 +10,10 @@ const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { createDirectoryCommand, expandHomeDir } from './directoryCommand.js';
-import { bindDirectoryCommand } from './directoryCommandHost.js';
+import {
+  bindDirectoryCommand,
+  bindDirectoryChangeRecording,
+} from './directoryCommandHost.js';
 import {
   loadServerHierarchicalMemory,
   type Config,
@@ -60,9 +63,22 @@ describe('directoryCommand', () => {
     const command = createDirectoryCommand(
       bindDirectoryCommand(
         mockContext.services.config ?? null,
-        mockContext.services.agent ?? null,
-        mockContext.recordingOwner,
-        mockContext.recordingIntegration,
+        async () => {
+          const client = mockContext.services.agent?.agentClient;
+          if (!client) throw new Error('Session agent is unavailable');
+          await client.addDirectoryContext();
+        },
+        bindDirectoryChangeRecording(
+          mockContext.recordingOwner,
+          async (event) => {
+            const agent = mockContext.services.agent;
+            if (!agent) throw new Error('Session agent is unavailable');
+            await agent.session.recordRecordingEvent(event);
+          },
+          mockContext.recordingIntegration?.recordDirectoriesChanged.bind(
+            mockContext.recordingIntegration,
+          ),
+        ),
         mockContext.ui.addItem,
         mockContext.ui.setLlxprtMdFileCount,
       ),
