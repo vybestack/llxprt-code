@@ -138,6 +138,7 @@ export function createMockRuntimeApi(
   const stubs = {
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => 'mock-provider'),
+    detectProviderQuota: () => undefined,
     setActiveModel: vi.fn(async () => {}),
     listAvailableModels: vi.fn(() => []),
     getActiveModelName: vi.fn(() => 'mock-model'),

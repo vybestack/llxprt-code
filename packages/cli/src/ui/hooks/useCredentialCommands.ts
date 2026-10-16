@@ -28,13 +28,15 @@ import {
   bindKeyCommandOperations,
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
-  bindQuotaCommandOperations,
   bindMcpAuthCommandOperations,
 } from '../commands/credentialCommandHost.js';
-import { createKeyCommand } from '../commands/keyCommand.js';
+import {
+  createKeyCommand,
+  type KeyCommandOperations,
+} from '../commands/keyCommand.js';
 import { createKeyfileCommand } from '../commands/keyfileCommand.js';
 import { createLogoutCommand } from '../commands/logoutCommand.js';
-import { createQuotaCommand } from '../commands/quotaCommand.js';
+import { useQuotaCommand } from './useQuotaCommand.js';
 import { createMcpAuthCommand } from '../commands/mcpAuth.js';
 import { createMcpCommand } from '../commands/mcpCommand.js';
 import { bindMcpCommand } from '../commands/mcpCommandHost.js';
@@ -191,23 +193,23 @@ export function useCredentialCommands(
       useBound(settings, settings.setProviderKeyfile),
       useBound(settings, settings.removeProviderKeyfile),
     ),
-    keyCommand: useMemo(
-      () => createKeyCommand(bindKeyCommandOperations(api, config)),
-      [api, config],
+    keyCommand: useKeyRegistration(
+      useKeyOwnerBound(config, config?.getProviderKeys),
+      useKeyOwnerBound(config, config?.listKeyCompletionNames),
+      useKeyOwnerBound(config, config?.invalidateKeyCompletion),
+      useBound(config, config?.isInteractive ?? isInteractiveBeforeBootstrap),
+      useBound(api, api.providerStatus),
+      useBound(api, api.updateActiveProviderApiKey),
+      useKeyOwnerBound(config, config?.setEphemeralSetting),
     ),
     authCommand: useAuthOwnerCommand(oauthControl, settings),
-    quotaCommand: useMemo(
-      () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
-      [api, oauthControl],
-    ),
+    quotaCommand: useQuotaCommand(),
     mcpCommand: useMcpRegistration(
       agent?.mcp,
       config !== null,
       useMcpAuthRegistration(
-        useMemo(
-          () => bindMcpAuthCommandOperations(agent, config),
-          [agent, config],
-        ),
+        agent?.mcp,
+        config !== null,
         settings,
         addItem,
         reloadCommands,
@@ -409,7 +411,8 @@ function useLogoutRegistration(
 }
 
 function useMcpAuthRegistration(
-  operations: ReturnType<typeof bindMcpAuthCommandOperations>,
+  mcp: Agent['mcp'] | undefined,
+  isConfigured: boolean,
   settings: LoadedSettings,
   addItem: UseHistoryManagerReturn['addItem'],
   reloadCommands: () => void,
@@ -417,12 +420,29 @@ function useMcpAuthRegistration(
   return useMemo(
     () =>
       createMcpAuthCommand(
-        operations,
+        bindMcpAuthCommandOperations(
+          () =>
+            (mcp?.listServers() ?? []).map((server) => ({
+              name: server.name,
+              oauthEnabled: server.config.oauth?.enabled === true,
+            })),
+          async () =>
+            mcp === undefined
+              ? []
+              : (await mcp.details()).servers
+                  .filter((server) => server.requiresAuth)
+                  .map((server) => server.name),
+          async (name, display) => {
+            if (mcp === undefined) throw new Error('Agent is not available.');
+            await mcp.authenticate(name, display);
+          },
+          () => isConfigured,
+        ),
         () => settings.merged.enableFuzzyFiltering ?? true,
         addItem,
         reloadCommands,
       ),
-    [operations, settings, addItem, reloadCommands],
+    [mcp, isConfigured, settings, addItem, reloadCommands],
   );
 }
 
@@ -445,5 +465,57 @@ function useKeyfileRegistration(
         ),
       ),
     [readStatus, updateKey, writeSetting, remember, forget],
+  );
+}
+
+function useKeyRegistration(
+  providerKeys: KeyCommandOperations['providerKeys'],
+  listNames: KeyCommandOperations['listKeyCompletionNames'],
+  invalidate: KeyCommandOperations['invalidateKeyCompletion'],
+  isInteractive: KeyCommandOperations['isInteractive'],
+  readStatus: ReturnType<typeof useRuntimeApi>['providerStatus'],
+  updateKey: KeyCommandOperations['updateActiveProviderApiKey'],
+  setEphemeral: KeyCommandOperations['setEphemeralSetting'],
+): SlashCommand {
+  return useMemo(
+    () =>
+      createKeyCommand(
+        bindKeyCommandOperations(
+          providerKeys,
+          listNames,
+          invalidate,
+          isInteractive,
+          () => readStatus().providerName ?? null,
+          updateKey,
+          setEphemeral,
+        ),
+      ),
+    [
+      providerKeys,
+      listNames,
+      invalidate,
+      isInteractive,
+      readStatus,
+      updateKey,
+      setEphemeral,
+    ],
+  );
+}
+
+function missingKeyOwner(): never {
+  throw new Error('Key commands require an explicit credential owner');
+}
+
+function isInteractiveBeforeBootstrap(): boolean {
+  return true;
+}
+
+function useKeyOwnerBound<Owner, Args extends unknown[], Result>(
+  owner: Owner,
+  operation: ((this: Owner, ...args: Args) => Result) | undefined,
+): (...args: Args) => Result {
+  return useMemo(
+    () => (operation === undefined ? missingKeyOwner : operation.bind(owner)),
+    [owner, operation],
   );
 }

@@ -4,20 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { OAuthControl } from '../contexts/OAuthControlContext.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { BaseurlCommandOperations } from './baseurlCommand.js';
 import type { KeyCommandOperations } from './keyCommand.js';
 import type { KeyfileCommandOperations } from './keyfileCommand.js';
 import type { LogoutCommandOperations } from './logoutCommand.js';
 import type { QuotaCommandOperations } from './quotaCommand.js';
 import type { McpAuthCommandOperations } from './mcpAuth.js';
-import { fetchAllQuotaInfo } from './statsQuota.js';
-
-const MISSING_CREDENTIAL_OWNER =
-  'Key commands require an explicit credential owner';
 
 export function bindBaseurlCommandOperations(
   activeProviderName: () => string,
@@ -84,22 +76,22 @@ export function bindKeyfileCommandOperations(
 }
 
 export function bindKeyCommandOperations(
-  api: RuntimeApi,
-  config: CliUiRuntime | null,
+  providerKeys: KeyCommandOperations['providerKeys'],
+  listKeyCompletionNames: KeyCommandOperations['listKeyCompletionNames'],
+  invalidateKeyCompletion: KeyCommandOperations['invalidateKeyCompletion'],
+  isInteractive: KeyCommandOperations['isInteractive'],
+  activeProviderName: KeyCommandOperations['activeProviderName'],
+  updateActiveProviderApiKey: KeyCommandOperations['updateActiveProviderApiKey'],
+  setEphemeralSetting: KeyCommandOperations['setEphemeralSetting'],
 ): KeyCommandOperations {
-  const owner = (): CliUiRuntime => {
-    if (config === null) throw new Error(MISSING_CREDENTIAL_OWNER);
-    return config;
-  };
   return {
-    providerKeys: () => owner().getProviderKeys(),
-    listKeyCompletionNames: () => owner().listKeyCompletionNames(),
-    invalidateKeyCompletion: () => owner().invalidateKeyCompletion(),
-    isInteractive: () => (config === null ? true : config.isInteractive()),
-    activeProviderName: () => api.providerStatus().providerName ?? null,
-    updateActiveProviderApiKey: (key) => api.updateActiveProviderApiKey(key),
-    setEphemeralSetting: (key, value) =>
-      owner().setEphemeralSetting(key, value),
+    providerKeys,
+    listKeyCompletionNames,
+    invalidateKeyCompletion,
+    isInteractive,
+    activeProviderName,
+    updateActiveProviderApiKey,
+    setEphemeralSetting,
     schedulePaymentModeCheck,
   };
 }
@@ -109,41 +101,24 @@ export function bindKeyCommandOperations(
  * configured endpoint and the same quota report /stats shows.
  */
 export function bindQuotaCommandOperations(
-  api: RuntimeApi,
-  oauthControl: OAuthControl,
+  oauthControl: QuotaCommandOperations['oauthControl'],
+  requestFetch: QuotaCommandOperations['fetch'],
+  baseUrlSetting: QuotaCommandOperations['baseUrlSetting'],
+  fetchQuotaLines: QuotaCommandOperations['fetchQuotaLines'],
 ): QuotaCommandOperations {
-  return {
-    oauthControl,
-    fetch: api.fetch,
-    baseUrlSetting: () => api.getEphemeralSetting('base-url'),
-    fetchQuotaLines: () => fetchAllQuotaInfo(api, oauthControl),
-  };
+  return { oauthControl, fetch: requestFetch, baseUrlSetting, fetchQuotaLines };
 }
 
 export function bindMcpAuthCommandOperations(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
+  configuredServers: McpAuthCommandOperations['configuredServers'],
+  authenticationRequiredServers: McpAuthCommandOperations['authenticationRequiredServers'],
+  authenticate: McpAuthCommandOperations['authenticate'],
+  isConfigured: McpAuthCommandOperations['isConfigured'],
 ): McpAuthCommandOperations {
   return {
-    isConfigured: () => config !== null,
-    configuredServers: () =>
-      (agent?.mcp.listServers() ?? []).map((server) => ({
-        name: server.name,
-        oauthEnabled: server.config.oauth?.enabled === true,
-      })),
-    authenticationRequiredServers: async () => {
-      if (agent === null) {
-        return [];
-      }
-      return (await agent.mcp.details()).servers
-        .filter((server) => server.requiresAuth)
-        .map((server) => server.name);
-    },
-    authenticate: async (serverName, displayListener) => {
-      if (agent === null) {
-        throw new Error('Agent is not available.');
-      }
-      await agent.mcp.authenticate(serverName, displayListener);
-    },
+    configuredServers,
+    authenticationRequiredServers,
+    authenticate,
+    isConfigured,
   };
 }

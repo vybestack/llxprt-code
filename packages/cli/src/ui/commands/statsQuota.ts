@@ -24,11 +24,6 @@ const logger = new DebugLogger('llxprt:cli:stats');
 
 export type UsageMap = Map<string, Record<string, unknown>>;
 
-type OAuthUsage = Pick<
-  OAuthControl,
-  'getAllAnthropicUsageInfo' | 'getAllCodexUsageInfo'
->;
-
 /** Sort bucket names with 'default' first, then lexicographic. */
 export function defaultFirstSort(a: string, b: string): number {
   if (a === 'default') {
@@ -65,8 +60,10 @@ async function readKeyFile(filePath: string): Promise<string | null> {
  * Resolve the API key for the current profile.
  * Checks ephemeral settings for auth-keyfile first, then falls back to auth-key.
  */
-async function resolveApiKey(runtimeApi: RuntimeApi): Promise<string | null> {
-  const keyfilePath = runtimeApi.getEphemeralSetting('auth-keyfile');
+async function resolveApiKey(
+  readSetting: RuntimeApi['getEphemeralSetting'],
+): Promise<string | null> {
+  const keyfilePath = readSetting('auth-keyfile');
   if (typeof keyfilePath === 'string' && keyfilePath.trim() !== '') {
     const key = await readKeyFile(keyfilePath.trim());
     if (key) {
@@ -74,7 +71,7 @@ async function resolveApiKey(runtimeApi: RuntimeApi): Promise<string | null> {
     }
   }
 
-  const authKey = runtimeApi.getEphemeralSetting('auth-key');
+  const authKey = readSetting('auth-key');
   if (typeof authKey === 'string' && authKey.trim() !== '') {
     return authKey.trim();
   }
@@ -87,14 +84,17 @@ async function resolveApiKey(runtimeApi: RuntimeApi): Promise<string | null> {
  * Returns null if the profile doesn't use a supported API-key provider.
  */
 async function fetchApiKeyProviderQuota(
-  runtimeApi: RuntimeApi,
+  readSetting: RuntimeApi['getEphemeralSetting'],
+  readProvider: RuntimeApi['getActiveProviderName'],
+  detectQuota: RuntimeApi['detectProviderQuota'],
+  requestFetch: NetworkFetch,
 ): Promise<{ provider: string; lines: string[] } | null> {
   let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
   let baseUrlForFetch: string | undefined;
-  const activeProviderName = runtimeApi.getActiveProviderName();
+  const activeProviderName = readProvider();
 
   // Strategy 1: Check ephemeral base-url setting (highest priority)
-  const ephemeralBaseUrl = runtimeApi.getEphemeralSetting('base-url');
+  const ephemeralBaseUrl = readSetting('base-url');
   if (typeof ephemeralBaseUrl === 'string') {
     provider = detectApiKeyProvider(ephemeralBaseUrl);
     if (provider) {
@@ -105,7 +105,7 @@ async function fetchApiKeyProviderQuota(
 
   // Strategy 2 & 3: If not found, try provider config base URLs
   if (!provider && activeProviderName) {
-    const result = runtimeApi.detectProviderQuota(activeProviderName);
+    const result = detectQuota(activeProviderName);
     if (result) {
       provider = result.provider as
         | 'zai'
@@ -129,7 +129,7 @@ async function fetchApiKeyProviderQuota(
     return null;
   }
 
-  const apiKey = await resolveApiKey(runtimeApi);
+  const apiKey = await resolveApiKey(readSetting);
   if (!apiKey) {
     logger.debug(
       () => `Detected ${provider} provider but no API key available`,
@@ -137,7 +137,7 @@ async function fetchApiKeyProviderQuota(
     return null;
   }
 
-  return fetchApiKeyQuota(runtimeApi.fetch, provider, apiKey, baseUrlForFetch);
+  return fetchApiKeyQuota(requestFetch, provider, apiKey, baseUrlForFetch);
 }
 
 function appendBucketLines(
@@ -226,14 +226,15 @@ function formatCodexLines(codexUsageInfo: UsageMap): string[] {
 }
 
 async function fetchOAuthQuotaLines(
-  oauthManager: OAuthUsage,
+  readAnthropic: OAuthControl['getAllAnthropicUsageInfo'],
+  readCodex: OAuthControl['getAllCodexUsageInfo'],
   requestFetch: NetworkFetch,
 ): Promise<string[]> {
   const output: string[] = [];
 
   const [anthropicResult, codexResult] = await Promise.allSettled([
-    oauthManager.getAllAnthropicUsageInfo(requestFetch),
-    oauthManager.getAllCodexUsageInfo(requestFetch),
+    readAnthropic(requestFetch),
+    readCodex(requestFetch),
   ]);
 
   if (anthropicResult.status === 'rejected') {
@@ -278,22 +279,32 @@ async function fetchOAuthQuotaLines(
  * Returns formatted lines ready for display, or empty array if no quota available.
  */
 export async function fetchAllQuotaInfo(
-  runtimeApi: RuntimeApi,
-  oauthControl: OAuthControl,
+  readSetting: RuntimeApi['getEphemeralSetting'],
+  readProvider: RuntimeApi['getActiveProviderName'],
+  detectQuota: RuntimeApi['detectProviderQuota'],
+  requestFetch: NetworkFetch,
+  isOAuthAvailable: OAuthControl['isAvailable'],
+  readAnthropic: OAuthControl['getAllAnthropicUsageInfo'],
+  readCodex: OAuthControl['getAllCodexUsageInfo'],
 ): Promise<string[]> {
   const output: string[] = [];
 
   try {
-    const oauthManager = oauthControl;
-    if (oauthManager.isAvailable()) {
+    if (isOAuthAvailable()) {
       const oauthLines = await fetchOAuthQuotaLines(
-        oauthManager,
-        runtimeApi.fetch,
+        readAnthropic,
+        readCodex,
+        requestFetch,
       );
       output.push(...oauthLines);
     }
 
-    const apiKeyQuotaResult = await fetchApiKeyProviderQuota(runtimeApi);
+    const apiKeyQuotaResult = await fetchApiKeyProviderQuota(
+      readSetting,
+      readProvider,
+      detectQuota,
+      requestFetch,
+    );
     if (apiKeyQuotaResult) {
       if (output.length > 0) {
         output.push('');
