@@ -319,7 +319,15 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   it('rejects a registered headless operation without an Agent owner', async () => {
-    const generatePrompt = bindAutoPromptOperation(null, null);
+    const unavailable = (): never => {
+      throw new Error('Session agent is unavailable');
+    };
+    const generatePrompt = bindAutoPromptOperation(
+      unavailable,
+      unavailable,
+      unavailable,
+      unavailable,
+    );
     mockGetCommands.mockReturnValue([
       {
         name: 'runtime',
