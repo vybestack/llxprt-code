@@ -54,9 +54,17 @@ describe('presentation registration ownership', () => {
         usePresentationCommands(
           Object.assign(
             bindAboutDetails(
-              context.runtimeApi,
-              null,
-              context.services.settings,
+              () => context.runtimeApi.getRuntimeDiagnosticsSnapshot(),
+              () => context.runtimeApi.getActiveProviderName(),
+              () => context.runtimeApi.getActiveProviderDetails(),
+              (key) => context.runtimeApi.getEphemeralSetting(key),
+              () => undefined,
+              () => undefined,
+              () => undefined,
+              () => '',
+              () => context.runtimeApi.providerStatus(),
+              (provider) =>
+                context.services.settings.getProviderKeyfile(provider),
             ),
             {
               hooks: peer.hooks,

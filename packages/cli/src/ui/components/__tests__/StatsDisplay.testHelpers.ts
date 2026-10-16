@@ -120,6 +120,10 @@ export const defaultZeroMetrics = (): SessionMetrics => ({
   cache: cloneCache(),
 });
 
+function unavailableSessionSetting(): never {
+  throw new Error('Session settings are unavailable in this runtime fixture');
+}
+
 /**
  * Builds a fully-typed RuntimeApi mock with every method stubbed as a vi.fn().
  * Overrides allow per-test customization without repeating incomplete runtime
@@ -138,12 +142,22 @@ export function createMockRuntimeApi(
   const stubs = {
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => 'mock-provider'),
+    getActiveProviderDetails: () => {
+      throw new Error(
+        'Provider details are unavailable in this runtime fixture',
+      );
+    },
     getActiveProviderAliasConfig: () => {
       throw new Error(
         'Provider aliases are unavailable in this runtime fixture',
       );
     },
     detectProviderQuota: () => undefined,
+    getSessionSetting: unavailableSessionSetting,
+    setSessionSetting: unavailableSessionSetting,
+    getProviderDumpMetadata: () => {
+      throw new Error('Context dumps are unavailable in this runtime fixture');
+    },
     setActiveModel: vi.fn(async () => {}),
     listAvailableModels: vi.fn(() => []),
     getActiveModelName: vi.fn(() => 'mock-model'),

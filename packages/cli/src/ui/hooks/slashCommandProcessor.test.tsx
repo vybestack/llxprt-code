@@ -147,6 +147,7 @@ describe('useSlashCommandProcessor', () => {
   let mockConfig: Config;
   const mockSettings = {
     merged: { ui: {} },
+    getProviderKeyfile: unavailableSettings,
     setProviderKeyfile: unavailableSettings,
     removeProviderKeyfile: unavailableSettings,
   } as LoadedSettings;
