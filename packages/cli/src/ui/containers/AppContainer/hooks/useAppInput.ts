@@ -1,3 +1,4 @@
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -87,7 +88,7 @@ export interface AppInputParams {
   // From bootstrap
   streamRuntime: AppBootstrapResult['streamRuntime'];
   slashCommandRuntime: SlashCommandRuntime;
-  agent: AppBootstrapResult['agent'];
+  agent: Agent;
   settings: AppBootstrapResult['settings'];
   subagentManager?: UiSubagentManager;
   /**
