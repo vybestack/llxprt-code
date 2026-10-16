@@ -28,7 +28,10 @@ import {
   ProviderFileLifecycle,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -282,13 +285,9 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         builtCredentials().authority,
         builtCallerRelease,
       );
-      const {
-        tokenizerFactory: builtCallerTokenizer,
-        contentGeneratorFactory: builtCallerContent,
-      } = configureProviderRuntimeFactories(
-        builtCallerConfig,
-        builtCallerManager,
-      );
+      const builtCallerTokenizer =
+        configureProviderTokenizer(builtCallerManager);
+      const builtCallerContent = createRuntimeContentGeneratorFactory();
       const builtCallerOAuth = acquirePreferredOAuth(
         undefined,
         builtCallerPolicy.session.messageBus,
@@ -434,13 +433,9 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         otherCredentials().authority,
         otherCallerRelease,
       );
-      const {
-        tokenizerFactory: otherCallerTokenizer,
-        contentGeneratorFactory: otherCallerContent,
-      } = configureProviderRuntimeFactories(
-        otherCallerConfig,
-        otherCallerManager,
-      );
+      const otherCallerTokenizer =
+        configureProviderTokenizer(otherCallerManager);
+      const otherCallerContent = createRuntimeContentGeneratorFactory();
       const otherCallerOAuth = acquirePreferredOAuth(
         undefined,
         otherCallerPolicy.session.messageBus,

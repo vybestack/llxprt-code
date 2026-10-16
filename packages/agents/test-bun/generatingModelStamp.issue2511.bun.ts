@@ -1,4 +1,4 @@
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -99,7 +99,7 @@ function buildConversationManager(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -260,7 +260,7 @@ function buildChatSessionWithLiveProvider(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',

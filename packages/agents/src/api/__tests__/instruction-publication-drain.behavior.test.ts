@@ -12,7 +12,10 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -133,10 +136,8 @@ describe('admitted instruction publication disposal', () => {
         credentials().authority,
         callerRelease,
       );
-      const {
-        tokenizerFactory: callerTokenizer,
-        contentGeneratorFactory: callerContent,
-      } = configureProviderRuntimeFactories(callerConfig, callerManager);
+      const callerTokenizer = configureProviderTokenizer(callerManager);
+      const callerContent = createRuntimeContentGeneratorFactory();
       const callerOAuth = acquirePreferredOAuth(
         undefined,
         callerMessageBus,

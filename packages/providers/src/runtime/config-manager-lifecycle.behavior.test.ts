@@ -7,7 +7,7 @@ import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { configureProviderTokenizer } from '../composition/index.js';
 import {
   acquireAdoptedProviderManager,
   activateAdoptedProviders,
@@ -222,8 +222,7 @@ describe('Config-independent provider owner lifecycle', () => {
         oauth,
         'borrowed-manager',
         false,
-        configureProviderRuntimeFactories(ownerConfig, manager)
-          .tokenizerFactory,
+        configureProviderTokenizer(manager),
       );
       await release.close();
       const revision = provider.clientRevision;
@@ -298,8 +297,7 @@ describe('Config-independent provider owner lifecycle', () => {
         oauth,
         'owned-manager',
         false,
-        configureProviderRuntimeFactories(ownerConfig, manager)
-          .tokenizerFactory,
+        configureProviderTokenizer(manager),
       );
       ownerSettings.set('base-url', 'http://127.0.0.1:1');
       const attached = provider.clientRevision;
@@ -404,8 +402,7 @@ describe('Config-independent provider owner lifecycle', () => {
         finalOAuth,
         'shared-label',
         false,
-        configureProviderRuntimeFactories(ownerConfig, earlyManager)
-          .tokenizerFactory,
+        configureProviderTokenizer(earlyManager),
       );
       expect(finalManager).toBe(earlyManager);
       expect(finalOAuth).toBe(earlyOAuth);

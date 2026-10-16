@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -208,13 +211,8 @@ describe('fromConfig admission before resource effects', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const {
-      tokenizerFactory: builtCallerTokenizer,
-      contentGeneratorFactory: builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
+    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerContent = createRuntimeContentGeneratorFactory();
     const builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,
@@ -399,13 +397,8 @@ describe('fromConfig admission before resource effects', () => {
       otherCredentials().authority,
       otherCallerRelease,
     );
-    const {
-      tokenizerFactory: otherCallerTokenizer,
-      contentGeneratorFactory: otherCallerContent,
-    } = configureProviderRuntimeFactories(
-      otherCallerConfig,
-      otherCallerManager,
-    );
+    const otherCallerTokenizer = configureProviderTokenizer(otherCallerManager);
+    const otherCallerContent = createRuntimeContentGeneratorFactory();
     const otherCallerOAuth = acquirePreferredOAuth(
       undefined,
       otherCallerPolicy.session.messageBus,

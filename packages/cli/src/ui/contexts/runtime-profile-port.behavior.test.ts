@@ -9,7 +9,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -92,12 +95,10 @@ describe('CLI profile operation projection', () => {
   let ownerCallerFiles: ProviderFileLifecycle;
   let ownerCallerRuntimeId: string;
   let ownerCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let ownerCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let ownerCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let ownerCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openownerCaller(fixture: string): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
@@ -213,12 +214,10 @@ describe('CLI profile operation projection', () => {
       ownerCredentials().authority,
       ownerCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      ownerCallerConfig,
-      ownerCallerManager,
-    );
-    ownerCallerTokenizer = factories.tokenizerFactory;
-    ownerCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(ownerCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    ownerCallerTokenizer = factoriesTokenizer;
+    ownerCallerContent = factoriesContent;
     ownerCallerOAuth = acquirePreferredOAuth(
       undefined,
       ownerCallerPolicy.session.messageBus,

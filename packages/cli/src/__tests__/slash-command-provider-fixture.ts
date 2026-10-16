@@ -11,7 +11,7 @@ import {
   OpenAIProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
 export function createSlashCommandProviderFixture(sessionId: string): {
   config: Config;
@@ -41,6 +41,6 @@ export function createSlashCommandProviderFixture(sessionId: string): {
   );
   manager.registerProvider(new OpenAIProvider(undefined));
   manager.setActiveProvider('openai');
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   return { config, manager, settingsOwner, settingsService };
 }

@@ -15,7 +15,10 @@ import {
   ProviderFileLifecycle,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -84,12 +87,10 @@ describe('profile-chat-preparation', () => {
   let builtCallerFiles: ProviderFileLifecycle;
   let builtCallerRuntimeId: string;
   let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let builtCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openbuiltCaller(
     fixture: string,
@@ -233,12 +234,10 @@ describe('profile-chat-preparation', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
-    builtCallerTokenizer = factories.tokenizerFactory;
-    builtCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    builtCallerTokenizer = factoriesTokenizer;
+    builtCallerContent = factoriesContent;
     builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,
@@ -294,12 +293,10 @@ describe('profile-chat-preparation', () => {
   let otherCallerFiles: ProviderFileLifecycle;
   let otherCallerRuntimeId: string;
   let otherCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let otherCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let otherCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let otherCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openotherCaller(
     fixture: string,
@@ -443,12 +440,10 @@ describe('profile-chat-preparation', () => {
       otherCredentials().authority,
       otherCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      otherCallerConfig,
-      otherCallerManager,
-    );
-    otherCallerTokenizer = factories.tokenizerFactory;
-    otherCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(otherCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    otherCallerTokenizer = factoriesTokenizer;
+    otherCallerContent = factoriesContent;
     otherCallerOAuth = acquirePreferredOAuth(
       undefined,
       otherCallerPolicy.session.messageBus,

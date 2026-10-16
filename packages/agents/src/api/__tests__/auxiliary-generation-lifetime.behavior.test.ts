@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -89,12 +92,10 @@ describe('auxiliary generation lifetime', () => {
   let builtCallerFiles: ProviderFileLifecycle;
   let builtCallerRuntimeId: string;
   let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let builtCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openbuiltCaller(
     fixture: string,
@@ -238,12 +239,10 @@ describe('auxiliary generation lifetime', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
-    builtCallerTokenizer = factories.tokenizerFactory;
-    builtCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    builtCallerTokenizer = factoriesTokenizer;
+    builtCallerContent = factoriesContent;
     builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,
@@ -299,12 +298,10 @@ describe('auxiliary generation lifetime', () => {
   let peerCallerFiles: ProviderFileLifecycle;
   let peerCallerRuntimeId: string;
   let peerCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let peerCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let peerCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let peerCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openpeerCaller(
     fixture: string,
@@ -445,12 +442,10 @@ describe('auxiliary generation lifetime', () => {
       peerCredentials().authority,
       peerCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      peerCallerConfig,
-      peerCallerManager,
-    );
-    peerCallerTokenizer = factories.tokenizerFactory;
-    peerCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(peerCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    peerCallerTokenizer = factoriesTokenizer;
+    peerCallerContent = factoriesContent;
     peerCallerOAuth = acquirePreferredOAuth(
       undefined,
       peerCallerPolicy.session.messageBus,

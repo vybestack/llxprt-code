@@ -15,7 +15,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -111,13 +114,11 @@ describe('Zed ACP provider ownership', () => {
 
   let firstCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
 
-  let firstCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let firstCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
 
   let firstCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openfirstCaller(
     fixture: string,
@@ -265,12 +266,10 @@ describe('Zed ACP provider ownership', () => {
       firstCredentials().authority,
       firstCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      firstCallerConfig,
-      firstCallerManager,
-    );
-    firstCallerTokenizer = factories.tokenizerFactory;
-    firstCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(firstCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    firstCallerTokenizer = factoriesTokenizer;
+    firstCallerContent = factoriesContent;
     firstCallerOAuth = acquirePreferredOAuth(
       undefined,
       firstCallerPolicy.session.messageBus,
@@ -416,13 +415,11 @@ describe('Zed ACP provider ownership', () => {
 
   let nextCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
 
-  let nextCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let nextCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
 
   let nextCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function opennextCaller(
     fixture: string,
@@ -567,12 +564,10 @@ describe('Zed ACP provider ownership', () => {
       nextCredentials().authority,
       nextCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      nextCallerConfig,
-      nextCallerManager,
-    );
-    nextCallerTokenizer = factories.tokenizerFactory;
-    nextCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(nextCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    nextCallerTokenizer = factoriesTokenizer;
+    nextCallerContent = factoriesContent;
     nextCallerOAuth = acquirePreferredOAuth(
       undefined,
       nextCallerPolicy.session.messageBus,

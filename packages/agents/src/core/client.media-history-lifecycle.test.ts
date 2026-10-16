@@ -7,7 +7,7 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  */
 
 import { fixturePaths } from './__tests__/client-test-helpers.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
 /**
  * AgentClient local-media ownership tests across deferred and active history.
@@ -295,7 +295,7 @@ describe('AgentClient (client.ts)', () => {
       selectedOwner,
     );
     ownerManager = manager;
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     settingsService.set('activeProvider', 'gemini');
     const ctx = await setupAgentClient(
       { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },

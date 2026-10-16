@@ -3,7 +3,7 @@ import { afterEach as closeInvocationRoots } from 'bun:test';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -100,7 +100,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   function buildChatSession(

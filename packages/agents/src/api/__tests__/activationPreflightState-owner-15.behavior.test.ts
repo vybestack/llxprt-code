@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -151,13 +154,10 @@ describe('preflight adoption boundaries', () => {
       builtCredentials().authority,
       built_builtCallerRelease,
     );
-    const {
-      tokenizerFactory: built_builtCallerTokenizer,
-      contentGeneratorFactory: built_builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      built_builtCallerConfig,
+    const built_builtCallerTokenizer = configureProviderTokenizer(
       built_builtCallerManager,
     );
+    const built_builtCallerContent = createRuntimeContentGeneratorFactory();
     const built_builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       built_builtCallerPolicy.session.messageBus,

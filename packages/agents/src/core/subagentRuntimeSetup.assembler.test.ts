@@ -15,7 +15,7 @@ import { instructionFixture } from './__tests__/instruction-fixture.js';
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
@@ -137,7 +137,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     manager.registerProvider(provider);
 
     const memoryOverrides: PropertyDescriptorMap = {};

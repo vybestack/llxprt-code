@@ -209,7 +209,7 @@ export function createFakeRepo(
   const ghWrapper = path.join(binDir, 'gh');
   writeFileSync(
     ghWrapper,
-    `#!/usr/bin/env bash\nexec python3 "${FAKE_GH}" "$@"\n`,
+    `#!/usr/bin/env bash\nexec python3 -I -S "${FAKE_GH}" "$@"\n`,
   );
   execFileSync('chmod', ['+x', ghWrapper]);
 

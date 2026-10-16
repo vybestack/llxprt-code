@@ -11,7 +11,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -122,10 +125,8 @@ describe('Session owner cleanup joining', () => {
       credentials().authority,
       builtRelease,
     );
-    const {
-      tokenizerFactory: builtTokenizer,
-      contentGeneratorFactory: builtContent,
-    } = configureProviderRuntimeFactories(builtConfig, builtManager);
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
       builtMessageBus,
@@ -328,10 +329,8 @@ describe('Session owner cleanup joining', () => {
       credentials().authority,
       builtRelease,
     );
-    const {
-      tokenizerFactory: builtTokenizer,
-      contentGeneratorFactory: builtContent,
-    } = configureProviderRuntimeFactories(builtConfig, builtManager);
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
     const builtOAuth = acquirePreferredOAuth(
       undefined,
       builtMessageBus,

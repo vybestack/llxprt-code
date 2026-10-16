@@ -23,9 +23,9 @@ import {
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
-  configureProviderRuntimeFactories,
   populateProviderManager,
   NodeFileSystem,
+  configureProviderTokenizer,
 } from '../composition/index.js';
 import {
   createTestProvider,
@@ -158,8 +158,7 @@ describe('logout ownership', () => {
         firstManager,
         firstOauth,
         firstConfig.getSessionId(),
-        configureProviderRuntimeFactories(firstConfig, firstManager)
-          .tokenizerFactory,
+        configureProviderTokenizer(firstManager),
         undefined,
       );
   }
@@ -285,8 +284,7 @@ describe('logout ownership', () => {
         secondManager,
         secondOauth,
         secondConfig.getSessionId(),
-        configureProviderRuntimeFactories(secondConfig, secondManager)
-          .tokenizerFactory,
+        configureProviderTokenizer(secondManager),
         undefined,
       );
   }

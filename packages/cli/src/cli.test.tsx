@@ -6,7 +6,7 @@
 import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createProviderSessionCapabilities as preflightCapabilities } from './integration-tests/__tests__/session-client-owner-fixture.js';
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
@@ -247,7 +247,7 @@ function makeInteractiveConfig(
   };
   manager.registerProvider(provider);
   manager.setActiveProvider('gemini');
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   interactiveConfigs.push(config);
   return { config, manager };
 }

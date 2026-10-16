@@ -100,7 +100,10 @@ import type {
   CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
 import {
@@ -359,12 +362,14 @@ function finishAdoptionAssembly(
   authority: CredentialAuthority,
 ): Promise<Agent> {
   const preflight = options.activationPreflight?.operation;
-  const { tokenizerFactory, contentGeneratorFactory } =
-    configureProviderRuntimeFactories(options.config, manager, {
-      tokenizerFactory: options.tokenizerFactory ?? preflight?.tokenizerFactory,
-      contentGeneratorFactory:
-        options.contentGeneratorFactory ?? preflight?.contentGeneratorFactory,
-    });
+  const tokenizerFactory = configureProviderTokenizer(
+    manager,
+    options.tokenizerFactory ?? preflight?.tokenizerFactory,
+  );
+  const contentGeneratorFactory =
+    options.contentGeneratorFactory ??
+    preflight?.contentGeneratorFactory ??
+    createRuntimeContentGeneratorFactory();
   const oauth = acquireAdoptedOAuth(
     options.oauthManager ?? preflight?.oauthManager,
     options.tokenStore,
@@ -609,7 +614,6 @@ export class PreferredAgentAssembly {
     let manager: ProviderManager;
     let oauth: OAuthManager;
     let tokenizerFactory: RuntimeTokenizerFactory;
-    let contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
     try {
       settings =
         this.sessionOverrides === undefined
@@ -638,11 +642,12 @@ export class PreferredAgentAssembly {
         this.authority,
         release,
       );
-      ({ tokenizerFactory, contentGeneratorFactory } =
-        configureProviderRuntimeFactories(this.config, manager, {
-          tokenizerFactory: this.tokenizerSelection,
-          contentGeneratorFactory: this.contentSelection,
-        }));
+      tokenizerFactory = configureProviderTokenizer(
+        manager,
+        this.tokenizerSelection,
+      );
+      this.contentGeneratorFactory =
+        this.contentSelection ?? createRuntimeContentGeneratorFactory();
       oauth = acquirePreferredOAuth(
         this.suppliedStore,
         this.messageBus,
@@ -671,7 +676,6 @@ export class PreferredAgentAssembly {
       this.manager = manager;
       this.oauth = oauth;
       this.tokenizerFactory = tokenizerFactory;
-      this.contentGeneratorFactory = contentGeneratorFactory;
       this.release = release;
     } catch (primary) {
       await rejectPreferredAcquisition(

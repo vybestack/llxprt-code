@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -276,13 +279,8 @@ describe('enabled extension joint root shutdown', () => {
       firstCredentials().authority,
       firstCallerRelease,
     );
-    const {
-      tokenizerFactory: firstCallerTokenizer,
-      contentGeneratorFactory: firstCallerContent,
-    } = configureProviderRuntimeFactories(
-      firstCallerConfig,
-      firstCallerManager,
-    );
+    const firstCallerTokenizer = configureProviderTokenizer(firstCallerManager);
+    const firstCallerContent = createRuntimeContentGeneratorFactory();
     const firstCallerOAuth = acquirePreferredOAuth(
       undefined,
       firstCallerPolicy.session.messageBus,
@@ -453,13 +451,9 @@ describe('enabled extension joint root shutdown', () => {
       secondCredentials().authority,
       secondCallerRelease,
     );
-    const {
-      tokenizerFactory: secondCallerTokenizer,
-      contentGeneratorFactory: secondCallerContent,
-    } = configureProviderRuntimeFactories(
-      secondCallerConfig,
-      secondCallerManager,
-    );
+    const secondCallerTokenizer =
+      configureProviderTokenizer(secondCallerManager);
+    const secondCallerContent = createRuntimeContentGeneratorFactory();
     const secondCallerOAuth = acquirePreferredOAuth(
       undefined,
       secondCallerPolicy.session.messageBus,

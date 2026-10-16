@@ -232,6 +232,7 @@ export function observeZedConfigOptions(
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   onError: (error: unknown) => void,
   subscribeModelChanges: SubscribeModelChanges,
+  joinRefresh: (refresh: () => Promise<void>) => Promise<void>,
 ): () => void {
   let stopped = false;
   let running = false;
@@ -243,7 +244,7 @@ export function observeZedConfigOptions(
     // one additional pass instead of starting concurrent snapshots.
     if (running) return;
     running = true;
-    void runRefreshLoop();
+    void joinRefresh(runRefreshLoop).catch(onError);
   };
 
   async function runRefreshLoop(): Promise<void> {
@@ -266,9 +267,22 @@ export function observeZedConfigOptions(
   const releaseModelChanges = subscribeModelChanges(refresh);
   coreEvents.on(CoreEvent.SettingsChanged, refresh);
   return () => {
+    if (stopped) return;
     stopped = true;
-    releaseModelChanges();
-    coreEvents.off(CoreEvent.SettingsChanged, refresh);
+    const failures: unknown[] = [];
+    try {
+      releaseModelChanges();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      coreEvents.off(CoreEvent.SettingsChanged, refresh);
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'ACP config observer release failed');
   };
 }
 

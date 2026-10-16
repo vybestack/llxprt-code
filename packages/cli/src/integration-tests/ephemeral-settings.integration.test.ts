@@ -1,5 +1,5 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -142,7 +142,7 @@ describe('Ephemeral Settings Integration Tests', () => {
         settingsService,
         config,
       );
-      configureProviderRuntimeFactories(config, providerManager);
+      configureProviderTokenizer(providerManager);
 
       // Set custom headers via ephemeral settings
       const customHeaders = {
@@ -179,7 +179,7 @@ describe('Ephemeral Settings Integration Tests', () => {
         settingsService,
         config,
       );
-      configureProviderRuntimeFactories(config, providerManager);
+      configureProviderTokenizer(providerManager);
 
       // Get ephemeral settings - streaming should not be set initially
       const ephemeralSettings = sessionRoot.getEphemeralSettings();

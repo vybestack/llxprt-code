@@ -2,7 +2,7 @@ import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookE
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -86,7 +86,7 @@ describe('ChatSession runtime context', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {

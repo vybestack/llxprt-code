@@ -1,5 +1,5 @@
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -86,7 +86,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {

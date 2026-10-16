@@ -32,33 +32,57 @@ export class PhysicalTerminalPeer {
   private serial = 0;
   private acquisitionGate: ReturnType<typeof deferred<void>> | undefined;
   private acquired = deferred<void>();
+  private updateGate: ReturnType<typeof deferred<void>> | undefined;
+  private updated = deferred<void>();
   private closeClient!: () => void;
   private closeAgent!: () => void;
   private closing: Promise<void> | undefined;
   failKill = false;
   failRelease = false;
+  updateFailure: { readonly reason: unknown } | undefined;
 
   constructor() {
     let clientInput!: ReadableStreamDefaultController<Uint8Array>;
     let agentInput!: ReadableStreamDefaultController<Uint8Array>;
+    let clientClosed = false;
+    let agentClosed = false;
     const clientReadable = new ReadableStream<Uint8Array>({
       start: (controller) => {
         clientInput = controller;
+      },
+      cancel: () => {
+        clientClosed = true;
       },
     });
     const agentReadable = new ReadableStream<Uint8Array>({
       start: (controller) => {
         agentInput = controller;
       },
+      cancel: () => {
+        agentClosed = true;
+      },
     });
     const toClient = new WritableStream<Uint8Array>({
-      write: (chunk) => clientInput.enqueue(chunk),
+      write: async (chunk) => {
+        clientInput.enqueue(chunk);
+        await this.waitForUpdateDelivery(chunk);
+      },
     });
     const toAgent = new WritableStream<Uint8Array>({
       write: (chunk) => agentInput.enqueue(chunk),
     });
-    this.closeClient = () => clientInput.close();
-    this.closeAgent = () => agentInput.close();
+    this.closeClient = () => {
+      if (!clientClosed) {
+        clientClosed = true;
+        clientInput.close();
+      }
+    };
+    this.closeAgent = () => {
+      if (!agentClosed) {
+        agentClosed = true;
+        agentInput.close();
+      }
+    };
     this.client = new acp.ClientSideConnection(
       () => ({
         requestPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
@@ -70,30 +94,8 @@ export class PhysicalTerminalPeer {
         },
         waitForTerminalExit: ({ terminalId }) =>
           this.require(terminalId).exited,
-        killTerminal: async ({ terminalId }) => {
-          const terminal = this.require(terminalId);
-          terminal.killed++;
-          await this.stop(terminal);
-          if (this.failKill)
-            throw new acp.RequestError(
-              -32001,
-              'physical peer kill response failed',
-              { phase: 'kill' },
-            );
-          return {};
-        },
-        releaseTerminal: async ({ terminalId }) => {
-          const terminal = this.require(terminalId);
-          terminal.released++;
-          await this.stop(terminal);
-          if (this.failRelease)
-            throw new acp.RequestError(
-              -32002,
-              'physical peer release response failed',
-              { phase: 'release' },
-            );
-          return {};
-        },
+        killTerminal: ({ terminalId }) => this.killTerminal(terminalId),
+        releaseTerminal: ({ terminalId }) => this.releaseTerminal(terminalId),
       }),
       acp.ndJsonStream(toAgent, clientReadable),
     );
@@ -112,11 +114,61 @@ export class PhysicalTerminalPeer {
     );
   }
 
+  private async killTerminal(id: string): Promise<acp.KillTerminalResponse> {
+    const terminal = this.require(id);
+    terminal.killed++;
+    await this.stop(terminal);
+    if (this.failKill)
+      throw new acp.RequestError(-32001, 'physical peer kill response failed', {
+        phase: 'kill',
+      });
+    return {};
+  }
+  private async releaseTerminal(
+    id: string,
+  ): Promise<acp.ReleaseTerminalResponse> {
+    const terminal = this.require(id);
+    terminal.released++;
+    await this.stop(terminal);
+    if (this.failRelease)
+      throw new acp.RequestError(
+        -32002,
+        'physical peer release response failed',
+        { phase: 'release' },
+      );
+    return {};
+  }
+
   async initialize(): Promise<void> {
     await this.client.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
       clientCapabilities: { terminal: true },
     });
+  }
+
+  private async waitForUpdateDelivery(chunk: Uint8Array): Promise<void> {
+    const message: unknown = JSON.parse(new TextDecoder().decode(chunk));
+    if (
+      typeof message === 'object' &&
+      message !== null &&
+      'method' in message &&
+      message.method === 'session/update'
+    ) {
+      this.updated.resolve();
+      await this.updateGate?.promise;
+      if (this.updateFailure !== undefined) throw this.updateFailure.reason;
+    }
+  }
+
+  holdUpdates(): void {
+    this.updateGate = deferred<void>();
+    this.updated = deferred<void>();
+  }
+  whenUpdated(): Promise<void> {
+    return this.updated.promise;
+  }
+  releaseUpdates(): void {
+    this.updateGate?.resolve();
   }
 
   holdAcquisition(): void {
@@ -228,6 +280,7 @@ export class PhysicalTerminalPeer {
 
   private async close(): Promise<void> {
     this.releaseAcquisition();
+    this.releaseUpdates();
     const failures: unknown[] = [];
     for (const terminal of this.terminals.values()) {
       try {

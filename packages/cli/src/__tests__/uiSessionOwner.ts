@@ -30,7 +30,10 @@ import {
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { buildAgentClientFactory } from '../../../agents/src/api/agentBootstrap.js';
 import { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
@@ -234,7 +237,8 @@ async function assembleUiInfrastructure(
       throw new Error('UI fixture has no resource transport');
     },
   );
-  const factories = configureProviderRuntimeFactories(config, manager);
+  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesContent = createRuntimeContentGeneratorFactory();
   const sessionClient = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settingsService),
@@ -244,8 +248,8 @@ async function assembleUiInfrastructure(
     () => undefined,
     filesystem.paths,
     settings,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
+    factoriesContent,
+    factoriesTokenizer,
   );
   const hookBus = new MessageBus();
   sessionClient.bindHooks(undefined, hookBus, trust);

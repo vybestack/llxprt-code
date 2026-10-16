@@ -1,5 +1,5 @@
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -118,8 +118,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager);
+      const promptEstimator = configureProviderTokenizer(localManager);
 
       const provider: IProvider = {
         name: 'stub',
@@ -191,8 +190,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager);
+      const promptEstimator = configureProviderTokenizer(localManager);
 
       const provider: IProvider = {
         name: 'stub',
@@ -262,22 +260,19 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager, {
-          tokenizerFactory: {
-            getTokenizer: () => undefined,
-            async estimatePrompt(request) {
-              return {
-                count: await request.legacyEstimate(),
-                method: 'calibrated',
-                family: 'legacy-unregistered',
-                estimatorVersion: 'core-estimate-tokens-v1',
-                assetRevision: 'none',
-                projectionRevision: request.projectionRevision,
-              };
-            },
-          },
-        });
+      const promptEstimator = configureProviderTokenizer(localManager, {
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
       let transports = 0;
       let pendingReads = 0;
       let firstTransportSignal: AbortSignal | undefined;
@@ -444,22 +439,19 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      const { tokenizerFactory: promptEstimator } =
-        configureProviderRuntimeFactories(localConfig, localManager, {
-          tokenizerFactory: {
-            getTokenizer: () => undefined,
-            async estimatePrompt(request) {
-              return {
-                count: await request.legacyEstimate(),
-                method: 'calibrated',
-                family: 'legacy-unregistered',
-                estimatorVersion: 'core-estimate-tokens-v1',
-                assetRevision: 'none',
-                projectionRevision: request.projectionRevision,
-              };
-            },
-          },
-        });
+      const promptEstimator = configureProviderTokenizer(localManager, {
+        getTokenizer: () => undefined,
+        async estimatePrompt(request) {
+          return {
+            count: await request.legacyEstimate(),
+            method: 'calibrated',
+            family: 'legacy-unregistered',
+            estimatorVersion: 'core-estimate-tokens-v1',
+            assetRevision: 'none',
+            projectionRevision: request.projectionRevision,
+          };
+        },
+      });
 
       const capturedSignals: AbortSignal[] = [];
       const pendingReadsBySession: Record<string, number> = {};

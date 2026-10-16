@@ -46,7 +46,10 @@ import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contra
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { prepareAgentPreflight } from '@vybestack/llxprt-code-agents';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { bindAutoPromptOperation } from '../commands/subagentCommandHost.js';
@@ -93,7 +96,8 @@ async function owner(
     }),
   );
   manager.registerProvider(provider);
-  const factories = configureProviderRuntimeFactories(config, manager);
+  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesContent = createRuntimeContentGeneratorFactory();
   const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
   const settingsOwner = new SessionSettingsOwner(settings);
   settingsOwner.bindTelemetry(config);
@@ -122,8 +126,8 @@ async function owner(
     () => undefined,
     fixturePaths(),
     settingsOwner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
+    factoriesContent,
+    factoriesTokenizer,
   );
   if (fixtureFilesystem === undefined)
     throw new Error('Missing fixture filesystem');

@@ -1,6 +1,6 @@
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -58,7 +58,7 @@ function buildConversationManager(model: string): {
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider: IProvider = {
     name: 'stub',

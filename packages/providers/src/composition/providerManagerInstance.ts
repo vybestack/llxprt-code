@@ -55,40 +55,20 @@ export { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 
-function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorFactory<ContentGenerator> {
+export function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorFactory<ContentGenerator> {
   return {
     createContentGenerator: () => new ProviderContentGenerator(),
   };
 }
 
-/**
- * @plan:PLAN-20260603-ISSUE1584.P16a
- * @requirement:REQ-DEP-001
- */
-export function configureProviderRuntimeFactories(
-  _config: Config,
+export function configureProviderTokenizer(
   manager: RuntimeProviderManager,
-  supplied: {
-    readonly tokenizerFactory?: RuntimeTokenizerFactory;
-    readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
-  } = {},
-): {
-  readonly tokenizerFactory: RuntimeTokenizerFactory;
-  readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
-} {
-  const installedTokenizerFactory = manager.getTokenizerFactory?.();
-  const tokenizerFactory =
-    supplied.tokenizerFactory ??
-    installedTokenizerFactory ??
-    createRuntimeTokenizerFactory();
-  if (tokenizerFactory !== installedTokenizerFactory)
-    manager.setTokenizerFactory?.(tokenizerFactory);
-  return {
-    tokenizerFactory,
-    contentGeneratorFactory:
-      supplied.contentGeneratorFactory ??
-      createRuntimeContentGeneratorFactory(),
-  };
+  supplied: RuntimeTokenizerFactory | undefined = undefined,
+): RuntimeTokenizerFactory {
+  const installed = manager.getTokenizerFactory?.();
+  const selected = supplied ?? installed ?? createRuntimeTokenizerFactory();
+  if (selected !== installed) manager.setTokenizerFactory?.(selected);
+  return selected;
 }
 
 /**
@@ -476,7 +456,7 @@ function tryActivateFakeProvider(
   }
   if (config) {
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   }
   const fakeProvider = new FakeProvider(fakeResponsesPath, process.cwd());
   manager.registerProvider(fakeProvider);
@@ -546,7 +526,7 @@ export function populateProviderManager(
 
   if (config) {
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(settings, user);

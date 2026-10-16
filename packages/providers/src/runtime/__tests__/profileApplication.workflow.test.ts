@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -275,7 +275,7 @@ describe('Profile cascade workflow at the owner', () => {
   });
 
   it('rejects a missing model when neither the provider nor config supplies a default', async () => {
-    const { config, settings, store, providers } = owner();
+    const { settings, store, providers } = owner();
     const provider = providers.get('anthropic');
     if (!provider) throw new Error('Missing fixture provider');
     provider.name = 'no-default';
@@ -289,7 +289,7 @@ describe('Profile cascade workflow at the owner', () => {
     );
     manager.registerProvider(provider);
     manager.setActiveProvider('no-default');
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     settings.set('activeProvider', 'no-default');
     owner().settingsOwner.chooseModel('');
     await expect(

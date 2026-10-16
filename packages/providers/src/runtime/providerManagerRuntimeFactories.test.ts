@@ -22,7 +22,10 @@ import {
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '../composition/index.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '../composition/index.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { ModelPromptEstimatorError } from '../tokenizers/ModelPromptEstimatorError.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
@@ -87,7 +90,7 @@ function createEncodeFailingLoader(encodeFailure: Error): TiktokenModuleLoader {
   };
 }
 
-describe('configureProviderRuntimeFactories', () => {
+describe('individually owned provider factories', () => {
   const credentials = useOwnedCredentials();
   const retiring: Array<() => void | Promise<void>> = [];
   let callerConfig: Config;
@@ -157,10 +160,7 @@ describe('configureProviderRuntimeFactories', () => {
         release,
         undefined,
       );
-      callerTokenizer = configureProviderRuntimeFactories(
-        callerConfig,
-        callerManager,
-      ).tokenizerFactory;
+      callerTokenizer = configureProviderTokenizer(callerManager);
       await settingsOwner.startTelemetry(callerConfig);
       callerManager.setRuntimeContext(
         createProviderRuntimeContext({
@@ -188,18 +188,43 @@ describe('configureProviderRuntimeFactories', () => {
    * @plan:PLAN-20260603-ISSUE1584.P16a
    * @requirement:REQ-DEP-001
    */
+  it('binds only the selected tokenizer and acquires independent content generators', async () => {
+    await openCaller('independent-factory-owners', 'gpt-5.6-sol', {});
+    const installed = callerTokenizer;
+    expect(configureProviderTokenizer(callerManager)).toBe(installed);
+    const selected = createRuntimeTokenizerFactory();
+    expect(configureProviderTokenizer(callerManager, selected)).toBe(selected);
+    expect(callerManager.getTokenizerFactory()).toBe(selected);
+    expect(configureProviderTokenizer(callerManager)).toBe(selected);
+    const prepare = requirePrepareTokenizer(selected);
+    await prepare('openai', 'gpt-5.6-sol');
+    const tokenizer = selected.getTokenizer('openai', 'gpt-5.6-sol');
+    expect(
+      await tokenizer?.countTokens(
+        'The quick brown fox jumps over the lazy dog.',
+      ),
+    ).toBe(10);
+    const firstFactory = createRuntimeContentGeneratorFactory();
+    const secondFactory = createRuntimeContentGeneratorFactory();
+    expect(firstFactory).not.toBe(secondFactory);
+    const first = firstFactory.createContentGenerator();
+    const second = secondFactory.createContentGenerator();
+    expect(first).toBeInstanceOf(ProviderContentGenerator);
+    expect(second).toBeInstanceOf(ProviderContentGenerator);
+    expect(first).not.toBe(second);
+  });
+
   it('injects providers-backed content generator and tokenizer factories into CLI config', async () => {
     await openCaller('provider-runtime-factory-injection', 'gpt-4.1', {
       source: 'issue1584-p16a',
     });
 
-    const config = callerConfig;
     const manager = callerManager;
 
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
 
-    const { contentGeneratorFactory, tokenizerFactory } =
-      configureProviderRuntimeFactories(config, manager);
+    const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
+    const tokenizerFactory = configureProviderTokenizer(manager);
 
     expect(contentGeneratorFactory).toBeDefined();
     expect(tokenizerFactory).toBeDefined();
@@ -244,8 +269,7 @@ describe('configureProviderRuntimeFactories', () => {
       source: 'issue2835',
     });
 
-    const config = callerConfig;
-    configureProviderRuntimeFactories(config, callerManager);
+    configureProviderTokenizer(callerManager);
     const tokenizerFactory = callerTokenizer;
     expect(tokenizerFactory).toBeDefined();
 
@@ -305,12 +329,11 @@ describe('configureProviderRuntimeFactories', () => {
       {},
     );
 
-    const config = callerConfig;
     const injectedFactory = createRuntimeTokenizerFactory();
     callerManager.setTokenizerFactory(injectedFactory);
 
     try {
-      configureProviderRuntimeFactories(config, callerManager);
+      configureProviderTokenizer(callerManager);
 
       expect(callerManager.getTokenizerFactory()).toBe(injectedFactory);
     } finally {

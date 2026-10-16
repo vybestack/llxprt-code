@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -104,13 +107,11 @@ describe('workspace catalog ownership through public Agent operations', () => {
 
   let fixtureCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
 
-  let fixtureCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let fixtureCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
 
   let fixtureCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openfixtureCaller(
     fixture: string,
@@ -257,12 +258,10 @@ describe('workspace catalog ownership through public Agent operations', () => {
       fixtureCredentials().authority,
       fixtureCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      fixtureCallerConfig,
-      fixtureCallerManager,
-    );
-    fixtureCallerTokenizer = factories.tokenizerFactory;
-    fixtureCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(fixtureCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    fixtureCallerTokenizer = factoriesTokenizer;
+    fixtureCallerContent = factoriesContent;
     fixtureCallerOAuth = acquirePreferredOAuth(
       undefined,
       fixtureCallerPolicy.session.messageBus,

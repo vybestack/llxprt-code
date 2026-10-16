@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderManager, ProviderFileLifecycle } from './index.js';
-import { configureProviderRuntimeFactories } from './composition/index.js';
+import { configureProviderTokenizer } from './composition/index.js';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { acquirePreferredProviderManager } from '../../agents/src/api/preferred-provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
@@ -80,7 +80,7 @@ describe('retry runtime kind', () => {
         credentials().authority,
         release,
       );
-      configureProviderRuntimeFactories(config, manager);
+      configureProviderTokenizer(manager);
       manager.setRuntimeContext(
         createProviderRuntimeContext({
           runtimeId,

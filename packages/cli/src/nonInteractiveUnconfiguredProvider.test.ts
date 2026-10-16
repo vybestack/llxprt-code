@@ -1,7 +1,7 @@
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -163,7 +163,7 @@ function configureProvider(
   manager.registerProvider(provider);
   manager.setActiveProvider(name);
   runtimeSettings.owner.initializeProviderSelection(name, PLACEHOLDER_MODEL);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   return manager;
 }
 

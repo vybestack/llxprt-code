@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -136,10 +139,8 @@ describe('UI session client ownership', () => {
       credentials().authority,
       fixtureRelease,
     );
-    const {
-      tokenizerFactory: fixtureTokenizer,
-      contentGeneratorFactory: fixtureContent,
-    } = configureProviderRuntimeFactories(fixtureConfig, fixtureManager);
+    const fixtureTokenizer = configureProviderTokenizer(fixtureManager);
+    const fixtureContent = createRuntimeContentGeneratorFactory();
     const fixtureOAuth = acquirePreferredOAuth(
       undefined,
       fixtureMessageBus,
@@ -379,10 +380,8 @@ describe('UI session client ownership', () => {
       credentials().authority,
       fixtureRelease,
     );
-    const {
-      tokenizerFactory: fixtureTokenizer,
-      contentGeneratorFactory: fixtureContent,
-    } = configureProviderRuntimeFactories(fixtureConfig, fixtureManager);
+    const fixtureTokenizer = configureProviderTokenizer(fixtureManager);
+    const fixtureContent = createRuntimeContentGeneratorFactory();
     const fixtureOAuth = acquirePreferredOAuth(
       undefined,
       fixtureMessageBus,
@@ -581,10 +580,8 @@ describe('UI session client ownership', () => {
       credentials().authority,
       fixtureRelease,
     );
-    const {
-      tokenizerFactory: fixtureTokenizer,
-      contentGeneratorFactory: fixtureContent,
-    } = configureProviderRuntimeFactories(fixtureConfig, fixtureManager);
+    const fixtureTokenizer = configureProviderTokenizer(fixtureManager);
+    const fixtureContent = createRuntimeContentGeneratorFactory();
     const fixtureOAuth = acquirePreferredOAuth(
       undefined,
       fixtureMessageBus,

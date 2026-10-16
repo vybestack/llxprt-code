@@ -11,7 +11,10 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../api/__tests__/helpers/owned-credential-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -66,8 +69,8 @@ describe('explicit child runtime loader inputs', () => {
       credentials().authority,
       settingsOwner,
     );
-    const { tokenizerFactory, contentGeneratorFactory } =
-      configureProviderRuntimeFactories(config, manager);
+    const tokenizerFactory = configureProviderTokenizer(manager);
+    const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const state = createAgentRuntimeState({
       runtimeId: 'explicit-child',
       sessionId: 'child-session',

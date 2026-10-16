@@ -9,7 +9,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -274,13 +277,8 @@ describe('filesystem workspace extension ownership', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const {
-      tokenizerFactory: builtCallerTokenizer,
-      contentGeneratorFactory: builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
+    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerContent = createRuntimeContentGeneratorFactory();
     const builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,

@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -120,10 +123,8 @@ describe('Explicit session client lifetime', () => {
       credentials().authority,
       leftRelease,
     );
-    const {
-      tokenizerFactory: leftTokenizer,
-      contentGeneratorFactory: leftContent,
-    } = configureProviderRuntimeFactories(leftConfig, leftManager);
+    const leftTokenizer = configureProviderTokenizer(leftManager);
+    const leftContent = createRuntimeContentGeneratorFactory();
     const leftOAuth = acquirePreferredOAuth(
       undefined,
       leftMessageBus,
@@ -254,10 +255,8 @@ describe('Explicit session client lifetime', () => {
       credentials().authority,
       rightRelease,
     );
-    const {
-      tokenizerFactory: rightTokenizer,
-      contentGeneratorFactory: rightContent,
-    } = configureProviderRuntimeFactories(rightConfig, rightManager);
+    const rightTokenizer = configureProviderTokenizer(rightManager);
+    const rightContent = createRuntimeContentGeneratorFactory();
     const rightOAuth = acquirePreferredOAuth(
       undefined,
       rightMessageBus,

@@ -16,7 +16,10 @@ import { readdir } from 'node:fs/promises';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -214,13 +217,8 @@ describe('fromConfig admission before resource effects', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const {
-      tokenizerFactory: builtCallerTokenizer,
-      contentGeneratorFactory: builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
+    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerContent = createRuntimeContentGeneratorFactory();
     const builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,

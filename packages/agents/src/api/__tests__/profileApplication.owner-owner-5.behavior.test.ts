@@ -12,8 +12,9 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
-  configureProviderRuntimeFactories,
   writeProviderAliasConfig,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -256,13 +257,9 @@ describe('public profile application ownership outside ALS', () => {
       builtCredentials().authority,
       a_builtCallerRelease,
     );
-    const {
-      tokenizerFactory: a_builtCallerTokenizer,
-      contentGeneratorFactory: a_builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      a_builtCallerConfig,
-      a_builtCallerManager,
-    );
+    const a_builtCallerTokenizer =
+      configureProviderTokenizer(a_builtCallerManager);
+    const a_builtCallerContent = createRuntimeContentGeneratorFactory();
     const a_builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       a_builtCallerPolicy.session.messageBus,
@@ -464,13 +461,9 @@ describe('public profile application ownership outside ALS', () => {
       builtCredentials().authority,
       b_builtCallerRelease,
     );
-    const {
-      tokenizerFactory: b_builtCallerTokenizer,
-      contentGeneratorFactory: b_builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      b_builtCallerConfig,
-      b_builtCallerManager,
-    );
+    const b_builtCallerTokenizer =
+      configureProviderTokenizer(b_builtCallerManager);
+    const b_builtCallerContent = createRuntimeContentGeneratorFactory();
     const b_builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       b_builtCallerPolicy.session.messageBus,

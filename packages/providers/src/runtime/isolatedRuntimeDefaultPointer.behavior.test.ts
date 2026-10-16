@@ -21,7 +21,7 @@ import {
 } from '../../../agents/src/core/subagent-cleanup.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { configureProviderTokenizer } from '../composition/index.js';
 import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 import { activateAdoptedProviders } from '../../../agents/src/api/adopted-provider-assembly.js';
 /**
@@ -128,8 +128,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       foregroundManager,
       foregroundOauth,
       foregroundConfig.getSessionId(),
-      configureProviderRuntimeFactories(foregroundConfig, foregroundManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(foregroundManager),
       undefined,
     );
   }
@@ -226,8 +225,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       firstManager,
       firstOauth,
       firstConfig.getSessionId(),
-      configureProviderRuntimeFactories(firstConfig, firstManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(firstManager),
       undefined,
     );
   }
@@ -327,8 +325,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       secondManager,
       secondOauth,
       secondConfig.getSessionId(),
-      configureProviderRuntimeFactories(secondConfig, secondManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(secondManager),
       undefined,
     );
   }
@@ -348,8 +345,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
           firstOauth,
           'same-label',
           true,
-          configureProviderRuntimeFactories(firstConfig, firstManager)
-            .tokenizerFactory,
+          configureProviderTokenizer(firstManager),
         );
       else await activateFirst();
       expect(

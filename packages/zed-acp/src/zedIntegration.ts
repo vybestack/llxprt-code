@@ -35,6 +35,7 @@ import {
 } from './zed-session-agent.js';
 import { resolveSessionTargetDir } from './zed-session-config.js';
 import { SessionLifecycle } from './zed-session-lifecycle.js';
+import { rethrowZedSessionFailure } from './zed-session-errors.js';
 import {
   hasRecordedSessionFile,
   nodeChatSessionFileLister,
@@ -62,6 +63,9 @@ export { parseZedAuthMethodId } from './zed-helpers.js';
 
 export class ZedAgent {
   private sessions: Map<string, Session> = new Map();
+  private closing: Promise<void> | undefined;
+  private readonly acceptedWork = new Set<Promise<void>>();
+  private readonly unpublishedSessions = new Set<Session>();
   private clientCapabilities: ClientCapabilitiesWithSession | undefined;
   private readonly logger = new DebugLogger('llxprt:zed-integration');
   private readonly lifecycle: SessionLifecycle;
@@ -90,39 +94,40 @@ export class ZedAgent {
       (session) => zedSessionConfigOptions(this.clientCapabilities, session),
     );
   }
-  async initialize(
-    args: acp.InitializeRequest,
-  ): Promise<acp.InitializeResponse> {
-    this.clientCapabilities = args.clientCapabilities as
-      | ClientCapabilitiesWithSession
-      | undefined;
-    return initializeZedAgent(this.definitions);
+  initialize(args: acp.InitializeRequest): Promise<acp.InitializeResponse> {
+    return this.admitWork(() => {
+      this.clientCapabilities = args.clientCapabilities as
+        | ClientCapabilitiesWithSession
+        | undefined;
+      return initializeZedAgent(this.definitions);
+    });
   }
   listSessions(
     params: acp.ListSessionsRequest,
   ): Promise<acp.ListSessionsResponse> {
-    return this.lifecycle.list(params);
+    return this.admitWork(() => this.lifecycle.list(params));
   }
   authenticate({ methodId }: acp.AuthenticateRequest): Promise<void> {
-    return authenticateZedAgent(this.definitions, methodId, this.application);
+    return this.admitWork(() =>
+      authenticateZedAgent(this.definitions, methodId, this.application),
+    );
   }
   private reportRecordingFailure(sessionId: string, error: unknown): void {
     this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`);
   }
-  async newSession(
-    params: acp.NewSessionRequest,
-  ): Promise<acp.NewSessionResponse> {
+  newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
+    return this.admitWork(() => this.openSession(params));
+  }
+  private async openSession({
+    cwd,
+  }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
       const settingsSource = this.createSessionSettings();
-      const terminals = this.createTerminals(
-        sessionId,
-        params.cwd,
-        settingsSource,
-      );
+      const terminals = this.createTerminals(sessionId, cwd, settingsSource);
       const agent = await this.buildSessionAgent(
         sessionId,
-        params.cwd,
+        cwd,
         settingsSource,
         terminals,
       );
@@ -172,10 +177,12 @@ export class ZedAgent {
           this.supportsConfigOptions(),
           terminals,
         );
-      } catch (error) {
-        await agent.dispose().catch(() => undefined);
-        await terminals?.dispose().catch(() => undefined);
-        throw error;
+      } catch (primary) {
+        return await this.releaseFailedConstruction(
+          primary,
+          () => agent.dispose(),
+          () => terminals?.dispose(),
+        );
       }
       return await this.publishNewSession(
         session,
@@ -196,11 +203,15 @@ export class ZedAgent {
     listModels: Agent['listAvailableModels'],
     readSetting: Agent['getEphemeralSetting'],
   ): Promise<acp.NewSessionResponse> {
+    this.unpublishedSessions.add(session);
+    if (this.closing !== undefined) {
+      await this.releaseSession(session);
+      this.assertOpen();
+    }
     try {
       await session.sendAvailableCommands();
-    } catch (error) {
-      await session.dispose();
-      throw error;
+    } catch (primary) {
+      return this.rejectSession(sessionId, session, primary);
     }
     let configOptions: acp.NewSessionResponse['configOptions'];
     try {
@@ -210,10 +221,14 @@ export class ZedAgent {
         listModels,
         readSetting,
       ));
-    } catch (error) {
-      await session.dispose();
-      throw error;
+    } catch (primary) {
+      return this.rejectSession(sessionId, session, primary);
     }
+    if (this.closing !== undefined) {
+      await this.releaseSession(session);
+      this.assertOpen();
+    }
+    this.unpublishedSessions.delete(session);
     this.sessions.set(sessionId, session);
     return {
       sessionId,
@@ -224,7 +239,7 @@ export class ZedAgent {
   resumeSession(
     params: acp.ResumeSessionRequest,
   ): Promise<acp.ResumeSessionResponse> {
-    return this.lifecycle.resume(params);
+    return this.admitWork(() => this.lifecycle.resume(params));
   }
   private supportsConfigOptions(): boolean {
     return this.clientCapabilities?.session?.configOptions === true;
@@ -232,8 +247,10 @@ export class ZedAgent {
   async loadSession(
     params: acp.LoadSessionRequest,
   ): Promise<acp.LoadSessionResponse> {
-    return this.lifecycle.runSerialized(params.sessionId, () =>
-      this.performLoadSession(params),
+    return this.admitWork(() =>
+      this.lifecycle.runSerialized(params.sessionId, () =>
+        this.performLoadSession(params),
+      ),
     );
   }
   private async performLoadSession(
@@ -245,8 +262,7 @@ export class ZedAgent {
       try {
         await reattached.sendAvailableCommands();
       } catch (error) {
-        await this.rollbackSession(sessionId, reattached);
-        throw error;
+        return this.rejectSession(sessionId, reattached, error);
       }
       try {
         return {
@@ -257,22 +273,20 @@ export class ZedAgent {
           )),
         };
       } catch (error) {
-        await this.rollbackSession(sessionId, reattached);
-        throw error;
+        return this.rejectSession(sessionId, reattached, error);
       }
     }
     await this.disposePriorSession(sessionId);
     const session = await this.installResumedSession(sessionId, params.cwd);
     try {
       await session.sendAvailableCommands();
+      return {
+        modes: buildSessionModes(session.getApprovalMode()),
+        ...(await zedSessionConfigOptions(this.clientCapabilities, session)),
+      };
     } catch (error) {
-      await this.rollbackSession(sessionId, session);
-      throw error;
+      return this.rejectSession(sessionId, session, error);
     }
-    return {
-      modes: buildSessionModes(session.getApprovalMode()),
-      ...(await zedSessionConfigOptions(this.clientCapabilities, session)),
-    };
   }
   private async tryReattachLiveSession(
     sessionId: string,
@@ -296,8 +310,7 @@ export class ZedAgent {
       await existing.replayLiveHistory();
       return existing;
     } catch (error) {
-      await this.rollbackSession(sessionId, existing);
-      throw error;
+      return this.rejectSession(sessionId, existing, error);
     }
   }
   private async rollbackSession(
@@ -305,7 +318,32 @@ export class ZedAgent {
     session: Session,
   ): Promise<void> {
     this.sessions.delete(sessionId);
-    await session.dispose().catch(() => undefined);
+    await this.releaseSession(session);
+  }
+  private async releaseSession(session: Session): Promise<void> {
+    try {
+      await session.dispose();
+    } catch (error) {
+      if (this.closing === undefined) this.unpublishedSessions.delete(session);
+      throw error;
+    }
+    this.unpublishedSessions.delete(session);
+  }
+  private async rejectSession(
+    sessionId: string,
+    session: Session,
+    primary: unknown,
+  ): Promise<never> {
+    this.sessions.delete(sessionId);
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => this.releaseSession(session)),
+    ]);
+    rethrowZedSessionFailure(
+      primary,
+      results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      ),
+    );
   }
   private async disposePriorSession(sessionId: string): Promise<void> {
     const existing = this.sessions.get(sessionId);
@@ -319,13 +357,13 @@ export class ZedAgent {
       sessionId,
       cwd,
     );
+    this.unpublishedSessions.delete(session);
     this.sessions.set(sessionId, session);
     try {
       await session.streamHistory(history);
     } catch (error) {
-      await this.rollbackSession(sessionId, session);
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
-      throw error;
+      return this.rejectSession(sessionId, session, error);
     }
     return session;
   }
@@ -341,14 +379,16 @@ export class ZedAgent {
       settingsSource,
       terminals,
     );
+    let history: readonly IContent[];
+    let session: Session;
     try {
-      const history = await resumeAgentHistory(
+      history = await resumeAgentHistory(
         (id) => agent.session.resume(id),
         sessionId,
         this.config.projectChatsDir,
         this.sessionFileLister,
       );
-      const session = new Session(
+      session = new Session(
         sessionId,
         (input, options) => agent.stream(input, options),
         () => agent.getModel(),
@@ -388,13 +428,36 @@ export class ZedAgent {
         this.supportsConfigOptions(),
         terminals,
       );
-      return { session, history };
-    } catch (error) {
-      await agent.dispose().catch(() => undefined);
-      await terminals?.dispose().catch(() => undefined);
-      this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
-      throw toLoadRequestError(sessionId, error);
+    } catch (primary) {
+      this.logger.debug(() => `loadSession - build/resume failed: ${primary}`);
+      return this.releaseFailedConstruction(
+        toLoadRequestError(sessionId, primary),
+        () => agent.dispose(),
+        () => terminals?.dispose(),
+      );
     }
+    this.unpublishedSessions.add(session);
+    if (this.closing !== undefined) {
+      await this.releaseSession(session);
+      this.assertOpen();
+    }
+    return { session, history };
+  }
+  private async releaseFailedConstruction(
+    primary: unknown,
+    retireAgent: Agent['dispose'],
+    releaseTerminals: () => Promise<void> | undefined,
+  ): Promise<never> {
+    const results = await Promise.allSettled([
+      Promise.resolve().then(retireAgent),
+      Promise.resolve().then(releaseTerminals),
+    ]);
+    rethrowZedSessionFailure(
+      primary,
+      results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      ),
+    );
   }
   private createTerminals(
     sessionId: string,
@@ -448,14 +511,15 @@ export class ZedAgent {
     }
   }
   deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
-    return this.lifecycle.delete(params);
+    return this.admitWork(() => this.lifecycle.delete(params));
   }
   closeSession(params: CloseSessionRequest): Promise<CloseSessionResponse> {
-    return this.lifecycle.close(params);
+    return this.admitWork(() => this.lifecycle.close(params));
   }
   setSessionMode(
     params: acp.SetSessionModeRequest,
   ): Promise<acp.SetSessionModeResponse> {
+    this.assertOpen();
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`);
@@ -463,30 +527,78 @@ export class ZedAgent {
     return Promise.resolve(session.setMode(params.modeId));
   }
   setSessionConfigOption(params: acp.SetSessionConfigOptionRequest) {
-    return this.lifecycle.runSerialized(params.sessionId, () =>
-      dispatchZedConfigOption(this.clientCapabilities, this.sessions, params),
+    return this.admitWork(() =>
+      this.lifecycle.runSerialized(params.sessionId, () =>
+        dispatchZedConfigOption(this.clientCapabilities, this.sessions, params),
+      ),
     );
   }
   async cancel({ sessionId }: acp.CancelNotification): Promise<void> {
+    this.assertOpen();
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
     await session.cancelPendingPrompt();
   }
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
+    this.assertOpen();
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Session not found: ${params.sessionId}`);
     }
     return session.prompt(params);
   }
-  async disposeAll(): Promise<void> {
-    const sessions = [...this.sessions.values()];
+  private assertOpen(): void {
+    if (this.closing !== undefined)
+      throw new Error('ACP workspace is disposed');
+  }
+  private async admitWork<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertOpen();
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.acceptedWork.add(completed);
+    try {
+      return await operation();
+    } finally {
+      this.acceptedWork.delete(completed);
+      complete();
+    }
+  }
+  disposeAll(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
+    let complete!: () => void;
+    let fail!: (reason: unknown) => void;
+    this.closing = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    void this.closeWorkspace().then(complete, fail);
+    return this.closing;
+  }
+  private async closeWorkspace(): Promise<void> {
+    const accepted = [...this.acceptedWork];
+    const sessions = [
+      ...new Set([...this.sessions.values(), ...this.unpublishedSessions]),
+    ];
     this.sessions.clear();
-    const results = await Promise.allSettled(
-      sessions.map((session) => session.dispose()),
+    this.unpublishedSessions.clear();
+    const results = await Promise.allSettled([
+      ...sessions.map((session) => session.dispose()),
+      ...accepted,
+    ]);
+    const lateSessions = [
+      ...new Set([...this.sessions.values(), ...this.unpublishedSessions]),
+    ];
+    this.sessions.clear();
+    this.unpublishedSessions.clear();
+    const late = await Promise.allSettled(
+      lateSessions.map((session) => session.dispose()),
     );
-    const trust = await Promise.allSettled([this.ownedTrust?.dispose()]);
-    const failures = [...results, ...trust].flatMap((result) =>
+    const trust = await Promise.allSettled([
+      Promise.resolve().then(() => this.ownedTrust?.dispose()),
+    ]);
+    const failures = [...results, ...late, ...trust].flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
     if (failures.length > 0)

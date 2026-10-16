@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -288,13 +291,9 @@ describe('workspace skill root lifetime @issue:2615', () => {
         callerCredentials().authority,
         callerCallerRelease,
       );
-      const {
-        tokenizerFactory: callerCallerTokenizer,
-        contentGeneratorFactory: callerCallerContent,
-      } = configureProviderRuntimeFactories(
-        callerCallerConfig,
-        callerCallerManager,
-      );
+      const callerCallerTokenizer =
+        configureProviderTokenizer(callerCallerManager);
+      const callerCallerContent = createRuntimeContentGeneratorFactory();
       const callerCallerOAuth = acquirePreferredOAuth(
         undefined,
         callerCallerPolicy.session.messageBus,
@@ -522,13 +521,8 @@ describe('workspace skill root lifetime @issue:2615', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const {
-      tokenizerFactory: builtCallerTokenizer,
-      contentGeneratorFactory: builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
+    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerContent = createRuntimeContentGeneratorFactory();
     const builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,

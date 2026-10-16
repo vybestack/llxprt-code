@@ -15,7 +15,8 @@
 
 // ─── ProviderManager construction & lifecycle ────────────────────────────────
 export {
-  configureProviderRuntimeFactories,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
   populateProviderManager,
   refreshAliasProviders,
   bindOpenAIAliasIdentity,
