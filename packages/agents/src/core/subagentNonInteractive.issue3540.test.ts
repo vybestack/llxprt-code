@@ -30,7 +30,11 @@ import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
 import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createStatelessRuntimeBundle,
   defaultRunConfig,
 } from './__tests__/subagent-test-helpers.js';
@@ -63,9 +67,17 @@ function stopped(): IContent {
 }
 
 async function runDirectNonInteractive(
+  retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
   responses: readonly IContent[],
 ): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
-  const { config, toolRegistry } = await createMockConfig();
+  const configSettings = seedSubagentSettings();
+  const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
+  const configWorkspace = await acquireSubagentWorkspace(
+    config,
+    retainSubagentCleanup,
+  );
+  const toolRegistry = configWorkspace.toolSelection;
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -135,13 +147,15 @@ async function runDirectNonInteractive(
 }
 
 describe('issue 3540 textual Hermes emitter rejection', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);
   });
 
   it('rejects a Hermes emitter call with a null value without emitting', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({
         emit_variable_name: 'alpha',
         emit_variable_value: null,
@@ -153,7 +167,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   });
 
   it('rejects a Hermes emitter call with missing arguments without emitting', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({ emit_variable_name: 'alpha' }),
     ]);
 
@@ -162,7 +176,7 @@ describe('issue 3540 textual Hermes emitter rejection', () => {
   });
 
   it('still completes GOAL when a later Hermes call is well-formed', async () => {
-    const { output } = await runDirectNonInteractive([
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, [
       hermesEmission({
         emit_variable_name: 'alpha',
         emit_variable_value: null,

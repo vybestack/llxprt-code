@@ -1,3 +1,5 @@
+import { WorkspaceToolCatalogOwner } from '@vybestack/llxprt-code-core';
+import { initializeParser } from '@vybestack/llxprt-code-core';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
@@ -6,11 +8,8 @@ import { createSessionSettingsFixture } from './helpers/session-settings-fixture
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createTestFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-
-import { testConfigInitialization } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -132,14 +131,14 @@ async function exerciseCollision(sameKey: boolean): Promise<void> {
     configs.push(config);
     cleanup.push(() => configPolicy.dispose());
     const bus = configPolicy.session.messageBus;
-    const infrastructure = testConfigInitialization(
+    const registry = new WorkspaceToolCatalogOwner(
       config,
       bus,
-      configPolicy,
-      createTestFilesystem(config),
+      configPolicy.trust,
     );
-    await config.initialize(infrastructure);
-    const registry = infrastructure.toolCatalog;
+    cleanup.push(() => registry.dispose());
+    await initializeParser();
+    await registry.initialize();
     configPolicy.session.confirmation.addRule({
       toolName: 'owner_record',
       decision: PolicyDecision.ASK_USER,

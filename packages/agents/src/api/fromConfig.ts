@@ -200,17 +200,6 @@ function hasConfig<K extends string>(
   return v !== null && v !== undefined;
 }
 
-/**
- * Public readiness signal for workspace infrastructure initialization.
- *
- * @plan:PLAN-20260621-COREAPIREMED.P09
- * @requirement:REQ-001
- * @pseudocode lines 73-75
- */
-export function isConfigInitialized(config: Config): boolean {
-  return config.hasInitializationStarted();
-}
-
 function assertMcpHandoff(options: {
   readonly mcpRuntime?: McpRuntimeOwner;
   readonly mcpOwnership?: 'agent' | 'caller';

@@ -148,7 +148,9 @@ describe('supplied workspace memory lifetime through public adoption', () => {
         memoryOwner: { owner: memory },
       }),
     ).rejects.toThrow('runtimeId');
-    expect(built_builtFactorylessConfig.hasInitializationStarted()).toBe(false);
+    expect(memory.operations.snapshot().memoryContent).toContain(
+      'Initial caller instructions.',
+    );
     await writeFile(file, 'Caller file after failed adoption.');
     expect((await memory.operations.refresh()).memoryContent).toContain(
       'Caller file after failed adoption.',

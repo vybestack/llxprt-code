@@ -14,7 +14,8 @@ import { tmpdir } from 'node:os';
 import { Config } from '../config/config.js';
 import { composeWorkspaceSkills } from '../config/skill-tool-sync.js';
 import type { WorkspaceSkillOwner } from './workspace-skill-owner.js';
-import { testConfigInitialization } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { initializeParser } from '../utils/shell-parser.js';
 
 function deferred(): { promise: Promise<void>; resolve(): void } {
   let resolve: () => void = () => {
@@ -32,7 +33,7 @@ describe('workspace skill transactions @issue:2615', () => {
   let config: Config;
   let filesystem: WorkspaceFilesystemOwner;
   let policyOwner: RuntimePolicyOwner;
-  let tooling: ReturnType<typeof testConfigInitialization>['toolCatalog'];
+  let tooling: WorkspaceToolCatalogOwner;
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'skill-owner-'));
     config = new Config({
@@ -49,14 +50,13 @@ describe('workspace skill transactions @issue:2615', () => {
       isTrusted: () => policyOwner.trust.isTrustedFolder(),
     });
     policyOwner = new RuntimePolicyOwner(config);
-    const initialization = testConfigInitialization(
+    tooling = new WorkspaceToolCatalogOwner(
       config,
       policyOwner.session.messageBus,
-      policyOwner,
-      filesystem,
+      policyOwner.trust,
     );
-    tooling = initialization.toolCatalog;
-    await config.ensureInitialized(initialization);
+    await initializeParser();
+    await tooling.initialize();
   });
   afterEach(async () => {
     await owner?.dispose();
@@ -142,14 +142,14 @@ describe('workspace skill transactions @issue:2615', () => {
       isTrusted: () => policyOwner.trust.isTrustedFolder(),
     });
     policyOwner = new RuntimePolicyOwner(config);
-    await config.ensureInitialized(
-      testConfigInitialization(
-        config,
-        policyOwner.session.messageBus,
-        policyOwner,
-        filesystem,
-      ),
+    await tooling.dispose();
+    tooling = new WorkspaceToolCatalogOwner(
+      config,
+      policyOwner.session.messageBus,
+      policyOwner.trust,
     );
+    await initializeParser();
+    await tooling.initialize();
     owner = composeWorkspaceSkills(
       config,
       (directory, approved) =>

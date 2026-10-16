@@ -25,7 +25,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/configTypes.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { installTestWorkspaceSkills } from '../__tests__/workspace-skill-fixture.js';
 import { discoverSkillsForConfig } from './skillDiscovery.js';
 
 async function writeProjectSkill(
@@ -48,6 +48,8 @@ Body for ${name}.
 }
 
 describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003', () => {
+  const acquireSkills = installTestWorkspaceSkills();
+
   let workspaceDir: string;
   let close: (() => Promise<void>) | undefined;
 
@@ -92,18 +94,15 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     );
 
     const config = buildConfig(true);
-    const owner = await initializeTestMcpRuntime(config);
+    const owner = await acquireSkills(config);
     close = async () => {
       await owner.dispose();
       await config.dispose();
     };
 
-    const skills = await discoverSkillsForConfig(
-      owner.workspaceSkills.operations,
-      async () => {
-        await owner.workspaceSkills.initialize();
-      },
-    );
+    const skills = await discoverSkillsForConfig(owner.operations, async () => {
+      await owner.initialize();
+    });
 
     const names = skills.map((s) => s.name).sort();
     expect(names).toContain('alpha-skill');
@@ -124,18 +123,15 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     );
 
     const config = buildConfig(false);
-    const owner = await initializeTestMcpRuntime(config);
+    const owner = await acquireSkills(config);
     close = async () => {
       await owner.dispose();
       await config.dispose();
     };
 
-    const skills = await discoverSkillsForConfig(
-      owner.workspaceSkills.operations,
-      async () => {
-        await owner.workspaceSkills.initialize();
-      },
-    );
+    const skills = await discoverSkillsForConfig(owner.operations, async () => {
+      await owner.initialize();
+    });
 
     expect(skills).toStrictEqual([]);
   });
@@ -148,26 +144,20 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
       'the alpha skill',
     );
     const config = buildConfig(true);
-    const owner = await initializeTestMcpRuntime(config);
+    const owner = await acquireSkills(config);
     close = async () => {
       await owner.dispose();
       await config.dispose();
     };
 
-    const first = await discoverSkillsForConfig(
-      owner.workspaceSkills.operations,
-      async () => {
-        await owner.workspaceSkills.initialize();
-      },
-    );
+    const first = await discoverSkillsForConfig(owner.operations, async () => {
+      await owner.initialize();
+    });
     expect(first.map((s) => s.name)).toContain('alpha-skill');
 
-    const second = await discoverSkillsForConfig(
-      owner.workspaceSkills.operations,
-      async () => {
-        await owner.workspaceSkills.initialize();
-      },
-    );
+    const second = await discoverSkillsForConfig(owner.operations, async () => {
+      await owner.initialize();
+    });
     expect(second.map((s) => s.name)).toContain('alpha-skill');
   });
 });

@@ -83,17 +83,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -103,7 +93,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -122,6 +116,8 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 const CONDITION_WAIT_TURNS = 200_000;
 
 describe('subagent.ts', () => {
+  const retainCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock;
 
   beforeEach(() => {
@@ -181,7 +177,10 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should terminate with MAX_TURNS if the limit is reached', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 2 };
 
       // Model keeps looping by calling emitvalue repeatedly
@@ -211,7 +210,7 @@ describe('subagent.ts', () => {
 
       const { overrides: maxTurnOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
       );
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -233,7 +232,10 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -261,7 +263,7 @@ describe('subagent.ts', () => {
       try {
         const { overrides: timeoutOverrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         scope = await SubAgentScope.create(
           'test-agent',
@@ -327,8 +329,17 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
       async () => {
-        const { config, mcpRuntime, settingsOwner, settingsService } =
-          await createMockConfig();
+        const settings = seedSubagentSettings();
+        const config = createSubagentConfig(settings, retainCleanup);
+        const settingsOwner = await acquireSubagentSettings(
+          config,
+          settings,
+          retainCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainCleanup,
+        );
         const testTimeoutMs = 30_000; // 30 second timeout for this test
         settingsOwner.writeUserParameter(
           'stream-idle-timeout-ms',
@@ -373,7 +384,7 @@ describe('subagent.ts', () => {
 
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         const scope = await SubAgentScope.create(
           'test-agent',
@@ -420,12 +431,15 @@ describe('subagent.ts', () => {
       };
 
     it('should terminate with ERROR if the model call throws', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
 
       const { overrides: errorOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
       );
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -455,8 +469,13 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit =
       async () => {
-        const { config, mcpRuntime, settingsService } =
-          await createMockConfig();
+        const settings = seedSubagentSettings();
+        const config = createSubagentConfig(settings, retainCleanup);
+        await acquireSubagentSettings(config, settings, retainCleanup);
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainCleanup,
+        );
         const runConfig: RunConfig = {
           max_time_minutes: 0.001,
           max_turns: 100,
@@ -495,7 +514,7 @@ describe('subagent.ts', () => {
 
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         const scope = await SubAgentScope.create(
           'test-agent',
@@ -541,7 +560,10 @@ describe('subagent.ts', () => {
 
   it('treats eager completed-tool persistence as best-effort during interactive runs', async () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const settings = seedSubagentSettings();
+    const config = createSubagentConfig(settings, retainCleanup);
+    await acquireSubagentSettings(config, settings, retainCleanup);
+    const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
     const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
@@ -579,7 +601,7 @@ describe('subagent.ts', () => {
     });
     const { overrides } = createRuntimeOverrides(
       mcpRuntime.workspaceFilesystem.paths,
-      { settings: settingsService },
+      { settings },
       { runtimeBundle },
     );
 
@@ -648,12 +670,15 @@ describe('subagent.ts', () => {
 
   describe('dispose', () => {
     it('should abort active operations when dispose is called', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -680,7 +705,10 @@ describe('subagent.ts', () => {
     });
 
     it('should clean up parent abort signal listener when dispose is called', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const parentAbortController = new AbortController();
       const removeEventListenerSpy = vi.spyOn(
@@ -691,7 +719,7 @@ describe('subagent.ts', () => {
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -719,12 +747,15 @@ describe('subagent.ts', () => {
     });
 
     it('should be safe to call dispose multiple times', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -748,12 +779,15 @@ describe('subagent.ts', () => {
     });
 
     it('should nullify active abort controller reference', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -781,8 +815,14 @@ describe('subagent.ts', () => {
     });
 
     it('unblocks a stalled non-interactive run so no async work leaks between tests', async () => {
-      const { config, mcpRuntime, settingsOwner, settingsService } =
-        await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      const settingsOwner = await acquireSubagentSettings(
+        config,
+        settings,
+        retainCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -813,7 +853,7 @@ describe('subagent.ts', () => {
         const runtimeBundle = createStatelessRuntimeBundle();
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
           { runtimeBundle },
         );
 

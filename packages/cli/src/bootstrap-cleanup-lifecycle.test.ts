@@ -140,7 +140,7 @@ describe('real startup activation owner cleanup', () => {
     restore.push(
       spyOn(process, 'exit').mockImplementation((code) => {
         for (const owner of observed) {
-          expectNoForeground(owner.config);
+          expectStartupAdmissionClosed(owner);
           if (probeReceipts && owner.receipt) {
             const check = agents.fromConfig({
               settingsService: owner.settingsService,
@@ -175,8 +175,10 @@ describe('real startup activation owner cleanup', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  function expectNoForeground(config: Config): void {
-    expect(config.hasInitializationStarted()).toBe(false);
+  function expectStartupAdmissionClosed(owner: ObservedBootstrap): void {
+    expect(() => owner.operation.sessionClient.getAgentClient()).toThrow(
+      'disposed',
+    );
   }
 
   function currentRuntimeId(): string {
@@ -292,7 +294,11 @@ describe('real startup activation owner cleanup', () => {
     restore.push(
       spyOn(acp, 'runZedIntegration').mockImplementation(async () => {
         expect(observed).toHaveLength(1);
-        expect(observed[0].config.hasInitializationStarted()).toBe(false);
+        expect(
+          observed[0].operation.sessionClient
+            .getAgentClient()
+            .hasChatInitialized(),
+        ).toBe(false);
         expect(
           observed[0].operation.sessionClient.getAgentClient(),
         ).toBeDefined();
@@ -349,8 +355,12 @@ describe('real startup activation owner cleanup', () => {
       restore.push(
         spyOn(sandbox, 'start_sandbox').mockImplementation(async () => {
           expect(observed).toHaveLength(2);
-          expect(observed[0].config.hasInitializationStarted()).toBe(false);
-          expect(observed[1].config.hasInitializationStarted()).toBe(false);
+          expect(
+            observed[0].operation.sessionClient
+              .getAgentClient()
+              .hasChatInitialized(),
+          ).toBe(false);
+          expectStartupAdmissionClosed(observed[1]);
           if (!probeReceipts) await expectClosed(observed[1]);
           launched = true;
           return 0;
@@ -393,7 +403,7 @@ describe('real startup activation owner cleanup', () => {
     await expect(main()).rejects.toThrow('sandbox spawn failed');
     expect(observed).toHaveLength(2);
     for (const owner of observed) {
-      expectNoForeground(owner.config);
+      expectStartupAdmissionClosed(owner);
       await expectClosed(owner);
     }
   });

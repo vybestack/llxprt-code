@@ -11,11 +11,7 @@ import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
  */
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
-import {
-  createTestFilesystem,
-  installTestWorkspaceFilesystem,
-  testConfigInitialization,
-} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
@@ -217,14 +213,7 @@ async function createConfig(
     factories.tokenizerFactory,
     client,
   );
-  await config.initialize(
-    testConfigInitialization(
-      config,
-      configPolicy.session.messageBus,
-      configPolicy,
-      createTestFilesystem(config),
-    ),
-  );
+
   return {
     config,
     sessionClient,

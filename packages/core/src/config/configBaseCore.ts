@@ -167,7 +167,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly outputSettings!: OutputSettings;
   protected readonly introspectionAgentSettings!: IntrospectionAgentSettings;
   protected readonly useWriteTodos!: boolean;
-  protected initialized = false;
   isContinueSession(): boolean {
     return Boolean(this.continueSession);
   }

@@ -41,7 +41,11 @@ import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js'
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   createCompletedToolCallResponse,
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -94,17 +98,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -114,6 +108,8 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock;
 
   describe('runNonInteractive - Execution and Tool Use', () => {
@@ -160,7 +156,20 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with GOAL if no outputs are expected and model stops', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
       const { overrides } = createRuntimeOverrides(
@@ -209,7 +218,20 @@ describe('subagent.ts', () => {
 
     const observePromptsTheModelToFinishOutstandingTodosBeforeCompleting =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
 
         mockSendMessageStream.mockImplementation(
           createMockStream(['stop', 'stop']),
@@ -262,7 +284,20 @@ describe('subagent.ts', () => {
       };
 
     it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -303,7 +338,20 @@ describe('subagent.ts', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
     it('rejects a malformed self_emitvalue call with null arguments (issue 3540)', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -351,11 +399,25 @@ describe('subagent.ts', () => {
         parameters: { type: 'object', properties: {} },
       };
 
-      const { config, mcpRuntime } = await createMockConfig({
-        getFunctionDeclarationsFiltered: vi
-          .fn()
-          .mockReturnValue([listFilesToolDef]),
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getFunctionDeclarationsFiltered: vi
+            .fn()
+            .mockReturnValue([listFilesToolDef]),
+        },
+      );
       const toolConfig: ToolConfig = { tools: ['list_files'] };
 
       mockSendMessageStream.mockImplementation(
@@ -437,7 +499,20 @@ describe('subagent.ts', () => {
     });
 
     it('should provide specific tool error responses to the model', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const toolConfig: ToolConfig = { tools: ['failing_tool'] };
 
       mockSendMessageStream.mockImplementation(
@@ -517,7 +592,20 @@ describe('subagent.ts', () => {
 
     const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
 
         mockSendMessageStream.mockImplementation(
@@ -611,22 +699,36 @@ describe('subagent.ts', () => {
         },
       });
 
-      const { config, mcpRuntime } = await createMockConfig({
-        getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
-          {
-            name: 'write_file',
-            description: 'Write files to disk',
-            parameters: {
-              type: 'object',
-              properties: {
-                path: { type: 'string' },
-                content: { type: 'string' },
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+            {
+              name: 'write_file',
+              description: 'Write files to disk',
+              parameters: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                  content: { type: 'string' },
+                },
               },
-            },
-          } as FunctionDeclaration,
-        ]),
-        getTool: vi.fn().mockReturnValue({}),
-      });
+            } as FunctionDeclaration,
+          ]),
+          getTool: vi.fn().mockReturnValue({}),
+        },
+      );
 
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: mcpRuntime.toolSelection,
@@ -701,7 +803,20 @@ describe('subagent.ts', () => {
     });
 
     it('should nudge the model if it stops before emitting all required variables', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const outputConfig: OutputConfig = {
         outputs: { required_var: 'Must be present' },
       };

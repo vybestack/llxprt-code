@@ -30,7 +30,11 @@ import {
 } from './subagentExecution.js';
 import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createStatelessRuntimeBundle,
   defaultRunConfig,
 } from './__tests__/subagent-test-helpers.js';
@@ -95,13 +99,23 @@ function stopped(): IContent {
   return { speaker: 'ai', blocks: [{ type: 'text', text: 'Done.' }] };
 }
 
-async function runDirectNonInteractive(params: {
-  readonly outputConfig: OutputConfig;
-  readonly declarations: readonly ToolDeclaration[];
-  readonly responses: readonly IContent[];
-  readonly emittedVars?: Readonly<Record<string, string>>;
-}): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
-  const { config, toolRegistry } = await createMockConfig();
+async function runDirectNonInteractive(
+  retainSubagentCleanup: (close: () => void | Promise<void>) => () => void,
+  params: {
+    readonly outputConfig: OutputConfig;
+    readonly declarations: readonly ToolDeclaration[];
+    readonly responses: readonly IContent[];
+    readonly emittedVars?: Readonly<Record<string, string>>;
+  },
+): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
+  const configSettings = seedSubagentSettings();
+  const config = createSubagentConfig(configSettings, retainSubagentCleanup);
+  await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
+  const configWorkspace = await acquireSubagentWorkspace(
+    config,
+    retainSubagentCleanup,
+  );
+  const toolRegistry = configWorkspace.toolSelection;
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -171,17 +185,22 @@ async function runDirectNonInteractive(params: {
 }
 
 describe('issue 3526 non-interactive emitter completion invariants', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);
   });
 
   it('resolves raw Hermes emitter calls without an ordinary registry entry', async () => {
-    const { output, requestCount } = await runDirectNonInteractive({
-      outputConfig: OUTPUT_CONFIG,
-      declarations: getScopeLocalFuncDefs(OUTPUT_CONFIG),
-      responses: [hermesEmissions()],
-    });
+    const { output, requestCount } = await runDirectNonInteractive(
+      retainSubagentCleanup,
+      {
+        outputConfig: OUTPUT_CONFIG,
+        declarations: getScopeLocalFuncDefs(OUTPUT_CONFIG),
+        responses: [hermesEmissions()],
+      },
+    );
 
     expect(output.emitted_vars).toStrictEqual({
       alpha: 'A',
@@ -196,11 +215,14 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
   it('uses a callable emitter when duplicate effective declarations are present', async () => {
     const emitterDeclarations = getScopeLocalFuncDefs(OUTPUT_CONFIG);
 
-    const { output, requestCount } = await runDirectNonInteractive({
-      outputConfig: OUTPUT_CONFIG,
-      declarations: [...emitterDeclarations, ...emitterDeclarations],
-      responses: [nativeEmissions()],
-    });
+    const { output, requestCount } = await runDirectNonInteractive(
+      retainSubagentCleanup,
+      {
+        outputConfig: OUTPUT_CONFIG,
+        declarations: [...emitterDeclarations, ...emitterDeclarations],
+        responses: [nativeEmissions()],
+      },
+    );
 
     expect(output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
     expect(output.emitted_vars).toStrictEqual({
@@ -213,23 +235,26 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
   });
 
   it('fails once without nudging when required outputs lack an effective emitter', async () => {
-    const { output, requestCount } = await runDirectNonInteractive({
-      outputConfig: OUTPUT_CONFIG,
-      declarations: [
-        {
-          name: 'read_file',
-          description: 'Read a file',
-          parametersJsonSchema: { type: 'object', properties: {} },
-        },
-      ],
-      responses: [
-        {
-          speaker: 'ai',
-          blocks: [toolCall('read_file', { file_path: 'report.md' })],
-        },
-      ],
-      emittedVars: { alpha: 'A', beta: 'B' },
-    });
+    const { output, requestCount } = await runDirectNonInteractive(
+      retainSubagentCleanup,
+      {
+        outputConfig: OUTPUT_CONFIG,
+        declarations: [
+          {
+            name: 'read_file',
+            description: 'Read a file',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+        ],
+        responses: [
+          {
+            speaker: 'ai',
+            blocks: [toolCall('read_file', { file_path: 'report.md' })],
+          },
+        ],
+        emittedVars: { alpha: 'A', beta: 'B' },
+      },
+    );
 
     expect(output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
     expect(output.final_message).toContain('self_emitvalue');
@@ -243,7 +268,7 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
       outputs: { toString: 'required value' },
     };
 
-    const { output } = await runDirectNonInteractive({
+    const { output } = await runDirectNonInteractive(retainSubagentCleanup, {
       outputConfig,
       declarations: [],
       responses: [stopped()],

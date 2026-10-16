@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -7,7 +8,6 @@ import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtim
 import type { SubAgentScope } from '../subagent.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
-import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -46,7 +46,8 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type {
@@ -55,20 +56,29 @@ import type {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
-const mockConfigs = new Map<
-  Config,
-  Awaited<ReturnType<typeof initializeTestMcpRuntime>>
->();
+type RetainSubagentCleanup = (close: () => void | Promise<void>) => () => void;
 
-afterEach(async () => {
-  const configs = Array.from(mockConfigs.keys());
-  await Promise.all(configs.map((config) => disposeMockConfig(config)));
-});
-
-export async function disposeMockConfig(config: Config): Promise<void> {
-  await mockConfigs.get(config)?.dispose();
-  mockConfigs.delete(config);
-  await config.dispose();
+export function installSubagentCleanup(): RetainSubagentCleanup {
+  const releases: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const release of releases.splice(0).reverse()) {
+      try {
+        await release();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Subagent fixture cleanup failed');
+  });
+  return (close) => {
+    releases.push(close);
+    return () => {
+      const index = releases.indexOf(close);
+      if (index >= 0) releases.splice(index, 1);
+    };
+  };
 }
 
 export function createCompletedToolCallResponse(params: {
@@ -110,63 +120,101 @@ type ToolSelectionMethodOverrides = Partial<
   >
 >;
 
-export async function createMockConfig(
-  toolRegistryMethods: ToolSelectionMethodOverrides = {},
-  initialSettings: Readonly<Record<string, unknown>> = {},
-): Promise<{
-  config: Config;
-  settingsService: SettingsService;
-  settingsOwner: ReturnType<
-    typeof createSessionSettingsFixture
-  >['settingsOwner'];
-  toolRegistry: ToolSelection;
-  mcpRuntime: Awaited<ReturnType<typeof initializeTestMcpRuntime>>;
-}> {
-  // The settings service flows explicitly through ConfigParameters (issue
-  // #2616: no ambient runtime context install).
-  const settingsService = new SettingsService();
-  for (const [key, value] of Object.entries(initialSettings))
-    settingsService.set(key, value);
-  const configParams: ConfigParameters = {
-    initialSettings,
+export function seedSubagentSettings(
+  initial: Readonly<Record<string, unknown>> = {},
+): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(initial)) settings.set(key, value);
+  return settings;
+}
+
+export function createSubagentConfig(
+  settings: SettingsService,
+  retain: RetainSubagentCleanup,
+  declarations: Partial<
+    Pick<ConfigParameters, 'mcpServers' | 'targetDir' | 'cwd' | 'trustedFolder'>
+  > = {},
+): Config {
+  const config = new Config({
+    initialSettings: settings.getAllGlobalSettings(),
     sessionId: 'test-session',
     model: 'gemini-2.5-pro',
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
-  };
-  const config = new Config(configParams);
-  const settingsRoot = createSessionSettingsFixture(config, settingsService);
-  const mcpRuntime = await initializeTestMcpRuntime(config);
-  mockConfigs.set(config, mcpRuntime);
-
+    ...declarations,
+  });
+  retain(() => config.dispose());
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: 'gemini-2.5-pro',
   });
+  return config;
+}
 
-  const toolRegistry = mcpRuntime.toolSelection;
-  vi.spyOn(toolRegistry, 'getTool').mockImplementation(
-    toolRegistryMethods.getTool ?? (() => undefined),
-  );
-  vi.spyOn(toolRegistry, 'getFunctionDeclarationsFiltered').mockImplementation(
-    toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
-  );
+export async function acquireSubagentSettings(
+  config: Config,
+  settings: SettingsService,
+  retain: RetainSubagentCleanup,
+): Promise<SessionSettingsOwner> {
+  const owner = new SessionSettingsOwner(settings);
+  try {
+    owner.bindTelemetry(config);
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
+  } catch (primary) {
+    const cleanup = await Promise.allSettled([owner.dispose()]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [primary, ...failures],
+        'Subagent settings acquisition cleanup failed',
+      );
+    throw primary;
+  }
+  retain(() => owner.dispose());
+  return owner;
+}
 
-  if (toolRegistryMethods.getEnabledTools)
-    vi.spyOn(toolRegistry, 'getEnabledTools').mockImplementation(
-      toolRegistryMethods.getEnabledTools,
+export async function acquireSubagentWorkspace(
+  config: Config,
+  retain: RetainSubagentCleanup,
+  toolRegistryMethods: ToolSelectionMethodOverrides = {},
+): Promise<McpRuntimeOwner> {
+  const owner = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
+  const close = (): Promise<void> => owner.dispose();
+  const remove = retain(close);
+  try {
+    await owner.initialize();
+    const tools = owner.toolSelection;
+    vi.spyOn(tools, 'getTool').mockImplementation(
+      toolRegistryMethods.getTool ?? (() => undefined),
     );
-  if (toolRegistryMethods.getAllTools)
-    vi.spyOn(toolRegistry, 'getAllTools').mockImplementation(
-      toolRegistryMethods.getAllTools,
+    vi.spyOn(tools, 'getFunctionDeclarationsFiltered').mockImplementation(
+      toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
     );
-  return {
-    config,
-    settingsService,
-    settingsOwner: settingsRoot.settingsOwner,
-    toolRegistry,
-    mcpRuntime,
-  };
+    if (toolRegistryMethods.getEnabledTools)
+      vi.spyOn(tools, 'getEnabledTools').mockImplementation(
+        toolRegistryMethods.getEnabledTools,
+      );
+    if (toolRegistryMethods.getAllTools)
+      vi.spyOn(tools, 'getAllTools').mockImplementation(
+        toolRegistryMethods.getAllTools,
+      );
+    return owner;
+  } catch (primary) {
+    remove();
+    const cleanup = await Promise.allSettled([close()]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [primary, ...failures],
+        'Subagent workspace acquisition cleanup failed',
+      );
+    throw primary;
+  }
 }
 
 export function createMockStream(

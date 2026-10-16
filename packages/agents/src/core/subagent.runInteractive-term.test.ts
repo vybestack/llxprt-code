@@ -80,17 +80,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -100,7 +90,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
   defaultModelConfig,
@@ -117,6 +111,8 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 const CONDITION_WAIT_TURNS = 200_000;
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock<(...args: never[]) => Promise<unknown>>;
 
   beforeEach(() => {
@@ -174,7 +170,20 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should time out while waiting for interactive tool completion', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -275,7 +284,20 @@ describe('subagent.ts', () => {
 
     const observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const runConfig: RunConfig = {
           max_time_minutes: 0.001, // 0.06 seconds
           max_turns: 100,
