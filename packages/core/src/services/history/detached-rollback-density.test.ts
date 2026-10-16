@@ -23,9 +23,9 @@ describe('ordinal detached density values', () => {
       await history.detachedValues.transform(async (source, sink) => {
         let index = 0;
         for await (const row of source.streamRows()) {
-          if (index === 1) sink.removeValue(index);
-          else if (index === 2) sink.appendReplacement(index, caller);
-          else sink.appendValue(row);
+          if (index === 1) await sink.removeValue(index);
+          else if (index === 2) await sink.appendReplacement(index, caller);
+          else await sink.appendValue(row);
           index++;
         }
       });

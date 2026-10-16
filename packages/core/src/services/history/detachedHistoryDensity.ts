@@ -11,12 +11,12 @@ export function detachedHistorySink(
   assertActive: () => void,
 ): DetachedHistorySink {
   return {
-    appendValue: (row): void => {
+    appendValue: async (row): Promise<void> => {
       assertActive();
       validateHistoryEntry(row, next.length);
       next.append(row);
     },
-    appendReplacement: (ordinal, row): void => {
+    appendReplacement: async (ordinal, row): Promise<void> => {
       assertActive();
       validateHistoryEntry(row, next.length);
       const marker = previous.readOriginalMarker(ordinal).chronology;
@@ -32,7 +32,7 @@ export function detachedHistorySink(
           reason: 'density-replaced',
         });
     },
-    removeValue: (ordinal): void => {
+    removeValue: async (ordinal): Promise<void> => {
       assertActive();
       const marker = previous.readOriginalMarker(ordinal).chronology;
       if (marker !== undefined)

@@ -41,17 +41,17 @@ function indexMediaReferences(
   }
 }
 
-function appendAdmittedRows(
+async function appendAdmittedRows(
   rows: readonly IContent[],
   references: HistoryMediaIndex,
   sink: DetachedHistorySink,
   options: DeferredHistorySourceOptions,
-): void {
+): Promise<void> {
   for (const content of rows) {
     options.ownership?.retain(content);
     try {
       indexMediaReferences(content, references);
-      sink.appendValue(sanitizeProviderContentForSerialization(content));
+      await sink.appendValue(sanitizeProviderContentForSerialization(content));
     } finally {
       options.ownership?.release(content);
     }
@@ -163,7 +163,7 @@ function deferredAdmissionTransform(
         options.ownership?.retain(row);
         try {
           const admitted = await admission.admitContents([row], context);
-          appendAdmittedRows(admitted, references, sink, options);
+          await appendAdmittedRows(admitted, references, sink, options);
         } finally {
           options.ownership?.release(row);
         }

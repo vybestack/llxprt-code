@@ -384,7 +384,7 @@ export async function replaceRankedToolResponse(
             replaced = true;
           }
           if (invalidatesChain) [row] = invalidateResponsesStatefulChain([row]);
-          sink.appendValue(sanitizeProviderContentForSerialization(row));
+          await sink.appendValue(sanitizeProviderContentForSerialization(row));
           entryIndex++;
         }
       },
@@ -498,7 +498,7 @@ export async function publishSelectedToolResponses(
             replaced += targets.length;
           }
           if (invalidatesChain) [row] = invalidateResponsesStatefulChain([row]);
-          sink.appendValue(sanitizeProviderContentForSerialization(row));
+          await sink.appendValue(sanitizeProviderContentForSerialization(row));
           entryIndex++;
         }
       },

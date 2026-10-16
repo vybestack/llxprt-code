@@ -8,15 +8,15 @@ import type {
   DetachedHistoryTransform,
 } from './detachedHistoryAPI.js';
 
-function appendDensityValue(
+async function appendDensityValue(
   sink: DetachedHistorySink,
   index: number,
   row: IContent,
   replacement: IContent | undefined,
-): void {
+): Promise<void> {
   const [clean] = invalidateResponsesStatefulChain([replacement ?? row]);
-  if (replacement === undefined) sink.appendValue(clean);
-  else sink.appendReplacement(index, clean);
+  if (replacement === undefined) await sink.appendValue(clean);
+  else await sink.appendReplacement(index, clean);
 }
 
 export function* acceptedHistoryValues(
@@ -46,9 +46,14 @@ export function densityValueTransform(
       let ordinal = 0;
       for await (const row of source.streamRows()) {
         const index = ordinal++;
-        if (removed.has(index)) sink.removeValue(index);
+        if (removed.has(index)) await sink.removeValue(index);
         else
-          appendDensityValue(sink, index, row, current.replacements.get(index));
+          await appendDensityValue(
+            sink,
+            index,
+            row,
+            current.replacements.get(index),
+          );
       }
     } finally {
       input.result = undefined;

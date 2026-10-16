@@ -17,7 +17,8 @@ describe('detached cancellation before mutation', () => {
       const operation = rejectedValue(
         history.detachedValues.transform(
           async (source, sink) => {
-            for await (const row of source.streamRows()) sink.appendValue(row);
+            for await (const row of source.streamRows())
+              await sink.appendValue(row);
           },
           undefined,
           { signal: controller.signal },

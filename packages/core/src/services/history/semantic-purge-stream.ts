@@ -265,7 +265,7 @@ export class SemanticMediaPurgeStreamCoordinator {
             throw new PrecommitFailure(error);
           }
           for await (const row of replacement.streamRows(signal))
-            sink.appendValue(row);
+            await sink.appendValue(row);
         },
         undefined,
         { signal },

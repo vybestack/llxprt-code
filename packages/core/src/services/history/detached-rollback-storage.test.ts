@@ -29,7 +29,7 @@ describe('detached external scratch I/O', () => {
           result = await rejectedValue(
             history.detachedValues.transform(async (source, sink) => {
               for await (const row of source.streamRows())
-                sink.appendValue(row);
+                await sink.appendValue(row);
               if (kind === 'read') {
                 const fault = spyOn(fs, 'readSync').mockImplementation(() => 0);
                 restore = () => {
@@ -42,7 +42,7 @@ describe('detached external scratch I/O', () => {
                 restore = () => {
                   fault.mockRestore();
                 };
-                sink.appendValue({
+                await sink.appendValue({
                   speaker: 'human',
                   blocks: [{ type: 'text', text: 'candidate fault' }],
                 });

@@ -30,7 +30,7 @@ describe('detached cleanup error ordering', () => {
       try {
         result = await rejectedValue(
           history.detachedValues.transform(async (_source, sink) => {
-            sink.appendValue(detachedRow(0));
+            await sink.appendValue(detachedRow(0));
             armed = true;
             throw failure;
           }),
@@ -99,7 +99,7 @@ describe('detached cursor lifecycle', () => {
           cursor = source.streamRows()[Symbol.asyncIterator]();
           const first = await cursor.next();
           if (first.done === true) throw new Error('Missing first row');
-          sink.appendValue(first.value);
+          await sink.appendValue(first.value);
         },
         undefined,
         {

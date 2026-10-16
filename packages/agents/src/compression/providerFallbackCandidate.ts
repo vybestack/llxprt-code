@@ -27,7 +27,7 @@ export async function publishProviderFallbackCandidate(
       const original = rows.readRow(index);
       if (original.blocks.length === 0) continue;
       const [row] = invalidateResponsesStatefulChain([original]);
-      sink.appendValue(sanitizeProviderContentForSerialization(row));
+      await sink.appendValue(sanitizeProviderContentForSerialization(row));
     }
   }, model);
 }

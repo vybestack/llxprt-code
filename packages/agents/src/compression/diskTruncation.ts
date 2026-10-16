@@ -109,7 +109,7 @@ export async function publishCandidate(
         const [clean] = invalidateResponsesStatefulChain([
           { ...row, metadata },
         ]);
-        sink.appendValue(sanitizeProviderContentForSerialization(clean));
+        await sink.appendValue(sanitizeProviderContentForSerialization(clean));
         if (
           !marked &&
           clean.metadata?.reason === 'compression-state-snapshot'

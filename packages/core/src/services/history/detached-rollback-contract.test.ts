@@ -94,7 +94,7 @@ for (const stage of [
           history.detachedValues.transform(
             async (source, sink) => {
               for await (const row of source.streamRows()) {
-                sink.appendValue({
+                await sink.appendValue({
                   ...row,
                   blocks: [{ type: 'text', text: 'candidate' }],
                 });

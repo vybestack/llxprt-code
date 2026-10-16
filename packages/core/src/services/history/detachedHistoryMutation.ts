@@ -41,9 +41,13 @@ export interface DetachedHistorySource {
   streamRows(signal?: AbortSignal): AsyncIterable<IContent>;
 }
 export interface DetachedHistorySink {
-  appendValue(row: IContent): void;
-  appendReplacement(sourceOrdinal: number, row: IContent): void;
-  removeValue(sourceOrdinal: number): void;
+  /**
+   * Each call resolves when the candidate has taken the row, so a transform
+   * that awaits every call cannot run ahead of the store consuming its output.
+   */
+  appendValue(row: IContent): Promise<void>;
+  appendReplacement(sourceOrdinal: number, row: IContent): Promise<void>;
+  removeValue(sourceOrdinal: number): Promise<void>;
 }
 export type DetachedHistoryTransform = (
   source: DetachedHistorySource,
@@ -111,7 +115,7 @@ export function detachedValueSubmission(
         let index = 0;
         for await (const row of input.rows) {
           validateHistoryEntry(row, index++);
-          sink.appendValue(
+          await sink.appendValue(
             append ? sanitizeProviderContentForSerialization(row) : row,
           );
         }
@@ -169,7 +173,8 @@ async function transformCandidate(
       throw new Error('Detached transform already consumed');
     const sink = detachedHistorySink(previous, next, spans, assertActive);
     if (task.append === true) {
-      for await (const row of source.streamRows(signal)) sink.appendValue(row);
+      for await (const row of source.streamRows(signal))
+        await sink.appendValue(row);
     }
     await task.transform(source, sink);
     assertActive();

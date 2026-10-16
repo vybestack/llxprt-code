@@ -70,7 +70,7 @@ async function rollbackScale(size: number, stage: string): Promise<number> {
       history.detachedValues.transform(
         async (source, sink) => {
           for await (const row of source.streamRows())
-            sink.appendValue({
+            await sink.appendValue({
               ...row,
               metadata: { ...row.metadata, turnId: 'changed' },
             });
