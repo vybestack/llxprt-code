@@ -31,6 +31,16 @@ function toolsUnavailable(): never {
   throw new Error('agent not available');
 }
 
+type HistoryCommandOwners = Pick<
+  BuiltinCommandOwners,
+  | 'copyCommand'
+  | 'compressCommand'
+  | 'dumpcontextCommand'
+  | 'restoreCommand'
+  | 'perfCommand'
+  | 'diagnosticsCommand'
+>;
+
 export function useHistoryCommandOwners(
   agent: Agent | null,
   config: CliUiRuntime | null,
@@ -39,15 +49,7 @@ export function useHistoryCommandOwners(
   oauthControl: ReturnType<typeof useOAuthControl>,
   loadHistory: UseHistoryManagerReturn['loadHistory'],
   addItem: UseHistoryManagerReturn['addItem'],
-): Pick<
-  BuiltinCommandOwners,
-  | 'copyCommand'
-  | 'compressCommand'
-  | 'dumpcontextCommand'
-  | 'restoreCommand'
-  | 'perfCommand'
-  | 'diagnosticsCommand'
-> {
+): HistoryCommandOwners {
   return useMemo(
     () => ({
       diagnosticsCommand: createDiagnosticsCommand(
@@ -74,7 +76,9 @@ export function useHistoryCommandOwners(
         ),
         bindCopyCommandClipboard(),
       ),
-      compressCommand: createCompressCommand(bindCompressCommand(agent)),
+      compressCommand: bindCompressionCommand(
+        agent === null ? null : agent.compress.bind(agent),
+      ),
       dumpcontextCommand: createDumpcontextCommand(
         bindDumpcontextCommand({
           readMode: () => runtimeApi.getSessionSetting('dumpcontext'),
@@ -110,4 +114,8 @@ export function useHistoryCommandOwners(
     }),
     [agent, config, runtimeApi, settings, oauthControl, loadHistory, addItem],
   );
+}
+
+function bindCompressionCommand(compress: Agent['compress'] | null) {
+  return createCompressCommand(bindCompressCommand(compress));
 }

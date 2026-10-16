@@ -8,10 +8,8 @@ import { createWorkspaceCommandOwners } from './workspaceCommandOwners.js';
 
 import { bindDirectoryChangeRecording } from '../commands/directoryCommandHost.js';
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
-import {
-  resumeOwnerSession,
-  importOwnerSession,
-} from '../utils/ownerSessionUi.js';
+import { importOwnerSession } from '../utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import {
   bindCommandHistoryLoader,
   bindResumedHistoryReplay,
@@ -445,6 +443,31 @@ function useRegistryState(
   };
 }
 
+function bindOwnedCommandResume(
+  args: UseSlashCommandProcessorCoreArgs,
+): SlashCommandHandlerDeps['resumeOwnedSession'] {
+  return args.recordingOwner === 'agent'
+    ? bindCommandOwnerResume((action) => {
+        const agent = args.agent;
+        if (agent === null) throw new Error('Session agent is unavailable');
+        const mode = resolveEmojiFilterMode(args.config);
+        return action.sessionPackage === undefined
+          ? resumeOwnerSession(
+              agent.session.resume.bind(agent.session),
+              action.sessionRef,
+              mode,
+              agent.session.listBrowserTargetsDetailed.bind(agent.session),
+            )
+          : importOwnerSession(
+              agent.session.importSession.bind(agent.session),
+              action.sessionPackage.packageDirectory,
+              mode,
+              agent.session.getHistory.bind(agent.session),
+            );
+      }, args.loadHistory)
+    : null;
+}
+
 function buildHandlerDeps(
   args: UseSlashCommandProcessorCoreArgs,
   state: SlashCommandProcessorState,
@@ -453,21 +476,7 @@ function buildHandlerDeps(
   cancellation: SlashCommandCancellation,
 ): SlashCommandHandlerDeps {
   return {
-    resumeOwnedSession:
-      args.recordingOwner === 'agent'
-        ? bindCommandOwnerResume((action) => {
-            const agent = args.agent;
-            if (agent === null) throw new Error('Session agent is unavailable');
-            const mode = resolveEmojiFilterMode(args.config);
-            return action.sessionPackage === undefined
-              ? resumeOwnerSession(agent, action.sessionRef, mode)
-              : importOwnerSession(
-                  agent,
-                  action.sessionPackage.packageDirectory,
-                  mode,
-                );
-          }, args.loadHistory)
-        : null,
+    resumeOwnedSession: bindOwnedCommandResume(args),
     loadCommandHistory: bindCommandHistoryLoader(
       async (history) => {
         if (!args.agent) throw new Error('Session agent is unavailable');

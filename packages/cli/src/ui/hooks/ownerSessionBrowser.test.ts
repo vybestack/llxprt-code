@@ -9,7 +9,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
-import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import {
   type UseSessionBrowserProps,
   useSessionBrowser,
@@ -68,11 +68,12 @@ describe('owner session browser', () => {
             ...catalog,
             onSelect: async (target) => {
               await resumeOwnerSession(
-                next,
+                next.session.resume.bind(next.session),
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
                 'allowed',
+                next.session.listBrowserTargetsDetailed.bind(next.session),
               );
               return { ok: true };
             },
@@ -139,11 +140,12 @@ describe('owner session browser', () => {
             ...catalog,
             onSelect: async (target) => {
               const replay = await resumeOwnerSession(
-                next,
+                next.session.resume.bind(next.session),
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
                 'allowed',
+                next.session.listBrowserTargetsDetailed.bind(next.session),
               );
               shown = replay.uiHistory.some(
                 (item) =>

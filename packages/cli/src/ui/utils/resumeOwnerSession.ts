@@ -19,9 +19,10 @@ import { iContentToHistoryItems } from './iContentToHistoryItems.js';
  * resume does), and a failed resume names the unreadable file it matched.
  */
 export async function resumeOwnerSession(
-  agent: Agent,
+  resume: Agent['session']['resume'],
   ref: string,
   emojiFilterMode: EmojiFilterMode,
+  listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
 ): Promise<{
   readonly history: readonly AgentHistoryItem[];
   readonly uiHistory: readonly HistoryItem[];
@@ -29,12 +30,11 @@ export async function resumeOwnerSession(
 }> {
   let history: readonly AgentHistoryItem[];
   try {
-    history = await agent.session.resume(ref);
+    history = await resume(ref);
   } catch (error) {
-    throw await nameUnreadableRecording(agent, ref, error);
+    throw await nameUnreadableRecording(listBrowserTargetsDetailed, ref, error);
   }
-  const { unreadableRecordings } =
-    await agent.session.listBrowserTargetsDetailed();
+  const { unreadableRecordings } = await listBrowserTargetsDetailed();
   return {
     history,
     uiHistory: iContentToHistoryItems([...history], emojiFilterMode),
@@ -46,13 +46,12 @@ export async function resumeOwnerSession(
 }
 
 async function nameUnreadableRecording(
-  agent: Agent,
+  listBrowserTargetsDetailed: Agent['session']['listBrowserTargetsDetailed'],
   ref: string,
   error: unknown,
 ): Promise<unknown> {
   if (!(error instanceof Error)) return error;
-  const { unreadableRecordings } =
-    await agent.session.listBrowserTargetsDetailed();
+  const { unreadableRecordings } = await listBrowserTargetsDetailed();
   const named = matchUnreadableRecordings(
     ref,
     error.message.replace(/^Failed to resume session: /, ''),

@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -44,12 +46,33 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   // project and chat history the fixture currently provides.
   const registeredChat = (): SlashCommand =>
     createChatCommand(
-      bindChatRecordingOperations({
-        agent: context.services.agent,
-        config: context.services.config,
-        recordingIntegration: context.recordingIntegration,
-        recordingSwapCallbacks: context.recordingSwapCallbacks,
-      }),
+      bindChatRecordingOperations(
+        () =>
+          context.recordingSwapCallbacks?.getCurrentRecording() ??
+          context.recordingIntegration?.getRecordingService() ??
+          null,
+        () =>
+          context.services.config
+            ? getProjectHash(context.services.config.getProjectRoot())
+            : null,
+        () => context.services.config?.projectChatsDir ?? null,
+        () => context.services.agent?.agentClient.mediaStore,
+        () => {
+          const client = context.services.agent?.agentClient;
+          return client?.hasChatInitialized() === true
+            ? client.getChat().getHistory()
+            : null;
+        },
+        async (history) => {
+          if (context.services.agent === null)
+            throw new Error('Session agent is unavailable');
+          await context.services.agent.agentClient
+            .getChat()
+            .setHistory(history);
+        },
+        () =>
+          context.services.config ? context.services.config.getModel() : null,
+      ),
       () => true,
     );
 

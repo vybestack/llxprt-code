@@ -53,7 +53,9 @@ describe('registered compress command owner', () => {
       services: { agent: decoy },
       ui: { addItem: (item: HistoryItemWithoutId) => emitted.push(item) },
     });
-    const command = createCompressCommand(bindCompressCommand(owner));
+    const command = createCompressCommand(
+      bindCompressCommand(owner.compress.bind(owner)),
+    );
     const registry = await CommandService.create(
       [
         new BuiltinCommandLoader(

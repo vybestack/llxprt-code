@@ -31,7 +31,6 @@ import {
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
-import { listOwnerBrowserTargets } from '../ui/utils/ownerSessionUi.js';
 
 const fixture = fileURLToPath(
   new URL(
@@ -209,7 +208,7 @@ describe('interactive CLI owner startup', () => {
     const recording = source.agent.session.getRecording();
     const path = recording.path;
     await source.agent.session.setRecording({ enabled: false });
-    const targets = await listOwnerBrowserTargets(source.agent);
+    const targets = await source.agent.session.listBrowserTargets();
     const persisted = targets.find(
       (target) => target.kind === 'session' && target.session.filePath === path,
     );
@@ -242,7 +241,7 @@ describe('interactive CLI owner startup', () => {
     ).toBe(true);
     expect(resumed.agent.session.getRecording().path).toBe(path);
     expect(
-      (await listOwnerBrowserTargets(resumed.agent)).some(
+      (await resumed.agent.session.listBrowserTargets()).some(
         (target) =>
           target.kind === 'session' && target.session.filePath === path,
       ),

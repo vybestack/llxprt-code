@@ -61,7 +61,12 @@ describe('interactive owner session replay', () => {
     await first.session.setRecording({ enabled: false });
 
     const next = await build(root, 'second-owner');
-    const replay = await resumeOwnerSession(next, 'first-owner', 'allowed');
+    const replay = await resumeOwnerSession(
+      next.session.resume.bind(next.session),
+      'first-owner',
+      'allowed',
+      next.session.listBrowserTargetsDetailed.bind(next.session),
+    );
     expect(
       replay.history.some((item) =>
         item.blocks.some(
@@ -100,9 +105,10 @@ describe('interactive owner session replay', () => {
     const checkpoint = await agent.session.createCheckpoint('fork-point');
     const source = agent.session.getRecording().path;
     const replay = await resumeOwnerSession(
-      agent,
+      agent.session.resume.bind(agent.session),
       checkpoint.checkpointId,
       'allowed',
+      agent.session.listBrowserTargetsDetailed.bind(agent.session),
     );
     expect(
       replay.uiHistory.some(
@@ -130,7 +136,12 @@ describe('interactive owner session replay', () => {
       // Consume the real Agent turn.
     }
     await expect(
-      resumeOwnerSession(agent, 'absent-owner', 'allowed'),
+      resumeOwnerSession(
+        agent.session.resume.bind(agent.session),
+        'absent-owner',
+        'allowed',
+        agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      ),
     ).rejects.toThrow('Failed to resume session');
     await agent.session.recordRecordingEvent({
       type: 'session_event',

@@ -6,10 +6,8 @@
 import type { CommandOwnerFixture } from './mockCommandContext.js';
 
 import { bindCommandOwnerResume } from '../ui/hooks/commandOwnerResumeHost.js';
-import {
-  resumeOwnerSession,
-  importOwnerSession,
-} from '../ui/utils/ownerSessionUi.js';
+import { importOwnerSession } from '../ui/utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../ui/utils/resumeOwnerSession.js';
 import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
 import { vi } from 'bun:test';
 import { CommandKind, type SlashCommand } from '../ui/commands/types.js';
@@ -59,7 +57,17 @@ export function bindFixtureOwnerResume(
     if (agent === null) throw new Error('Session agent is unavailable');
     const mode = resolveEmojiFilterMode(config);
     return action.sessionPackage === undefined
-      ? resumeOwnerSession(agent, action.sessionRef, mode)
-      : importOwnerSession(agent, action.sessionPackage.packageDirectory, mode);
+      ? resumeOwnerSession(
+          agent.session.resume.bind(agent.session),
+          action.sessionRef,
+          mode,
+          agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        )
+      : importOwnerSession(
+          agent.session.importSession.bind(agent.session),
+          action.sessionPackage.packageDirectory,
+          mode,
+          agent.session.getHistory.bind(agent.session),
+        );
   }, loadHistory);
 }

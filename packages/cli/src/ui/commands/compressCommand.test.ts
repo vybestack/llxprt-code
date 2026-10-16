@@ -46,9 +46,7 @@ function setupCapturingContext(): {
 }
 
 function commandFor(result: AgentCompressionResult): SlashCommand {
-  return createCompressCommand(
-    bindCompressCommand({ compress: async () => result }),
-  );
+  return createCompressCommand(bindCompressCommand(async () => result));
 }
 
 function findCompressionItem(

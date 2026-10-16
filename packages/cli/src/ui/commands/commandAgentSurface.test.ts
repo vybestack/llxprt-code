@@ -47,12 +47,7 @@ describe('compressCommand — agent surface', () => {
       compress: compressMock,
     });
 
-    const command = createCompressCommand(
-      bindCompressCommand({
-        compress: compressMock,
-        agentClient: { hasChatInitialized: () => true },
-      } as unknown as Agent),
-    );
+    const command = createCompressCommand(bindCompressCommand(compressMock));
     await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
@@ -84,12 +79,7 @@ describe('compressCommand — agent surface', () => {
       },
     });
 
-    const command = createCompressCommand(
-      bindCompressCommand({
-        compress: compressMock,
-        agentClient: { hasChatInitialized: () => true },
-      } as unknown as Agent),
-    );
+    const command = createCompressCommand(bindCompressCommand(compressMock));
     await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
@@ -419,12 +409,7 @@ describe('error paths — agent surface rejections', () => {
       compress: compressMock,
     });
 
-    const command = createCompressCommand(
-      bindCompressCommand({
-        compress: compressMock,
-        agentClient: { hasChatInitialized: () => true },
-      } as unknown as Agent),
-    );
+    const command = createCompressCommand(bindCompressCommand(compressMock));
     await command.action!(context, '');
 
     // The owner operation surfaces the rejected compression as an error.

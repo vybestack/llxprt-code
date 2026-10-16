@@ -6,11 +6,8 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import {
-  importOwnerSession,
-  listOwnerBrowserTargets,
-  resumeOwnerSession,
-} from './ownerSessionUi.js';
+import { importOwnerSession } from './ownerSessionUi.js';
+import { resumeOwnerSession } from './resumeOwnerSession.js';
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -37,7 +34,7 @@ describe('owner-backed interactive session operations', () => {
       const next = await borrow();
       await next.setHistory([human('current owner')]);
       await next.session.setRecording({ enabled: true });
-      const targets = await listOwnerBrowserTargets(next);
+      const targets = await next.session.listBrowserTargets();
       const target = targets.find(
         (entry) =>
           entry.kind === 'session' && entry.session.sessionId === sourceId,
@@ -45,7 +42,12 @@ describe('owner-backed interactive session operations', () => {
       expect(
         target?.kind === 'session' ? target.session.filePath : undefined,
       ).toBe(source);
-      const replay = await resumeOwnerSession(next, sourceId, 'allowed');
+      const replay = await resumeOwnerSession(
+        next.session.resume.bind(next.session),
+        sourceId,
+        'allowed',
+        next.session.listBrowserTargetsDetailed.bind(next.session),
+      );
       expect(hasUserTurn(replay.uiHistory, 'browse source')).toBe(true);
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
@@ -58,7 +60,7 @@ describe('owner-backed interactive session operations', () => {
       await agent.setHistory([human('checkpoint source')]);
       await agent.session.setRecording({ enabled: true });
       const checkpoint = await agent.session.createCheckpoint('browser-branch');
-      const targets = await listOwnerBrowserTargets(agent);
+      const targets = await agent.session.listBrowserTargets();
       const target = targets.find(
         (entry) =>
           entry.kind === 'checkpoint' &&
@@ -70,14 +72,15 @@ describe('owner-backed interactive session operations', () => {
         target?.kind === 'checkpoint' ? target.source.filePath : undefined,
       ).toBe(sourcePath);
       const replay = await resumeOwnerSession(
-        agent,
+        agent.session.resume.bind(agent.session),
         checkpoint.checkpointId,
         'allowed',
+        agent.session.listBrowserTargetsDetailed.bind(agent.session),
       );
       expect(hasUserTurn(replay.uiHistory, 'checkpoint source')).toBe(true);
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       expect(
-        (await listOwnerBrowserTargets(agent)).some(
+        (await agent.session.listBrowserTargets()).some(
           (entry) =>
             entry.kind === 'checkpoint' &&
             entry.checkpointId === checkpoint.checkpointId,
@@ -95,13 +98,23 @@ describe('owner-backed interactive session operations', () => {
       await agent.session.setRecording({ enabled: true });
       const path = agent.session.getRecording().path;
       await expect(
-        resumeOwnerSession(agent, 'missing-session', 'allowed'),
+        resumeOwnerSession(
+          agent.session.resume.bind(agent.session),
+          'missing-session',
+          'allowed',
+          agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        ),
       ).rejects.toThrow('Failed to resume session');
       const checkpoint =
         await agent.session.createCheckpoint('discarded-branch');
       await agent.session.deleteCheckpoint(checkpoint.checkpointId);
       await expect(
-        resumeOwnerSession(agent, checkpoint.checkpointId, 'allowed'),
+        resumeOwnerSession(
+          agent.session.resume.bind(agent.session),
+          checkpoint.checkpointId,
+          'allowed',
+          agent.session.listBrowserTargetsDetailed.bind(agent.session),
+        ),
       ).rejects.toThrow('Failed to resume session');
       const activeId = (await agent.session.listSessions()).at(0)?.id;
       if (!activeId) throw new Error('No active session');
@@ -133,7 +146,12 @@ describe('owner-backed interactive session operations', () => {
       const next = await borrow();
       await next.setHistory([human('current owner')]);
       await next.session.setRecording({ enabled: true });
-      const replay = await importOwnerSession(next, destination, 'allowed');
+      const replay = await importOwnerSession(
+        next.session.importSession.bind(next.session),
+        destination,
+        'allowed',
+        next.session.getHistory.bind(next.session),
+      );
       expect(hasUserTurn(replay.uiHistory, 'portable turn')).toBe(true);
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),

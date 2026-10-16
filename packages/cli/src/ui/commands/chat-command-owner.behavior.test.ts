@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
+
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -25,7 +27,23 @@ describe('registered chat command ownership', () => {
           {
             ...createUnconfiguredBuiltinOwners(),
             chatCommand: createChatOwnerCommand(
-              bindChatOwnerOperations(agent, null),
+              bindChatOwnerOperations(
+                () => agent.session.listCheckpoints(),
+                (name, options) =>
+                  agent.session.createCheckpoint(name, options),
+                (tag) => agent.session.resume(tag),
+                (checkpointId) => agent.session.deleteCheckpoint(checkpointId),
+                (checkpointId, name, options) =>
+                  agent.session.renameCheckpoint(checkpointId, name, options),
+                () => agent.session.getHistory(),
+                () => agent.session.clearHistory(),
+                (turns) => agent.session.restoreTurns(turns),
+                (name, options) =>
+                  agent.session.nameCurrentSession(name, options),
+                () => agent.session.getRecording().path,
+                () => agent.getModel(),
+                () => resolveEmojiFilterMode(null),
+              ),
               () => true,
             ),
           },
@@ -172,7 +190,42 @@ describe('registered chat command ownership', () => {
     const decoy = await owner('decoy');
     await materialize(decoy, 'decoy');
     const command = createChatOwnerCommand(
-      bindChatOwnerOperations(null, null),
+      bindChatOwnerOperations(
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => {
+          throw new Error('No session owner available');
+        },
+        () => resolveEmojiFilterMode(null),
+      ),
       () => true,
     );
     const saved = await run(command, 'save', 'orphan', decoy);

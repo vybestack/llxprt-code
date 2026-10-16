@@ -11,7 +11,7 @@ import {
   bindRawBrowserResume,
   bindRawBrowserSession,
 } from '../../../components/browserResumeHost.js';
-import { resumeOwnerSession } from '../../../utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../../../utils/resumeOwnerSession.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
@@ -790,11 +790,12 @@ export function useAppInput(params: AppInputParams) {
       return bindOwnerBrowserResume(
         (target) =>
           resumeOwnerSession(
-            agent,
+            agent.session.resume.bind(agent.session),
             target.kind === 'session'
               ? target.session.sessionId
               : target.checkpointId,
             resolveEmojiFilterMode(config),
+            agent.session.listBrowserTargetsDetailed.bind(agent.session),
           ),
         turnStore.commands.loadHistory,
         turnStore.commands.addItem,
