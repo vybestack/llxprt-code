@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useIdePromptComplete } from './useIdePromptComplete.js';
+import {
+  computeIsInputActive,
+  computeIsAwaitingSlashCommandConfirmation,
+} from './inputActivity.js';
 
 import { useBrowserCatalogCommands } from '../../../hooks/useBrowserCatalogCommands.js';
 import { isEditorAvailable } from '@vybestack/llxprt-code-core';
@@ -24,7 +29,13 @@ import type React from 'react';
 import { useStdin, useStdout } from 'ink';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useAgentStream } from '../../../hooks/agentStream/index.js';
+import { useAgentStream } from '../../../hooks/agentStream/useAgentStream.js';
+import {
+  useBound,
+  useContentIdentityReader,
+  useTurnFlush,
+  useCancelRunningSubagents,
+} from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
@@ -35,19 +46,12 @@ import { useVim } from '../../../hooks/vim.js';
 import { useTextBuffer } from '../../../components/shared/text-buffer.js';
 import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
 import { shouldClearTodos } from '../../../hooks/useTodoPausePreserver.js';
-import {
-  StreamingState,
-  ToolCallStatus,
-  type HistoryItem,
-  type HistoryItemWithoutId,
-} from '../../../types.js';
+import { type HistoryItem } from '../../../types.js';
 import { submitOAuthCode } from '../../../oauth-submission.js';
 import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { PromptContentGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
-import { SettingScope } from '../../../../config/settings.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import type { IdeIntegrationNudgeResult } from '../../../IdeIntegrationNudge.js';
 import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
@@ -349,11 +353,11 @@ function useInputBuffer(
   };
 }
 
-function useInputStreamSetup(
+function useStreamInteraction(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { streamRuntime, settings, recordingIntegration } = p;
+  const { settings } = p;
   const { stdout } = useStdout();
   const { setEmbeddedShellFocused } = p.terminalStore.commands;
   const { refreshStatic } = p.turnStore.commands;
@@ -375,10 +379,9 @@ function useInputStreamSetup(
   );
   const bufferSetup = useInputBuffer(p, core);
   const { handleUserCancel } = bufferSetup;
-  const agentStreamResult = useAgentStream(
-    p.agent,
-    streamRuntime,
-    {
+  return {
+    bufferSetup,
+    input: {
       history,
       addItem,
       settings,
@@ -398,10 +401,87 @@ function useInputStreamSetup(
       operationLifecycle: p.operationLifecycle,
       cancelActiveSlashCommand: core.cancelActiveSlashCommand,
     },
-    recordingIntegration,
-    p.subagentManager,
-    p.recordingOwner,
-  );
+  };
+}
+
+function useInputStreamSetup(
+  p: AppInputParams,
+  core: ReturnType<typeof useInputCore>,
+) {
+  const {
+    agent,
+    streamRuntime: runtime,
+    recordingIntegration: recorder,
+    subagentManager,
+    recordingOwner,
+  } = p;
+  const { bufferSetup, input } = useStreamInteraction(p, core);
+  const { tools, mcp, metrics, tasks } = agent;
+  const { session, events, model } = runtime;
+  const { ephemeral, shell, checkpoint, files, projectTempDir } = runtime;
+  const { settings: prefs } = runtime;
+  const { bucketFailover: buckets, sessionLimits: limits } = runtime;
+  const agentStreamResult = useAgentStream({
+    ...input,
+    readHistory: useBound(agent, agent.getHistory),
+    isCheckpointingEnabled: useBound(
+      checkpoint,
+      checkpoint.getCheckpointingEnabled,
+    ),
+    projectCheckpointsDir: runtime.projectCheckpointsDir,
+    stream: useBound(agent, agent.stream),
+    setDisplayCallbacks: useBound(tools, tools.setDisplayCallbacks),
+    setEditorCallbacks: useBound(tools, tools.setEditorCallbacks),
+    openClientChannel: useBound(tools, tools.openClientChannel),
+    subscribeChildTools: useBound(tools, tools.subscribeChildTools),
+    appendShellHistory: useBound(agent, agent.addHistory),
+    injectSteer: useBound(agent, agent.injectSteer),
+    cancelRunningAsyncTasks: useCancelRunningSubagents(tasks),
+    getProviderContextLimit: useBound(agent, agent.getProviderContextLimit),
+    getContentPrefixIdentity: useContentIdentityReader(agent),
+    getToolHandle: useBound(tools, tools.get),
+    findResource: useBound(mcp, mcp.findResource),
+    readResource: useBound(mcp, mcp.readResource),
+    setLastPromptTokenCount: useBound(metrics, metrics.setLastPromptTokenCount),
+    subscribeTaskNotifications: useBound(tasks, tasks.subscribeNotifications),
+    flushRecording: useTurnFlush(agent.session, recordingOwner, recorder),
+    readSessionId: useBound(session, session.getSessionId),
+    subscribeMcpUpdates: useBound(events, events.onMcpClientUpdate),
+    resetBuckets: useCallback(() => buckets.resetBuckets?.(), [buckets]),
+    resetBucketSession: useCallback(
+      () => buckets.resetBucketSession?.(),
+      [buckets],
+    ),
+    ensureBucketsAuthenticated: useCallback(async () => {
+      await buckets.ensureBucketsAuthenticated?.();
+    }, [buckets]),
+    atCommandConfig: files,
+    logUserPrompt: useBound(prefs, prefs.logUserPrompt),
+    getModel: useBound(model, model.getModel),
+    getProvider: useBound(model, model.getProvider),
+    readSelectedProvider: useBound(prefs, prefs.readSelectedProvider),
+    readCitations: useBound(prefs, prefs.readCitations),
+    readProfileName: useBound(prefs, prefs.readProfileName),
+    readContextLimit: useCallback(
+      () => ephemeral.getEphemeralSetting('context-limit'),
+      [ephemeral],
+    ),
+    getMaxSessionTurns: useBound(limits, limits.getMaxSessionTurns),
+    readEmojiFilterMode: useCallback(
+      () => resolveEmojiFilterMode(ephemeral),
+      [ephemeral],
+    ),
+    projectTempDir,
+    checkpointOperations: checkpoint.getCheckpointingEnabled()
+      ? checkpoint.checkpoints
+      : undefined,
+    readTargetDir: useBound(session, session.getTargetDir),
+    readUsePty: useBound(shell, shell.getShouldUseNodePtyShell),
+    readShellExecutionConfig: useBound(shell, shell.getShellExecutionConfig),
+    readPtyWidth: useBound(shell, shell.getPtyTerminalWidth),
+    readPtyHeight: useBound(shell, shell.getPtyTerminalHeight),
+    subagentManager,
+  });
   return { ...bufferSetup, agentStreamResult };
 }
 
@@ -485,86 +565,6 @@ function useInputStream(
   const wiring = useInputStreamWiring(p, core, setup);
   const { agentStreamResult: _agentStreamResult, ...setupRest } = setup;
   return { ...setupRest, ...wiring };
-}
-
-export interface IsInputActiveInputs {
-  streamingState: StreamingState;
-  initError: string | null;
-  hasSlashCommands: boolean;
-  /** True while a slash command is blocked on a shell-expansion approval. */
-  isAwaitingSlashCommandConfirmation: boolean;
-}
-
-/**
- * True when a slash command has put a confirmation on screen that owns the
- * keyboard. `confirm_action` renders through the dialog manager, which
- * replaces the whole inline layout; `confirm_shell_commands` instead parks a
- * Confirming tool group in the processor's pending items, which is what this
- * detects.
- */
-export function computeIsAwaitingSlashCommandConfirmation(
-  pendingItems: readonly HistoryItemWithoutId[],
-): boolean {
-  return pendingItems.some(
-    (item) =>
-      item.type === 'tool_group' &&
-      item.tools.some((tool) => tool.status === ToolCallStatus.Confirming),
-  );
-}
-
-/**
- * Decides whether the composer is rendered.
- *
- * This deliberately does NOT key off the slash-command pipeline being busy.
- * Doing so hid the prompt for the entire duration of a long command
- * (issue #2976). The composer only has to stand down when something else owns
- * the keyboard, which is what the streaming and confirmation terms cover.
- */
-export function computeIsInputActive(inputs: IsInputActiveInputs): boolean {
-  const isStreamingIdleOrResponding =
-    inputs.streamingState === StreamingState.Idle ||
-    inputs.streamingState === StreamingState.Responding;
-  return (
-    isStreamingIdleOrResponding &&
-    !inputs.initError &&
-    inputs.hasSlashCommands &&
-    !inputs.isAwaitingSlashCommandConfirmation
-  );
-}
-
-/**
- * IDE nudge resolution: slash-command-driven enable/install plus a persisted
- * "seen" flag so the nudge never renders twice.
- */
-function useIdePromptComplete(
-  settings: AppInputParams['settings'],
-  handleSlashCommand: ReturnType<typeof useInputCore>['handleSlashCommand'],
-  setIdePromptAnswered: AppInputParams['setIdePromptAnswered'],
-) {
-  return useCallback(
-    (result: IdeIntegrationNudgeResult) => {
-      if (result.userSelection === 'yes') {
-        if (result.isExtensionPreInstalled) {
-          void handleSlashCommand('/ide enable');
-        } else {
-          void handleSlashCommand('/ide install');
-        }
-        settings.setValue(
-          SettingScope.User,
-          'hasSeenIdeIntegrationNudge',
-          true,
-        );
-      } else if (result.userSelection === 'dismiss') {
-        settings.setValue(
-          SettingScope.User,
-          'hasSeenIdeIntegrationNudge',
-          true,
-        );
-      }
-      setIdePromptAnswered(true);
-    },
-    [handleSlashCommand, settings, setIdePromptAnswered],
-  );
 }
 
 /**

@@ -23,7 +23,7 @@ import {
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';

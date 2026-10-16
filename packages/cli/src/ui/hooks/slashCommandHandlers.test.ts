@@ -47,7 +47,7 @@ import { CommandKind } from '../commands/types.js';
 import { MessageType } from '../types.js';
 import { processSlashCommand } from './slashCommandHandlers.js';
 import { createSlashCommandCancellation } from './useSlashCommandCancellation.js';
-import { computeIsAwaitingSlashCommandConfirmation } from '../containers/AppContainer/hooks/useAppInput.js';
+import { computeIsAwaitingSlashCommandConfirmation } from '../containers/AppContainer/hooks/inputActivity.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
 const performResumeMock = vi.fn();
