@@ -15,7 +15,6 @@ import { withDetachedRollbackCheckpoint } from './detachedRollbackCheckpoint.js'
 import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 import {
   detachedValueSubmission,
-  withDetachedHistoryMutation,
   type DetachedHistoryTask,
   type DetachedHistoryHost,
   type DetachedHistoryTransform,
@@ -119,7 +118,7 @@ export function createDetachedHistoryAPI(
     model: string | undefined,
     options: DetachedHistoryOptions,
   ): Promise<void> =>
-    enqueue(() => withDetachedHistoryMutation(task, host(), model, options));
+    enqueue(() => journal.publishDetached(task, host(), model, options));
   return {
     withRollbackCheckpoint: (execute) =>
       withDetachedRollbackCheckpoint(host(), enqueue, execute),

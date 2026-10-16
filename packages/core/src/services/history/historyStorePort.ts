@@ -23,6 +23,11 @@ import type { HistoryRowSummary } from './historySummaryTracker.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import type {
+  DetachedHistoryHost,
+  DetachedHistoryOptions,
+  DetachedHistoryTask,
+} from './detachedHistoryMutation.js';
+import type {
   HistoryMediaOwner,
   HistoryMutationInput,
 } from './historyBatchContracts.js';
@@ -221,6 +226,19 @@ export interface HistoryStorePort {
    * about that one.
    */
   compensate(mark: HistoryCompensationMark, failure: unknown): Promise<void>;
+  /**
+   * Runs one detached append, replacement or transform end to end: reads the
+   * current rows, runs the task's transform to build the candidate, publishes
+   * it and compensates when that fails. How the candidate is held and written
+   * is the store's business; `host` carries the service-side policy (tokens,
+   * spans, chronology, events).
+   */
+  publishDetached(
+    task: DetachedHistoryTask,
+    host: DetachedHistoryHost,
+    modelName: string | undefined,
+    options: DetachedHistoryOptions,
+  ): Promise<void>;
   /** Copies the current rows and their origins into `previous` once they are durable. */
   captureDetached(
     previous: DetachedHistoryJournal,

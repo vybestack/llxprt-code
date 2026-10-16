@@ -103,6 +103,12 @@ import { clearHistoryRows } from './historyClearRows.js';
 import { repairHistoryRows } from './historyValidationRepair.js';
 import { captureDetachedHistory } from './detachedHistoryCapture.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import {
+  withDetachedHistoryMutation,
+  type DetachedHistoryHost,
+  type DetachedHistoryOptions,
+  type DetachedHistoryTask,
+} from './detachedHistoryMutation.js';
 import type {
   HistoryMediaOwner,
   HistoryMutationInput,
@@ -420,6 +426,15 @@ export class HistoryJournalStore implements HistoryStorePort {
   ): HistoryCompensationMark {
     this.withReadRows((cursor) => previous.captureOrigins(cursor));
     return new SnapshotCompensationMark(this, previous, input, replacements);
+  }
+
+  publishDetached(
+    task: DetachedHistoryTask,
+    host: DetachedHistoryHost,
+    modelName: string | undefined,
+    options: DetachedHistoryOptions,
+  ): Promise<void> {
+    return withDetachedHistoryMutation(task, host, modelName, options);
   }
 
   compensate(mark: HistoryCompensationMark, _failure: unknown): Promise<void> {

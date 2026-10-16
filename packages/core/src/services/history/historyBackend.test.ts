@@ -40,6 +40,7 @@ const PORT_METHODS = [
   'adoptMediaOwner',
   'captureCompensation',
   'compensate',
+  'publishDetached',
   'captureDetached',
   'withRowSummary',
   'openDumpSnapshot',
