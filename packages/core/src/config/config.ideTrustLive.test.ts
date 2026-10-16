@@ -6,45 +6,10 @@
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 
 import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
-import { WorkspaceIdeOwner } from '../services/workspace-ide-owner.js';
 import { RuntimePolicyOwner } from '../policy/policy-owner.js';
-const ideOwners: WorkspaceIdeOwner[] = [];
-async function initializeWorkspace(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-) {
-  const owner = new WorkspaceIdeOwner(config, trust, trust);
-  ideOwners.push(owner);
-  const runtime = await initializeTestMcpRuntime(
-    config,
-    McpClientManager,
-    undefined,
-    undefined,
-    new RuntimePolicyOwner(config, trust),
-  );
-  try {
-    await owner.initialize();
-    return runtime;
-  } catch (error) {
-    ideOwners.splice(ideOwners.indexOf(owner), 1);
-    const results = await Promise.allSettled([
-      runtime.dispose(),
-      owner.dispose(),
-    ]);
-    throw new AggregateError(
-      [
-        error,
-        ...results.flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
-        ),
-      ],
-      `Workspace initialization failed: ${String(error)}`,
-    );
-  }
-}
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { resolve } from 'node:path';
 
 let ideClient: IdeClient;
@@ -57,6 +22,7 @@ const mcpManager = {
   quarantineForTrustRevocation: vi.fn(),
   whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn().mockResolvedValue(undefined),
+  cancelDiscovery: vi.fn().mockResolvedValue(undefined),
   readInstructions: vi.fn().mockReturnValue(''),
 };
 
@@ -72,7 +38,8 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
 
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
@@ -87,6 +54,55 @@ const baseParams: ConfigParameters = {
 };
 
 describe('Config live IDE trust', () => {
+  const ideOwners: Array<{ dispose(): void | Promise<void> }> = [];
+
+  async function initializeWorkspace(
+    config: Config,
+    trust: WorkspaceTrustLifecycle,
+  ) {
+    ideOwners.push(config, trust);
+    const policy = new RuntimePolicyOwner(config, trust);
+    ideOwners.push(policy);
+    const runtime = await McpRuntimeOwner.create(
+      createTestOAuthBinding(),
+      config,
+      policy.session.messageBus,
+      undefined,
+      McpClientManager,
+      undefined,
+      policy,
+    );
+    ideOwners.push(runtime);
+    try {
+      await runtime.initialize();
+      return runtime;
+    } catch (error) {
+      ideOwners.splice(ideOwners.indexOf(runtime), 1);
+      const results = await Promise.allSettled([runtime.dispose()]);
+      throw new AggregateError(
+        [
+          error,
+          ...results.flatMap((result) =>
+            result.status === 'rejected' ? [result.reason] : [],
+          ),
+        ],
+        `Workspace initialization failed: ${String(error)}`,
+      );
+    }
+  }
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const owner of ideOwners.splice(0).reverse()) {
+      try {
+        await owner.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'IDE trust fixture cleanup failed');
+  });
   beforeEach(async () => {
     vi.clearAllMocks();
     ideClient = await actual.IdeClient.create();
@@ -211,9 +227,16 @@ describe('Config live IDE trust', () => {
     await expect(trust.whenSettled()).rejects.toBe(quarantineFailure);
     const owner = ideOwners.pop();
     expect(owner).toBeDefined();
-    await expect(owner?.dispose()).rejects.toMatchObject({
-      errors: [quarantineFailure],
-    });
+    const retirement = await owner?.dispose().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(retirement).toBeInstanceOf(AggregateError);
+    const causes = (error: unknown): unknown[] =>
+      error instanceof AggregateError ? error.errors.flatMap(causes) : [error];
+    expect(new Set(causes(retirement))).toStrictEqual(
+      new Set([quarantineFailure]),
+    );
   });
 
   it('deduplicates IDE notifications that do not change effective trust', async () => {

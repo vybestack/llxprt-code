@@ -10,7 +10,8 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Config } from './config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { RuntimePolicyOwner } from '../policy/policy-owner.js';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
   ActivateMcpServerTool,
@@ -199,7 +200,12 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
   let settingsService: SettingsService;
   let settingsOwner: SessionSettingsOwner;
   afterEach(() => settingsOwner.dispose());
-  let owner: Awaited<ReturnType<typeof initializeTestMcpRuntime>>;
+  let owner: WorkspaceToolCatalogOwner;
+  let policy: RuntimePolicyOwner;
+  afterEach(async () => {
+    await owner.dispose();
+    await policy.dispose();
+  });
 
   beforeEach(async () => {
     settingsService = new SettingsService();
@@ -214,44 +220,43 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
       cwd: '.',
     });
     settingsOwner = new SessionSettingsOwner(settingsService);
-    owner = await initializeTestMcpRuntime(
+    policy = new RuntimePolicyOwner(config);
+    owner = new WorkspaceToolCatalogOwner(
       config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      policy.session.messageBus,
+      policy.trust,
       () => settingsOwner.readRegistryPolicy([]),
     );
+    await owner.initialize();
   });
 
   it('registers activation tool when deferred servers exist, absent when off (D2)', async () => {
-    const registry = owner.toolSelection;
-    owner.toolPublication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
+    const registry = owner.selection;
+    owner.publication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
     settingsService.set('mcp.lazy', true);
-    await owner.refreshContext();
+    await owner.refreshActivation(async () => {});
     expect(findActivationTool(registry)).toBeDefined();
 
     settingsService.set('mcp.lazy', false);
-    await owner.refreshContext();
+    await owner.refreshActivation(async () => {});
     expect(findActivationTool(registry)).toBeUndefined();
   }, 15_000);
 
   it('rebuilds activation enum after tool list changes (C4)', async () => {
     settingsService.set('mcp.lazy', true);
-    const registry = owner.toolSelection;
-    owner.toolPublication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
+    const registry = owner.selection;
+    owner.publication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    await owner.refreshContext();
+    await owner.refreshActivation(async () => {});
     const initialEnum = extractNameEnum(
       findActivationTool(registry)?.schema.parametersJsonSchema,
     );
     expect(initialEnum).toContain('alpha');
     expect(initialEnum).not.toContain('beta');
 
-    owner.toolPublication.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
-    await owner.refreshContext();
+    owner.publication.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
+    await owner.refreshActivation(async () => {});
     const rebuiltEnum = extractNameEnum(
       findActivationTool(registry)?.schema.parametersJsonSchema,
     );
@@ -261,14 +266,14 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
 
   it('removes activation tool when all servers become eager (C4)', async () => {
     settingsService.set('mcp.lazy', true);
-    const registry = owner.toolSelection;
-    owner.toolPublication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
+    const registry = owner.selection;
+    owner.publication.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    await owner.refreshContext();
+    await owner.refreshActivation(async () => {});
     expect(findActivationTool(registry)).toBeDefined();
 
     settingsService.set('mcp.eagerServers', ['alpha']);
-    await owner.refreshContext();
+    await owner.refreshActivation(async () => {});
     expect(findActivationTool(registry)).toBeUndefined();
   });
 
@@ -286,13 +291,18 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
       cwd: '.',
       initialSettings: profileSettings.getAllGlobalSettings(),
     });
-    const nestedOwner = await initializeTestMcpRuntime(nestedConfig);
-
-    const registry = nestedOwner.toolSelection;
-    nestedOwner.toolPublication.registerTool(
+    const nestedPolicy = new RuntimePolicyOwner(nestedConfig);
+    const nestedOwner = new WorkspaceToolCatalogOwner(
+      nestedConfig,
+      nestedPolicy.session.messageBus,
+      nestedPolicy.trust,
+    );
+    await nestedOwner.initialize();
+    const registry = nestedOwner.selection;
+    nestedOwner.publication.registerTool(
       mcpTool('mcp__alpha__search', 'alpha'),
     );
-    await nestedOwner.refreshContext();
+    await nestedOwner.refreshActivation(async () => {});
 
     expect(findActivationTool(registry)).toBeDefined();
     expect(
@@ -303,5 +313,8 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
         findActivationTool(registry)?.schema.parametersJsonSchema,
       ),
     ).toContain('alpha');
+    await nestedOwner.dispose();
+    await nestedPolicy.dispose();
+    await nestedConfig.dispose();
   });
 });

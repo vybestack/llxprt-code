@@ -52,7 +52,8 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.j
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
 import {
   waitForCondition,
   waitForConditionInRealTime,
@@ -103,17 +104,6 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -123,6 +113,23 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 describe('subagent.ts', () => {
+  const workspaceOwners: McpRuntimeOwner[] = [];
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const owner of workspaceOwners.splice(0).reverse()) {
+      try {
+        await owner.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Idle stream workspace cleanup failed',
+      );
+  });
   describe('stream idle timeout behavioral tests', () => {
     const originalEnv = process.env;
     const mockMessageBus = {} as MessageBus;
@@ -234,7 +241,12 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', customTimeoutMs);
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        configWithTimeout,
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,
@@ -333,7 +345,12 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', 0); // Disabled
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        configWithTimeout,
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,
@@ -468,7 +485,12 @@ describe('subagent.ts', () => {
       };
       const configWithTimeout = new Config(configParams);
       settingsService.set('stream-idle-timeout-ms', configTimeoutMs);
-      const mcpRuntime = await initializeTestConfig(configWithTimeout);
+      const mcpRuntime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        configWithTimeout,
+      );
+      workspaceOwners.push(mcpRuntime);
+      await mcpRuntime.initialize();
 
       const runtimeBundle = createRuntimeBundle(
         configWithTimeout,

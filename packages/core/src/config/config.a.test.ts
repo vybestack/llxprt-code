@@ -5,20 +5,33 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { WorkspaceCheckpointOwner } from '../services/workspace-checkpoint-owner.js';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { WorkspaceMcpCatalogOwner } from '../services/workspace-mcp-catalog-owner.js';
+
 import {
   buildFsMockBody,
   buildToolsMockBody,
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
   createBaseParams,
@@ -38,7 +51,7 @@ const hoistedConfigMocks = {
 
 const initializeShellParser = vi.fn(() => Promise.resolve(true));
 
-void vi.mock('../utils/shell-parser.js', () => ({
+const parserInfrastructure = {
   initializeParser: initializeShellParser,
   isParserAvailable: () => true,
   parseShellCommand: () => null,
@@ -47,16 +60,25 @@ void vi.mock('../utils/shell-parser.js', () => ({
   splitCommandsWithTree: () => [],
   parseCommandDetails: () => null,
   hasPromptCommandTransform: () => false,
-}));
+};
+void vi.mock('../utils/shell-parser.js', () => parserInfrastructure);
+void vi.mock(
+  '@vybestack/llxprt-code-core/utils/shell-parser.js',
+  () => parserInfrastructure,
+);
 
 const __actual = { ...(await import('fs')) };
 void vi.mock('fs', () => buildFsMockBody(__actual));
 
 // Mock dependencies that might be called during Config construction or createServerConfig.
 const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
-void vi.mock('@vybestack/llxprt-code-tools', () =>
-  buildToolsMockBody(__actual2),
-);
+void vi.mock('@vybestack/llxprt-code-tools', () => ({
+  ...buildToolsMockBody(__actual2),
+  ToolRegistry: vi.fn(
+    (...args: ConstructorParameters<typeof ToolRegistry>) =>
+      new __actual2.ToolRegistry(...args),
+  ),
+}));
 
 // Mock individual tools if their constructors are complex or have side effects
 
@@ -69,13 +91,6 @@ void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-const __actual4 = {
-  ...(await import('@vybestack/llxprt-code-ide-integration')),
-};
-void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
-  buildIdeIntegrationMockBody(__actual4),
-);
-
 void vi.mock('../utils/memoryDiscovery.js', () =>
   buildMemoryDiscoveryMockBody(hoistedConfigMocks),
 );
@@ -86,7 +101,39 @@ void vi.mock('../utils/events.js', () =>
 );
 
 describe('Server Config (config.ts)', () => {
+  const owners: Array<{ dispose(): void | Promise<void> }> = [];
+
+  async function initializeWorkspace(config: Config): Promise<void> {
+    owners.push(config);
+    const workspace = await McpRuntimeOwner.create(
+      createTestOAuthBinding(),
+      config,
+    );
+    owners.push(workspace);
+    await workspace.initialize();
+  }
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const owner of owners.splice(0).reverse()) {
+      try {
+        await owner.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Workspace startup fixture cleanup failed',
+      );
+  });
   const baseParams = createBaseParams(new SettingsService());
+  const paths: string[] = [];
+  afterEach(async () => {
+    for (const path of paths.splice(0))
+      await rm(path, { recursive: true, force: true });
+  });
 
   beforeEach(() => {
     resetAgentClientMock();
@@ -105,7 +152,7 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      const initialization = initializeTestConfig(config);
+      const initialization = initializeWorkspace(config);
       await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledOnce();
       });
@@ -137,8 +184,8 @@ describe('Server Config (config.ts)', () => {
       });
 
       const initializations = [
-        initializeTestConfig(firstConfig),
-        initializeTestConfig(secondConfig),
+        initializeWorkspace(firstConfig),
+        initializeWorkspace(secondConfig),
       ];
       await waitFor(() => {
         expect(initializeShellParser).toHaveBeenCalledTimes(2);
@@ -162,7 +209,12 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      const runtime = await initializeTestConfig(config);
+      const runtime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        config,
+      );
+      owners.push(runtime);
+      await runtime.initialize();
       expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
 
       expect(ToolRegistry).toHaveBeenCalledOnce();
@@ -195,34 +247,76 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      const runtime = await initializeTestConfig(config);
+      const runtime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        config,
+      );
+      owners.push(runtime);
+      await runtime.initialize();
       expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
     });
 
-    it('should throw an error if initialized more than once', async () => {
+    it('retains its original workspace through repeated owner initialization', async () => {
+      const directory = await mkdtemp(join(tmpdir(), 'startup-cached-skills-'));
+      paths.push(directory);
+      const originalPath = join(directory, '.agents', 'skills', 'original');
+      await mkdir(originalPath, { recursive: true });
+      await writeFile(
+        join(originalPath, 'SKILL.md'),
+        '---\nname: original\ndescription: original publication\n---\nphysical original skill',
+      );
       const config = new Config({
         ...baseParams,
+        targetDir: directory,
+        cwd: directory,
+        trustedFolder: true,
         checkpointing: false,
+        skillsSupport: true,
       });
-
-      const runtime = await initializeTestConfig(config);
-      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
-      expect(() => config.initialize()).toThrow(
-        'Config was already initialized',
+      owners.push(config);
+      const runtime = await McpRuntimeOwner.create(
+        createTestOAuthBinding(),
+        config,
       );
+      owners.push(runtime);
+      await runtime.initialize();
+      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
+      const registry = runtime.toolSelection;
+      const original = runtime.workspaceSkills.initialize();
+      await original;
+      await rm(originalPath, { recursive: true });
+      const changedPath = join(directory, '.agents', 'skills', 'changed');
+      await mkdir(changedPath);
+      await writeFile(
+        join(changedPath, 'SKILL.md'),
+        '---\nname: changed\ndescription: later publication\n---\nnot admitted by repeated startup',
+      );
+      const repeated = runtime.workspaceSkills.initialize();
+      expect(repeated).toBe(original);
+      await repeated;
+      expect(
+        runtime.workspaceSkills.operations.list().map((skill) => skill.name),
+      ).toStrictEqual(['original']);
+      expect(
+        registry.getAllToolNames().filter((name) => name === 'activate_skill'),
+      ).toHaveLength(1);
+      expect(registry.getTool('activate_skill')).toBeDefined();
     });
 
     it('returns an independently owned workspace catalog without storing registries on Config', async () => {
       const config = new Config({ ...baseParams, checkpointing: false });
-      const runtime = await initializeTestConfig(config);
-      runtime.catalogOwner.resourcePublication.setResourcesForServer(
-        'fixture',
-        [{ name: 'entry', uri: 'fixture:///entry' }],
+      const catalog = new WorkspaceMcpCatalogOwner(
+        () => true,
+        async () => {
+          throw new Error('No resource transport selected');
+        },
       );
+      owners.push(catalog);
+      catalog.resourcePublication.setResourcesForServer('fixture', [
+        { name: 'entry', uri: 'fixture:///entry' },
+      ]);
       expect(
-        runtime.catalogOwner.resourceSelection.findResource(
-          'fixture:fixture:///entry',
-        ),
+        catalog.resourceSelection.findResource('fixture:fixture:///entry'),
       ).toMatchObject({
         serverName: 'fixture',
         name: 'entry',
@@ -230,10 +324,10 @@ describe('Server Config (config.ts)', () => {
       });
       expect('getResourceRegistry' in config).toBe(false);
       expect('getPromptRegistry' in config).toBe(false);
-      await runtime.dispose();
-      expect(() =>
-        runtime.catalogOwner.resourceSelection.listResources(),
-      ).toThrow('stopped');
+      await catalog.dispose();
+      expect(() => catalog.resourceSelection.listResources()).toThrow(
+        'stopped',
+      );
     });
   });
 });

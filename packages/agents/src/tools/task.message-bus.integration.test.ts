@@ -16,7 +16,6 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -31,10 +30,13 @@ import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { ChatSession } from '../core/chatSession.js';
 import { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   createStatelessRuntimeBundle,
-  disposeMockConfig,
 } from '../core/__tests__/subagent-test-helpers.js';
 import { TaskTool } from './task.js';
 
@@ -102,7 +104,8 @@ function createManagers(): {
 }
 
 describe('TaskTool runtime MessageBus integration', () => {
-  let config: Config | undefined;
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let sendMessageStream: ReturnType<typeof createMockStream>;
 
   beforeEach(() => {
@@ -128,21 +131,27 @@ describe('TaskTool runtime MessageBus integration', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    if (config !== undefined) {
-      await disposeMockConfig(config);
-    }
   });
 
   it('uses the exact session MessageBus for a non-interactive subagent tool scheduler', async () => {
     const probeTool = new MockTool(TOOL_NAME);
-    const {
-      config: runtimeConfig,
-      mcpRuntime,
-      settingsOwner,
-    } = await createMockConfig({
-      getTool: (name) => (name === TOOL_NAME ? probeTool : undefined),
-    });
-    config = runtimeConfig;
+    const runtimeConfigSettings = seedSubagentSettings();
+    const runtimeConfig = createSubagentConfig(
+      runtimeConfigSettings,
+      retainSubagentCleanup,
+    );
+    const settingsOwner = await acquireSubagentSettings(
+      runtimeConfig,
+      runtimeConfigSettings,
+      retainSubagentCleanup,
+    );
+    const mcpRuntime = await acquireSubagentWorkspace(
+      runtimeConfig,
+      retainSubagentCleanup,
+      {
+        getTool: (name) => (name === TOOL_NAME ? probeTool : undefined),
+      },
+    );
 
     const sessionMessageBus = mcpRuntime.messageBus;
     const decoyMessageBus = new MessageBus(sessionMessageBus, false);

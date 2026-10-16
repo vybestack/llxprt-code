@@ -37,7 +37,11 @@ import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/Agent
 import type { ChatSessionConfig } from './chatSession.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -90,17 +94,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -110,11 +104,26 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock;
 
   describe('create (toolConfig preservation — Issue #2069)', () => {
     it('explicit empty toolConfig + outputConfig yields only self_emitvalue', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['read_file', 'write_file']),
         getToolMetadata: vi.fn(() => ({
@@ -166,7 +175,20 @@ describe('subagent.ts', () => {
     });
 
     it('omitted toolConfig + outputConfig yields runtime default tools plus self_emitvalue', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['read_file', 'write_file']),
         getToolMetadata: vi.fn(() => ({
@@ -270,7 +292,20 @@ describe('subagent.ts', () => {
     };
 
     it('should correctly template the system prompt and initialize ChatSession', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = {
         systemPrompt: 'Hello ${name}, your task is ${task}.',
       };
@@ -312,7 +347,20 @@ describe('subagent.ts', () => {
     });
 
     it('should include output instructions in the system prompt when outputs are defined', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -339,7 +387,20 @@ describe('subagent.ts', () => {
     });
 
     it('should always start with empty chat history when using systemPrompt', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = { systemPrompt: 'Test prompt' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -371,7 +432,20 @@ describe('subagent.ts', () => {
     });
 
     it('should reject with required error when PromptConfig lacks systemPrompt', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const malformedPromptConfig = {} as unknown as PromptConfig;
 
       const { overrides } = createRuntimeOverrides(
@@ -396,7 +470,20 @@ describe('subagent.ts', () => {
     });
 
     it('should substitute placeholders for missing template variables', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = {
         systemPrompt: 'Hello {{name}}, your session is {{session_id}}.',
       };
@@ -425,7 +512,20 @@ describe('subagent.ts', () => {
     });
 
     it('should substitute placeholder for missing sessionId template variable', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = {
         systemPrompt: 'Session: {{session_id}}',
       };
@@ -453,7 +553,20 @@ describe('subagent.ts', () => {
     });
 
     it('should always include outputConfig instructions in system instruction when systemPrompt is used', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = { systemPrompt: 'Do the thing.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -479,7 +592,20 @@ describe('subagent.ts', () => {
     });
 
     it('should pass interactionMode subagent when building system prompt', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));

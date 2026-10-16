@@ -80,10 +80,11 @@ describe('explicit MCP construction ownership', () => {
           ...createSessionSettingsFixture(config),
           config,
           mcpOwnership: 'caller',
+          credentialAuthority: builtCredentials().authority,
         },
       ]),
     ).rejects.toThrow('Caller-owned MCP requires an explicit runtime handoff');
-    expect(config.hasInitializationStarted()).toBe(false);
+    expect(builtCredentials().keySnapshot()).toStrictEqual([]);
   });
 
   it('retains failed root initialization and rejects a mismatched adoption bus without poisoning an independent root', async () => {
@@ -140,7 +141,7 @@ describe('explicit MCP construction ownership', () => {
     ).rejects.toThrow(
       'MCP runtime handoff must retain its Config and MessageBus',
     );
-    expect(config.hasInitializationStarted()).toBe(false);
+    expect(first.isStopped()).toBe(false);
     await second.initialize();
     expect(second.isStopped()).toBe(false);
     expect(second.trust).toBe(first.trust);

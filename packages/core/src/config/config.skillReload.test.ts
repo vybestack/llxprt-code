@@ -1,3 +1,4 @@
+import { installTestWorkspaceSkills } from '../__tests__/workspace-skill-fixture.js';
 import type { WorkspaceSkillAssemblyOperations } from './skill-tool-sync.js';
 /**
  * @license
@@ -14,7 +15,7 @@ import { join } from 'node:path';
 import { Config, type ConfigParameters } from './config.js';
 import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
 import type { WorkspaceSkillOwner } from '../skills/workspace-skill-owner.js';
 
 interface RegistrarObservation {
@@ -22,6 +23,8 @@ interface RegistrarObservation {
 }
 
 describe('workspace reload refreshes the model-facing skill surface @issue:3379', () => {
+  const acquireSkills = installTestWorkspaceSkills();
+
   let directory: string;
   let close: (() => Promise<void>) | undefined;
   let owner: Pick<WorkspaceSkillOwner, 'operations' | 'refresh'>;
@@ -62,31 +65,22 @@ describe('workspace reload refreshes the model-facing skill surface @issue:3379'
       skillsSupport: true,
       ...overrides,
     });
-    const runtime = await initializeTestMcpRuntime(
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        reloadPolicy: async () => ({}),
-        registerTools: (_registry, service) => {
-          if (registrationFailure) throw new Error('registration failed');
-          observations.push({
-            skills: service
-              .listSkills()
-              .map((skill) => skill.name)
-              .sort(),
-          });
-        },
-        ...operations,
+    const skills = await acquireSkills(config, {
+      reloadPolicy: async () => ({}),
+      registerTools: (_registry, service) => {
+        if (registrationFailure) throw new Error('registration failed');
+        observations.push({
+          skills: service
+            .listSkills()
+            .map((skill) => skill.name)
+            .sort(),
+        });
       },
-    );
-    owner = runtime.workspaceSkills;
+      ...operations,
+    });
+    owner = skills;
     close = async () => {
-      await runtime.dispose();
+      await skills.dispose();
       await config.dispose();
     };
     observations.length = 0;

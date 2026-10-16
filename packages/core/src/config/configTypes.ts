@@ -3,12 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  WorkspacePathOperations,
-  WorkspaceTextOperations,
-  WorkspaceScanOperations,
-  WorkspaceIgnoreOperations,
-} from '../services/workspace-filesystem-owner.js';
 
 /**
  * Shared configuration types extracted from config.ts.
@@ -26,10 +20,7 @@ import type { SkillDefinition } from '../skills/skillManager.js';
  * instead of providers package.
  */
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
-import type {
-  McpApprovalPolicy,
-  MCPOAuthConfig,
-} from '@vybestack/llxprt-code-mcp';
+import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
@@ -39,7 +30,6 @@ import type {
   AnyToolInvocation,
   ISkillService,
   ToolPublication,
-  ILspService,
 } from '@vybestack/llxprt-code-tools';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -460,30 +450,4 @@ export interface ConfigParameters {
   onModelChange?: (model: string) => void;
   mcpEnabled?: boolean;
   extensionsEnabled?: boolean;
-}
-
-export interface ConfigInitializationDependencies {
-  readonly initializeMemory?: () => Promise<void>;
-  workspacePaths: WorkspacePathOperations;
-  workspaceFiles: WorkspaceTextOperations;
-  workspaceIgnore: WorkspaceIgnoreOperations;
-  workspaceScans: WorkspaceScanOperations;
-  lspDiagnostics?: ILspService;
-  initializeIde?: () => Promise<void>;
-  initializeTools: () => Promise<void>;
-  startLsp?: () => Promise<void>;
-  startExtensions?: () => Promise<void>;
-  publishTools?: () => Promise<void>;
-  summarizeOutput?: (
-    content: string,
-    signal: AbortSignal,
-    tokenBudget?: number,
-  ) => Promise<string>;
-  mcpApprovalPolicy: McpApprovalPolicy;
-  startMcpDiscovery: () => void;
-  startMcpExtension: (extension: LlxprtExtension) => Promise<void>;
-  stopMcpExtension: (extension: LlxprtExtension) => Promise<void>;
-  readMcpInstructions: () => string | undefined;
-  messageBus?: MessageBus;
-  startMcp?: () => Promise<void>;
 }

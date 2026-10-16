@@ -3,14 +3,16 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
-import { PolicyDecision } from '../policy/types.js';
-const fixtureTrust: WorkspaceTrustLifecycle[] = [];
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
-import { HookSystem } from '../hooks/hookSystem.js';
-import { createOwnedHookRoot } from '../hooks/__tests__/hook-runtime-fixture.js';
+import { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-policy';
 import {
   RuntimePolicyOwner,
@@ -24,52 +26,12 @@ import {
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { assembleAgentActivationBootstrap } from '@vybestack/llxprt-code-agents';
+import { installFailingSessionFixture } from './helpers/session-failure-fixture.js';
 
-async function createFailingSession(config: Config, failure: Error) {
-  const settingsService = new SettingsService();
-  for (const [key, value] of Object.entries(config.getInitialSettings()))
-    settingsService.set(key, value);
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
-  );
-  const operation = await assembleAgentActivationBootstrap(
-    config,
-    settingsService,
-    manager,
-    null,
-    () => undefined,
-    'borrowed',
-  );
-  vi.spyOn(
-    operation.sessionClient.getAgentClient(),
-    'dispose',
-  ).mockImplementation(async () => {
-    throw failure;
-  });
-  return {
-    disposeSession: () =>
-      Promise.resolve(operation.dispose()).then(
-        () => {
-          throw new Error('Expected session cleanup failure');
-        },
-        (error: unknown) => {
-          if (!(error instanceof AggregateError)) throw error;
-          const cause: unknown = error.errors[0];
-          if (!(cause instanceof AggregateError)) throw cause;
-          if (error.errors.length !== 1) throw error;
-          return cause.errors;
-        },
-      ),
-    operation,
-    cleanup: () => manager.dispose(),
-  };
+function causes(error: unknown): unknown[] {
+  return error instanceof AggregateError
+    ? error.errors.flatMap(causes)
+    : [error];
 }
 
 interface InstanceMock {
@@ -91,54 +53,13 @@ function createInstanceMock(): InstanceMock {
   };
 }
 
-import type { ConfigParameters } from './config.js';
-import { ApprovalMode, Config } from './config.js';
-import { initializeTestMcpRuntime as initializeMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
-
-async function initializeTestConfig(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-): Promise<void> {
-  await initializeMcpRuntime(
-    config,
-    McpClientManager,
-    undefined,
-    undefined,
-    new RuntimePolicyOwner(config, trust),
-  );
-}
-
-async function initializeTestMcpRuntime(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-  ...args: Parameters<typeof initializeMcpRuntime> extends [
-    unknown,
-    ...infer Rest,
-  ]
-    ? Rest
-    : never
-) {
-  return initializeMcpRuntime(
-    config,
-    args[0] ?? McpClientManager,
-    args[1],
-    args[2],
-    args[3] ?? new RuntimePolicyOwner(config, trust),
-  );
-}
-
-const hookRoots: HookSystem[] = [];
-const hookSettingsOwners: SessionSettingsOwner[] = [];
-function createHookRoot(
-  config: Config,
-  trust: WorkspaceTrustLifecycle,
-): HookSystem {
-  const { root, settingsOwner } = createOwnedHookRoot(config, trust);
-  hookSettingsOwners.push(settingsOwner);
-  hookRoots.push(root);
-  hookInitializers.push(vi.spyOn(root.getRegistry(), 'initialize'));
-  return root;
-}
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  ApprovalMode,
+  Config,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 
 const FAILED_TRANSITION_COUNT = 101;
 
@@ -158,6 +79,66 @@ function asAggregateError(error: unknown): AggregateError {
 }
 
 describe('Config MCP wiring on folder trust change', () => {
+  const fixtureTrust: WorkspaceTrustLifecycle[] = [];
+
+  const workspaceOwners: McpRuntimeOwner[] = [];
+
+  function retireWorkspace(owner: McpRuntimeOwner): Promise<void> {
+    const index = workspaceOwners.indexOf(owner);
+    if (index >= 0) workspaceOwners.splice(index, 1);
+    return owner.dispose();
+  }
+
+  async function acquireWorkspace(
+    config: Config,
+    trust: WorkspaceTrustLifecycle,
+    policy = new RuntimePolicyOwner(config, trust),
+  ): Promise<McpRuntimeOwner> {
+    const owner = await McpRuntimeOwner.create(
+      createTestOAuthBinding(),
+      config,
+      policy.session.messageBus,
+      undefined,
+      McpClientManager,
+      undefined,
+      policy,
+    );
+    workspaceOwners.push(owner);
+    await owner.initialize();
+    return owner;
+  }
+
+  const hookRoots: HookSystem[] = [];
+
+  const hookSettingsOwners: SessionSettingsOwner[] = [];
+
+  function createHookRoot(
+    config: Config,
+    trust: WorkspaceTrustLifecycle,
+  ): HookSystem {
+    const settingsOwner = new SessionSettingsOwner(new SettingsService());
+    hookSettingsOwners.push(settingsOwner);
+    settingsOwner.bindTelemetry(config);
+    const root = new HookSystem(
+      readHookDefinitions(config),
+      hookSessionRuntime(config, trust, settingsOwner.telemetry),
+    );
+    hookRoots.push(root);
+    hookInitializers.push(vi.spyOn(root.getRegistry(), 'initialize'));
+    return root;
+  }
+
+  const createFailingSession = installFailingSessionFixture();
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      workspaceOwners.splice(0).map((owner) => owner.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Trust workspace cleanup failed');
+  });
   beforeEach(() => {
     instances.length = 0;
     hookInitializers.length = 0;
@@ -192,7 +173,7 @@ describe('Config MCP wiring on folder trust change', () => {
       localTrust: config.initialWorkspaceTrust,
     });
     fixtureTrust.push(configTrust);
-    await initializeTestConfig(config, configTrust);
+    await acquireWorkspace(config, configTrust);
 
     void configTrust.setTrustedFolderLive(true);
     await configTrust.whenSettled();
@@ -206,7 +187,7 @@ describe('Config MCP wiring on folder trust change', () => {
       localTrust: config.initialWorkspaceTrust,
     });
     fixtureTrust.push(configTrust);
-    await initializeTestConfig(config, configTrust);
+    await acquireWorkspace(config, configTrust);
 
     void configTrust.setTrustedFolderLive(false);
     await configTrust.whenSettled();
@@ -223,14 +204,7 @@ describe('Config MCP wiring on folder trust change', () => {
     const engine = new PolicyEngine(config.getPolicyEngineConfig());
     const workspace = new WorkspacePolicyOwner(config, configTrust, engine);
     const configPolicy = new RuntimePolicyOwner(config, configTrust, workspace);
-    const runtime = await initializeTestMcpRuntime(
-      config,
-      configTrust,
-      undefined,
-      undefined,
-      undefined,
-      configPolicy,
-    );
+    const runtime = await acquireWorkspace(config, configTrust, configPolicy);
     config.setApprovalMode(ApprovalMode.YOLO);
     const policyFailure = new Error('policy cleanup failed');
     vi.spyOn(engine, 'removeRulesBySource').mockImplementationOnce(() => {
@@ -260,7 +234,7 @@ describe('Config MCP wiring on folder trust change', () => {
       localTrust: config.initialWorkspaceTrust,
     });
     fixtureTrust.push(configTrust);
-    await initializeTestConfig(config, configTrust);
+    await acquireWorkspace(config, configTrust);
     const quarantineFailure = new Error('quarantine failed');
     instances[0].quarantineForTrustRevocation.mockImplementationOnce(() => {
       throw quarantineFailure;
@@ -283,7 +257,7 @@ describe('Config MCP wiring on folder trust change', () => {
       localTrust: config.initialWorkspaceTrust,
     });
     fixtureTrust.push(configTrust);
-    await initializeTestConfig(config, configTrust);
+    await acquireWorkspace(config, configTrust);
 
     void configTrust.setTrustedFolderLive(true);
     await configTrust.whenSettled();
@@ -302,7 +276,7 @@ describe('Config MCP wiring on folder trust change', () => {
       localTrust: config.initialWorkspaceTrust,
     });
     fixtureTrust.push(configTrust);
-    await initializeTestConfig(config, configTrust);
+    await acquireWorkspace(config, configTrust);
     createHookRoot(config, configTrust);
 
     void configTrust.setTrustedFolderLive(true);
@@ -323,7 +297,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configA.initialWorkspaceTrust,
       });
       fixtureTrust.push(configATrust);
-      await initializeTestConfig(configA, configATrust);
+      await acquireWorkspace(configA, configATrust);
 
       const configB = new Config({
         ...baseParams,
@@ -334,7 +308,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configB.initialWorkspaceTrust,
       });
       fixtureTrust.push(configBTrust);
-      await initializeTestConfig(configB, configBTrust);
+      await acquireWorkspace(configB, configBTrust);
 
       const mockA = instances[0];
       const mockB = instances[1];
@@ -357,7 +331,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configA.initialWorkspaceTrust,
       });
       fixtureTrust.push(configATrust);
-      await initializeTestConfig(configA, configATrust);
+      await acquireWorkspace(configA, configATrust);
 
       const configB = new Config({
         ...baseParams,
@@ -368,7 +342,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configB.initialWorkspaceTrust,
       });
       fixtureTrust.push(configBTrust);
-      await initializeTestConfig(configB, configBTrust);
+      await acquireWorkspace(configB, configBTrust);
 
       const mockA = instances[0];
       const mockB = instances[1];
@@ -391,7 +365,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configA.initialWorkspaceTrust,
       });
       fixtureTrust.push(configATrust);
-      await initializeTestConfig(configA, configATrust);
+      await acquireWorkspace(configA, configATrust);
 
       const configB = new Config({
         ...baseParams,
@@ -402,7 +376,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: configB.initialWorkspaceTrust,
       });
       fixtureTrust.push(configBTrust);
-      await initializeTestConfig(configB, configBTrust);
+      await acquireWorkspace(configB, configBTrust);
 
       const mockA = instances[0];
       const mockB = instances[1];
@@ -429,7 +403,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
 
       const mock = instances[0];
       mock.onFolderTrustRevoked.mockImplementation(async () => {
@@ -456,7 +430,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
 
       const mock = instances[0];
       mock.onFolderTrustRevoked.mockImplementation(async () => {
@@ -479,7 +453,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
 
       const mock = instances[0];
       mock.onFolderTrustRevoked.mockRejectedValueOnce(
@@ -511,7 +485,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
       const failure = new Error('disconnect failed');
       instances[0].onFolderTrustRevoked.mockRejectedValueOnce(failure);
 
@@ -536,7 +510,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
       createHookRoot(config, configTrust);
       hookInitializers[0].mockRejectedValueOnce(new Error('hooks failed'));
 
@@ -557,7 +531,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
       createHookRoot(config, configTrust);
       hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
       vi.useFakeTimers();
@@ -599,7 +573,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
       const hookRoot = createHookRoot(config, configTrust);
       hookInitializers[0].mockReturnValue(new Promise<void>(() => {}));
 
@@ -628,7 +602,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const mock = instances[0];
         let releaseTransition: (() => void) | undefined;
         mock.onFolderTrustRevoked.mockImplementation(
@@ -647,7 +621,7 @@ describe('Config MCP wiring on folder trust change', () => {
             expect(mock.onFolderTrustRevoked).toHaveBeenCalledOnce(),
           );
           const retirement = Promise.allSettled([
-            owner.dispose(),
+            retireWorkspace(owner),
             config.dispose(),
           ]);
           await waitFor(() => expect(mock.stop).toHaveBeenCalledOnce());
@@ -662,7 +636,7 @@ describe('Config MCP wiring on folder trust change', () => {
         } finally {
           releaseTransition?.();
           const retired = await Promise.allSettled([
-            owner.dispose(),
+            retireWorkspace(owner),
             config.dispose(),
           ]);
           const completed = await transition;
@@ -686,7 +660,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const mock = instances[0];
         let releaseTransition: (() => void) | undefined;
         mock.onFolderTrustRevoked.mockImplementation(
@@ -708,7 +682,7 @@ describe('Config MCP wiring on folder trust change', () => {
             expect(reload).toHaveBeenCalledOnce();
           });
           const retirement = Promise.allSettled([
-            owner.dispose(),
+            retireWorkspace(owner),
             config.dispose(),
           ]);
           await hookRoot.dispose();
@@ -727,7 +701,7 @@ describe('Config MCP wiring on folder trust change', () => {
           releaseTransition?.();
           const retired = await Promise.allSettled([
             hookRoot.dispose(),
-            owner.dispose(),
+            retireWorkspace(owner),
             config.dispose(),
           ]);
           const completed = await transition;
@@ -750,7 +724,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         await owner.dispose();
         await config.dispose();
         await configTrust.dispose();
@@ -773,7 +747,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const manager = instances[0];
         const hookSystem = createHookRoot(config, configTrust);
         await hookSystem.initialize();
@@ -782,15 +756,10 @@ describe('Config MCP wiring on folder trust change', () => {
         const session = await createFailingSession(config, agentFailure);
 
         await owner.dispose();
-        await expect(session.disposeSession()).resolves.toStrictEqual([
-          agentFailure,
-        ]);
+        await expect(session()).resolves.toStrictEqual([agentFailure]);
         await hookSystem.dispose();
         await expect(config.dispose()).resolves.toBeUndefined();
-        await expect(session.disposeSession()).resolves.toStrictEqual([
-          agentFailure,
-        ]);
-        session.cleanup();
+        await expect(session()).resolves.toStrictEqual([agentFailure]);
 
         expect(disposeHooks).toHaveBeenCalledOnce();
         await expect(hookSystem.initialize()).rejects.toThrow('disposed');
@@ -807,7 +776,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const agentFailure = new Error('agent dispose failed');
         const hookFailure = new Error('hook dispose failed');
         const stopFailure = new Error('stop failed');
@@ -818,20 +787,15 @@ describe('Config MCP wiring on folder trust change', () => {
           .mockRejectedValueOnce(hookFailure);
         instances[0].stop.mockRejectedValue(stopFailure);
 
-        await expect(owner.dispose()).rejects.toMatchObject({
+        await expect(retireWorkspace(owner)).rejects.toMatchObject({
           message: 'Workspace runtime cleanup failed',
           errors: [stopFailure],
         });
-        await expect(session.disposeSession()).resolves.toStrictEqual([
-          agentFailure,
-        ]);
+        await expect(session()).resolves.toStrictEqual([agentFailure]);
         await expect(hookSystem.dispose()).rejects.toBe(hookFailure);
         failedRetirement.mockRestore();
         await expect(config.dispose()).resolves.toBeUndefined();
-        await expect(session.disposeSession()).resolves.toStrictEqual([
-          agentFailure,
-        ]);
-        session.cleanup();
+        await expect(session()).resolves.toStrictEqual([agentFailure]);
       });
 
       it('reports both transition and manager stop failures', async () => {
@@ -840,7 +804,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const transitionError = new Error('transition failed');
         const stopError = new Error('stop failed');
         instances[0].onFolderTrustRevoked.mockRejectedValue(transitionError);
@@ -851,11 +815,19 @@ describe('Config MCP wiring on folder trust change', () => {
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 
-        await expect(owner.dispose()).rejects.toMatchObject({
+        const retirement = await retireWorkspace(owner).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(retirement).toMatchObject({
           message: 'Workspace runtime cleanup failed',
-          errors: [stopError],
         });
-        await expect(configTrust.dispose()).rejects.toBe(transitionError);
+        expect(causes(retirement)).toStrictEqual([stopError, transitionError]);
+        await expect(
+          configTrust.setTrustedFolderLive(true),
+        ).resolves.toBeUndefined();
+        expect(configTrust.isTrustedFolder()).toBe(true);
+        await expect(configTrust.dispose()).resolves.toBeUndefined();
       });
 
       it('retains an undefined transition rejection alongside a stop failure', async () => {
@@ -864,7 +836,7 @@ describe('Config MCP wiring on folder trust change', () => {
           localTrust: config.initialWorkspaceTrust,
         });
         fixtureTrust.push(configTrust);
-        const owner = await initializeTestMcpRuntime(config, configTrust);
+        const owner = await acquireWorkspace(config, configTrust);
         const stopError = new Error('stop failed');
         instances[0].onFolderTrustRevoked.mockRejectedValue(undefined);
         instances[0].stop.mockRejectedValue(stopError);
@@ -874,11 +846,19 @@ describe('Config MCP wiring on folder trust change', () => {
           expect(instances[0].onFolderTrustRevoked).toHaveBeenCalledOnce(),
         );
 
-        await expect(owner.dispose()).rejects.toMatchObject({
+        const retirement = await retireWorkspace(owner).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(retirement).toMatchObject({
           message: 'Workspace runtime cleanup failed',
-          errors: [stopError],
         });
-        await expect(configTrust.dispose()).rejects.toBeUndefined();
+        expect(causes(retirement)).toStrictEqual([stopError, undefined]);
+        await expect(
+          configTrust.setTrustedFolderLive(true),
+        ).resolves.toBeUndefined();
+        expect(configTrust.isTrustedFolder()).toBe(true);
+        await expect(configTrust.dispose()).resolves.toBeUndefined();
       });
     });
 
@@ -888,7 +868,7 @@ describe('Config MCP wiring on folder trust change', () => {
         localTrust: config.initialWorkspaceTrust,
       });
       fixtureTrust.push(configTrust);
-      await initializeTestConfig(config, configTrust);
+      await acquireWorkspace(config, configTrust);
       const mock = instances[0];
       mock.onFolderTrustGained.mockRejectedValue(new Error('gain failed'));
       mock.onFolderTrustRevoked.mockRejectedValue(new Error('revoke failed'));

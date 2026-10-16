@@ -34,7 +34,8 @@ import { executeProviderActivation } from '../../../agents/src/api/providerActiv
 import { assembleProviderSwitch } from '../../../agents/src/api/providerSwitchAssembly.js';
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 import { AgentConfig } from '../../../agents/src/api/config-types.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   startCatalogFixture,
@@ -416,23 +417,19 @@ describe('production CLI workspace MCP consumers', () => {
       mcpServers: { physical: { httpUrl: server.url, trust: true } },
       telemetry: { enabled: false },
     });
-    const root = await initializeTestConfig(config);
+    const root = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
     try {
+      await root.initialize();
       await waitFor(() =>
-        expect(
-          root.catalogOwner.resourceSelection
-            .listResources()
-            .map((resource) => resource.uri),
-        ).toContain('fixture:///quantity'),
+        expect(root.listResources().map((resource) => resource.uri)).toContain(
+          'fixture:///quantity',
+        ),
       );
       await writeFile(join(directory, 'quantity'), '29');
       expect(
-        await root.catalogOwner.resourceSelection.readResource(
-          'physical',
-          'fixture:///quantity',
-        ),
+        await root.readResource('physical', 'fixture:///quantity'),
       ).toMatchObject({ contents: [{ text: '29' }] });
-      const prompt = root.catalogOwner.promptSelection
+      const prompt = root
         .listPrompts('physical')
         .find((candidate) => candidate.name === 'quantity');
       if (!prompt) throw new Error('Fixture manager did not publish a prompt');

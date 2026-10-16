@@ -2,7 +2,14 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  realpath,
+  rm,
+  mkdir,
+  writeFile,
+  readFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -78,7 +85,7 @@ describe('supplied workspace memory lifetime through public adoption', () => {
   });
 
   it('disposes transferred memory after failed public adoption', async () => {
-    const { directory, memory } = await physicalMemory();
+    const { directory, file, memory } = await physicalMemory();
     const built_directory = directory;
     const built_builtFactorylessPreviousReplay =
       process.env.LLXPRT_FAKE_RESPONSES;
@@ -148,7 +155,9 @@ describe('supplied workspace memory lifetime through public adoption', () => {
         memoryOwner: { owner: memory, ownership: 'agent' },
       }),
     ).rejects.toThrow('runtimeId');
-    expect(built_builtFactorylessConfig.hasInitializationStarted()).toBe(false);
+    expect(await readFile(file, 'utf8')).toContain(
+      'Initial caller instructions.',
+    );
     expect(() => memory.operations.refresh()).toThrow('disposed');
     expect(() => memory.operations.snapshot()).toThrow('disposed');
   });

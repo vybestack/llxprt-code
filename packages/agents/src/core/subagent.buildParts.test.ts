@@ -96,17 +96,7 @@ void vi.mock('./nonInteractiveToolExecutor.js', () => ({
   ...realNonInteractiveToolExecutorModule,
   executeToolCall: toolExecutorMock,
 }));
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -116,7 +106,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -125,6 +119,8 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock<(...args: unknown[]) => unknown>;
 
   beforeEach(() => {
@@ -167,7 +163,20 @@ describe('subagent.ts', () => {
 
   describe('buildPartsFromCompletedCalls output deduplication', () => {
     it('should not call onMessage for tools with canUpdateOutput=true (fixes #898)', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeBundle = createStatelessRuntimeBundle();
       const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
       const { overrides } = createRuntimeOverrides(
@@ -236,7 +245,20 @@ describe('subagent.ts', () => {
     });
 
     it('should call onMessage for tools with canUpdateOutput=false', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -301,7 +323,20 @@ describe('subagent.ts', () => {
     });
 
     it('should call onMessage for error calls even if tool had canUpdateOutput=true', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -384,7 +419,20 @@ describe('subagent.ts', () => {
 
     const observeProduceFunctionResponseOnlyPartsForErrorToolCallsAnthropicBoundary =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
         );
@@ -475,7 +523,20 @@ describe('subagent.ts', () => {
 
     const observeProduceValidPairedPartsForMixedSuccessErrorCallsAnthropicBoundary =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
         );
@@ -565,7 +626,20 @@ describe('subagent.ts', () => {
       };
 
     it('should handle calls where tool is undefined gracefully', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -638,11 +712,26 @@ describe('subagent.ts', () => {
           };
         },
       });
-      const { config, toolRegistry, mcpRuntime } = await createMockConfig({
-        getTool: (name) => (name === tool.name ? tool : undefined),
-        getEnabledTools: () => [tool],
-        getAllTools: () => [tool],
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getTool: (name) => (name === tool.name ? tool : undefined),
+          getEnabledTools: () => [tool],
+          getAllTools: () => [tool],
+        },
+      );
+      const toolRegistry = mcpRuntime.toolSelection;
       mcpRuntime.policyOwner.session.confirmation.addRule({
         toolName: '*',
         decision: PolicyDecision.ALLOW,
