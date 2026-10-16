@@ -81,12 +81,18 @@ import { useInputKeybindings } from './useInputKeybindings.js';
 import type {
   SlashCommandRuntime,
   StreamRuntime,
-  UiRuntime,
   UiSubagentManager,
 } from '../../../cliUiRuntime.js';
 
 export interface AppInputParams {
-  uiRuntime: UiRuntime;
+  projectTempDir: string;
+  readInitialPrompt: () => string | undefined;
+  isAgentClientPresent: () => boolean;
+  readIdeMode: Parameters<typeof useInputKeybindings>[0]['readIdeMode'];
+  readInteractiveShellEnabled: Parameters<
+    typeof useInputKeybindings
+  >[0]['readInteractiveShellEnabled'];
+  readMcpServers: Parameters<typeof useInputKeybindings>[0]['readMcpServers'];
   streamRuntime: StreamRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   agent: Agent;
@@ -317,7 +323,7 @@ function useInputBuffer(
     shellModeActive,
   });
   const inputHistoryStore = useInputHistoryStore();
-  const logger = useLogger(p.uiRuntime.projectTempDir);
+  const logger = useLogger(p.projectTempDir);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
   const lastSubmittedPromptRef = useRef<string | null>('');
   const handleOAuthCodeDialogClose = useCallback(() => {
@@ -728,7 +734,9 @@ function useInputStartup(
   stream: ReturnType<typeof useInputStream>,
 ): void {
   useInputKeybindings({
-    uiRuntime: p.uiRuntime,
+    readIdeMode: p.readIdeMode,
+    readInteractiveShellEnabled: p.readInteractiveShellEnabled,
+    readMcpServers: p.readMcpServers,
     terminalStore: p.terminalStore,
     settingsStore: p.settingsStore,
     turnStore: p.turnStore,
@@ -742,14 +750,12 @@ function useInputStartup(
     p.settingsStore.store,
     (s) => s.startupGuardsInitialized,
   );
-  const initialPrompt = useMemo(
-    () => p.uiRuntime.app.getQuestion(),
-    [p.uiRuntime],
-  );
+  const { readInitialPrompt } = p;
+  const initialPrompt = useMemo(() => readInitialPrompt(), [readInitialPrompt]);
   useInitialPromptSubmit({
     initialPrompt,
     submitPrompt: stream.handleUserInputSubmit,
-    agentClientPresent: Boolean(p.uiRuntime.agentClientSource.getAgentClient()),
+    agentClientPresent: p.isAgentClientPresent(),
     interactiveRuntimeReady: stream.interactiveRuntimeReady,
     store: p.store,
     startupGuardsInitialized,
