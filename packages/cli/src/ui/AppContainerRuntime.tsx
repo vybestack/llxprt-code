@@ -358,6 +358,28 @@ function useAppCommands(
   );
 }
 
+function useBootstrapRuntime(
+  props: AppContainerRuntimeProps,
+  terminalStore: TerminalStore,
+  turnStore: TurnStore,
+  settingsStore: SettingsProfileStore,
+): AppBootstrapResult {
+  const { agent, ...bootstrapProps } = props;
+  return useAppBootstrap({
+    ...bootstrapProps,
+    triggerSessionStart: useBound(agent.hooks, agent.hooks.triggerSessionStart),
+    appendHistory: useBound(agent, agent.addHistory),
+    recordRecordingEvent: useBound(
+      agent.session,
+      agent.session.recordRecordingEvent,
+    ),
+    metrics: agent.metrics,
+    terminalStore,
+    turnStore,
+    settingsStore,
+  });
+}
+
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const {
@@ -367,12 +389,12 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
     dialogOpeners,
   } = useAppStores(props.slashCommandRuntime);
-  const bootstrap = useAppBootstrap({
-    ...props,
+  const bootstrap = useBootstrapRuntime(
+    props,
     terminalStore,
     turnStore,
     settingsStore,
-  });
+  );
   const dialogs = useAppDialogsRuntime(
     props,
     bootstrap,

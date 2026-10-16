@@ -45,7 +45,8 @@ import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
+import type { UseSessionInitializationParams } from './useSessionInitialization.js';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type {
@@ -56,10 +57,10 @@ import type {
 
 export interface AppBootstrapProps {
   uiRuntime: UiRuntime;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   */
-  agent: Agent;
+  triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'];
+  appendHistory: (content: IContent) => Promise<void>;
+  recordRecordingEvent: (event: SessionRecordingEvent) => Promise<void>;
+  metrics: Parameters<typeof useTokenMetricsTracking>[0]['metrics'];
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -87,10 +88,7 @@ export interface AppBootstrapProps {
 export interface AppBootstrapResult {
   uiRuntime: UiRuntime;
   streamRuntime: StreamRuntime;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   */
-  agent: Agent;
+
   /**
    * Narrow boundary that resolves the live AgentClient for the streaming
    * path. Resolved once here so downstream hooks receive an explicit,
@@ -128,22 +126,20 @@ export interface AppBootstrapResult {
 }
 
 function useInitializationBindings(
-  agent: AppBootstrapProps['agent'],
+  triggerSessionStart: AppBootstrapProps['triggerSessionStart'],
+  appendHistory: AppBootstrapProps['appendHistory'],
   uiRuntime: AppBootstrapProps['uiRuntime'],
 ) {
   return {
-    triggerSessionStart: useCallback(
-      () => agent.hooks.triggerSessionStart(),
-      [agent],
-    ),
+    triggerSessionStart,
     appendHookContext: useCallback(
       async (text: string) => {
-        await agent.addHistory({
+        await appendHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text }],
         });
       },
-      [agent],
+      [appendHistory],
     ),
     readEmojiFilterMode: useCallback(
       () => resolveEmojiFilterMode(uiRuntime.ephemeral),
@@ -162,7 +158,7 @@ function useInitializationBindings(
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, agent, settings, resumedHistory } = props;
+  const { uiRuntime, settings, resumedHistory } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -209,7 +205,11 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     coreMemoryFileCount,
     setCoreMemoryFileCount: _setCoreMemoryFileCount,
   } = useSessionInitialization({
-    ...useInitializationBindings(agent, uiRuntime),
+    ...useInitializationBindings(
+      props.triggerSessionStart,
+      props.appendHistory,
+      uiRuntime,
+    ),
     addItem,
     loadHistory,
     resumedHistory,
@@ -255,7 +255,7 @@ function useIdeClientCleanup(uiRuntime: UiRuntime): void {
 }
 
 function useFeedbackRecording(
-  session: Pick<Agent['session'], 'recordRecordingEvent'>,
+  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'],
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegrationRef:
     | React.MutableRefObject<RecordingIntegration | null>
@@ -264,7 +264,7 @@ function useFeedbackRecording(
   return useCallback(
     (severity: 'warning' | 'error', message: string) => {
       if (recordingOwner === 'agent') {
-        return session.recordRecordingEvent({
+        return recordRecordingEvent({
           type: 'session_event',
           severity,
           message,
@@ -275,7 +275,7 @@ function useFeedbackRecording(
         message,
       );
     },
-    [session, recordingOwner, recordingIntegrationRef],
+    [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
   );
 }
 
@@ -305,7 +305,7 @@ function useBootstrapEvents(
     recordingIntegration,
     initialRecordingService,
     initialLockHandle,
-    agent,
+    recordRecordingEvent,
     recordingOwner,
   } = props;
   const { recordingIntegrationRef, recordingSwapCallbacks } =
@@ -339,14 +339,14 @@ function useBootstrapEvents(
     [uiRuntime],
   );
   const recordFeedback = useFeedbackRecording(
-    agent.session,
+    recordRecordingEvent,
     recordingOwner,
     recordingIntegrationRef,
   );
   useCoreEventHandlers({ handleNewMessage, readDebugMode, recordFeedback });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
-    metrics: props.agent.metrics,
+    metrics: props.metrics,
     uiRuntime,
     updateHistoryTokenCount,
     recordingIntegrationRef,
@@ -382,7 +382,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   return {
     uiRuntime,
     streamRuntime,
-    agent: props.agent,
     agentClientSource: streamRuntime.agentClientSource,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
