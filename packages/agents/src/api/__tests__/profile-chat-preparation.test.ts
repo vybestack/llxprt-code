@@ -568,7 +568,7 @@ describe('profile-chat-preparation', () => {
       const boundary = vi
         .spyOn(builtCallerConfig, 'isInteractive')
         .mockImplementation(() => {
-          if (++reads === 3) throw failure;
+          if (++reads === 2) throw failure;
           return true;
         });
       try {
@@ -576,7 +576,7 @@ describe('profile-chat-preparation', () => {
           failure,
         );
         boundary.mockRestore();
-        expect(reads).toBe(3);
+        expect(reads).toBe(2);
         expect(agent.agentClient).toBe(client);
         expect(client.hasChatInitialized()).toBe(initialized);
         expect(client.getHistoryService()).toBe(visibleHistory);
@@ -652,7 +652,7 @@ describe('profile-chat-preparation', () => {
     const boundary = vi
       .spyOn(builtCallerConfig, 'isInteractive')
       .mockImplementation(() => {
-        if (++reads === 3) disposal = agent.dispose();
+        if (++reads === 2) disposal = agent.dispose();
         return true;
       });
     try {

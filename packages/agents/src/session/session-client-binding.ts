@@ -9,7 +9,10 @@ import type {
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  AgentClientFactory,
+  AgentClientContract,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -168,3 +171,7 @@ export function requireSessionPolicy(
     throw new Error('Missing session policy composition');
   return owner;
 }
+
+export type SessionClientFactory = (
+  ...args: Parameters<AgentClientFactory>
+) => AgentClientContract | undefined;

@@ -22,7 +22,7 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { LoopHolder, RebuildLoopDeps } from './loop/rebuildLoop.js';
+import type { LoopHolder, prepareLoop } from './loop/rebuildLoop.js';
 import type {
   OwnershipRecord,
   StableDisplayCallbacksHolder,
@@ -60,7 +60,10 @@ export interface AgentDeps {
   readonly runtimeState: AgentRuntimeState;
   readonly ownership: OwnershipRecord;
   readonly sessionIdentityOwnership: 'config' | 'facade';
-  readonly rebuildLoop: (deps: RebuildLoopDeps) => unknown;
+  readonly rebuildLoop: () => void;
+  readonly prepareLoopForClient: (
+    client: AgentClientContract,
+  ) => ReturnType<typeof prepareLoop>;
   readonly resolveClient: () => AgentClientContract;
   /**
    * The HistoryService instance createAgent eagerly created + stored for reuse

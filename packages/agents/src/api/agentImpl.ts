@@ -418,16 +418,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
   ) =>
     assembleProfileReplacement(
       this.deps.resolveClient,
-      this.deps.settingsOwner.telemetry,
-      this.deps.loopHolder,
-      this.deps.sessionClient.toolCatalog.selection,
-      () => this.getApprovalMode(),
-      () => this.deps.settingsOwner.readToolExecutionPolicy(),
-      () => this.deps.sessionClient.toolCatalog.readGovernance(),
-      this.deps.config,
-      this.deps.messageBus,
-      this.deps.approvalHandler,
-      this.deps.displayCallbacks,
+      (run) => run.loop === this.deps.loopHolder.current,
+      this.deps.prepareLoopForClient,
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
@@ -1203,21 +1195,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
    */
   private rebuild(): void {
-    this.deps.rebuildLoop({
-      telemetry: this.deps.settingsOwner.telemetry,
-      loopHolder: this.deps.loopHolder,
-      toolSelection: this.deps.sessionClient.toolCatalog.selection,
-      readApprovalMode: () => this.getApprovalMode(),
-      readExecutionPolicy: () =>
-        this.deps.settingsOwner.readToolExecutionPolicy(),
-      getToolGovernance: () =>
-        this.deps.sessionClient.toolCatalog.readGovernance(),
-      resolveClient: this.deps.resolveClient,
-      config: this.deps.config,
-      messageBus: this.deps.messageBus,
-      approvalHandler: this.deps.approvalHandler,
-      displayCallbacks: this.deps.displayCallbacks,
-    });
+    this.deps.rebuildLoop();
   }
 
   /**

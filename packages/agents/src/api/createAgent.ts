@@ -5,8 +5,6 @@ import { setActiveModel } from './providerMutations.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-
 import {
   assembleModelSelection,
   type ModelSelectionOperations,
@@ -49,7 +47,7 @@ import type {
   SessionSettingsOwner,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import { type SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   captureSettingsSnapshot,
@@ -67,11 +65,14 @@ import type { AgentAuth } from './config-types.js';
 import type { Agent } from './agent.js';
 import type { AgentConfigSchema } from './config-schema.js';
 import { toConfigParameters } from './agentConfig.adapter.js';
-import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
 import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { wrapRegistryWithConfirmation } from './confirmationForcing.js';
-import { rebuildLoop, type LoopHolder } from './loop/rebuildLoop.js';
+import {
+  rebuildLoop,
+  prepareLoop,
+  type LoopHolder,
+} from './loop/rebuildLoop.js';
 import { AgentImpl } from './agentImpl.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
@@ -383,23 +384,18 @@ async function assembleFacade(
   closeRuntime: () => Promise<void> | void,
   deps: AssembleFacadeDeps,
 ): Promise<Agent> {
-  rebuildLoop({
-    telemetry: settingsOwner.telemetry,
-    loopHolder: deps.loopHolder,
-    resolveClient: deps.resolveClient,
-    toolSelection: deps.sessionClient.toolCatalog.selection,
-    readApprovalMode: () =>
-      deps.mcpOperations.trust.isTrustedFolder()
-        ? deps.config.getApprovalMode()
-        : ApprovalMode.DEFAULT,
-    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-    getToolGovernance: () => deps.sessionClient.toolCatalog.readGovernance(),
-    config: deps.config,
-    messageBus: deps.messageBus,
-    approvalHandler: deps.approvalHandler,
-    displayCallbacks: deps.displayCallbacks,
-    AgenticLoopCtor: AgenticLoop,
-  });
+  const client = deps.sessionClient;
+  const constructLoop = (current: AgentClientContract) =>
+    client.createLoop(
+      current,
+      deps.loopHolder.schedulerFactory,
+      deps.approvalHandler,
+      deps.displayCallbacks,
+    );
+  const rebuild = (): void => {
+    rebuildLoop(deps.loopHolder, deps.resolveClient, constructLoop);
+  };
+  rebuild();
   const runtimeHandle = { cleanup: closeRuntime };
   const ownership = recordOwnership({
     runtimeHandle,
@@ -413,7 +409,7 @@ async function assembleFacade(
   });
   return new AgentImpl(
     {
-      sessionClient: deps.sessionClient,
+      sessionClient: client,
       workspaceSkills: deps.workspaceSkills,
       mediaOwner: deps.mediaOwner,
       taskLaunchOwner: deps.taskLaunchOwner,
@@ -428,7 +424,7 @@ async function assembleFacade(
         deps.manager,
         deps.oauthManager,
         readRuntimeKind,
-        () => deps.sessionClient.refreshAuth(),
+        () => client.refreshAuth(),
         settingsOwner,
       ),
       settingsService: deps.sharedSettingsService,
@@ -440,11 +436,11 @@ async function assembleFacade(
       runtimeState: deps.runtimeState,
       ownership,
       sessionIdentityOwnership: deps.sessionIdentityOwnership,
-      rebuildLoop,
+      rebuildLoop: rebuild,
+      prepareLoopForClient: (client) =>
+        prepareLoop(deps.loopHolder, () => client, constructLoop),
       resolveClient: deps.resolveClient,
-      initialHistoryService: initializeAgentHistory(
-        deps.sessionClient.getAgentClient(),
-      ),
+      initialHistoryService: initializeAgentHistory(client.getAgentClient()),
       approvalHandler: deps.approvalHandler,
       displayCallbacks: deps.displayCallbacks,
       editorCallbacksHolder: deps.editorCallbacksHolder,

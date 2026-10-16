@@ -4,6 +4,7 @@ import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   OwnedClientLedger,
+  SessionClientWorkQueue,
   cleanupProviderScope,
   finishCleanup,
   rethrowAfterClientCleanup,
@@ -19,6 +20,7 @@ import {
   requireSessionPolicy,
   bindFactoryClient,
   captureSessionRuntimeState,
+  type SessionClientFactory,
 } from './session-client-binding.js';
 import {
   acceptSkillPublication,
@@ -29,6 +31,14 @@ import {
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
+import type { AgenticLoopOptions } from '../core/agenticLoop/types.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import {
+  bindSchedulerOwner,
+  type SchedulerConstruction,
+} from './assembleSchedulerOwner.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { HostGitHubBrokerOwner } from '../api/host-github-broker-owner.js';
@@ -65,10 +75,7 @@ import type { Agent } from '../api/agent.js';
 import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
 import { AgentBootstrapError } from '../api/agentBootstrap.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  AgentClientContract,
-  AgentClientFactory,
-} from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -80,11 +87,7 @@ import {
   prepareProfileClient,
 } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 
-import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import {
-  readHookDefinitions,
-  hookSessionRuntime,
-} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookComposition } from './session-hook-composition.js';
 
 export class SessionClientOwner {
   static readonly cleanupProviderScope = cleanupProviderScope;
@@ -113,55 +116,15 @@ export class SessionClientOwner {
     this.client.bindProviderFiles?.(lifecycle, composeRetryOperations);
   }
 
-  private hookRoot: SessionHookOwner | undefined;
-  private releaseHookReload: (() => void) | undefined;
-  private ownsHookRoot = false;
-  hasHookComposition(): boolean {
-    return this.hookRoot !== undefined;
+  private readonly hookComposition: SessionHookComposition;
+  readonly hasHookComposition = () => this.hookComposition.isComposed();
+  get hookOperations() {
+    return this.hookComposition.operations;
   }
-  get hookOperations(): SessionHookOwner {
-    if (this.hookRoot === undefined)
-      throw new Error('Missing session hook composition');
-    return this.hookRoot;
-  }
-  bindHooks(
-    root?: SessionHookOwner,
-    bus: MessageBus = this.messageBus,
-    trust: WorkspaceTrustControlPort | undefined = this.boundWorkspace?.trust,
-  ): void {
-    if (this.hookRoot !== undefined)
-      throw new Error('Session hooks are already composed');
-    if (root !== undefined) {
-      root.assertMessageBus(bus);
-      this.hookRoot = root.fork();
-    } else {
-      if (trust === undefined)
-        throw new Error('Hooks require explicit workspace trust composition');
-      this.hookRoot = new SessionHookOwner(
-        readHookDefinitions(this.config),
-        hookSessionRuntime(this.config, trust, this.settingsOwner.telemetry),
-        this.config.getEnableHooks(),
-        bus,
-      );
-    }
-    this.ownsHookRoot = true;
-    this.releaseHookReload = this.boundWorkspace?.bindSessionHookReload(
-      this.mcpBindingToken,
-      () => this.hookOperations.reloadDefinitions(),
-    );
-  }
-  closeHookAdmission(): void {
-    this.releaseHookReload?.();
-    this.releaseHookReload = undefined;
-    this.hookRoot?.closeAdmission();
-  }
-
-  disposeHooks(): Promise<void> {
-    this.closeHookAdmission();
-    return this.ownsHookRoot
-      ? (this.hookRoot?.dispose() ?? Promise.resolve())
-      : Promise.resolve();
-  }
+  readonly bindHooks = (...args: Parameters<SessionHookComposition['bind']>) =>
+    this.hookComposition.bind(...args);
+  readonly closeHookAdmission = () => this.hookComposition.closeAdmission();
+  readonly disposeHooks = () => this.hookComposition.dispose();
 
   private instructionOwner: SessionInstructionOwner | undefined;
   private inheritedInstructions: InstructionReadOperations | undefined;
@@ -208,6 +171,43 @@ export class SessionClientOwner {
   private readonly policyWrites = new Set<Promise<void>>();
   get messageBus() {
     return requireSessionPolicy(this.sessionPolicy).messageBus;
+  }
+  createLoop(
+    client: AgentClientContract,
+    scheduler: SchedulerConstruction | undefined,
+    approvalHandler: AgenticLoopOptions['approvalHandler'],
+    displayCallbacks: AgenticLoopOptions['displayCallbacks'],
+  ): AgenticLoop {
+    this.getAgentClient();
+    const workspace = this.boundWorkspace;
+    if (workspace === undefined)
+      throw new AgentBootstrapError(
+        'Loop construction requires workspace policy composition',
+      );
+    const interactiveMode = this.config.isInteractive();
+    const messageBus = this.messageBus;
+    return new AgenticLoop({
+      agentClient: client,
+      config: this.config,
+      messageBus,
+      createSchedulerOwner: bindSchedulerOwner(
+        this.config,
+        messageBus,
+        interactiveMode,
+        this.toolCatalog.selection,
+        scheduler ?? ((options) => new CoreToolScheduler(options)),
+        () => this.settingsOwner.readToolExecutionPolicy(),
+        () => this.toolCatalog.readGovernance(),
+        () =>
+          workspace.trust.isTrustedFolder()
+            ? this.config.getApprovalMode()
+            : ApprovalMode.DEFAULT,
+        this.settingsOwner.telemetry,
+      ),
+      approvalHandler,
+      displayCallbacks,
+      interactiveMode,
+    });
   }
   addSessionPolicyRule(
     rule: Parameters<SessionPolicyOwner['confirmation']['addRule']>[0],
@@ -258,7 +258,9 @@ export class SessionClientOwner {
   );
   private admissionClosed = false;
   private releaseMcpBinding: (() => void) | undefined;
-  private tail: Promise<void> = Promise.resolve();
+  private readonly work = new SessionClientWorkQueue(() =>
+    this.getAgentClient(),
+  );
   private readonly ownedClients = new OwnedClientLedger(async (scope) => {
     await this.cleanupProviderFiles?.(scope);
   });
@@ -274,9 +276,7 @@ export class SessionClientOwner {
     private readonly config: Config,
     private readonly readTaskSchemaPolicy: () => RegistryPolicy,
     private readonly manager: RuntimeProviderManager,
-    private readonly factory: (
-      ...args: Parameters<AgentClientFactory>
-    ) => AgentClientContract | undefined,
+    private readonly factory: SessionClientFactory,
     private readonly mediaStore: LocalMediaStore,
     private readMcpInstructions: () => string | undefined,
     private readonly workspacePaths: WorkspacePathOperations,
@@ -286,6 +286,17 @@ export class SessionClientOwner {
     private readonly borrowedClient?: AgentClientContract,
     private readonly borrowedBus?: MessageBus,
   ) {
+    this.hookComposition = new SessionHookComposition(
+      config,
+      () => settingsOwner.telemetry,
+      () => this.messageBus,
+      () => this.boundWorkspace?.trust,
+      (reload) =>
+        this.boundWorkspace?.bindSessionHookReload(
+          this.mcpBindingToken,
+          reload,
+        ),
+    );
     if (borrowedClient !== undefined) {
       borrowedClient.assertConfig(config);
       borrowedClient.assertProviderManager(manager);
@@ -426,7 +437,7 @@ export class SessionClientOwner {
       (read, release) => this.bindMcpInstructions(read, release),
       () =>
         acceptSkillPublication(this.client, this.toolCatalog, (operation) =>
-          this.enqueueAccepted(operation),
+          this.work.enqueueAccepted(operation),
         ),
     );
   }
@@ -498,16 +509,15 @@ export class SessionClientOwner {
     return this.client;
   }
 
-  private captureRuntimeState(
+  private readonly captureRuntimeState = (
     runtimeId: string,
     sessionId: string,
-  ): AgentRuntimeState {
-    return captureSessionRuntimeState(this.settingsOwner, {
+  ) =>
+    captureSessionRuntimeState(this.settingsOwner, {
       runtimeId,
       sessionId,
       proxyUrl: this.config.getProxy(),
     });
-  }
 
   private profileDefinitions:
     | Pick<ProfileDefinitionReads, 'loadProfile'>
@@ -592,29 +602,15 @@ export class SessionClientOwner {
     });
   }
 
-  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    this.getAgentClient();
-    return this.enqueueAccepted(operation);
-  }
-
-  private enqueueAccepted<T>(operation: () => Promise<T>): Promise<T> {
-    const pending = this.tail.then(operation);
-    this.tail = pending.then(
-      () => undefined,
-      () => undefined,
-    );
-    return pending;
-  }
-
   refreshAuth(_authMethod?: string): Promise<void> {
-    return this.enqueue(() => this.replaceClient());
+    return this.work.enqueue(() => this.replaceClient());
   }
 
   prepareNewSession(
     sessionId: string,
     onPublish: () => void,
   ): Promise<PreparedSessionClient> {
-    return this.enqueue(() =>
+    return this.work.enqueue(() =>
       prepareNewSessionClient(
         this.captureRuntimeState(`${sessionId}#client`, sessionId),
         this.tokenizerFactory,
@@ -698,7 +694,7 @@ export class SessionClientOwner {
     retire: () => Promise<void>;
     discard: () => Promise<void>;
   }> {
-    return this.enqueue(() => this.prepareProfileClient());
+    return this.work.enqueue(() => this.prepareProfileClient());
   }
 
   private async prepareProfileClient(): ReturnType<
@@ -750,16 +746,16 @@ export class SessionClientOwner {
         this.runtimeState = prepared.runtimeState;
         this.config.setFallbackMode(false);
       },
-      retire: () => this.enqueueAccepted(() => ledger.dispose(previous)),
+      retire: () => this.work.enqueueAccepted(() => ledger.dispose(previous)),
       discard: () =>
-        this.enqueueAccepted(() => ledger.dispose(prepared.client)),
+        this.work.enqueueAccepted(() => ledger.dispose(prepared.client)),
     };
   }
 
   createDetachedAgentClient(
     id = `${this.runtimeState.sessionId}#detached#${randomUUID()}`,
   ): Promise<AgentClientContract> {
-    return this.enqueue(() =>
+    return this.work.enqueue(() =>
       prepareDetachedSessionClient({
         state: this.captureRuntimeState(id, this.runtimeState.sessionId),
         tokenizer: this.tokenizerFactory,
@@ -783,7 +779,7 @@ export class SessionClientOwner {
       this.client,
       instructions,
       () => this.boundWorkspace?.isStopped() === true,
-      (operation) => this.enqueueAccepted(operation),
+      (operation) => this.work.enqueueAccepted(operation),
     );
   }
 
@@ -794,7 +790,7 @@ export class SessionClientOwner {
           listToolNames: () => selection.getAllToolNames(),
         })
       : undefined;
-    return this.enqueue(async () => {
+    return this.work.enqueue(async () => {
       const client = this.client;
       if (client.isInitialized()) await client.setTools(declarations);
     });
@@ -820,7 +816,7 @@ export class SessionClientOwner {
     this.closing = Promise.allSettled([bindingClosing]).then(
       async (binding) => {
         const hooks = await Promise.allSettled([this.disposeHooks()]);
-        await this.tail;
+        await this.work.join();
         const instructions = await Promise.allSettled([
           this.instructionOwner?.dispose(),
         ]);
