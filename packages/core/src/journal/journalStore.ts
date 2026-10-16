@@ -2,7 +2,8 @@
 import { JournalFormatError } from './errors.js';
 import { buildGroup, mapReader, type BuildContext } from './groupBuild.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
-import { mutationOf, planGroup, type PlanContext } from './groupPlan.js';
+import { mutationOf, planGroup } from './groupPlan.js';
+import type { PlanContext } from './groupPlanTypes.js';
 import type { CommitAck } from './groupWriter.js';
 import type { JournalGroupWriter } from './groupWriter.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
@@ -23,6 +24,12 @@ import {
   loadRightSpine,
   type RowTreeRootRef,
 } from './rowTreeReader.js';
+import {
+  readRowIds,
+  readStoredRow,
+  type RowIds,
+  type StoredRow,
+} from './rowReads.js';
 import { readVersionAt } from './trailerAccess.js';
 import { versionOf, type Version } from './version.js';
 import type { SlotKinds } from './aggregateComposition.js';
@@ -154,6 +161,16 @@ export class JournalStore {
     const root = this.rowRootRef();
     if (root === undefined || this.access === undefined) return;
     yield* iterateRowEntries(this.access, root, from);
+  }
+
+  /** The header and raw id strings of the row an entry points at (design 4.6), without its blocks. */
+  readRowIds(entry: RowEntry): Promise<RowIds> {
+    return readRowIds(this.requireAccess(), entry);
+  }
+
+  /** The whole row an entry points at. */
+  readRow(entry: RowEntry): Promise<StoredRow> {
+    return readStoredRow(this.requireAccess(), entry);
   }
 
   /** The version a trailer at `offset` carries. */

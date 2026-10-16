@@ -1,22 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
-import type { Aggregate } from './aggregate.js';
-import {
-  EMPTY_AGGREGATE,
-  composeAggregates,
-  type SlotKinds,
-} from './aggregateComposition.js';
+import type { SlotKinds } from './aggregateComposition.js';
 import { JournalFormatError } from './errors.js';
-import type { RecordAccess } from './recordAccess.js';
 import type { RowEntry } from './rowEntry.js';
 import { ROW_TREE_ARITY } from './rowTreeNode.js';
-import {
-  entryAt,
-  iterateRowEntries,
-  readRowTreeNode,
-  type RowTreeRootRef,
-} from './rowTreeReader.js';
+import { entryAt, readRowTreeNode } from './rowTreeReader.js';
+import { collectRows, verifyNodes } from './__tests__/support/rowTreeVerify.js';
 import {
   createTreeWriter,
   openTree,
@@ -71,75 +61,11 @@ async function appendInChunks(
   }
 }
 
-async function collectRows(
-  access: RecordAccess,
-  root: RowTreeRootRef,
-  from = 0,
-): Promise<RowEntry[]> {
-  const rows: RowEntry[] = [];
-  for await (const entry of iterateRowEntries(access, root, from)) {
-    rows.push(entry);
-  }
-  return rows;
-}
-
 function sampleIndexes(count: number): number[] {
   if (count <= 1000) return Array.from({ length: count }, (_, index) => index);
   const picked = new Set([0, 1, count - 2, count - 1]);
   for (let index = 0; index < count; index += 97) picked.add(index);
   return [...picked];
-}
-
-interface Verified {
-  readonly count: number;
-  readonly level: number;
-  readonly maxLabel: bigint;
-  readonly aggregate: Aggregate;
-}
-
-/**
- * Walks a node and returns what it covers, worked out from its leaves alone.
- * Every internal slot must describe its child exactly: row count, largest
- * label and the aggregate of the child's own items.
- */
-async function verifyNodes(
-  access: RecordAccess,
-  offset: number,
-  kinds: SlotKinds,
-  expectedLevel?: number,
-): Promise<Verified> {
-  const node = await readRowTreeNode(access, offset);
-  if (node.kind === 'leaf') {
-    expect(expectedLevel ?? 0).toBe(0);
-    return {
-      count: node.entries.length,
-      level: 0,
-      maxLabel: node.entries[node.entries.length - 1].label,
-      aggregate: naiveAggregate(node.entries, kinds),
-    };
-  }
-  expect(expectedLevel ?? node.level).toBe(node.level);
-  let folded = EMPTY_AGGREGATE;
-  let count = 0;
-  for (const slot of node.slots) {
-    const child = await verifyNodes(
-      access,
-      slot.childOffset,
-      kinds,
-      node.level - 1,
-    );
-    expect(slot.count).toBe(child.count);
-    expect(slot.maxLabel).toBe(child.maxLabel);
-    expect(slot.aggregate).toStrictEqual(child.aggregate);
-    folded = composeAggregates(folded, child.aggregate, kinds);
-    count += child.count;
-  }
-  return {
-    count,
-    level: node.level,
-    maxLabel: node.slots[node.slots.length - 1].maxLabel,
-    aggregate: folded,
-  };
 }
 
 async function verifyTree(

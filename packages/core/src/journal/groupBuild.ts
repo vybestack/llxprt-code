@@ -3,48 +3,26 @@ import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
-  collectFacts,
-  existingEntries,
-  type FactDeps,
-  type GroupFacts,
-} from './groupFacts.js';
-import type { GroupPlan } from './groupPlan.js';
-import type { TrailerState } from './groupWriter.js';
-import type { IdNodeCache } from './idTrieCache.js';
-import { KeyedMapBatch, KeyedMapReader, type MapKind } from './keyedMap.js';
-import type { IdKeyHasher } from './idKeys.js';
-import type { LineageChain } from './lineageChain.js';
-import type { RecordAccess } from './recordAccess.js';
+  commitFacts,
+  commitState,
+  mapReader,
+  trailerState,
+  writeRows,
+  type BuildContext,
+  type BuiltGroup,
+  type TreeResult,
+} from './groupBuildShared.js';
+import { collectFacts, existingEntries } from './groupFacts.js';
+import type { GroupPlan } from './groupPlanTypes.js';
+import { buildFromSegments } from './groupSegmentBuild.js';
 import type { MutationCode } from './recordKinds.js';
-import { encodeRowDraft, entryForNewRow, type EncodedRow } from './rowDraft.js';
+import { encodeRowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
-import {
-  appendRowEntries,
-  type RightSpine,
-  type RowTreeAlgebra,
-} from './rowTreeBuilder.js';
-import { hasActiveSlot, slotKindsOf, type Version } from './version.js';
+import { appendRowEntries } from './rowTreeBuilder.js';
+import { hasActiveSlot, slotKindsOf } from './version.js';
 
-/** The seams a group is built with, all supplied by the store. */
-export interface BuildContext extends FactDeps {
-  readonly access: RecordAccess | undefined;
-  readonly published: Version | undefined;
-  readonly hasher: IdKeyHasher;
-  readonly metaCache: IdNodeCache;
-  readonly stateCache: IdNodeCache;
-  readonly algebra: (kinds: ReturnType<typeof slotKindsOf>) => RowTreeAlgebra;
-  readonly spineFor: (version: Version) => Promise<RightSpine>;
-  readonly chainFor: (parent: Version | undefined) => Promise<LineageChain>;
-  /** The `commitSeq` the group will get; a new lineage takes it as its id. */
-  readonly commitSeq: number;
-}
-
-/** What the store keeps after the group is acked, and nothing before. */
-export interface BuiltGroup {
-  readonly state: TrailerState;
-  readonly spine: RightSpine | undefined;
-  readonly chainBase: LineageChain;
-}
+export { mapReader } from './groupBuildShared.js';
+export type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 
 /** The rows a group puts in the tree, in label order, with the first and last seen. */
 class RowStream {
@@ -68,27 +46,6 @@ class RowStream {
     this.last = entry;
     return entry;
   }
-}
-
-async function writeRows(
-  appender: RecordAppender,
-  encoded: readonly EncodedRow[],
-): Promise<RowEntry[]> {
-  const entries: RowEntry[] = [];
-  for (const row of encoded) {
-    const offset = await appender.append(row.record);
-    entries.push(entryForNewRow(row, offset));
-  }
-  return entries;
-}
-
-interface TreeResult {
-  readonly rowRoot: number;
-  readonly aggregate: Version['aggregate'];
-  readonly spine: RightSpine | undefined;
-  readonly firstLabel: bigint;
-  readonly lastRowOffset: number;
-  readonly lastOwner: number;
 }
 
 async function buildTree(
@@ -132,42 +89,6 @@ async function buildTree(
   };
 }
 
-async function commitState(
-  ctx: BuildContext,
-  plan: GroupPlan,
-  appender: RecordAppender,
-): Promise<number> {
-  const root = ctx.published?.roots.stateRoot ?? 0;
-  if (plan.stateSets.size === 0) return root;
-  const batch = new KeyedMapBatch(mapReader(ctx, 'state'), root);
-  for (const [key, value] of plan.stateSets) batch.set(key, value);
-  return batch.commit(appender);
-}
-
-export function mapReader(ctx: BuildContext, kind: MapKind): KeyedMapReader {
-  return new KeyedMapReader(
-    ctx.access,
-    kind === 'meta' ? ctx.metaCache : ctx.stateCache,
-    kind,
-    ctx.hasher,
-  );
-}
-
-async function commitFacts(
-  facts: GroupFacts | undefined,
-  plan: GroupPlan,
-  appender: RecordAppender,
-): Promise<{ idRoot: number; metaRoot: number }> {
-  if (facts === undefined) {
-    return {
-      idRoot: plan.base.roots.idRoot,
-      metaRoot: plan.base.roots.metaRoot,
-    };
-  }
-  const { root } = await facts.ids.commit(appender);
-  return { idRoot: root, metaRoot: await facts.meta.commit(appender) };
-}
-
 function hasPendingRows(plan: GroupPlan): boolean {
   return plan.range !== undefined || plan.newRows.length > 0;
 }
@@ -184,6 +105,9 @@ export async function buildGroup(
   mutation: MutationCode,
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
+  if (plan.segments !== undefined) {
+    return buildFromSegments(ctx, plan, plan.segments, mutation, appender);
+  }
   const pending = hasPendingRows(plan);
   if (pending && hasActiveSlot(plan.base.slots)) {
     throw new JournalFormatError(
@@ -207,38 +131,9 @@ export async function buildGroup(
       idRoot,
       metaRoot,
       stateRoot,
+      nextLabel: plan.nextLabel,
     }),
     spine: tree.spine,
     chainBase,
-  };
-}
-
-function trailerState(
-  ctx: BuildContext,
-  plan: GroupPlan,
-  mutation: MutationCode,
-  chain: LineageChain,
-  built: TreeResult & { idRoot: number; metaRoot: number; stateRoot: number },
-): TrailerState {
-  const { parent } = plan;
-  return {
-    parent: parent?.selfOffset ?? 0,
-    skip: chain.skipsForChild(),
-    lineage: plan.lineageId ?? BigInt(ctx.commitSeq),
-    lineageDepth: parent === undefined ? 0 : parent.lineageDepth + 1,
-    mutation,
-    mutationArg0: plan.pop?.cut ?? 0n,
-    mutationArg1: BigInt(plan.pop?.removed ?? 0),
-    rowRoot: built.rowRoot,
-    idRoot: built.idRoot,
-    metaRoot: built.metaRoot,
-    stateRoot: built.stateRoot,
-    nextLabel: plan.nextLabel,
-    firstLabel: built.firstLabel,
-    lastRowOffset: built.lastRowOffset,
-    lastOwner: built.lastOwner,
-    ckptBytes: (ctx.published?.ckptBytes ?? 0) + plan.ckptDelta,
-    rootAggregate: built.aggregate,
-    slots: plan.base.slots,
   };
 }

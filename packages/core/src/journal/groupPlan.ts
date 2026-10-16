@@ -1,77 +1,25 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
+import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
+import {
+  appendSegments,
+  applyRewrite,
+  isRewriteEdit,
+  popSegments,
+} from './groupRewrites.js';
+import { requireAccess, rootRef } from './groupSegments.js';
 import { allocateAppendLabels } from './labels.js';
-import { nearestAncestorWithRows, type VersionReader } from './lineageChain.js';
-import type { RecordAccess } from './recordAccess.js';
+import { nearestAncestorWithRows } from './lineageChain.js';
 import { MUTATION, type MutationCode } from './recordKinds.js';
 import type { RowDraft } from './rowDraft.js';
 import { countRowsBelow } from './rowTreeQueries.js';
-import type { RowTreeRootRef } from './rowTreeReader.js';
 import {
   emptiedVersion,
   genesisVersion,
   sameVersion,
   type Version,
 } from './version.js';
-
-/** Rows of an existing tree that a group keeps without writing their records again: rows `[from, to)` of `source`. */
-export interface ExistingRange {
-  readonly source: Version;
-  readonly from: number;
-  readonly to: number;
-}
-
-export interface NewRow {
-  readonly label: bigint;
-  readonly draft: RowDraft;
-}
-
-/**
- * What a group has decided so far. The version it builds on, `base`, is a
- * real version whose roots are reused as they are; the rows after it are
- * `range` (existing entries, no new record) followed by `newRows`. A pop that
- * lands inside a group re-appends part of one (design 4.3 step 4), and a pop
- * that must rebuild is an empty `base` with the whole kept prefix as `range`.
- */
-export interface GroupPlan {
-  base: Version;
-  /** True while `base` is on the lineage of the published version, so pops may walk it. */
-  walkable: boolean;
-  range: ExistingRange | undefined;
-  newRows: NewRow[];
-  /** The trailer the new one extends; undefined starts a lineage. */
-  parent: Version | undefined;
-  /** The lineage the new trailer joins; undefined makes its own `commitSeq` the id. */
-  lineageId: bigint | undefined;
-  nextLabel: bigint;
-  stateSets: Map<string, Uint8Array>;
-  ckptDelta: number;
-  pop: { cut: bigint; removed: number } | undefined;
-  rebuilt: boolean;
-}
-
-export interface PlanContext {
-  /** Undefined until the first group commits. */
-  readonly access: RecordAccess | undefined;
-  readonly published: Version | undefined;
-  readonly readVersion: VersionReader;
-  /** The `nextLabel` of a journal with no group. */
-  readonly firstNextLabel: bigint;
-}
-
-function requireAccess(ctx: PlanContext): RecordAccess {
-  if (ctx.access === undefined) {
-    throw new JournalFormatError('The journal has no committed group to read');
-  }
-  return ctx.access;
-}
-
-function rootRef(version: Version): RowTreeRootRef | undefined {
-  return version.roots.rowRoot === 0
-    ? undefined
-    : { offset: version.roots.rowRoot, rows: version.rows };
-}
 
 function startPlan(ctx: PlanContext): GroupPlan {
   const base = ctx.published ?? genesisVersion(ctx.firstNextLabel);
@@ -85,8 +33,9 @@ function startPlan(ctx: PlanContext): GroupPlan {
     nextLabel: base.nextLabel,
     stateSets: new Map(),
     ckptDelta: 0,
-    pop: undefined,
+    args: undefined,
     rebuilt: false,
+    segments: undefined,
   };
 }
 
@@ -96,6 +45,7 @@ function startNewLineage(plan: GroupPlan): void {
   plan.walkable = false;
   plan.range = undefined;
   plan.newRows = [];
+  plan.segments = undefined;
 }
 
 function applyAppend(plan: GroupPlan, rows: readonly RowDraft[]): void {
@@ -199,7 +149,7 @@ async function applyPop(
       `Pop to label ${cut} removes ${removed} rows, not the expected ${expectedRemoved}`,
     );
   }
-  plan.pop ??= { cut, removed };
+  plan.args ??= { cut, removed };
 }
 
 async function applyRestore(
@@ -243,12 +193,21 @@ async function applyEdit(
   plan: GroupPlan,
   edit: VersionEdit,
 ): Promise<void> {
+  if (isRewriteEdit(edit)) {
+    await applyRewrite(ctx, plan, edit);
+    return;
+  }
   switch (edit.kind) {
     case 'append':
-      applyAppend(plan, edit.rows);
+      if (plan.segments === undefined) applyAppend(plan, edit.rows);
+      else appendSegments(plan, edit.rows);
       break;
     case 'pop':
-      await applyPop(ctx, plan, edit.cutLabel, edit.expectedRemoved);
+      if (plan.segments === undefined) {
+        await applyPop(ctx, plan, edit.cutLabel, edit.expectedRemoved);
+      } else {
+        await popSegments(ctx, plan, edit.cutLabel, edit.expectedRemoved);
+      }
       break;
     case 'clear':
       startNewLineage(plan);
@@ -268,10 +227,28 @@ async function applyEdit(
   }
 }
 
+/** The mutation code of an edit that starts a lineage by changing rows (design 4.10). */
+const REWRITE_MUTATION = {
+  compress: MUTATION.compress,
+  replace: MUTATION.replace,
+  density: MUTATION.density,
+  purge: MUTATION.purge,
+  insert: MUTATION.insert,
+  owner: MUTATION.owner,
+} as const;
+
+function isLineageRewrite(
+  kind: VersionEdit['kind'],
+): kind is keyof typeof REWRITE_MUTATION {
+  return kind in REWRITE_MUTATION;
+}
+
 /**
- * The mutation the trailer names. A clear or a restore decides the group;
- * otherwise the first append or pop does; a group of state edits only is a
- * `state` group. A checkpoint is state-only by definition (design 4.9).
+ * The mutation the trailer names. A clear or a restore decides the group.
+ * Otherwise the first edit that starts a lineage by changing rows does (a
+ * compression, replace, density, purge, insert or owner change), then the
+ * first append or pop, then a fill; a group of state edits only is a `state`
+ * group. A checkpoint is state-only by definition (design 4.9).
  */
 export function mutationOf(edits: readonly VersionEdit[]): MutationCode {
   if (edits.length === 0) {
@@ -285,14 +262,21 @@ export function mutationOf(edits: readonly VersionEdit[]): MutationCode {
   }
   if (clears) return MUTATION.clear;
   if (restores) return MUTATION.restore;
-  const versioned = kinds.find((kind) => kind === 'append' || kind === 'pop');
-  if (kinds.includes('checkpoint') && versioned !== undefined) {
+  const changesRows = kinds.some(
+    (kind) => kind !== 'setState' && kind !== 'checkpoint',
+  );
+  if (kinds.includes('checkpoint') && changesRows) {
     throw new JournalFormatError(
       'A checkpoint group changes only the state map',
     );
   }
-  if (versioned === undefined) return MUTATION.state;
-  return versioned === 'append' ? MUTATION.append : MUTATION.pop;
+  const rewrite = kinds.find(isLineageRewrite);
+  if (rewrite !== undefined) return REWRITE_MUTATION[rewrite];
+  const versioned = kinds.find((kind) => kind === 'append' || kind === 'pop');
+  if (versioned !== undefined) {
+    return versioned === 'append' ? MUTATION.append : MUTATION.pop;
+  }
+  return kinds.includes('fill') ? MUTATION.fill : MUTATION.state;
 }
 
 export async function planGroup(

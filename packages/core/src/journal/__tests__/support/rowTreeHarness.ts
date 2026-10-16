@@ -15,7 +15,9 @@ import {
   type JournalOpenDependencies,
 } from '../../journalWriterOpen.js';
 import type { JournalGroupWriter } from '../../groupWriter.js';
+import { createRecordAccess } from '../../recordAccess.js';
 import type { RowEntry } from '../../rowEntry.js';
+import { editRowTree, type RowTreeEdits } from '../../rowTreeEdit.js';
 import {
   appendRowEntries,
   bulkBuildRowTree,
@@ -33,7 +35,7 @@ import { trailerStateFor, testJournalSeams } from './journalFixtures.js';
 /** The trailer state of a group that leaves the row tree in `state`. */
 export function treeTrailerState(
   seed: number,
-  state: RowTreeState | undefined,
+  state: Pick<RowTreeState, 'root'> | undefined,
   kinds: SlotKinds,
 ): TrailerState {
   const base = trailerStateFor(seed, {});
@@ -61,7 +63,44 @@ export class TreeFixtureWriter {
     readonly writer: JournalGroupWriter,
     private readonly kinds: SlotKinds,
     private spine: RightSpine | undefined,
+    private readonly file: string,
   ) {}
+
+  /** Applies label-keyed edits to the committed tree by path copying, as one group. */
+  async editRows(edits: RowTreeEdits): Promise<CommitAck> {
+    const seed = ++this.groups;
+    const published = this.writer.published;
+    const root = rowTreeRootOf(published?.trailer);
+    if (published === undefined || root === undefined) {
+      throw new Error('There is no committed tree to edit');
+    }
+    const access = createRecordAccess(
+      this.file,
+      this.writer.reader,
+      published.trailer,
+    );
+    const ack = await this.writer.commitStreamedGroup(async (appender) => {
+      const edited = await editRowTree(
+        access,
+        appender,
+        testAlgebra(this.kinds),
+        root,
+        edits,
+      );
+      return treeTrailerState(seed, { root: edited }, this.kinds);
+    });
+    // The edit keeps no spine; the next append needs the one the file now holds.
+    const after = this.writer.published;
+    const newRoot = rowTreeRootOf(after?.trailer);
+    if (after === undefined || newRoot === undefined) {
+      throw new Error('The edit left no committed tree');
+    }
+    this.spine = await loadRightSpine(
+      createRecordAccess(this.file, this.writer.reader, after.trailer),
+      newRoot,
+    );
+    return ack;
+  }
 
   /**
    * Appends the entries as one group, path-copying the right spine. The
@@ -122,6 +161,7 @@ export async function createTreeWriter(
     await createJournal(file, dependencies),
     kinds,
     undefined,
+    file,
   );
 }
 
@@ -137,7 +177,7 @@ export async function reopenTreeWriter(
     const spine =
       root === undefined ? undefined : await loadRightSpine(reader, root);
     const { writer } = await openJournalForOwner(file, dependencies);
-    return new TreeFixtureWriter(writer, kinds, spine);
+    return new TreeFixtureWriter(writer, kinds, spine, file);
   } finally {
     await reader.close();
   }

@@ -4,7 +4,7 @@ import type { FrameBody } from './frame.js';
 import type { GroupRecord } from './groupAppender.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
-import type { RowEntry } from './rowEntry.js';
+import { ENTRY_FLAG, type RowEntry } from './rowEntry.js';
 import {
   encodeIdPiece,
   encodeRowHeader,
@@ -144,5 +144,28 @@ export function entryForNewRow(
       [0, 0, 0, 0],
     ],
     stamp: [UNSTAMPED, UNSTAMPED, UNSTAMPED],
+  };
+}
+
+/**
+ * The entry of a row that rewrites the row `previous`, such as a purge that
+ * keeps its id tuples (design 4.6). What the normalizer derived from the ids
+ * stays; the numbers computed from the content, the summaries, token counts,
+ * media metrics and `LENS` references, start missing again, because the
+ * content changed.
+ */
+export function entryForRewrittenRow(
+  encoded: EncodedRow,
+  recordOffset: number,
+  previous: RowEntry,
+): RowEntry {
+  const fresh = entryForNewRow(encoded, recordOffset);
+  return {
+    ...fresh,
+    flags: fresh.flags | (previous.flags & ENTRY_FLAG.pairSensitive),
+    reconBlocks: previous.reconBlocks,
+    answered: previous.answered,
+    callBlocks: previous.callBlocks,
+    unmappedBlocks: previous.unmappedBlocks,
   };
 }

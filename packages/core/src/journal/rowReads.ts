@@ -78,3 +78,54 @@ async function idPieceOf(
   }
   return wider.bodyPrefix.subarray(0, idsLen);
 }
+
+/** A whole row as stored: the header, the raw ids, the metadata piece and each block. */
+export interface StoredRow {
+  readonly header: RowHeader;
+  readonly rawIds: readonly string[];
+  readonly meta: Uint8Array;
+  readonly blocks: readonly Uint8Array[];
+}
+
+async function readBody(
+  access: RecordAccess,
+  head: Parameters<RecordAccess['readRecordBody']>[0],
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of access.readRecordBody(head, undefined, 'ROW')) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Reads the row an entry points at, with its body under the body CRC. The row
+ * is held whole, so this is for a row-sized read (a block relocated next to its
+ * call, a test), not for a scan of the history.
+ */
+export async function readStoredRow(
+  access: RecordAccess,
+  entry: RowEntry,
+): Promise<StoredRow> {
+  const head = await access.readRecordHead(entry.recordOffset, 'ROW');
+  if (head.kind !== RECORD_KIND.ROW) {
+    throw new JournalFormatError(
+      `Record at offset ${entry.recordOffset} is not a row (kind ${head.kind})`,
+    );
+  }
+  const header = decodeRowHeader(head.kindHeader);
+  if (header.label !== entry.label) {
+    throw new JournalFormatError(
+      `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
+    );
+  }
+  const body = await readBody(access, head);
+  return {
+    header,
+    rawIds: decodeIdPiece(body.subarray(0, header.idsLen), header.ids.length),
+    meta: body.subarray(header.idsLen, header.idsLen + header.metaLen),
+    blocks: header.blocks.map((block) =>
+      body.subarray(block.offset, block.offset + block.length),
+    ),
+  };
+}
