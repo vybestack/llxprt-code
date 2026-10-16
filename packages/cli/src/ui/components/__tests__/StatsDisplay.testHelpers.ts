@@ -138,6 +138,11 @@ export function createMockRuntimeApi(
   const stubs = {
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => 'mock-provider'),
+    getActiveProviderAliasConfig: () => {
+      throw new Error(
+        'Provider aliases are unavailable in this runtime fixture',
+      );
+    },
     detectProviderQuota: () => undefined,
     setActiveModel: vi.fn(async () => {}),
     listAvailableModels: vi.fn(() => []),

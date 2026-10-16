@@ -92,7 +92,10 @@ import { assertDefined } from '../../__tests__/assertions.js';
 function runProvider(context: CommandOwnerFixture, args: string) {
   const command = createProviderCommand(
     bindProviderCommandOperations(
-      context.runtimeApi,
+      context.runtimeApi.getActiveProviderName.bind(context.runtimeApi),
+      context.runtimeApi.providerStatus.bind(context.runtimeApi),
+      context.runtimeApi.getActiveModelName.bind(context.runtimeApi),
+      context.runtimeApi.getActiveProviderAliasConfig.bind(context.runtimeApi),
       async (name, options) => {
         const agent = context.services.agent;
         if (agent === null)
