@@ -8,7 +8,7 @@ import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
 import fs from 'node:fs';
 import net from 'node:net';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core/utils/errors.js';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { shouldUseCurrentUserInSandbox } from './sandbox-env.js';
 import { setupSshAgentPodmanMacOS } from './sandbox-podman.js';
