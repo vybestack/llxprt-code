@@ -9,7 +9,7 @@ import {
   type ResolvedEntry,
 } from '../../recording/journalResolver.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { CommitWatermark } from '../../recording/types.js';
 import { invalidateResponsesStatefulChain, type IContent } from './IContent.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
@@ -20,7 +20,7 @@ function requireLiveSource(isCancelled: () => boolean): void {
 }
 
 async function destinationCount(
-  destination: SessionRecordingService,
+  destination: RecordingPort,
   counters?: JournalReadCounters,
 ): Promise<number> {
   const filePath = destination.getFilePath();
@@ -133,7 +133,7 @@ async function stageSource(
  * only when the commit record is durable.
  */
 async function commitReplacement(
-  destination: SessionRecordingService,
+  destination: RecordingPort,
   entries: AsyncIterable<OwnedEntry>,
   isCancelled: () => boolean,
 ): Promise<{ watermark: CommitWatermark; rows: number }> {
@@ -158,7 +158,7 @@ async function commitReplacement(
 
 /** Close an unfinished transaction; its failure is reported with the cause. */
 async function abortReplacement(
-  destination: SessionRecordingService,
+  destination: RecordingPort,
   txId: string,
   rows: number,
   cause: unknown,
@@ -274,7 +274,7 @@ function seededPayload(
 
 export async function appendHistoryJournal(
   source: AttachmentSource,
-  destination: SessionRecordingService,
+  destination: RecordingPort,
   replace: boolean,
   isCancelled: () => boolean,
   counters?: JournalReadCounters,

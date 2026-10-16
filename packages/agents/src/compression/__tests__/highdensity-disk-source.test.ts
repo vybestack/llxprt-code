@@ -6,7 +6,7 @@ import {
   checkpointState,
   expectedCheckpointState,
 } from './checkpoint-source-fault-helpers.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
@@ -26,7 +26,7 @@ class FailingSourceHistory extends HighdensityDiskHistory {
 }
 async function sourceFailure(size: number, mode: string): Promise<number> {
   let created: FailingSourceHistory | undefined;
-  let recording: SessionRecordingService | undefined;
+  let recording: RecordingPort | undefined;
   return withSuffixFixture(
     size,
     async (history, ownership) => {

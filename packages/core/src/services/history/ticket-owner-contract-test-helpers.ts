@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import { expect } from 'bun:test';
 import type { IContent } from './IContent.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import {
   transformProbes,
@@ -30,7 +30,7 @@ export async function seedTicketRows(
 }
 
 export function submitTicketRows(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   size: number,
   makeRow: (index: number) => IContent,
   register?: (row: IContent) => void,
@@ -68,7 +68,7 @@ export async function expectTicketCallersReleased(
 }
 
 export function expectTicketCursorRows(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   owners: RowOwnership,
   size: number,
   expected: (index: number) => IContent,

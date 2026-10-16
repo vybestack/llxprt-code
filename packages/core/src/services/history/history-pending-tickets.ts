@@ -3,7 +3,7 @@ import {
   SynchronousValueSpool,
   type ValueTicketReader,
 } from '../../recording/synchronous-value-spool.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import {
   isRecord,
   isSpeakerContent,

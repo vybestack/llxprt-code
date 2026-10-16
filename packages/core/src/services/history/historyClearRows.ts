@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import { replaceOwnedRowsOps, type OwnedRow } from './historyReplaceOps.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
@@ -18,7 +18,7 @@ function* ownedClearedRows(
 }
 
 function restoreClearedRows(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   cursor: HistoryReadCursor,
   admitted: boolean,
 ): unknown[] {
@@ -37,7 +37,7 @@ function restoreClearedRows(
 }
 
 export function clearHistoryRows(input: {
-  readonly journal: HistoryJournalStore;
+  readonly journal: HistoryStorePort;
   readonly spans: readonly RemovedInteriorSpan[];
   readonly rollbackOnFailure: boolean;
   readonly publish: (spans: RemovedInteriorSpan[]) => void;

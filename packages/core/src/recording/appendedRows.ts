@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readSync } from 'node:fs';
-import type { HistoryJournalOp } from '../services/history/historyJournalStore.js';
+import type { HistoryJournalOp } from '../services/history/historyStorePort.js';
 import { foldLine } from './durableRowFold.js';
 import { DurableDensityIndex } from './durableDensityIndex.js';
 import { MutableRowDirectory, type NumericRow } from './mutableRowDirectory.js';

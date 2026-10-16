@@ -3,13 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { randomUUID } from 'node:crypto';
-import { isDeepStrictEqual } from 'node:util';
 import type {
   HistoryJournalOp,
-  HistoryJournalStore,
   HistoryMutationMark,
-} from './historyJournalStore.js';
+  HistoryStorePort,
+} from './historyStorePort.js';
+import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
@@ -37,8 +37,8 @@ async function nextOf<T>(iterator: AsyncIterator<T>): Promise<T | undefined> {
  * unchanged, a pure tail truncation (one rewind), or anything else.
  */
 async function planReplacement(
-  live: HistoryJournalStore,
-  candidate: HistoryJournalStore,
+  live: HistoryStorePort,
+  candidate: HistoryStorePort,
 ): Promise<Exclude<ReplacementPlan, { kind: 'replace' }> | undefined> {
   const liveLength = live.getLength();
   const candidateLength = candidate.getLength();
@@ -86,7 +86,7 @@ export class StagedProfileReplacement {
   private settled = false;
 
   private constructor(
-    private readonly journal: HistoryJournalStore,
+    private readonly journal: HistoryStorePort,
     private readonly ownership: RowOwnership | undefined,
     private readonly origin: string | undefined,
     private readonly plan: ReplacementPlan,
@@ -94,8 +94,8 @@ export class StagedProfileReplacement {
   ) {}
 
   static async stage(
-    journal: HistoryJournalStore,
-    candidate: HistoryJournalStore,
+    journal: HistoryStorePort,
+    candidate: HistoryStorePort,
     ownership: RowOwnership | undefined,
     origin: string | undefined,
   ): Promise<StagedProfileReplacement> {
@@ -122,7 +122,7 @@ export class StagedProfileReplacement {
 
   private async writeTransaction(
     open: { txId: string; rows: number },
-    candidate: HistoryJournalStore,
+    candidate: HistoryStorePort,
   ): Promise<void> {
     try {
       // An unmaterialized recorder buffers a non-content record until the

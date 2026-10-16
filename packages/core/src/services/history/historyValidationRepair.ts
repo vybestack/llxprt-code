@@ -1,12 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
 import type { IContent, ToolCallBlock } from './IContent.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryRowOrigins } from './historyRowOrigins.js';
-import type {
-  HistoryJournalStore,
-  HistoryJournalOp,
-} from './historyJournalStore.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { HistoryRepairIndex } from './historyRepairIndex.js';
 import {
@@ -116,7 +113,7 @@ export class HistoryValidationRepair {
     }
   }
 
-  publish(journal: HistoryJournalStore): void {
+  publish(journal: HistoryStorePort): void {
     if (this.inserted.length === 0) return;
     try {
       for (const op of this.operations()) {
@@ -135,7 +132,7 @@ export class HistoryValidationRepair {
     }
   }
 
-  rollback(journal: HistoryJournalStore): void {
+  rollback(journal: HistoryStorePort): void {
     if (this.admitted === 0) return;
     const abort = this.replacements.abortOp();
     if (abort !== null) {

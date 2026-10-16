@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import type { HistoryServiceCore } from './HistoryServiceCore.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { ChronologyStamper } from './historyChronology.js';
 import type { SpanWindow } from './historySpanWindow.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
@@ -70,7 +70,7 @@ function notifyDetachedBatch(
 
 export function createDetachedHistoryAPI(
   history: HistoryServiceCore,
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   chronology: ChronologyStamper,
   spans: SpanWindow,
   ownership: RowOwnership | undefined,

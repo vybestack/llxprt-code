@@ -5,7 +5,7 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { field } from '../../recording/resolverProjection.js';
 import { parseChronologyBinding } from '../../recording/chronologyBinding.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
@@ -60,7 +60,7 @@ export async function writeResumeProjection(
 
 export async function persistResumeChronology(
   projection: ResumeProjection,
-  recording: SessionRecordingService,
+  recording: RecordingPort,
   boot: ResumeCursorBoot,
   observation?: ChronologyCommitObservation,
 ): Promise<CommitWatermark> {
@@ -103,7 +103,7 @@ async function persistProjectedRow(
   line: string,
   rowIndex: number,
   original: ResolvedEntry,
-  recording: SessionRecordingService,
+  recording: RecordingPort,
   boot: ResumeCursorBoot,
   observation?: ChronologyCommitObservation,
 ): Promise<CommitWatermark | null> {

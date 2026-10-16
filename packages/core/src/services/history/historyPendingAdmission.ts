@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
   CommitWatermark,
   SessionRecordLine,
 } from '../../recording/types.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import type { HistoryPendingTickets } from './history-pending-tickets.js';
 import { opToEnvelope } from './historyJournalEnvelope.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
 
 export function admitHistoryPending(
-  recorder: SessionRecordingService,
+  recorder: RecordingPort,
   op: HistoryJournalOp,
   ownership?: RowOwnership,
 ): { readonly line: SessionRecordLine } {

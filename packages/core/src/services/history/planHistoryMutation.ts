@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
@@ -15,10 +16,6 @@ import { historyOriginId } from './historyOriginId.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type { DensityReplacementRecordShape } from './historyJournalGuards.js';
-import type {
-  HistoryJournalOp,
-  HistoryJournalStore,
-} from './historyJournalStore.js';
 import {
   historyRowAt,
   type HistoryRowSource,
@@ -109,7 +106,7 @@ function contentOp(
  * back by one replace transaction of the previous rows.
  */
 export async function compensateMutation(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   previousHistory: HistoryMutationSnapshot,
   input: HistoryMutationInput,
   replacements: OpenReplaceTracker,

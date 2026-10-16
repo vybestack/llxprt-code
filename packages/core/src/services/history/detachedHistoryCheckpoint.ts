@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryJournalStore } from './historyJournalStore.js';
+import type { HistoryStorePort } from './historyStorePort.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { captureDetachedHistory } from './detachedHistoryCapture.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 
 export async function withDetachedHistoryCheckpoint<T>(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   ownership: RowOwnership | undefined,
   enqueue: (execute: () => Promise<void>) => Promise<void>,
   settleTokens: () => Promise<void>,

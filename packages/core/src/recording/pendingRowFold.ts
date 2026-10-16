@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '../services/history/IContent.js';
-import type { HistoryJournalOp } from '../services/history/historyJournalStore.js';
+import type { HistoryJournalOp } from '../services/history/historyStorePort.js';
 import type { PendingFoldSnapshot } from './pendingFoldSnapshot.js';
 import {
   foldDurableRows,

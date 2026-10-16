@@ -8,7 +8,7 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 
@@ -61,7 +61,7 @@ async function persistCheckedRows(
   rows: SemanticPurgeRowSource,
   frontier: SemanticMediaPurgeFrontier,
   size: number,
-  recording: SessionRecordingService | undefined,
+  recording: RecordingPort | undefined,
 ): Promise<void> {
   let count = 0;
   for await (const row of rows.streamRows()) {
@@ -77,7 +77,7 @@ async function persistCheckedRows(
 
 async function verifyProduction(size: number): Promise<number> {
   const ownership = new RowOwnership();
-  let recording: SessionRecordingService | undefined;
+  let recording: RecordingPort | undefined;
   await withSuffixFixture(
     size,
     async (history) => {

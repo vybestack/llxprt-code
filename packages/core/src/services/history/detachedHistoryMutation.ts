@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type {
   ChronologyStamper,
   ChronologyState,
@@ -61,7 +61,7 @@ export interface DetachedState {
   readonly chronology: ChronologyState;
 }
 export interface DetachedHistoryHost {
-  readonly journal: HistoryJournalStore;
+  readonly journal: HistoryStorePort;
   readonly chronology: ChronologyStamper;
   readonly ownership?: RowOwnership;
   readonly mediaOwner?: HistoryMediaOwner;

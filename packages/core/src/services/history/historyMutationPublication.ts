@@ -1,8 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type {
-  HistoryJournalStore,
-  HistoryJournalOp,
-} from './historyJournalStore.js';
+import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -21,7 +18,7 @@ export class HistoryMutationPublication {
   private origin: string | undefined;
 
   constructor(
-    private readonly journal: HistoryJournalStore,
+    private readonly journal: HistoryStorePort,
     private readonly ownership?: RowOwnership,
   ) {}
 

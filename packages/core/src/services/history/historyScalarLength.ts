@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import { validSeq } from '../../recording/resolverProjection.js';
 import { withSynchronousHistoryCursor } from '../../recording/synchronousHistoryCursor.js';

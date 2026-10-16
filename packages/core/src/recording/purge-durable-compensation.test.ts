@@ -3,7 +3,7 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
-import type { SessionRecordingService } from './SessionRecordingService.js';
+import type { RecordingPort } from './recordingPort.js';
 import { foldDurableRows } from './durableRowFold.js';
 import { SemanticMediaPurgeStreamCoordinator } from '../services/history/semantic-purge-stream.js';
 import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
@@ -47,7 +47,7 @@ function imageRow(index: number, bytes: number): IContent {
   };
 }
 async function verifyCompensation(size: number): Promise<number> {
-  let recording: SessionRecordingService | undefined;
+  let recording: RecordingPort | undefined;
   const owners = new RowOwnership();
   await withCoreSuffixFixture(
     size,

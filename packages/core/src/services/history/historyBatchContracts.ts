@@ -29,11 +29,11 @@ import {
 import type { DiskDensityResult } from './historyDiskDensity.js';
 import type { DensitySpanRows } from './densitySpanRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 
 export interface HistoryServiceJournalOptions {
-  readonly recording?: SessionRecordingService;
+  readonly recording?: RecordingPort;
   readonly attachmentCounters?: JournalReadCounters;
   readonly mutationOwnership?: RowOwnership;
 }

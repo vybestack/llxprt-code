@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { SessionRecordingService } from './SessionRecordingService.js';
+import type { RecordingPort } from './recordingPort.js';
 import type {
   HistoryPendingTickets,
   PendingHistoryTicket,
@@ -25,7 +25,7 @@ export interface PendingFoldSnapshot {
 }
 
 interface FoldBinding {
-  readonly recorder: SessionRecordingService | undefined;
+  readonly recorder: RecordingPort | undefined;
   readonly seeded: boolean;
   readonly durableTail: number;
   readonly pending: HistoryPendingTickets;

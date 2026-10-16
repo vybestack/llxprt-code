@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type {
   HistoryMediaOwner,
   PreparedHistoryBatchEffect,
@@ -77,8 +77,8 @@ export async function deriveResumeState(
 }
 
 export async function adoptResumeJournal(input: {
-  journal: HistoryJournalStore;
-  recording: SessionRecordingService;
+  journal: HistoryStorePort;
+  recording: RecordingPort;
   boot: ResumeCursorBoot;
   mediaOwner?: HistoryMediaOwner;
   estimate: (contents: readonly IContent[]) => Promise<number>;
@@ -89,7 +89,7 @@ export async function adoptResumeJournal(input: {
   if (input.mediaOwner && !input.mediaOwner.prepareReferenceReplacement)
     throw new Error('History media owner does not support journal adoption');
   let media: PreparedHistoryBatchEffect | undefined;
-  let adoption: ReturnType<HistoryJournalStore['adoptJournal']> | undefined;
+  let adoption: ReturnType<HistoryStorePort['adoptJournal']> | undefined;
   let projection: ResumeProjection | undefined;
   try {
     const state = await deriveResumeState(input.boot, input.estimate);

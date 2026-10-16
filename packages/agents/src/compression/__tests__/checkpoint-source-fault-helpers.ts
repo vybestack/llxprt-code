@@ -5,7 +5,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { detachedDigest } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { expectedRange } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
@@ -72,7 +72,7 @@ type Digest = Awaited<ReturnType<typeof detachedDigest>>;
 
 export async function checkpointState(
   history: HistoryService,
-  recording: SessionRecordingService | undefined,
+  recording: RecordingPort | undefined,
 ): Promise<{
   live: Digest;
   durable: Digest;

@@ -36,7 +36,7 @@ export type {
 import { adoptResumeJournal } from './historyResumeAdoption.js';
 import { publishResumeRestoration } from './historyResumeProjection.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent, ToolResponseBlock } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
@@ -67,7 +67,7 @@ import {
 } from './historyChronology.js';
 import { HistoryServiceReads } from './HistoryServiceReads.js';
 
-import type { HistoryServiceJournalOptions } from './historyJournalStore.js';
+import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 
 export type {
   HistoryTransformEntry,
@@ -148,7 +148,7 @@ export class HistoryService extends HistoryServiceReads {
     );
   }
   async adoptResumeBoot(
-    recording: SessionRecordingService,
+    recording: RecordingPort,
     boot: ResumeCursorBoot,
     afterPublication: () => void | Promise<void> = () => {},
   ): Promise<string[]> {
@@ -174,7 +174,7 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   private async adoptResumeBootInternal(
-    recording: SessionRecordingService,
+    recording: RecordingPort,
     boot: ResumeCursorBoot,
     afterPublication: () => void | Promise<void>,
   ): Promise<string[]> {

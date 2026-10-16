@@ -13,7 +13,7 @@ import { JournalResolver } from '../../recording/journalResolver.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { appendHistoryJournal } from './attachHistoryJournal.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { replaceAllOps, restoreRowsOps } from './historyReplaceOps.js';
 import { HistoryRowOrigins } from './historyRowOrigins.js';

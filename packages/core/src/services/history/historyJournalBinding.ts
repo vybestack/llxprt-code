@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { SessionRecordLine } from '../../recording/types.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 
 export interface JournalBinding {
   readonly retired: Set<() => void>;
-  recorder: SessionRecordingService | undefined;
+  recorder: RecordingPort | undefined;
   ownsRecorder: boolean;
   tempDir: string | null;
   pending: HistoryPendingTickets;
@@ -21,9 +21,7 @@ export interface JournalBinding {
   readonly projection?: ResumeProjection;
 }
 
-export function journalBinding(
-  recording?: SessionRecordingService,
-): JournalBinding {
+export function journalBinding(recording?: RecordingPort): JournalBinding {
   return {
     retired: new Set(),
     recorder: recording,

@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { SessionEventType } from '../../recording/types.js';
 import { acceptsHistoryOrigin, payloadOrigin } from './historyOriginId.js';
 
 interface FanoutBinding {
   readonly origin: string;
-  readonly recorder: SessionRecordingService;
+  readonly recorder: RecordingPort;
 }
 
 export function rethrow(failures: readonly unknown[], message: string): void {
@@ -60,14 +60,14 @@ export class HistoryRecorderFanout {
   }
 
   /** Re-binding an origin replaces that origin's recorder; others are untouched. */
-  bind(origin: string, recorder: SessionRecordingService): void {
+  bind(origin: string, recorder: RecordingPort): void {
     const index = this.bindings.findIndex((entry) => entry.origin === origin);
     const binding = { origin, recorder };
     if (index >= 0) this.bindings[index] = binding;
     else this.bindings.push(binding);
   }
 
-  unbind(recorder: SessionRecordingService): boolean {
+  unbind(recorder: RecordingPort): boolean {
     const index = this.bindings.findIndex(
       (entry) => entry.recorder === recorder,
     );
@@ -76,7 +76,7 @@ export class HistoryRecorderFanout {
     return true;
   }
 
-  has(recorder: SessionRecordingService): boolean {
+  has(recorder: RecordingPort): boolean {
     return this.bindings.some((entry) => entry.recorder === recorder);
   }
 

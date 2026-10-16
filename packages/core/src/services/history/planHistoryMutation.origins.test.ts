@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import { HistoryRowOrigins } from './historyRowOrigins.js';
 import { planHistoryMutation } from './planHistoryMutation.js';
 

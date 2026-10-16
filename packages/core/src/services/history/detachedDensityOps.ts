@@ -4,7 +4,7 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { batchDensityOps, type DensityChange } from './historyDiskDensity.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 
 /**
  * Walks a density candidate against the journal it was derived from. A

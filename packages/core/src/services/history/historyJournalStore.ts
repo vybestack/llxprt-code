@@ -87,12 +87,17 @@ import {
   readHistoryLength,
 } from './historyScalarLength.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
+import type {
+  HistoryJournalAdoption,
+  HistoryJournalOp,
+  HistoryMutationMark,
+  HistoryPublicationScope,
+  HistoryStorePort,
+} from './historyStorePort.js';
 import type {
   CommitWatermark,
-  CompressionDetailPayload,
-  DensityMutationPayload,
   SessionRecordLine,
-  SyntheticInsertPayload,
 } from '../../recording/types.js';
 import {
   arrayRowStore,
@@ -128,82 +133,14 @@ import {
   type HistoryReadCursor,
 } from '../../recording/synchronousHistoryCursor.js';
 
-/** Recorder options for the HistoryService constructor. */
-export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
-
-/**
- * One durable history mutation in the P05b1 journal-op vocabulary. This is
- * the unit the overlay folds and the journal records — one op per envelope.
- */
-export type HistoryJournalOp = HistoryJournalOpBody & {
-  /** Persisted id of the owner that published the op; absent means unowned. */
-  readonly origin?: string;
-};
-
-type HistoryJournalOpBody =
-  | {
-      readonly kind: 'content';
-      readonly content: IContent;
-      /** Set on a row written inside a replace transaction. */
-      readonly tx?: string;
-    }
-  | { readonly kind: 'replaceBegin'; readonly txId: string }
-  | {
-      readonly kind: 'replaceCommit';
-      readonly txId: string;
-      readonly rowCount: number;
-    }
-  | {
-      readonly kind: 'replaceAbort';
-      readonly txId: string;
-      readonly rowCount: number;
-    }
-  | {
-      readonly kind: 'rewind';
-      readonly itemsRemoved: number;
-      readonly cutSeq?: number;
-    }
-  | {
-      readonly kind: 'compressed';
-      readonly summary: IContent;
-      readonly itemsCompressed: number;
-    }
-  | {
-      readonly kind: 'compressionDetail';
-      readonly payload: CompressionDetailPayload;
-    }
-  | {
-      readonly kind: 'syntheticInsert';
-      readonly payload: SyntheticInsertPayload;
-    }
-  | { readonly kind: 'density'; readonly payload: DensityMutationPayload };
-
 // ---------------------------------------------------------------------------
 // The store
 // ---------------------------------------------------------------------------
 
-export interface HistoryJournalAdoption {
-  useDurableProjection(watermark: CommitWatermark): void;
-  prepareCommit(): void;
-  commit(): Promise<void>;
-  rollback(): void;
-}
-
-/** Opaque journal position; see {@link HistoryJournalStore.mutationMark}. */
-export interface HistoryMutationMark {
-  readonly binding: object;
-  readonly lastSeq: number | null;
-}
-
-/** Brackets one logical publication so the fan-out sees it only if it succeeds. */
-export interface HistoryPublicationScope {
-  close(published: boolean): void;
-}
-
 /** Publications up to this many rows reach the mirrors directly, not through the pump. */
 const DIRECT_DELIVERY_LINE_LIMIT = 4;
 
-export class HistoryJournalStore {
+export class HistoryJournalStore implements HistoryStorePort {
   private binding: JournalBinding;
   private readonly fanout = new HistoryRecorderFanout();
   private readonly fanoutFeed = new HistoryFanoutFeed(this.fanout);
@@ -226,7 +163,7 @@ export class HistoryJournalStore {
   private readonly summaryTracker = new HistorySummaryTracker();
 
   constructor(
-    recording?: SessionRecordingService,
+    recording?: RecordingPort,
     private readonly attachmentCounters?: JournalReadCounters,
     private readonly mutationOwnership?: RowOwnership,
   ) {
@@ -240,7 +177,7 @@ export class HistoryJournalStore {
     return () => binding.retired.delete(listener);
   }
 
-  isRecorder(recorder: SessionRecordingService): boolean {
+  isRecorder(recorder: RecordingPort): boolean {
     return this.binding.recorder === recorder;
   }
 
@@ -272,7 +209,7 @@ export class HistoryJournalStore {
     this.primaryOrigin = origin;
   }
 
-  isAdoptingRecorder(recorder: SessionRecordingService): boolean {
+  isAdoptingRecorder(recorder: RecordingPort): boolean {
     return this.adoptionPending && this.isRecorder(recorder);
   }
 
@@ -337,7 +274,7 @@ export class HistoryJournalStore {
 
   /** Small appended rows go straight to the mirrors; anything else through the pump. */
   private publishToMirrors(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     lines: readonly SessionRecordLine[],
     seq: number,
   ): void {
@@ -548,7 +485,7 @@ export class HistoryJournalStore {
    * changes media ownership or HistoryService's derived state.
    */
   adoptJournal(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     watermark: CommitWatermark,
     stripResumeMarkers = false,
     projection?: ResumeProjection,
@@ -625,9 +562,7 @@ export class HistoryJournalStore {
    * origin filter instead of becoming the unfiltered primary; the hidden
    * primary is rebuilt from it, and every other mirror loses the rows it held.
    */
-  private async mirrorResumedRecorder(
-    recorder: SessionRecordingService,
-  ): Promise<void> {
+  private async mirrorResumedRecorder(recorder: RecordingPort): Promise<void> {
     const owner = this.primaryOrigin;
     if (owner === undefined)
       throw new Error(
@@ -666,7 +601,7 @@ export class HistoryJournalStore {
    * Late attach: copy live rows onto a new recorder when foreground history
    * was built before recording started. Resume must use adoptJournal instead.
    */
-  async detachJournal(recorder: SessionRecordingService): Promise<void> {
+  async detachJournal(recorder: RecordingPort): Promise<void> {
     if (this.disposed) return;
     if (this.fanout.has(recorder)) {
       this.assertNoAdoption();
@@ -703,7 +638,7 @@ export class HistoryJournalStore {
   }
 
   attachJournal(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     replace = false,
     onAttached?: () => void,
     origin?: string,
@@ -752,7 +687,7 @@ export class HistoryJournalStore {
   }
 
   private async transferJournal(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     replace: boolean,
     onAttached?: () => void,
     origin?: string,
@@ -795,7 +730,7 @@ export class HistoryJournalStore {
    * rows only, streamed through the filter.
    */
   private async attachMirror(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     replace: boolean,
     origin: string,
     onAttached?: () => void,
@@ -885,7 +820,7 @@ export class HistoryJournalStore {
     steps.throwIfFailed('History journal store disposal failed');
   }
 
-  private ensureRecorder(): SessionRecordingService {
+  private ensureRecorder(): RecordingPort {
     if (this.binding.recorder === undefined) {
       const dir = createScratchDirSync('llxprt-history-');
       this.binding.tempDir = dir;

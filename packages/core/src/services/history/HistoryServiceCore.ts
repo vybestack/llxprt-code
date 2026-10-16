@@ -81,11 +81,10 @@ import {
   ChronologyStamper,
   stampMutationChronology,
 } from './historyChronology.js';
-import {
-  HistoryJournalStore,
-  type HistoryServiceJournalOptions,
-} from './historyJournalStore.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
+import { createHistoryStore } from './historyBackend.js';
+import type { HistoryStorePort } from './historyStorePort.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import { SpanWindow } from './historySpanWindow.js';
 import { HistoryMutationFifo } from './historyMutationFifo.js';
 import { compensateMutation } from './planHistoryMutation.js';
@@ -103,7 +102,7 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 export type { CompressionConfig };
 
 // The journal options type rides the Core surface for facade consumers.
-export type { HistoryServiceJournalOptions } from './historyJournalStore.js';
+export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 
 // Batch/ownership contracts moved to historyBatchContracts.ts (size budget);
 // the public export surface of this module is unchanged.
@@ -153,7 +152,7 @@ export abstract class HistoryServiceCore
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  protected readonly journal: HistoryJournalStore;
+  protected readonly journal: HistoryStorePort;
   readonly detachedValues: DetachedHistoryAPI;
 
   /**
@@ -252,11 +251,7 @@ export abstract class HistoryServiceCore
   protected constructor(options: HistoryServiceJournalOptions = {}) {
     super();
     this.mutationOwnership = options.mutationOwnership;
-    this.journal = new HistoryJournalStore(
-      options.recording,
-      options.attachmentCounters,
-      options.mutationOwnership,
-    );
+    this.journal = createHistoryStore(options);
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,
@@ -292,7 +287,7 @@ export abstract class HistoryServiceCore
 
   /** Attach the journal store after construction (foreground wiring order). */
   attachJournal(
-    recorder: SessionRecordingService,
+    recorder: RecordingPort,
     replace = false,
     onAttached?: () => void,
     origin?: object,
@@ -308,7 +303,7 @@ export abstract class HistoryServiceCore
     );
   }
 
-  detachJournal(recorder: SessionRecordingService): Promise<void> {
+  detachJournal(recorder: RecordingPort): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.detachJournal(recorder),
     );

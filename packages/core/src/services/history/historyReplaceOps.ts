@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import type { IContent } from './IContent.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
 /**

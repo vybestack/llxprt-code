@@ -3,7 +3,7 @@ import {
   contentTxId,
   requireTxId,
 } from '../../recording/replaceTransaction.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
   SessionEventType,
   SessionRecordLine,
@@ -92,7 +92,7 @@ interface OpenTransaction {
 export class HistoryFanoutFeed {
   private cursor = 0;
   private consumedSeq = 0;
-  private primary: SessionRecordingService | undefined;
+  private primary: RecordingPort | undefined;
   private baseline: BaselineOwner | undefined;
   private index: SharedRowIndex | undefined;
   /** Journal offset the index has folded through. */
@@ -112,7 +112,7 @@ export class HistoryFanoutFeed {
    * the primary below `baseline.end` belong to `baseline.origin`.
    */
   reset(
-    primary: SessionRecordingService,
+    primary: RecordingPort,
     cursor: number,
     baseline?: BaselineOwner,
   ): void {
@@ -164,10 +164,7 @@ export class HistoryFanoutFeed {
    * is appended on its own; returns false, having done nothing, otherwise.
    * A refusing mirror is reported through {@link settle}, like a pump failure.
    */
-  deliverNow(
-    primary: SessionRecordingService,
-    lines: readonly DirectLine[],
-  ): boolean {
+  deliverNow(primary: RecordingPort, lines: readonly DirectLine[]): boolean {
     if (!this.idle || !lines.every(isAppendedRow)) return false;
     if (lines.length === 0) return true;
     for (const line of lines) {
@@ -181,11 +178,7 @@ export class HistoryFanoutFeed {
     return true;
   }
 
-  schedule(
-    primary: SessionRecordingService,
-    seq: number,
-    mode: FanoutFeedMode,
-  ): void {
+  schedule(primary: RecordingPort, seq: number, mode: FanoutFeedMode): void {
     this.scheduled++;
     this.chain = this.chain.then(async () => {
       try {
@@ -204,7 +197,7 @@ export class HistoryFanoutFeed {
 
   /** Consume the records from the cursor through `seq`; `limit` bounds the read. */
   private async consume(
-    primary: SessionRecordingService,
+    primary: RecordingPort,
     seq: number,
     limit: number,
     mode: FanoutFeedMode,

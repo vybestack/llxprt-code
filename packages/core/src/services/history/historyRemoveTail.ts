@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type {
   HistoryMediaOwner,
@@ -52,7 +52,7 @@ function cutIndex(
  * of a row the snapshot does not keep.
  */
 function suffixOrigins(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   previous: HistoryMutationSnapshot,
   cut: number,
 ): ReadonlyArray<string | undefined> {
@@ -67,7 +67,7 @@ function suffixOrigins(
 }
 
 function restoreSuffix(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   previous: HistoryMutationSnapshot,
   cut: number,
   origins: ReadonlyArray<string | undefined>,
@@ -85,7 +85,7 @@ function restoreSuffix(
 }
 
 async function rollbackRemoval(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   previous: HistoryMutationSnapshot,
   cut: number,
   origins: ReadonlyArray<string | undefined>,
@@ -119,7 +119,7 @@ async function rollbackRemoval(
 }
 
 export async function removeHistoryTail(input: {
-  readonly journal: HistoryJournalStore;
+  readonly journal: HistoryStorePort;
   readonly owner?: HistoryMediaOwner;
   readonly ownership?: RowOwnership;
   readonly match?: IContent;

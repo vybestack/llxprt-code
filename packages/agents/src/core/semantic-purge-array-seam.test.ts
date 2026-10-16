@@ -8,7 +8,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 
@@ -112,7 +112,7 @@ async function verifyCandidate(
 }
 
 async function verifyProduction(size: number): Promise<number> {
-  let recording: SessionRecordingService | undefined;
+  let recording: RecordingPort | undefined;
   const ownership = new RowOwnership();
   await withSuffixFixture(
     size,

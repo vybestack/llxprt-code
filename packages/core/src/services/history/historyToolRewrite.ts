@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   invalidateResponsesStatefulChain,
@@ -8,7 +9,6 @@ import {
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { HistoryMutationPublication } from './historyMutationPublication.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import { planHistoryMutation } from './planHistoryMutation.js';
 import type { OpenReplaceTracker } from './historyReplaceOps.js';
@@ -16,7 +16,7 @@ import { historyMutationFailure } from './historyMutationEffects.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 interface RewriteInput {
-  readonly journal: HistoryJournalStore;
+  readonly journal: HistoryStorePort;
   readonly entryIndex: number;
   readonly blockIndex: number;
   readonly replacement: ToolResponseBlock;

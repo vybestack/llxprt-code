@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryStorePort } from './historyStorePort.js';
 import { setImmediate } from 'node:timers/promises';
 import {
   foldPendingRows,
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
@@ -52,7 +52,7 @@ async function copyRows(
 }
 
 export async function captureDetachedHistory(
-  journal: HistoryJournalStore,
+  journal: HistoryStorePort,
   previous: DetachedHistoryJournal,
   _ownership?: RowOwnership,
   signal?: AbortSignal,

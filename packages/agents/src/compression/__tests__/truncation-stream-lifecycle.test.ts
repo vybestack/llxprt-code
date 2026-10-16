@@ -7,7 +7,7 @@ import {
   checkpointState,
   expectedCheckpointState,
 } from './checkpoint-source-fault-helpers.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import {
   withSuffixFixture,
   rowIndex,
@@ -81,7 +81,7 @@ async function longCandidate(size: number): Promise<number> {
 
 async function producerFailure(size: number): Promise<number> {
   let created: FaultHistory | undefined;
-  let recording: SessionRecordingService | undefined;
+  let recording: RecordingPort | undefined;
   return withSuffixFixture(
     size,
     async (history, reader) => {

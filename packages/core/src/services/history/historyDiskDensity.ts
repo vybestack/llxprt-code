@@ -12,7 +12,7 @@ import type {
   HistoryMutationSnapshot,
 } from './historyMutationSnapshot.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import { DensitySpanRows } from './densitySpanRows.js';
 import { planHistoryMutation } from './planHistoryMutation.js';
 import { retryWithBackoff } from '../../utils/retry.js';

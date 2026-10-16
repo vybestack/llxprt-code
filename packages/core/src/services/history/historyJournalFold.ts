@@ -19,7 +19,7 @@ import {
   requireRowCount,
   requireTxId,
 } from '../../recording/replaceTransaction.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 
 /**
  * Kind-neutral fold event: ops (pending) and parsed journal envelopes

@@ -1,12 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryJournalOp, HistoryStorePort } from './historyStorePort.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type {
-  HistoryJournalStore,
-  HistoryJournalOp,
-} from './historyJournalStore.js';
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
@@ -133,7 +130,7 @@ export class DetachedHistoryPublication {
    * had, and the publication names no origin of its own.
    */
   constructor(
-    private readonly journal: HistoryJournalStore,
+    private readonly journal: HistoryStorePort,
     private readonly ownership?: RowOwnership,
     origin?: object,
     private readonly rowOrigins?: HistoryRowOrigins,

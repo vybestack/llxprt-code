@@ -5,11 +5,12 @@ import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import { scanResumeMetadata } from '../../recording/resumeMetadata.js';
 import { createScratchDir } from '../../storage/scratch-root.js';
 
 export async function cloneHistoryJournal(
-  source: SessionRecordingService,
+  source: RecordingPort,
   isCancelled: () => boolean,
 ): Promise<{
   recorder: SessionRecordingService;
@@ -66,7 +67,7 @@ export async function cloneHistoryJournal(
  * transaction.
  */
 async function initializeFromCopy(
-  recorder: SessionRecordingService,
+  recorder: RecordingPort,
   filePath: string,
   projectHash: string,
   copiedBytes: number,

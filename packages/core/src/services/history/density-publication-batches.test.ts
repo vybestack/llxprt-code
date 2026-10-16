@@ -11,7 +11,7 @@ import {
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from './IContent.js';
 import type { DensityRowDecision } from './historyDiskDensity.js';
-import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryJournalOp } from './historyStorePort.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 
 async function consumePlan(

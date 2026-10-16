@@ -11,10 +11,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
-import {
-  HistoryJournalStore,
-  type HistoryJournalOp,
-} from '../services/history/historyJournalStore.js';
+import { HistoryJournalStore } from '../services/history/historyJournalStore.js';
+import type { HistoryJournalOp } from '../services/history/historyStorePort.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { JournalResolver } from './journalResolver.js';
 import { foldDurableRows } from './durableRowFold.js';
