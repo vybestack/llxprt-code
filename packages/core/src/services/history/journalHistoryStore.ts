@@ -5,7 +5,9 @@ import type { CommitAck } from '../../journal/groupWriter.js';
 import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
+import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { HistoryJournalOp } from './historyStorePort.js';
+import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import {
   decodeStoredRow,
@@ -132,6 +134,12 @@ export class JournalHistoryStore {
     const rows: IContent[] = [];
     for await (const row of this.streamRows()) rows.push(row);
     return rows;
+  }
+
+  /** A dump of the rows once the queue is durable; it reads the file, so it holds no row. */
+  async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
+    await this.waitForDurable();
+    return new JournalDumpSnapshot(this.session.store.snapshot());
   }
 
   /** Settles the queue, then closes the journal. */
