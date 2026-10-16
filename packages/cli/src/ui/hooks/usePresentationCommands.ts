@@ -4,13 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useCallback, useMemo } from 'react';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../../config/settings.js';
+import type { AboutDetails } from '../commands/aboutCommand.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { createAboutCommand } from '../commands/aboutCommand.js';
-import { bindAboutDetails } from '../commands/aboutCommandHost.js';
 import { createClearCommand } from '../commands/clearCommand.js';
 import { bindClearSession } from '../commands/simpleCommandHost.js';
 import { createInitCommand } from '../commands/initCommand.js';
@@ -28,10 +24,11 @@ type PresentationCommands = Pick<
 >;
 
 export function usePresentationCommands(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
-  settings: LoadedSettings,
-  api: RuntimeApi,
+  readAbout: () => Promise<AboutDetails>,
+  targetDirectory: string | undefined,
+  endSession: Parameters<typeof bindClearSession>[0],
+  startNewSession: Parameters<typeof bindClearSession>[1],
+  startSession: Parameters<typeof bindClearSession>[2],
   addItem: CommandContext['ui']['addItem'],
   setDebugMessage: CommandContext['ui']['setDebugMessage'],
   updateHistoryTokenCount: CommandContext['ui']['updateHistoryTokenCount'],
@@ -48,38 +45,24 @@ export function usePresentationCommands(
   }, [clearItems, refreshStatic, alternateBuffer]);
   return useMemo(
     () => ({
-      aboutCommand: createAboutCommand(
-        bindAboutDetails(api, config, settings),
-        addItem,
-      ),
+      aboutCommand: createAboutCommand(readAbout, addItem),
       clearCommand: createClearCommand(
-        bindClearSession(
-          agent === null
-            ? null
-            : agent.hooks.triggerSessionEnd.bind(agent.hooks),
-          async () => {
-            if (agent === null) throw new Error('Session agent is unavailable');
-            await agent.session.startNewSession();
-          },
-          async (reason) => {
-            if (agent === null) throw new Error('Session agent is unavailable');
-            return agent.hooks.triggerSessionStart(reason);
-          },
-        ),
+        bindClearSession(endSession, startNewSession, startSession),
         setDebugMessage,
         addItem,
         updateHistoryTokenCount,
         clear,
       ),
-      initCommand: createInitCommand(config?.getTargetDir(), addItem),
+      initCommand: createInitCommand(targetDirectory, addItem),
       vimCommand: createVimCommand(toggleVimEnabled),
       uiProfileCommand: createUiProfileCommand(toggleDebugProfiler),
     }),
     [
-      agent,
-      config,
-      settings,
-      api,
+      readAbout,
+      targetDirectory,
+      endSession,
+      startNewSession,
+      startSession,
       addItem,
       setDebugMessage,
       updateHistoryTokenCount,
