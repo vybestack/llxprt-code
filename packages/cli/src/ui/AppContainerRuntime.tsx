@@ -219,6 +219,7 @@ function useAppInputRuntime(
 ): AppInputResult {
   return useAppInput({
     projectTempDir: props.uiRuntime.projectTempDir,
+    injectInputSteer: useBound(props.agent, props.agent.injectSteer),
     readInitialPrompt: useBound(
       props.uiRuntime.app,
       props.uiRuntime.app.getQuestion,
