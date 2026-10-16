@@ -544,6 +544,11 @@ describe('provider changes made in dialogs reach the session recording (issue #3
           agent: {
             getProvider: () => config.getProvider() ?? '',
             getModel: () => config.getModel(),
+            saveProfileSnapshot: async () => {
+              throw new Error(
+                'Profile snapshot writes are unavailable in this load fixture',
+              );
+            },
             profiles: {
               load: async (name: string) => {
                 await requireRuntime().loadProfileByName(name);

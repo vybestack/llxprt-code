@@ -19,6 +19,7 @@ const oauthControl = {
   getSupportedProviders: unavailableOAuth,
   isAuthenticated: unavailableOAuth,
   logout: unavailableOAuth,
+  listBuckets: unavailableOAuth,
 };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => runtimeApi,
