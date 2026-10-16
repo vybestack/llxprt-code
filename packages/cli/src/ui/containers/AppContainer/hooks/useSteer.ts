@@ -7,10 +7,6 @@
 import { useCallback } from 'react';
 import { StreamingState } from '../../../types.js';
 
-interface SteerAgent {
-  injectSteer(text: string): void;
-}
-
 interface SanitizedContent {
   text: string;
   blocked: boolean;
@@ -18,7 +14,7 @@ interface SanitizedContent {
 }
 
 export function useSteer(
-  agent: SteerAgent,
+  injectSteer: (text: string) => void,
   streamingState: StreamingState,
   sanitizeContent: (text: string) => SanitizedContent,
 ): (text: string) => boolean {
@@ -39,9 +35,9 @@ export function useSteer(
       // The AgenticLoop buffers steer text in pendingSteer and drains it at
       // the next iteration boundary — works whether or not a tool is
       // currently executing.
-      agent.injectSteer(sanitized.text);
+      injectSteer(sanitized.text);
       return true;
     },
-    [streamingState, sanitizeContent, agent],
+    [streamingState, sanitizeContent, injectSteer],
   );
 }

@@ -88,6 +88,7 @@ export interface AppInputParams {
   projectTempDir: string;
   readInitialPrompt: () => string | undefined;
   isAgentClientPresent: () => boolean;
+  injectInputSteer: (text: string) => void;
   readIdeMode: Parameters<typeof useInputKeybindings>[0]['readIdeMode'];
   readInteractiveShellEnabled: Parameters<
     typeof useInputKeybindings
@@ -544,7 +545,7 @@ function useInputStreamWiring(
     [todos, updateTodos, handleFinalSubmit],
   );
   const handleSteer = useSteer(
-    p.agent,
+    p.injectInputSteer,
     agentStreamResult.streamingState,
     agentStreamResult.sanitizeContent,
   );
