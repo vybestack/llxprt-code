@@ -15,7 +15,15 @@ const DEFAULT_WHAT = 'record';
  * offset and the trailer that led to it.
  */
 export interface RecordAccess {
-  readRecordHead(offset: number, what?: string): Promise<FrameHead>;
+  /**
+   * `prefetchBytes` is how much of the record to read with its head, for a
+   * record whose size the caller knows; it saves the second read.
+   */
+  readRecordHead(
+    offset: number,
+    what?: string,
+    prefetchBytes?: number,
+  ): Promise<FrameHead>;
   /** Streams the body; the CRC is checked after the last chunk, so consume it to the end. */
   readRecordBody(
     head: FrameHead,
@@ -43,9 +51,14 @@ export function createRecordAccess(
       { cause: error },
     );
   return {
-    async readRecordHead(offset, what = DEFAULT_WHAT) {
+    async readRecordHead(offset, what = DEFAULT_WHAT, prefetchBytes) {
       try {
-        return await readFrameHead(reader, offset, trailer.durableEnd);
+        return await readFrameHead(
+          reader,
+          offset,
+          trailer.durableEnd,
+          prefetchBytes,
+        );
       } catch (error) {
         if (error instanceof JournalFrameError) {
           throw corruption(what, offset, error);

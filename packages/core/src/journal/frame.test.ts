@@ -6,8 +6,10 @@ import {
   BODY_CRC_BYTES,
   FRAME_HEAD_BYTES,
   decodeFrameStart,
+  encodeBodylessFrame,
   encodeFrameStart,
   frameLength,
+  frameParts,
   readFrameBody,
   readFrameHead,
   writeFrame,
@@ -338,5 +340,107 @@ describe('frame writing', () => {
 
     expect(written).toBe(frameLength(7, 3));
     expect(out.bytes().length).toBe(written);
+  });
+
+  it('encodes a frame without a body as one buffer equal to what writeFrame writes', async () => {
+    const header = new SeededRandom(5).bytes(33);
+
+    const whole = encodeBodylessFrame(KIND, header);
+
+    expect(whole).toStrictEqual(new Uint8Array(await frameBytes(header, null)));
+    expect(whole.length).toBe(frameLength(33, 0));
+  });
+
+  it('yields the start, each body chunk and the body CRC as its parts', async () => {
+    const body = new SeededRandom(6).bytes(10);
+    const parts: Uint8Array[] = [];
+
+    for await (const part of frameParts(KIND, new Uint8Array(2), {
+      length: 10,
+      chunks: splitInto(body, [4]),
+    })) {
+      parts.push(part);
+    }
+
+    expect(parts.map((part) => part.length)).toStrictEqual([
+      FRAME_HEAD_BYTES + 2,
+      4,
+      4,
+      2,
+      BODY_CRC_BYTES,
+    ]);
+    expect(Buffer.concat(parts)).toStrictEqual(
+      Buffer.from(await frameBytes(new Uint8Array(2), body, [4])),
+    );
+  });
+});
+
+describe('frame head with a prefetch', () => {
+  /** A reader that counts the reads it serves. */
+  function countingReader(bytes: Uint8Array) {
+    const inner = bufferReader(bytes);
+    const reads: Array<{ position: number; length: number }> = [];
+    return {
+      reads,
+      reader: {
+        readAt(position: number, length: number) {
+          reads.push({ position, length });
+          return inner.readAt(position, length);
+        },
+      },
+    };
+  }
+
+  it('reads a head and kind header that fit the prefetch with one read, with the same result', async () => {
+    const header = new SeededRandom(8).bytes(500);
+    const bytes = await frameBytes(header, null);
+    const plain = countingReader(bytes);
+    const prefetched = countingReader(bytes);
+
+    const expected = await readFrameHead(plain.reader, 0, bytes.length);
+    const actual = await readFrameHead(
+      prefetched.reader,
+      0,
+      bytes.length,
+      4096,
+    );
+
+    expect(plain.reads).toHaveLength(2);
+    expect(prefetched.reads).toStrictEqual([
+      { position: 0, length: bytes.length },
+    ]);
+    expect(actual).toStrictEqual(expected);
+  });
+
+  it('reads the rest of a kind header that is larger than the prefetch', async () => {
+    const header = new SeededRandom(9).bytes(6000);
+    const bytes = await frameBytes(header, null);
+    const { reader, reads } = countingReader(bytes);
+
+    const head = await readFrameHead(reader, 0, bytes.length, 1024);
+
+    expect(reads).toStrictEqual([
+      { position: 0, length: 1024 },
+      { position: FRAME_HEAD_BYTES, length: 6000 },
+    ]);
+    expect(head.kindHeader).toStrictEqual(new Uint8Array(header));
+  });
+
+  it('never reads past the end of the file', async () => {
+    const bytes = await frameBytes(new Uint8Array(30), null);
+    const { reader, reads } = countingReader(bytes);
+
+    await readFrameHead(reader, 0, bytes.length, 1_000_000);
+
+    expect(reads).toStrictEqual([{ position: 0, length: bytes.length }]);
+  });
+
+  it('still reports a frame that does not fit as a torn write', async () => {
+    const bytes = await frameBytes(new Uint8Array(300), null);
+    const cut = bytes.subarray(0, 200);
+
+    await expect(
+      readFrameHead(bufferReader(cut), 0, cut.length, 4096),
+    ).rejects.toMatchObject({ code: 'does-not-fit' });
   });
 });

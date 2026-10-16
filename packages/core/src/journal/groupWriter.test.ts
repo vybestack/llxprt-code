@@ -5,7 +5,9 @@ import * as path from 'node:path';
 import { JournalWriterPoisonedError } from './errors.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { frameLength } from './frame.js';
+import type { RecordAppender } from './groupAppender.js';
 import { openJournalReadOnly } from './journalReader.js';
+import type { GroupRecord } from './groupWriter.js';
 import { createJournal } from './journalWriterOpen.js';
 import { RECORD_KIND } from './recordKinds.js';
 import { TRAILER_RECORD_BYTES } from './trailerRecord.js';
@@ -16,6 +18,7 @@ import {
   trailerStateFor,
   type JournalEvent,
 } from './__tests__/support/journalFixtures.js';
+import { collect } from './__tests__/support/memoryIo.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
 function onlyWritesAndFlushes(events: readonly JournalEvent[]): JournalEvent[] {
@@ -310,5 +313,232 @@ describe('a failed write or flush', () => {
     await expect(writer.commitGroup(standardGroup(1))).rejects.toThrow(
       'closed',
     );
+  });
+});
+
+function recordsBytes(group: { records: readonly GroupRecord[] }): number {
+  return group.records.reduce(
+    (sum, record) =>
+      sum + frameLength(record.kindHeader.length, record.body?.length ?? 0),
+    0,
+  );
+}
+
+describe('vectored group writes', () => {
+  const tempDir = useTempDir('journal-vectored-');
+
+  it('writes all the records of a group with one write, flushes, then writes the trailer', async () => {
+    const file = path.join(tempDir(), 'one-write.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+    const group = standardGroup(1);
+
+    const ack = await writer.commitGroup(group);
+    await writer.close();
+
+    const groupStart =
+      ack.durableEnd - TRAILER_RECORD_BYTES - recordsBytes(group);
+    expect(onlyWritesAndFlushes(events)).toStrictEqual([
+      { type: 'write', position: groupStart, length: recordsBytes(group) },
+      { type: 'flush', fd: expect.any(Number) },
+      {
+        type: 'write',
+        position: ack.durableEnd - TRAILER_RECORD_BYTES,
+        length: TRAILER_RECORD_BYTES,
+      },
+    ]);
+  });
+
+  it('keeps a group of thirteen node-sized records to one record write', async () => {
+    const file = path.join(tempDir(), 'thirteen.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+    const records = Array.from({ length: 13 }, (_, index) => ({
+      kind: RECORD_KIND.RTNODE,
+      kindHeader: new Uint8Array(9000).fill(index + 1),
+    }));
+
+    await writer.commitGroup({
+      records,
+      trailer: (offsets) => trailerStateFor(1, { rowRoot: offsets[12] }),
+    });
+    await writer.close();
+
+    const writes = events.filter((event) => event.type === 'write');
+    expect(writes).toHaveLength(2);
+    const reader = await openJournalReadOnly(file, dependencies);
+    expect(reader.trailer?.rowRoot).toBeGreaterThan(0);
+    await reader.close();
+  });
+
+  it('writes a group larger than one batch in a few writes, all before the flush', async () => {
+    const file = path.join(tempDir(), 'large.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+    const records = Array.from({ length: 100 }, (_, index) =>
+      plainRecord(RECORD_KIND.ROW, index + 1, 20 * 1024),
+    );
+
+    await writer.commitGroup({
+      records,
+      trailer: () => trailerStateFor(1, {}),
+    });
+    await writer.close();
+
+    const steps = onlyWritesAndFlushes(events);
+    const flushAt = steps.findIndex((step) => step.type === 'flush');
+    expect(flushAt).toBeGreaterThanOrEqual(2);
+    expect(flushAt).toBeLessThanOrEqual(3);
+    expect(steps.slice(flushAt + 1)).toHaveLength(1);
+  });
+
+  it('holds a chunk the producer reuses by value, so the bytes on disk are the ones yielded', async () => {
+    const file = path.join(tempDir(), 'reused.llxj');
+    const { dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    const shared = new Uint8Array(4);
+    async function* reused(): AsyncGenerator<Uint8Array> {
+      for (const fill of [1, 2, 3]) {
+        shared.fill(fill);
+        yield shared;
+      }
+    }
+
+    await writer.commitGroup({
+      records: [
+        {
+          kind: RECORD_KIND.ROW,
+          kindHeader: new Uint8Array(8),
+          body: { length: 12, chunks: reused() },
+        },
+      ],
+      trailer: () => trailerStateFor(1, {}),
+    });
+    await writer.close();
+
+    const reader = await openJournalReadOnly(file, dependencies);
+    const head = await reader.readRecordHead(JOURNAL_HEADER_BYTES);
+    const body = await collect(reader.readRecordBody(head));
+    await reader.close();
+    expect(Array.from(body)).toStrictEqual([
+      1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
+    ]);
+  });
+});
+
+describe('streamed groups', () => {
+  const tempDir = useTempDir('journal-streamed-');
+
+  async function viaArray(file: string): Promise<Uint8Array> {
+    const { dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    await writer.commitGroup(standardGroup(1));
+    await writer.close();
+    return new Uint8Array(await fsp.readFile(file));
+  }
+
+  async function viaStream(file: string): Promise<Uint8Array> {
+    const { dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    const group = standardGroup(1);
+    await writer.commitStreamedGroup(async (appender: RecordAppender) => {
+      const offsets: number[] = [];
+      for (const record of group.records) {
+        offsets.push(await appender.append(record));
+      }
+      return group.trailer(offsets);
+    });
+    await writer.close();
+    return new Uint8Array(await fsp.readFile(file));
+  }
+
+  it('produces the same file as the same records written as a group', async () => {
+    const array = await viaArray(path.join(tempDir(), 'array.llxj'));
+    const stream = await viaStream(path.join(tempDir(), 'stream.llxj'));
+
+    expect(stream).toStrictEqual(array);
+  });
+
+  it('tells the builder where each record starts before anything is written', async () => {
+    const file = path.join(tempDir(), 'offsets.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+    const seen: number[] = [];
+
+    await writer.commitStreamedGroup(async (appender) => {
+      seen.push(appender.nextOffset);
+      seen.push(await appender.append(plainRecord(RECORD_KIND.ROW, 1, 50)));
+      seen.push(appender.nextOffset);
+      return trailerStateFor(1, {});
+    });
+    await writer.close();
+
+    expect(seen[0]).toBe(JOURNAL_HEADER_BYTES);
+    expect(seen[1]).toBe(JOURNAL_HEADER_BYTES);
+    expect(seen[2]).toBe(JOURNAL_HEADER_BYTES + frameLength(24, 50));
+  });
+
+  it('leaves the file and the writer alone when the builder throws before it appends', async () => {
+    const file = path.join(tempDir(), 'early.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+
+    await expect(
+      writer.commitStreamedGroup(() => Promise.reject(new Error('no group'))),
+    ).rejects.toThrow('no group');
+
+    expect(events).toStrictEqual([]);
+    const ack = await writer.commitGroup(standardGroup(1));
+    await writer.close();
+    expect(ack.commitSeq).toBe(1);
+  });
+
+  it('poisons the writer when the builder throws after it appended', async () => {
+    const file = path.join(tempDir(), 'late.llxj');
+    const { dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+
+    await expect(
+      writer.commitStreamedGroup(async (appender) => {
+        await appender.append(plainRecord(RECORD_KIND.ROW, 1, 50));
+        throw new Error('half a group');
+      }),
+    ).rejects.toThrow('half a group');
+
+    await expect(writer.commitGroup(standardGroup(2))).rejects.toBeInstanceOf(
+      JournalWriterPoisonedError,
+    );
+    await writer.close();
+  });
+
+  it('writes a streamed group that is far larger than one batch without holding it', async () => {
+    const file = path.join(tempDir(), 'big.llxj');
+    const { events, dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    events.length = 0;
+    let lastOffset = 0;
+
+    await writer.commitStreamedGroup(async (appender) => {
+      for (let index = 0; index < 600; index++) {
+        lastOffset = await appender.append({
+          kind: RECORD_KIND.RTNODE,
+          kindHeader: new Uint8Array(9000).fill(index & 0xff),
+        });
+      }
+      return trailerStateFor(1, { rowRoot: lastOffset });
+    });
+    await writer.close();
+
+    const writes = events.filter((event) => event.type === 'write');
+    expect(writes.length).toBeGreaterThan(3);
+    expect(writes.length).toBeLessThan(12);
+    const reader = await openJournalReadOnly(file, dependencies);
+    expect(reader.trailer?.rowRoot).toBe(lastOffset);
+    await reader.close();
   });
 });

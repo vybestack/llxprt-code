@@ -53,17 +53,28 @@ function wrapHandle(
   gate: { promise: Promise<void> },
 ): JournalFileHandle {
   let writes = 0;
+  const admit = async (position: number, length: number): Promise<void> => {
+    const index = writes++;
+    events.push({ type: 'write', position, length });
+    if (failures.failWriteAt === index)
+      throw new Error('injected write failure');
+    if (failures.gateWriteAt === index) await gate.promise;
+  };
   return {
     fd: real.fd,
     read: (buffer, offset, length, position) =>
       real.read(buffer, offset, length, position),
     write: async (buffer, offset, length, position) => {
-      const index = writes++;
-      events.push({ type: 'write', position, length });
-      if (failures.failWriteAt === index)
-        throw new Error('injected write failure');
-      if (failures.gateWriteAt === index) await gate.promise;
+      await admit(position, length);
       return real.write(buffer, offset, length, position);
+    },
+    writev: async (buffers, position) => {
+      await admit(
+        position,
+        buffers.reduce((total, buffer) => total + buffer.length, 0),
+      );
+      const { bytesWritten } = await real.writev(buffers, position);
+      return { bytesWritten };
     },
     stat: () => real.stat(),
     truncate: async (length) => {

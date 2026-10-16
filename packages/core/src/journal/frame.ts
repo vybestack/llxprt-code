@@ -58,13 +58,13 @@ export function frameLength(headerLen: number, bodyLen: number): number {
   return FRAME_HEAD_BYTES + headerLen + bodyLen + BODY_CRC_BYTES;
 }
 
-/** The 20-byte head followed by the kind header; `null` means the frame has no body. */
-export function encodeFrameStart(
+/** Fills the 20-byte head and the kind header at the start of `bytes`. */
+function fillFrameStart(
+  bytes: Uint8Array,
   kind: number,
   kindHeader: Uint8Array,
   bodyLen: number | null,
-): Uint8Array {
-  const bytes = new Uint8Array(FRAME_HEAD_BYTES + kindHeader.length);
+): void {
   const view = viewOf(bytes);
   const L = FRAME_HEAD_LAYOUT;
   putU8(view, L.kind.offset, 'kind', kind);
@@ -82,6 +82,29 @@ export function encodeFrameStart(
     crc32(bytes.subarray(0, FRAME_CRC_COVERS_BYTES)),
   );
   putU32(view, L.frameCrc.offset, 'frameCrc', frameCrc);
+}
+
+/** The 20-byte head followed by the kind header; `null` means the frame has no body. */
+export function encodeFrameStart(
+  kind: number,
+  kindHeader: Uint8Array,
+  bodyLen: number | null,
+): Uint8Array {
+  const bytes = new Uint8Array(FRAME_HEAD_BYTES + kindHeader.length);
+  fillFrameStart(bytes, kind, kindHeader, bodyLen);
+  return bytes;
+}
+
+/**
+ * A whole frame that has no body, in one buffer: the head, the kind header and
+ * the body CRC of an empty body, which is zero.
+ */
+export function encodeBodylessFrame(
+  kind: number,
+  kindHeader: Uint8Array,
+): Uint8Array {
+  const bytes = new Uint8Array(frameLength(kindHeader.length, 0));
+  fillFrameStart(bytes, kind, kindHeader, null);
   return bytes;
 }
 
@@ -198,17 +221,25 @@ export function decodeFrameStart(bytes: Uint8Array, offset: number): FrameHead {
  * Reads the head and kind header of the frame at `offset`, in the order of
  * design 2.2: the frame fits in the file, then the frame CRC matches.
  * `does-not-fit` and `frame-crc-mismatch` are a torn write, tolerated only at
- * the tail of the file.
+ * the tail of the file. A caller that knows how big the head and kind header
+ * usually are passes `prefetchBytes`, and the head is then read together with
+ * the kind header in one read (clipped to the end of the file); a kind header
+ * larger than that is read with a second one.
  */
 export async function readFrameHead(
   reader: PositionalReader,
   offset: number,
   fileSize: number,
+  prefetchBytes: number = FRAME_HEAD_BYTES,
 ): Promise<FrameHead> {
   if (offset + FRAME_HEAD_BYTES > fileSize) {
     throw doesNotFit(offset, `file ends at ${fileSize}`);
   }
-  const head = await reader.readAt(offset, FRAME_HEAD_BYTES);
+  const first = await reader.readAt(
+    offset,
+    Math.min(Math.max(prefetchBytes, FRAME_HEAD_BYTES), fileSize - offset),
+  );
+  const head = first.subarray(0, FRAME_HEAD_BYTES);
   const raw = parseRawHead(head);
   if (BigInt(offset) + totalLength(raw) > BigInt(fileSize)) {
     throw doesNotFit(
@@ -216,19 +247,58 @@ export async function readFrameHead(
       `frame of ${totalLength(raw)} bytes runs past file end ${fileSize}`,
     );
   }
-  const kindHeader = await reader.readAt(
-    offset + FRAME_HEAD_BYTES,
-    raw.headerLen,
-  );
+  const kindHeaderEnd = FRAME_HEAD_BYTES + raw.headerLen;
+  const kindHeader =
+    kindHeaderEnd <= first.length
+      ? first.slice(FRAME_HEAD_BYTES, kindHeaderEnd)
+      : await reader.readAt(offset + FRAME_HEAD_BYTES, raw.headerLen);
   assertFrameCrc(offset, head, raw, kindHeader);
   return buildHead(offset, head, raw, kindHeader);
 }
 
 /**
- * Writes one frame and returns the number of bytes written. The body is
- * consumed chunk by chunk and its CRC is folded as it passes, so no more than
- * one chunk is held. A body that does not match its declared length fails
- * before the CRC is written.
+ * The parts of one frame in write order: the head with the kind header, each
+ * body chunk, and the body CRC. The body is consumed chunk by chunk and its
+ * CRC is folded as it passes. A body that does not match its declared length
+ * fails before the CRC part is produced.
+ */
+export async function* frameParts(
+  kind: number,
+  kindHeader: Uint8Array,
+  body?: FrameBody,
+): AsyncGenerator<Uint8Array> {
+  yield encodeFrameStart(
+    kind,
+    kindHeader,
+    body === undefined ? null : body.length,
+  );
+  let crc = 0;
+  if (body !== undefined) {
+    let bytes = 0;
+    for await (const chunk of body.chunks) {
+      if (bytes + chunk.length > body.length) {
+        throw new JournalFormatError(
+          `Frame body is longer than its declared ${body.length} bytes`,
+        );
+      }
+      crc = crc32(chunk, crc);
+      bytes += chunk.length;
+      yield chunk;
+    }
+    if (bytes !== body.length) {
+      throw new JournalFormatError(
+        `Frame body is shorter than its declared ${body.length} bytes: got ${bytes}`,
+      );
+    }
+  }
+  const trailer = new Uint8Array(BODY_CRC_BYTES);
+  putU32(viewOf(trailer), 0, 'bodyCrc', crc);
+  yield trailer;
+}
+
+/**
+ * Writes one frame and returns the number of bytes written. No more than one
+ * body chunk is held.
  */
 export async function writeFrame(
   sink: ByteSink,
@@ -236,42 +306,12 @@ export async function writeFrame(
   kindHeader: Uint8Array,
   body?: FrameBody,
 ): Promise<number> {
-  const start = encodeFrameStart(
-    kind,
-    kindHeader,
-    body === undefined ? null : body.length,
-  );
-  await sink(start);
-  const sent =
-    body === undefined ? { bytes: 0, crc: 0 } : await writeBody(sink, body);
-  const trailer = new Uint8Array(BODY_CRC_BYTES);
-  putU32(viewOf(trailer), 0, 'bodyCrc', sent.crc);
-  await sink(trailer);
-  return start.length + sent.bytes + BODY_CRC_BYTES;
-}
-
-async function writeBody(
-  sink: ByteSink,
-  body: FrameBody,
-): Promise<{ bytes: number; crc: number }> {
-  let bytes = 0;
-  let crc = 0;
-  for await (const chunk of body.chunks) {
-    if (bytes + chunk.length > body.length) {
-      throw new JournalFormatError(
-        `Frame body is longer than its declared ${body.length} bytes`,
-      );
-    }
-    crc = crc32(chunk, crc);
-    await sink(chunk);
-    bytes += chunk.length;
+  let written = 0;
+  for await (const part of frameParts(kind, kindHeader, body)) {
+    await sink(part);
+    written += part.length;
   }
-  if (bytes !== body.length) {
-    throw new JournalFormatError(
-      `Frame body is shorter than its declared ${body.length} bytes: got ${bytes}`,
-    );
-  }
-  return { bytes, crc };
+  return written;
 }
 
 /**

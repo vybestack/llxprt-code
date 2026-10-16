@@ -1,7 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalWriterPoisonedError } from './errors.js';
 import type { FlushRecords } from './flushRecords.js';
-import { frameLength, writeFrame, type FrameBody } from './frame.js';
+import { frameLength } from './frame.js';
+import {
+  VectoredRecordAppender,
+  type GroupRecord,
+  type RecordAppender,
+} from './groupAppender.js';
 import {
   createFileHandleSink,
   type JournalFileHandle,
@@ -12,14 +17,9 @@ import {
   type TrailerHeader,
 } from './trailerRecord.js';
 
-const GROUP_TAG_BYTES = 7;
+export type { GroupRecord, RecordAppender } from './groupAppender.js';
 
-/** One record of a group other than the trailer. */
-export interface GroupRecord {
-  readonly kind: number;
-  readonly kindHeader: Uint8Array;
-  readonly body?: FrameBody;
-}
+const GROUP_TAG_BYTES = 7;
 
 /** What the caller decides about a trailer; the writer fills in the rest. */
 export type TrailerState = Omit<
@@ -111,9 +111,35 @@ export class JournalGroupWriter {
     };
   }
 
-  /** Groups are written one after another in the order they are committed. */
+  /**
+   * Groups are written one after another in the order they are committed.
+   * The records of the group are written together, in as few vectored writes
+   * as their size allows.
+   */
   commitGroup(group: CommitGroup): Promise<CommitAck> {
-    const turn = this.queue.then(() => this.runGroup(group));
+    return this.commitStreamedGroup(async (appender) => {
+      // Before anything is appended, so a throw here leaves the file untouched.
+      const state = group.trailer(
+        planOffsets(appender.nextOffset, group.records),
+      );
+      for (const record of group.records) await appender.append(record);
+      return state;
+    });
+  }
+
+  /**
+   * A group whose records are produced while it is written, such as the nodes
+   * of a tree built from a stream. `build` appends the records, learning each
+   * offset as it goes, and returns the trailer state. It is the same commit
+   * point as `commitGroup`: the records are written, flushed, and only then
+   * the trailer. A `build` that throws before it appends anything leaves the
+   * writer usable; one that throws after poisons it, as any failure after a
+   * group began does.
+   */
+  commitStreamedGroup(
+    build: (appender: RecordAppender) => Promise<TrailerState>,
+  ): Promise<CommitAck> {
+    const turn = this.queue.then(() => this.runGroup(build));
     this.queue = turn.then(noop, noop);
     return turn;
   }
@@ -124,47 +150,28 @@ export class JournalGroupWriter {
     await this.handle.close();
   }
 
-  private async runGroup(group: CommitGroup): Promise<CommitAck> {
+  private async runGroup(
+    build: (appender: RecordAppender) => Promise<TrailerState>,
+  ): Promise<CommitAck> {
     if (this.closed) throw new Error('The journal writer is closed');
     if (this.failure !== undefined) {
       throw new JournalWriterPoisonedError({ cause: this.failure.error });
     }
-    const offsets = this.planOffsets(group.records);
-    const selfOffset = offsets.end;
-    const trailer = this.buildTrailer(group, offsets.records, selfOffset);
-    const record = encodeTrailerRecord(trailer);
+    const appender = new VectoredRecordAppender(this.handle, this.writeOffset);
     try {
-      await this.writeRecordsFlushThenTrailer(
-        group.records,
-        record,
-        selfOffset,
-      );
+      const state = await build(appender);
+      const selfOffset = appender.nextOffset;
+      const trailer = this.buildTrailer(state, selfOffset);
+      const record = encodeTrailerRecord(trailer);
+      await this.writeRecordsFlushThenTrailer(appender, record, selfOffset);
+      return this.acknowledge(trailer);
     } catch (error) {
-      this.failure = { error };
+      if (appender.started) this.failure = { error };
       throw error;
     }
-    return this.acknowledge(trailer);
   }
 
-  private planOffsets(records: readonly GroupRecord[]): {
-    records: number[];
-    end: number;
-  } {
-    let offset = this.writeOffset;
-    const starts: number[] = [];
-    for (const record of records) {
-      starts.push(offset);
-      offset += frameLength(record.kindHeader.length, record.body?.length ?? 0);
-    }
-    return { records: starts, end: offset };
-  }
-
-  private buildTrailer(
-    group: CommitGroup,
-    recordOffsets: readonly number[],
-    selfOffset: number,
-  ): TrailerHeader {
-    const state = group.trailer(recordOffsets);
+  private buildTrailer(state: TrailerState, selfOffset: number): TrailerHeader {
     return {
       ...state,
       selfOffset,
@@ -177,14 +184,11 @@ export class JournalGroupWriter {
 
   /** Design 4.1: the records are flushed before the trailer is written, and the trailer is not flushed. */
   private async writeRecordsFlushThenTrailer(
-    records: readonly GroupRecord[],
+    appender: VectoredRecordAppender,
     trailerRecord: Uint8Array,
     trailerOffset: number,
   ): Promise<void> {
-    const sink = createFileHandleSink(this.handle, this.writeOffset);
-    for (const record of records) {
-      await writeFrame(sink, record.kind, record.kindHeader, record.body);
-    }
+    await appender.drain();
     this.dependencies.flush(this.handle.fd);
     await createFileHandleSink(this.handle, trailerOffset)(trailerRecord);
   }
@@ -199,4 +203,14 @@ export class JournalGroupWriter {
       groupTag: trailer.groupTag,
     };
   }
+}
+
+function planOffsets(start: number, records: readonly GroupRecord[]): number[] {
+  const offsets: number[] = [];
+  let offset = start;
+  for (const record of records) {
+    offsets.push(offset);
+    offset += frameLength(record.kindHeader.length, record.body?.length ?? 0);
+  }
+  return offsets;
 }
