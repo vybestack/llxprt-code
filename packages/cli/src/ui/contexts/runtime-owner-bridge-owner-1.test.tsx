@@ -592,7 +592,7 @@ describe('interactive runtime owner bridge', () => {
       const leftProviderCommand = createProviderCommand(
         bindProviderCommandOperations(
           leftApi,
-          a,
+          (name, options) => a.setProvider(name, undefined, options),
           async () => {},
           (provider, model) => recordProviderSwitch(a, provider, model),
         ),
@@ -600,7 +600,7 @@ describe('interactive runtime owner bridge', () => {
       const rightProviderCommand = createProviderCommand(
         bindProviderCommandOperations(
           rightApi,
-          b,
+          (name, options) => b.setProvider(name, undefined, options),
           async () => {},
           (provider, model) => recordProviderSwitch(b, provider, model),
         ),

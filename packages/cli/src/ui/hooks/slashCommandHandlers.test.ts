@@ -117,9 +117,13 @@ describe('slashCommandHandlers', () => {
           isMcpDiscoveryPending: () => false,
           resumeRawSession: null,
           replayResumedHistory: () => {},
-          recordCommandError: bindCommandErrorRecorder(agent, 'agent', {
-            recordSessionEvent: rawWrite,
-          }),
+          recordCommandError: bindCommandErrorRecorder(
+            agent.session.recordRecordingEvent.bind(agent.session),
+            'agent',
+            {
+              recordSessionEvent: rawWrite,
+            },
+          ),
         },
         '/help',
       );
@@ -173,7 +177,7 @@ describe('slashCommandHandlers', () => {
             resumeRawSession: null,
             replayResumedHistory: () => {},
             recordCommandError: bindCommandErrorRecorder(
-              next,
+              next.session.recordRecordingEvent.bind(next.session),
               'agent',
               undefined,
             ),

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
@@ -15,7 +14,7 @@ import { appendOAuthTokens } from './diagnosticsTokens.js';
 export function bindDiagnosticsReads(
   config: CliUiRuntime | null,
   settings: LoadedSettings,
-  agent: Agent | null,
+  listTools: DiagnosticsCommandReads['listTools'],
   runtimeApi: RuntimeApi,
   oauth: OAuthControl,
 ): DiagnosticsCommandReads {
@@ -50,10 +49,7 @@ export function bindDiagnosticsReads(
         usageStatistics: merged.ui.usageStatisticsEnabled === true,
       };
     },
-    listTools: () => {
-      if (!agent) throw new Error('agent not available');
-      return agent.tools.list();
-    },
+    listTools,
     appendTokens: (lines, logger) =>
       appendOAuthTokens(
         () =>

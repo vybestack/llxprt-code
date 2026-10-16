@@ -37,7 +37,11 @@ describe('registered session and presentation commands', () => {
     ]);
     const events: string[] = [];
     const command = createClearCommand(
-      bindClearSession(owner),
+      bindClearSession(
+        owner.hooks.triggerSessionEnd.bind(owner.hooks),
+        owner.session.startNewSession.bind(owner.session),
+        owner.hooks.triggerSessionStart.bind(owner.hooks),
+      ),
       (message) => events.push(message),
       () => 0,
       (count) => events.push(`tokens:${count}`),

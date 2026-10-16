@@ -3,7 +3,6 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   SessionEndReason,
   SessionStartSource,
@@ -11,13 +10,20 @@ import {
 import type { ClearSessionOperations } from './clearCommand.js';
 
 export function bindClearSession(
-  agent: Agent | null,
+  endSession:
+    | ((
+        reason: SessionEndReason,
+      ) => ReturnType<ClearSessionOperations['endSession']>)
+    | null,
+  startNewSession: ClearSessionOperations['startNewSession'],
+  startSession: (
+    source: SessionStartSource,
+  ) => ReturnType<ClearSessionOperations['startSession']>,
 ): ClearSessionOperations | null {
-  if (agent === null) return null;
+  if (endSession === null) return null;
   return {
-    endSession: () => agent.hooks.triggerSessionEnd(SessionEndReason.Clear),
-    startNewSession: () => agent.session.startNewSession(),
-    startSession: () =>
-      agent.hooks.triggerSessionStart(SessionStartSource.Clear),
+    endSession: () => endSession(SessionEndReason.Clear),
+    startNewSession,
+    startSession: () => startSession(SessionStartSource.Clear),
   };
 }

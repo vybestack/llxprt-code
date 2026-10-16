@@ -478,7 +478,9 @@ function buildHandlerDeps(
       args.addItem,
     ),
     recordCommandError: bindCommandErrorRecorder(
-      args.agent,
+      args.agent === null
+        ? null
+        : args.agent.session.recordRecordingEvent.bind(args.agent.session),
       args.recordingOwner,
       args.recordingIntegration,
     ),
@@ -557,7 +559,13 @@ function useProviderCommand(
       createProviderCommand(
         bindProviderCommandOperations(
           api,
-          agent,
+          async (name, options) => {
+            if (agent === null)
+              throw new Error(
+                'Cannot switch provider: the interactive Agent is not available. Restart the session.',
+              );
+            return agent.setProvider(name, undefined, options);
+          },
           refreshProviderAliases,
           recordProviderSwitch,
         ),

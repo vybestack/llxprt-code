@@ -47,7 +47,7 @@ describe('registered diagnostic session owner', () => {
       bindDiagnosticsReads(
         registration.services.config,
         registration.services.settings,
-        owner,
+        owner.tools.list.bind(owner.tools),
         registration.runtimeApi,
         registration.oauthControl,
       ),

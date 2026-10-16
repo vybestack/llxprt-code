@@ -13,7 +13,7 @@ import { createRestoreCommand } from './restoreCommand.js';
 
 export function bindRestoreCommand(
   config: CliUiRuntime | null,
-  agent: Agent | null,
+  setClientHistory: Agent['setHistory'],
   git:
     | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
     | undefined,
@@ -25,10 +25,7 @@ export function bindRestoreCommand(
     {
       enabled: config?.getCheckpointingEnabled() === true,
       checkpointDirectory: config?.projectCheckpointsDir,
-      setClientHistory: (history) => {
-        if (!agent) throw new Error('Session agent is unavailable');
-        return agent.setHistory(history);
-      },
+      setClientHistory,
       restoreProjectSnapshot: git
         ? (commitHash) => git.restoreProjectFromSnapshot(commitHash)
         : undefined,
