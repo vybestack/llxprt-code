@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
@@ -37,36 +36,42 @@ import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
-import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
-import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './historyTokenSubscriptions.js';
-import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
-import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
 import type { UseSessionInitializationParams } from './useSessionInitialization.js';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type {
-  AgentClientSource,
-  StreamRuntime,
-  UiRuntime,
-} from '../../../cliUiRuntime.js';
 
 export interface AppBootstrapProps {
-  uiRuntime: UiRuntime;
+  readEmojiFilterMode: UseSessionInitializationParams['readEmojiFilterMode'];
+  readLlxprtMdFileCount: () => number;
+  readCoreMemoryFileCount: () => number;
+  readTerminalBackground: () => string | undefined;
+  readCurrentIde: () => IdeInfo | undefined;
+  readIdeMode: () => boolean;
+  registerIdeCleanup: () => void;
+  readDebugMode: () => boolean;
   triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'];
   appendHistory: (content: IContent) => Promise<void>;
   recordRecordingEvent: (event: SessionRecordingEvent) => Promise<void>;
   metrics: Parameters<typeof useTokenMetricsTracking>[0]['metrics'];
+  subscribeHistoryTokens: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['subscribeHistoryTokens'];
+  subscribeRecordingHistory: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['subscribeRecordingHistory'];
+  readProviderMetrics: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['readProviderMetrics'];
+  readSessionTokenUsage: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['readSessionTokenUsage'];
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -92,17 +97,7 @@ export interface AppBootstrapProps {
 }
 
 export interface AppBootstrapResult {
-  uiRuntime: UiRuntime;
-  streamRuntime: StreamRuntime;
-
-  /**
-   * Narrow boundary that resolves the live AgentClient for the streaming
-   * path. Resolved once here so downstream hooks receive an explicit,
-   * minimal surface instead of dereferencing the runtime object inline.
-   */
-  agentClientSource: AgentClientSource;
   settings: LoadedSettings;
-  runtime: ReturnType<typeof useRuntimeApi>;
   setLlxprtMdFileCount: (count: number) => void;
   handleNewMessage: ReturnType<typeof useConsoleMessages>['handleNewMessage'];
   clearConsoleMessagesState: ReturnType<
@@ -134,7 +129,9 @@ export interface AppBootstrapResult {
 function useInitializationBindings(
   triggerSessionStart: AppBootstrapProps['triggerSessionStart'],
   appendHistory: AppBootstrapProps['appendHistory'],
-  uiRuntime: AppBootstrapProps['uiRuntime'],
+  readEmojiFilterMode: AppBootstrapProps['readEmojiFilterMode'],
+  readLlxprtMdFileCount: AppBootstrapProps['readLlxprtMdFileCount'],
+  readCoreMemoryFileCount: AppBootstrapProps['readCoreMemoryFileCount'],
 ) {
   return {
     triggerSessionStart,
@@ -147,25 +144,15 @@ function useInitializationBindings(
       },
       [appendHistory],
     ),
-    readEmojiFilterMode: useCallback(
-      () => resolveEmojiFilterMode(uiRuntime.ephemeral),
-      [uiRuntime],
-    ),
-    readLlxprtMdFileCount: useCallback(
-      () => uiRuntime.memory.getLlxprtMdFileCount(),
-      [uiRuntime],
-    ),
-    readCoreMemoryFileCount: useCallback(
-      () => uiRuntime.memory.getCoreMemoryFileCount(),
-      [uiRuntime],
-    ),
+    readEmojiFilterMode,
+    readLlxprtMdFileCount,
+    readCoreMemoryFileCount,
   };
 }
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, settings, resumedHistory } = props;
-  const runtime = useRuntimeApi();
+  const { settings, resumedHistory } = props;
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -181,7 +168,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   // so theme switches propagate. The command guards equal writes.
   useEffect(() => {
     props.terminalStore.commands.setTerminalBackgroundColor(
-      props.uiRuntime.shell.getTerminalBackground(),
+      props.readTerminalBackground(),
     );
   });
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
@@ -214,7 +201,9 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     ...useInitializationBindings(
       props.triggerSessionStart,
       props.appendHistory,
-      uiRuntime,
+      props.readEmojiFilterMode,
+      props.readLlxprtMdFileCount,
+      props.readCoreMemoryFileCount,
     ),
     addItem,
     loadHistory,
@@ -229,7 +218,6 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   }, [props.settingsStore, coreMemoryFileCount]);
   useMemoryMonitor({ addItem, memoryController: props.memoryController });
   return {
-    runtime,
     updateInfo,
     setUpdateInfo,
     stdout,
@@ -247,17 +235,10 @@ function useBootstrapTodo() {
   return { todos, updateTodos };
 }
 
-function useIdeClientCleanup(uiRuntime: UiRuntime): void {
+function useIdeClientCleanup(registerIdeCleanup: () => void): void {
   useEffect(() => {
-    const ideClient = uiRuntime.ide.getIdeClient();
-    if (ideClient === undefined) {
-      return undefined;
-    }
-    registerCleanup(() => {
-      void ideClient.disconnect();
-    });
-    return undefined;
-  }, [uiRuntime]);
+    registerIdeCleanup();
+  }, [registerIdeCleanup]);
 }
 
 function useFeedbackRecording(
@@ -306,7 +287,6 @@ function useBootstrapEvents(
 ) {
   const oauthControl = useOAuthControl();
   const {
-    uiRuntime,
     settings,
     recordingIntegration,
     initialRecordingService,
@@ -322,11 +302,11 @@ function useBootstrapEvents(
       props.recordingOwner,
     );
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = uiRuntime.ide.getIdeClient()?.getCurrentIde();
-  useIdeClientCleanup(uiRuntime);
+  const currentIDE = props.readCurrentIde();
+  useIdeClientCleanup(props.registerIdeCleanup);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
-    !uiRuntime.ide.getIdeMode() &&
+    !props.readIdeMode() &&
     settings.merged.hasSeenIdeIntegrationNudge !== true &&
     !idePromptAnswered;
   useUpdateAndOAuthBridges({
@@ -340,10 +320,7 @@ function useBootstrapEvents(
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   useExtensionAutoUpdate({ settings, onConsoleMessage: handleNewMessage });
-  const readDebugMode = useCallback(
-    () => uiRuntime.app.getDebugMode(),
-    [uiRuntime],
-  );
+  const readDebugMode = props.readDebugMode;
   const recordFeedback = useFeedbackRecording(
     recordRecordingEvent,
     recordingOwner,
@@ -353,7 +330,10 @@ function useBootstrapEvents(
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
     metrics: props.metrics,
-    ...useHistoryMetricBindings(uiRuntime),
+    subscribeHistoryTokens: props.subscribeHistoryTokens,
+    subscribeRecordingHistory: props.subscribeRecordingHistory,
+    readProviderMetrics: props.readProviderMetrics,
+    readSessionTokenUsage: props.readSessionTokenUsage,
     updateHistoryTokenCount,
     recordingIntegrationRef,
     recordingOwner: props.recordingOwner,
@@ -377,8 +357,6 @@ function useBootstrapEvents(
 }
 
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
-  const { uiRuntime } = props;
-  const streamRuntime: StreamRuntime = uiRuntime;
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
@@ -386,9 +364,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
   return {
-    uiRuntime,
-    streamRuntime,
-    agentClientSource: streamRuntime.agentClientSource,
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],
@@ -396,7 +371,6 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     recordingIntegration: props.recordingIntegration,
     recordingOwner: props.recordingOwner,
     nightly: h.nightly,
-    runtime: h.runtime,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
     updateInfo: h.updateInfo,
     setUpdateInfo: h.setUpdateInfo,
@@ -413,28 +387,5 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     shouldShowIdePrompt: e.shouldShowIdePrompt,
     handleNewMessage: e.handleNewMessage,
     clearConsoleMessagesState: e.clearConsoleMessagesState,
-  };
-}
-
-function useHistoryMetricBindings(uiRuntime: UiRuntime) {
-  const runtime = useRuntimeApi();
-  const readHistory = useCallback(() => {
-    const client = uiRuntime.agentClientSource.getAgentClient();
-    return client.hasChatInitialized() === true
-      ? (client.getHistoryService() ?? null)
-      : null;
-  }, [uiRuntime]);
-  const logger = useMemo(() => new DebugLogger('llxprt:ui:tokentracking'), []);
-  return {
-    subscribeHistoryTokens: useMemo(
-      () => bindHistoryTokenSubscription(readHistory, logger),
-      [readHistory, logger],
-    ),
-    subscribeRecordingHistory: useMemo(
-      () => bindRecordingHistorySubscription(readHistory, logger),
-      [readHistory, logger],
-    ),
-    readProviderMetrics: useBound(runtime, runtime.getActiveProviderMetrics),
-    readSessionTokenUsage: useBound(runtime, runtime.getSessionTokenUsage),
   };
 }

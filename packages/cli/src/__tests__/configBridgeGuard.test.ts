@@ -166,22 +166,23 @@ describe('#2373 config boundary guard', () => {
     const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
     const runtime = read('ui/AppContainerRuntime.tsx');
 
-    expect(bootstrap).toMatch(/streamRuntime:\s*StreamRuntime/);
-    expect(bootstrap).toMatch(/uiRuntime:\s*UiRuntime/);
+    expect(bootstrap).toMatch(/subscribeHistoryTokens:\s*Parameters/);
+    expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
+    expect(bootstrap).not.toMatch(/\b(?:uiRuntime|streamRuntime):/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*CliUiRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*SlashCommandRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*props\./);
     expect(bootstrap).not.toMatch(/\bconfig:\s*uiRuntime/);
     expect(bootstrap).not.toMatch(/agentClientSource:\s*props\.config/);
 
-    expect(input).toMatch(/streamRuntime:\s*AppBootstrapResult/);
+    expect(input).toMatch(/streamRuntime:\s*StreamRuntime/);
     expect(input).not.toMatch(/uiRuntime:\s*AppBootstrapResult/);
     expect(input).toMatch(/slashCommandRuntime:\s*SlashCommandRuntime/);
     expect(input).not.toMatch(/AppBootstrapResult\['config'\]/);
     expect(input).not.toMatch(/useAgentStream\([^)]*\bslashCommandRuntime\b/);
 
-    expect(runtime).toMatch(/streamRuntime:\s*bootstrap\.streamRuntime/);
-    expect(runtime).toMatch(/uiRuntime:\s*bootstrap\.uiRuntime/);
+    expect(runtime).toMatch(/streamRuntime:\s*props\.uiRuntime/);
+    expect(runtime).toMatch(/readLlxprtMdFileCount:\s*useBound/);
     expect(runtime).not.toMatch(/bootstrap\.config/);
     expect(runtime).not.toMatch(/(?:props|bootstrap)\.config\b/);
   });

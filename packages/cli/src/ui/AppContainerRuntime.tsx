@@ -3,6 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useRuntimeApi } from './contexts/RuntimeContext.js';
+import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
+import { registerCleanup } from '../utils/cleanup.js';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './containers/AppContainer/hooks/historyTokenSubscriptions.js';
 
 import type React from 'react';
 import type {
@@ -193,7 +200,7 @@ function useAppDialogsRuntime(
     recordingIntegration: bootstrap.recordingIntegration,
     recordingOwner: bootstrap.recordingOwner,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    runtime: bootstrap.runtime,
+    runtime: useRuntimeApi(),
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
     currentIDE: bootstrap.currentIDE,
@@ -212,7 +219,7 @@ function useAppInputRuntime(
 ): AppInputResult {
   return useAppInput({
     uiRuntime: props.uiRuntime,
-    streamRuntime: bootstrap.streamRuntime,
+    streamRuntime: props.uiRuntime,
     slashCommandRuntime: props.slashCommandRuntime,
     agent: props.agent,
     settings: props.settings,
@@ -364,9 +371,48 @@ function useBootstrapRuntime(
   turnStore: TurnStore,
   settingsStore: SettingsProfileStore,
 ): AppBootstrapResult {
-  const { agent, ...bootstrapProps } = props;
+  const { agent, uiRuntime, ...bootstrapProps } = props;
+  const tokenLogger = useMemo(
+    () => new DebugLogger('llxprt:ui:tokentracking'),
+    [],
+  );
+  const readTokenHistory = useCallback(() => {
+    const client = agent.agentClient;
+    return client.hasChatInitialized() === true
+      ? (client.getHistoryService() ?? null)
+      : null;
+  }, [agent]);
   return useAppBootstrap({
     ...bootstrapProps,
+    readEmojiFilterMode: useCallback(
+      () => resolveEmojiFilterMode(uiRuntime.ephemeral),
+      [uiRuntime],
+    ),
+    readLlxprtMdFileCount: useBound(
+      uiRuntime.memory,
+      uiRuntime.memory.getLlxprtMdFileCount,
+    ),
+    readCoreMemoryFileCount: useBound(
+      uiRuntime.memory,
+      uiRuntime.memory.getCoreMemoryFileCount,
+    ),
+    readTerminalBackground: useBound(
+      uiRuntime.shell,
+      uiRuntime.shell.getTerminalBackground,
+    ),
+    readCurrentIde: useCallback(
+      () => uiRuntime.ide.getIdeClient()?.getCurrentIde(),
+      [uiRuntime],
+    ),
+    readIdeMode: useBound(uiRuntime.ide, uiRuntime.ide.getIdeMode),
+    registerIdeCleanup: useCallback(() => {
+      const ideClient = uiRuntime.ide.getIdeClient();
+      if (ideClient !== undefined)
+        registerCleanup(() => {
+          void ideClient.disconnect();
+        });
+    }, [uiRuntime]),
+    readDebugMode: useBound(uiRuntime.app, uiRuntime.app.getDebugMode),
     triggerSessionStart: useBound(agent.hooks, agent.hooks.triggerSessionStart),
     appendHistory: useBound(agent, agent.addHistory),
     recordRecordingEvent: useBound(
@@ -374,6 +420,22 @@ function useBootstrapRuntime(
       agent.session.recordRecordingEvent,
     ),
     metrics: agent.metrics,
+    subscribeHistoryTokens: useMemo(
+      () => bindHistoryTokenSubscription(readTokenHistory, tokenLogger),
+      [readTokenHistory, tokenLogger],
+    ),
+    subscribeRecordingHistory: useMemo(
+      () => bindRecordingHistorySubscription(readTokenHistory, tokenLogger),
+      [readTokenHistory, tokenLogger],
+    ),
+    readProviderMetrics: useBound(
+      agent.providerReads,
+      agent.providerReads.getActiveProviderMetrics,
+    ),
+    readSessionTokenUsage: useBound(
+      agent.providerReads,
+      agent.providerReads.getSessionTokenUsage,
+    ),
     terminalStore,
     turnStore,
     settingsStore,
@@ -414,7 +476,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
   );
   const layout = useAppLayout({
-    uiRuntime: bootstrap.uiRuntime,
+    uiRuntime: props.uiRuntime,
     settings: props.settings,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
     turnStore,
@@ -428,12 +490,11 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       runtimeMessageBus={props.runtimeMessageBus}
       slashCommandRuntime={props.slashCommandRuntime}
       version={props.version}
-      screenReaderEnabled={bootstrap.uiRuntime.app.getScreenReader()}
+      screenReaderEnabled={props.uiRuntime.app.getScreenReader()}
       disableLoadingPhrases={
-        bootstrap.uiRuntime.app.getAccessibility().disableLoadingPhrases ===
-        true
+        props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true
       }
-      debugMode={bootstrap.uiRuntime.app.getDebugMode()}
+      debugMode={props.uiRuntime.app.getDebugMode()}
       settings={bootstrap.settings}
       startupWarnings={bootstrap.startupWarnings}
       nightly={bootstrap.nightly}
