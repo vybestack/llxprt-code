@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useQuotaReader } from './useQuotaReader.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 
 import { useCallback, useMemo } from 'react';
 import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
@@ -35,8 +37,19 @@ export function useUtilityCommands(
   | 'helpCommand'
   | 'quitCommand'
 > {
-  const readQuota = useQuotaReader();
+  const api = useRuntimeApi();
   const oauth = useOAuthControl();
+  const available = useBound(oauth, oauth.isAvailable);
+  const discover = useBound(oauth, oauth.discoverBuckets);
+  const readQuota = useQuotaReader(
+    useBound(api, api.getEphemeralSetting),
+    useBound(api, api.getActiveProviderName),
+    useBound(api, api.detectProviderQuota),
+    api.fetch,
+    available,
+    useBound(oauth, oauth.getAllAnthropicUsageInfo),
+    useBound(oauth, oauth.getAllCodexUsageInfo),
+  );
   const { stats } = useSessionStats();
   const startTime = stats.sessionStartTime;
   const readStartTime = useCallback(() => startTime, [startTime]);
@@ -45,13 +58,13 @@ export function useUtilityCommands(
       createStatsCommand(
         bindStatsCommand(
           readQuota,
-          () => oauth.isAvailable(),
-          (logger) => oauth.discoverBuckets(logger),
+          available,
+          discover,
           readStartTime,
           addItem,
         ),
       ),
-    [readQuota, oauth, readStartTime, addItem],
+    [readQuota, available, discover, readStartTime, addItem],
   );
   const loggingCommand = useMemo(
     () => createLoggingCommand(bindLoggingCommand(config, settings, addItem)),

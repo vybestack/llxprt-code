@@ -20,6 +20,12 @@ const oauthControl = {
   isAuthenticated: unavailableOAuth,
   logout: unavailableOAuth,
   listBuckets: unavailableOAuth,
+  getAllAnthropicUsageInfo: unavailableOAuth,
+  getAllCodexUsageInfo: unavailableOAuth,
+  getAllCodexRateLimitResetCredits: unavailableOAuth,
+  hasCodexToken: unavailableOAuth,
+  readCodexBucketToken: unavailableOAuth,
+  discoverBuckets: unavailableOAuth,
 };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => runtimeApi,
