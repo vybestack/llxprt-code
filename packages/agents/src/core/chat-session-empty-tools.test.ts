@@ -41,6 +41,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 
 const modelTools = installModelToolFixture();
 
@@ -60,6 +61,71 @@ const unusedGenerator: ContentGenerator = {
   },
 };
 
+function observeHooks(
+  config: Config,
+  choice: ToolChoice | undefined,
+  before: Array<Omit<HookLLMRequest, 'version'>>,
+  after: Array<Omit<HookLLMRequest, 'version'>>,
+  selection: Array<Omit<HookLLMRequest, 'version'>>,
+): HookExecutionOwner {
+  const recordBefore = async (request: Omit<HookLLMRequest, 'version'>) => {
+    before.push(request);
+    return new BeforeModelHookOutput({});
+  };
+  const recordAfter = async (request: Omit<HookLLMRequest, 'version'>) => {
+    after.push(request);
+    return new AfterModelHookOutput({});
+  };
+  const snapshotEvents = withSnapshotModelEvents({
+    fireBeforeModelEvent: recordBefore,
+    fireAfterModelEvent: recordAfter,
+  });
+  return {
+    sessionId: () => config.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeToolSelection: async (request) => {
+      selection.push(request);
+      return new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: { toolChoice: choice },
+      });
+    },
+    beforeModel: recordBefore,
+    afterModel: recordAfter,
+    beforeModelSnapshot: (request, signal) =>
+      snapshotEvents.fireBeforeModelSnapshotEvent(request, signal),
+    afterModelSnapshot: (request, response, signal) =>
+      snapshotEvents.fireAfterModelSnapshotEvent(request, response, signal),
+  };
+}
+
+function observeProvider(requests: RuntimeGenerateChatOptions[]): IProvider {
+  return {
+    name: 'stub',
+    getModels: async () => [],
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion(
+      options: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
+    ): AsyncIterableIterator<IContent> {
+      if (!('contents' in options))
+        throw new Error('Unexpected positional provider call');
+      requests.push(options);
+      return (async function* (): AsyncGenerator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] };
+      })();
+    },
+  };
+}
+
+function choiceFor(origin: Origin): ToolChoice | undefined {
+  const choices: Record<Origin, ToolChoice | undefined> = {
+    producer: undefined,
+    missing: undefined,
+    none: { mode: 'none' },
+    unmatched: { mode: 'auto', allowedToolNames: ['absent'] },
+  };
+  return choices[origin];
+}
+
 function conversationDiagnostics(
   conversationLogPath: string,
   events: ConversationRequestEvent[],
@@ -67,6 +133,9 @@ function conversationDiagnostics(
   return {
     conversationLoggingEnabled: true,
     conversationLogPath,
+    requestBodyLoggingEnabled: false,
+    assertRequestArtifactExporter: () => undefined,
+    acknowledgeTerminalTelemetry: async () => () => undefined,
     redaction: {
       redactApiKeys: false,
       redactCredentials: false,
@@ -102,31 +171,13 @@ async function send(
   const after: Array<Omit<HookLLMRequest, 'version'>> = [];
   const selection: Array<Omit<HookLLMRequest, 'version'>> = [];
   const requests: RuntimeGenerateChatOptions[] = [];
-  const choices: Record<Origin, ToolChoice | undefined> = {
-    producer: undefined,
-    missing: undefined,
-    none: { mode: 'none' },
-    unmatched: { mode: 'auto', allowedToolNames: ['absent'] },
-  };
-  const choice = choices[origin];
-  const hookOwner: HookExecutionOwner = {
-    sessionId: () => config.getSessionId(),
-    transcriptPath: () => undefined,
-    beforeToolSelection: async (request) => {
-      selection.push(request);
-      return new BeforeToolSelectionHookOutput({
-        hookSpecificOutput: { toolChoice: choice },
-      });
-    },
-    beforeModel: async (request) => {
-      before.push(request);
-      return new BeforeModelHookOutput({});
-    },
-    afterModel: async (request) => {
-      after.push(request);
-      return new AfterModelHookOutput({});
-    },
-  };
+  const hookOwner = observeHooks(
+    config,
+    choiceFor(origin),
+    before,
+    after,
+    selection,
+  );
   const runtime = createProviderRuntimeContext({
     settingsService,
     config,
@@ -135,21 +186,7 @@ async function send(
   const manager = new TestRuntimeProviderManager(runtime);
   manager.setConfig(config);
   configureProviderRuntimeFactories(config, manager);
-  const provider: IProvider = {
-    name: 'stub',
-    getModels: async () => [],
-    getDefaultModel: () => 'stub-model',
-    generateChatCompletion(
-      options: RuntimeGenerateChatOptions | IContent[],
-    ): AsyncIterableIterator<IContent> {
-      if (Array.isArray(options))
-        throw new Error('Unexpected positional provider call');
-      requests.push(options);
-      return (async function* (): AsyncGenerator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] };
-      })();
-    },
-  };
+  const provider = observeProvider(requests);
   manager.registerProvider(
     diagnostics === undefined
       ? provider

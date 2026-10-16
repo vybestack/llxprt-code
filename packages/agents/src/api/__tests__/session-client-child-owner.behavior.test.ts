@@ -21,6 +21,7 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 import {
   SubagentOrchestrator,
   type SubagentOrchestratorOptions,
@@ -159,9 +160,11 @@ describe('Isolated child session client ownership', () => {
         blocks: [{ type: 'text', text: 'parent continues' }],
       });
       expect(
-        (await parent.owner.getAgentClient().getHistory()).filter(
-          (item) => item.speaker === 'human',
-        ),
+        (
+          await collectHistoryFixture(
+            parent.owner.getAgentClient().getHistory(),
+          )
+        ).filter((item) => item.speaker === 'human'),
       ).toHaveLength(1);
     });
   }, 30000);
@@ -183,9 +186,11 @@ describe('Isolated child session client ownership', () => {
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await parent.owner.getAgentClient().getHistory()).filter(
-            (item) => item.speaker === 'human',
-          ),
+          (
+            await collectHistoryFixture(
+              parent.owner.getAgentClient().getHistory(),
+            )
+          ).filter((item) => item.speaker === 'human'),
         ).toHaveLength(1);
       },
       async () => {

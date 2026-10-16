@@ -102,15 +102,17 @@ async function loadExtraHistory(
     const turnKey = historyService.generateTurnKey();
     return { ...content, metadata: { ...content.metadata, turnId: turnKey } };
   });
-  await historyService.addBatch(restored, currentModel);
+  await historyService.addBatch(restored, currentModel, {
+    streamPublication: true,
+  });
 }
 
 /**
  * Resolves (or creates) the HistoryService and optionally loads extra history.
  *
  * A stored service is reused to preserve the live conversation/UI display
- * across provider/auth rebuilds. However, `extraHistory` (e.g. the carried
- * `_previousHistory` from a client rebuild during --continue) must not be
+ * across provider/auth rebuilds. However, `extraHistory` (e.g. the history
+ * restored by --continue) must not be
  * silently dropped when the stored service is still empty — otherwise restored
  * context never reaches the model (issue #2500). When the stored service
  * already holds content (a mid-session switch), extraHistory is skipped to

@@ -26,28 +26,23 @@ export const copyCommand: SlashCommand = {
       };
     }
 
-    const chat = client.getChat();
-    const history = chat.getHistory();
+    let lastAiOutput: string | undefined;
+    for await (const item of client.getChat().streamHistory(context.signal)) {
+      if (item.speaker !== 'ai') continue;
+      lastAiOutput = '';
+      for (const block of item.blocks) {
+        if (block.type === 'text') lastAiOutput += block.text;
+      }
+    }
+    context.signal.throwIfAborted();
 
-    // Get the last message from the AI (ai speaker)
-    const lastAiMessage = history.filter((item) => item.speaker === 'ai').pop();
-
-    if (!lastAiMessage) {
+    if (lastAiOutput === undefined) {
       return {
         type: 'message',
         messageType: 'info',
         content: 'No output in history',
       };
     }
-    // Extract text from the blocks
-    const lastAiOutput = lastAiMessage.blocks
-      .filter(
-        (block): block is { type: 'text'; text: string } =>
-          block.type === 'text',
-      )
-      .map((block) => block.text)
-      .join('');
-
     if (lastAiOutput) {
       try {
         await copyToClipboard(lastAiOutput);

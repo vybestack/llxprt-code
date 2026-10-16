@@ -80,6 +80,8 @@ export interface TurnCommands {
   clearItems: () => void;
   /** Same signature as useHistoryManager's loadHistory. */
   loadHistory: (newHistory: HistoryItem[]) => void;
+  /** Inserts items ahead of the current history without dropping any row. */
+  prependHistory: (leading: HistoryItem[]) => void;
   /** Applies new display limits and trims the committed history. */
   setHistoryLimits: (limits: HistoryLimits) => void;
   /** Records an out-of-tree add request for a subscriber to perform. */
@@ -135,6 +137,7 @@ type TurnHistoryCommands = Pick<
   | 'removeItems'
   | 'clearItems'
   | 'loadHistory'
+  | 'prependHistory'
   | 'setHistoryLimits'
 >;
 
@@ -215,6 +218,11 @@ function createTurnHistoryCommands(
     publishHistory(true);
   };
 
+  const prependHistory = (leading: HistoryItem[]): void => {
+    ledger.prepend(leading);
+    publishHistory(true);
+  };
+
   const setHistoryLimits = (limits: HistoryLimits): void => {
     const before = ledger.getState();
     ledger.setLimits(limits);
@@ -229,6 +237,7 @@ function createTurnHistoryCommands(
     removeItems,
     clearItems,
     loadHistory,
+    prependHistory,
     setHistoryLimits,
   };
 }

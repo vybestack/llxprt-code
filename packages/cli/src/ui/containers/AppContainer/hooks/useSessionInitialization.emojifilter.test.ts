@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../../__tests__/resumeRows.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -48,67 +49,106 @@ async function seedWith(
   emojiMode: string | undefined,
   resumedHistory: IContent[] = RESUMED_HISTORY,
 ) {
-  const loadHistory = vi.fn();
+  const prependHistory = vi.fn();
   renderHook(() =>
     useSessionInitialization({
       uiRuntime: makeConfig(emojiMode),
       agent: makeAgent(),
       addItem: vi.fn(),
-      loadHistory,
-      resumedHistory,
+      prependHistory,
+      resumedBoot: displayBoot(resumedHistory),
     }),
   );
   await act(async () => {
     await Promise.resolve();
   });
-  return loadHistory;
+  return prependHistory;
+}
+
+function clearTestMocks(): void {
+  vi.clearAllMocks();
+}
+
+function restoreTestMocks(): void {
+  vi.restoreAllMocks();
 }
 
 describe('useSessionInitialization emoji filtering (#2888)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  beforeEach(clearTestMocks);
+  afterEach(restoreTestMocks);
 
   it('seeds filtered model text and verbatim user text by default', async () => {
-    const loadHistory = await seedWith(undefined);
+    const prependHistory = await seedWith(undefined);
 
-    expect(loadHistory).toHaveBeenCalledTimes(1);
-    expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'gemini', text: 'Done [OK]' },
+    expect(prependHistory).toHaveBeenCalledTimes(1);
+    expect(prependHistory).toHaveBeenCalledWith([
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'gemini',
+        text: 'Done [OK]',
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
 
   it('seeds verbatim text when the setting allows emojis', async () => {
-    const loadHistory = await seedWith('allowed');
+    const prependHistory = await seedWith('allowed');
 
-    expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'gemini', text: 'Done \u2705' },
+    expect(prependHistory).toHaveBeenCalledWith([
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'gemini',
+        text: 'Done \u2705',
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
+});
+
+describe('useSessionInitialization emoji filtering (#2888): error and warn', () => {
+  beforeEach(clearTestMocks);
+  afterEach(restoreTestMocks);
 
   it('seeds the live error item for blocked model text in error mode', async () => {
-    const loadHistory = await seedWith('error');
+    const prependHistory = await seedWith('error');
 
     // The blocked turn replays as the same error item the live path renders;
-    // user text stays verbatim.
-    expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'error', text: EMOJI_BLOCKED_ERROR_TEXT },
+    // user text stays verbatim. The error replacement keeps the source
+    // record's row identity.
+    expect(prependHistory).toHaveBeenCalledWith([
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'error',
+        text: EMOJI_BLOCKED_ERROR_TEXT,
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
 
   it('matches direct conversion output for the same mode', async () => {
-    const loadHistory = await seedWith('warn');
+    const prependHistory = await seedWith('warn');
 
     // Warn mode appends the feedback info item after the filtered turn,
     // exactly as the live path would have shown it.
-    expect(loadHistory).toHaveBeenCalledWith(
+    expect(prependHistory).toHaveBeenCalledWith(
       iContentToHistoryItems(RESUMED_HISTORY, 'warn'),
     );
   });
@@ -127,15 +167,21 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
         ],
       },
     ];
-    const loadHistory = await seedWith('error', withThinking);
+    const prependHistory = await seedWith('error', withThinking);
 
-    expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'hi' },
+    expect(prependHistory).toHaveBeenCalledWith([
+      {
+        id: -1,
+        type: 'user',
+        text: 'hi',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
       {
         id: -2,
         type: 'gemini',
         text: 'Answer',
         thinkingBlocks: [{ type: 'thinking', thought: '' }],
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
       },
     ]);
   });

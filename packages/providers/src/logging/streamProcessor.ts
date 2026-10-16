@@ -25,6 +25,7 @@ import {
 } from './tokenAccumulator.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export interface StreamAccumulatorState {
   streamedText: string;
@@ -198,6 +199,45 @@ export function processLoggedStreamChunk(
   return chunk;
 }
 
+function recordSourceStreamFailure(
+  error: unknown,
+  startTime: number,
+  acc: StreamAccumulatorState,
+  config: ProviderRequestDiagnostics | undefined,
+  recorder: AttemptRecorder,
+  ctx: StreamProcessContext,
+  modelName: string,
+  policy: RequestLoggingPolicy | undefined,
+): void {
+  ctx.performanceTracker.recordError(
+    performance.now() - startTime,
+    String(error),
+    acc.firstChunkTime,
+    acc.chunkCount,
+  );
+  // Accumulate partial token usage on stream errors so session totals
+  // remain consistent with the old logResponse path.
+  if (policy?.strictTelemetry !== true && acc.latestTokenUsage !== undefined) {
+    const partialTokenCounts = resolveTokenCounts(
+      acc.latestTokenUsage,
+      acc.streamedText,
+      ctx.debug,
+    );
+    accumulateTokenUsage(
+      partialTokenCounts,
+      config,
+      ctx.providerName,
+      ctx.debug,
+    );
+  }
+  recorder.finalizeAttempt(
+    classifyTerminalStatus(error),
+    modelName,
+    acc.latestTokenUsage,
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
 export async function* processStreamWithRecorderGen(
   config: ProviderRequestDiagnostics | undefined,
   stream: AsyncIterableIterator<IContent>,
@@ -205,66 +245,55 @@ export async function* processStreamWithRecorderGen(
   _promptId: string,
   recorder: AttemptRecorder,
   ctx: StreamProcessContext,
+  policy?: RequestLoggingPolicy,
 ): AsyncIterableIterator<IContent> {
   const startTime = performance.now();
   const acc = createStreamAccumulatorState();
   let finalized = false;
+  let terminalMetadata: IContent['metadata'];
 
   try {
     for await (const chunk of stream) {
-      yield processStreamChunk(chunk, acc, startTime, recorder);
+      const processed = processStreamChunk(chunk, acc, startTime, recorder);
+      if (policy?.strictTelemetry === true && isResponseTerminal(chunk))
+        terminalMetadata = { ...terminalMetadata, ...chunk.metadata };
+      const visible =
+        policy?.strictTelemetry === true
+          ? visibleResponseChunk(processed, policy)
+          : processed;
+      if (visible !== undefined) yield visible;
     }
+    if (policy?.strictTelemetry === true)
+      await afterReply(
+        'Response telemetry acknowledgement',
+        ctx.debug,
+        policy.signal,
+        () => recorder.acknowledgeSuccess(modelName, policy.signal),
+      );
 
     const duration = performance.now() - startTime;
-    const tokenCounts = resolveTokenCounts(
-      acc.latestTokenUsage,
-      acc.streamedText,
-      ctx.debug,
-    );
-    if (acc.latestTokenUsage !== undefined) {
-      accumulateTokenUsage(tokenCounts, config, ctx.providerName, ctx.debug);
-    }
-    const totalTokens =
-      tokenCounts.input_token_count + tokenCounts.output_token_count;
-    ctx.performanceTracker.recordCompletion(
+    recordLoggedStreamCompletion(
+      acc,
       duration,
-      acc.firstChunkTime,
-      totalTokens,
-      tokenCounts.output_token_count,
-      acc.chunkCount,
-      acc.lastChunkTime,
-    );
-    recorder.finalizeAttempt('success', modelName, acc.latestTokenUsage);
-    finalized = true;
-  } catch (error) {
-    const duration = performance.now() - startTime;
-    ctx.performanceTracker.recordError(
-      duration,
-      String(error),
-      acc.firstChunkTime,
-      acc.chunkCount,
-    );
-    // Accumulate partial token usage on stream errors so session totals
-    // remain consistent with the old logResponse path.
-    if (acc.latestTokenUsage !== undefined) {
-      const partialTokenCounts = resolveTokenCounts(
-        acc.latestTokenUsage,
-        acc.streamedText,
-        ctx.debug,
-      );
-      accumulateTokenUsage(
-        partialTokenCounts,
-        config,
-        ctx.providerName,
-        ctx.debug,
-      );
-    }
-    const status = classifyTerminalStatus(error);
-    recorder.finalizeAttempt(
-      status,
+      config,
+      recorder,
+      ctx,
       modelName,
-      acc.latestTokenUsage,
-      error instanceof Error ? error.message : String(error),
+      acc.streamedText,
+    );
+    finalized = true;
+    if (terminalMetadata !== undefined)
+      yield { speaker: 'ai', blocks: [], metadata: terminalMetadata };
+  } catch (error) {
+    recordSourceStreamFailure(
+      error,
+      startTime,
+      acc,
+      config,
+      recorder,
+      ctx,
+      modelName,
+      policy,
     );
     finalized = true;
     throw error;
@@ -277,6 +306,14 @@ export async function* processStreamWithRecorderGen(
     }
   }
 }
+
+type ResponseLogWriter = (
+  content: string,
+  promptId: string,
+  duration: number,
+  success: boolean,
+  error: unknown,
+) => Promise<void | (() => void | Promise<void>)>;
 
 /**
  * Handle the error path for logResponseStreamWithRecorderGen: write the
@@ -292,19 +329,24 @@ async function handleLoggedStreamError(
   recorder: AttemptRecorder,
   config: ProviderRequestDiagnostics,
   ctx: StreamProcessContext,
-  writeLog: (
-    content: string,
-    promptId: string,
-    duration: number,
-    success: boolean,
-    error: unknown,
-  ) => Promise<void>,
+  writeLog: ResponseLogWriter,
+  policy: RequestLoggingPolicy | undefined,
+  writeErrorLog: boolean,
 ): Promise<never> {
   const errorTime = performance.now();
   // Wrap writeLog so its failure does not mask the original error or skip
   // performance tracking and attempt finalization.
   try {
-    await writeLog('', promptId, errorTime - startTime, false, error);
+    if (writeErrorLog) {
+      const publish = await writeLog(
+        '',
+        promptId,
+        errorTime - startTime,
+        false,
+        error,
+      );
+      if (publish !== undefined) await publish();
+    }
   } catch (logError) {
     ctx.debug.warn(
       () =>
@@ -317,8 +359,11 @@ async function handleLoggedStreamError(
     acc.firstChunkTime,
     acc.chunkCount,
   );
-  // Accumulate partial token usage on stream errors for session totals.
-  if (acc.latestTokenUsage !== undefined) {
+  // Failed source usage belongs to the attempt error, not accepted session totals.
+  if (
+    policy?.strictDurableResponse !== true &&
+    acc.latestTokenUsage !== undefined
+  ) {
     const partialTokenCounts = resolveTokenCounts(
       acc.latestTokenUsage,
       acc.responseContent,
@@ -341,6 +386,151 @@ async function handleLoggedStreamError(
   throw error;
 }
 
+function isResponseTerminal(chunk: IContent): boolean {
+  return (
+    chunk.metadata?.usage !== undefined ||
+    chunk.metadata?.finishReason !== undefined ||
+    chunk.metadata?.rawStopReason !== undefined
+  );
+}
+
+function visibleResponseChunk(
+  chunk: IContent,
+  policy: RequestLoggingPolicy | undefined,
+): IContent | undefined {
+  if (policy?.strictDurableResponse !== true || !isResponseTerminal(chunk))
+    return chunk;
+  // Agents track usage as soon as metadata is yielded, before stream exhaustion.
+  return chunk.blocks.length === 0
+    ? undefined
+    : { ...chunk, metadata: undefined };
+}
+
+function recordLoggedStreamCompletion(
+  acc: StreamAccumulatorState,
+  duration: number,
+  config: ProviderRequestDiagnostics | undefined,
+  recorder: AttemptRecorder,
+  ctx: StreamProcessContext,
+  modelName: string,
+  text = acc.responseContent,
+): void {
+  const tokenCounts = resolveTokenCounts(acc.latestTokenUsage, text, ctx.debug);
+  if (acc.latestTokenUsage !== undefined)
+    accumulateTokenUsage(tokenCounts, config, ctx.providerName, ctx.debug);
+  const totalTokens =
+    tokenCounts.input_token_count + tokenCounts.output_token_count;
+  ctx.performanceTracker.recordCompletion(
+    duration,
+    acc.firstChunkTime,
+    totalTokens,
+    tokenCounts.output_token_count,
+    acc.chunkCount,
+    acc.lastChunkTime,
+  );
+  recorder.finalizeAttempt('success', modelName, acc.latestTokenUsage);
+}
+
+/**
+ * Runs logging work that follows a fully streamed reply. The reply and its
+ * usage already reached the caller, so a logging failure is reported through
+ * the debug error path and the turn stands. A caller abort still ends the turn.
+ */
+async function afterReply<T>(
+  what: string,
+  debug: DebugLogger,
+  signal: AbortSignal | undefined,
+  step: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await step();
+  } catch (error) {
+    signal?.throwIfAborted();
+    debug.error(
+      () =>
+        `${what} failed after the reply streamed; the turn is unaffected: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+}
+
+async function acknowledgeResponseSuccess(
+  recorder: AttemptRecorder,
+  modelName: string,
+  signal: AbortSignal | undefined,
+  publish: void | (() => void | Promise<void>),
+): Promise<void> {
+  await recorder.acknowledgeSuccess(modelName, signal);
+  if (publish !== undefined) await publish();
+  signal?.throwIfAborted();
+}
+
+async function* captureLoggedResponse(
+  stream: AsyncIterableIterator<IContent>,
+  acc: StreamAccumulatorState,
+  start: number,
+  recorder: AttemptRecorder,
+  policy: RequestLoggingPolicy | undefined,
+): AsyncGenerator<IContent, IContent['metadata']> {
+  let terminalMetadata: IContent['metadata'];
+  for await (const chunk of stream) {
+    const processed = processLoggedStreamChunk(chunk, acc, start, recorder);
+    if (policy?.strictDurableResponse === true && isResponseTerminal(chunk))
+      terminalMetadata = { ...terminalMetadata, ...chunk.metadata };
+    const visible = visibleResponseChunk(processed, policy);
+    if (visible !== undefined) yield visible;
+  }
+  return terminalMetadata;
+}
+
+interface StrictReply {
+  readonly recorder: AttemptRecorder;
+  readonly modelName: string;
+  readonly ctx: StreamProcessContext;
+  readonly writeLog: ResponseLogWriter;
+  readonly content: string;
+  readonly promptId: string;
+  readonly duration: number;
+}
+
+/**
+ * Durable response write and telemetry acknowledgement for a fully streamed
+ * strict reply. Returns the telemetry publication still owed, if any.
+ */
+async function logStrictReply(
+  policy: RequestLoggingPolicy | undefined,
+  reply: StrictReply,
+): Promise<void | (() => void | Promise<void>)> {
+  const { recorder, modelName, ctx } = reply;
+  let publish: void | (() => void | Promise<void>) = undefined;
+  if (policy?.strictDurableResponse === true) {
+    publish = await afterReply(
+      'Durable conversation response write',
+      ctx.debug,
+      policy.signal,
+      () =>
+        reply.writeLog(
+          reply.content,
+          reply.promptId,
+          reply.duration,
+          true,
+          undefined,
+        ),
+    );
+  }
+  if (policy?.strictTelemetry === true) {
+    await afterReply(
+      'Response telemetry acknowledgement',
+      ctx.debug,
+      policy.signal,
+      () =>
+        acknowledgeResponseSuccess(recorder, modelName, policy.signal, publish),
+    );
+    return undefined;
+  }
+  return publish;
+}
+
 export async function* logResponseStreamWithRecorderGen(
   config: ProviderRequestDiagnostics,
   stream: AsyncIterableIterator<IContent>,
@@ -348,45 +538,57 @@ export async function* logResponseStreamWithRecorderGen(
   modelName: string,
   recorder: AttemptRecorder,
   ctx: StreamProcessContext,
-  writeLog: (
-    content: string,
-    promptId: string,
-    duration: number,
-    success: boolean,
-    error: unknown,
-  ) => Promise<void>,
+  writeLog: ResponseLogWriter,
+  policy?: RequestLoggingPolicy,
 ): AsyncIterableIterator<IContent> {
   const startTime = performance.now();
   const acc = createStreamAccumulatorState();
   let finalized = false;
+  let responseAppendStarted = false;
+  let terminalMetadata: IContent['metadata'];
 
   try {
-    for await (const chunk of stream) {
-      yield processLoggedStreamChunk(chunk, acc, startTime, recorder);
-    }
+    terminalMetadata = yield* captureLoggedResponse(
+      stream,
+      acc,
+      startTime,
+      recorder,
+      policy,
+    );
 
     const duration = performance.now() - startTime;
-    const tokenCounts = resolveTokenCounts(
-      acc.latestTokenUsage,
-      acc.responseContent,
-      ctx.debug,
-    );
-    if (acc.latestTokenUsage !== undefined) {
-      accumulateTokenUsage(tokenCounts, config, ctx.providerName, ctx.debug);
-    }
-    const perfTotalTokens =
-      tokenCounts.input_token_count + tokenCounts.output_token_count;
-    ctx.performanceTracker.recordCompletion(
+    responseAppendStarted = policy?.strictDurableResponse === true;
+    const publish = await logStrictReply(policy, {
+      recorder,
+      modelName,
+      ctx,
+      writeLog,
+      content: acc.responseContent,
+      promptId,
       duration,
-      acc.firstChunkTime,
-      perfTotalTokens,
-      tokenCounts.output_token_count,
-      acc.chunkCount,
-      acc.lastChunkTime,
+    });
+    recordLoggedStreamCompletion(
+      acc,
+      duration,
+      config,
+      recorder,
+      ctx,
+      modelName,
     );
-    recorder.finalizeAttempt('success', modelName, acc.latestTokenUsage);
     finalized = true;
-    await writeLog(acc.responseContent, promptId, duration, true, undefined);
+    if (policy?.strictDurableResponse !== true)
+      await writeLog(acc.responseContent, promptId, duration, true, undefined);
+    if (publish !== undefined) {
+      const deferred = publish;
+      await afterReply(
+        'Conversation response telemetry',
+        ctx.debug,
+        policy?.signal,
+        async () => deferred(),
+      );
+    }
+    if (terminalMetadata !== undefined)
+      yield { speaker: 'ai', blocks: [], metadata: terminalMetadata };
   } catch (error) {
     finalized = true;
     await handleLoggedStreamError(
@@ -399,6 +601,8 @@ export async function* logResponseStreamWithRecorderGen(
       config,
       ctx,
       writeLog,
+      policy,
+      !responseAppendStarted,
     );
   } finally {
     if (!finalized) {

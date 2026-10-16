@@ -168,11 +168,14 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
 - `llxprt_code.tool_call`: each tool call (function, args, duration, success)
 - `llxprt_code.hook_call`: hook execution (event name, input, output, duration)
 - `llxprt_code.api_request`: provider API request. Includes `request_chars`
-  (character count of the request body) and token counts. The body itself is
-  omitted by default; it is included only when `telemetry.logApiBodies` is
-  enabled (and `telemetry.logPrompts` is `true`), truncated to
-  `telemetry.logApiBodyMaxChars` (default 4000).
-- `llxprt_code.api_error`: provider API error
+  (the size of the request, see below). The body itself is omitted by default;
+  it is included only when `telemetry.logApiBodies` is enabled (and
+  `telemetry.logPrompts` is `true`), exported as `llxprt_code.api_request_chunk`
+  records and a closing `llxprt_code.api_request_complete` record.
+- `llxprt_code.api_error`: provider API error, recorded when a request that
+  was handed to the provider fails. A request stopped before that point (a
+  BeforeModel hook block, an abort, a compression failure or a context
+  overflow) made no API call and is not recorded as one.
 - `llxprt_code.api_response`: provider API response (token counts, latency,
   `response_chars`). The response body is included only when
   `telemetry.logApiBodies` is enabled and `telemetry.logPrompts` is `true`,
@@ -192,6 +195,33 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
 - `llxprt_code.extension_uninstall`: extension uninstalled
 - `llxprt_code.extension_enable`: extension enabled
 - `llxprt_code.extension_disable`: extension disabled
+
+#### `request_chars`
+
+`request_chars` on `llxprt_code.api_request` is set on every send, whether or
+not API body logging is enabled. The two cases count different things:
+
+- **Body logging off (the default):** the UTF-8 byte length of the JSON request
+  body the provider sent, which is its `Content-Length`. It covers the whole
+  wire body (messages, system prompt, tools and parameters). The provider
+  reports it once the body is complete and before it is transmitted, so no
+  second pass over the conversation is made to count it, and the event is
+  recorded at that point. The value is the same as a character count for ASCII
+  text and larger for other text.
+- **Body logging on (`telemetry.logApiBodies` and `telemetry.logPrompts`):** the
+  number of characters (UTF-16 code units) in the exported request artifact,
+  which is the redacted, media-sanitized conversation JSON. The event is
+  recorded before the request is built.
+
+The agent loop also records a body-less `llxprt_code.api_request` when it hands
+the prepared request to the provider, which opens the API request span. It is
+recorded before any body exists, so its `request_chars` is `0`; the size is on
+the provider's `llxprt_code.api_request` for the same `prompt_id`.
+
+The provider's value is `0` when the provider fails before it builds a request body (for
+example, when credentials cannot be resolved). Earlier releases counted the
+UTF-16 length of the JSON-serialized conversation rows only, excluding the
+system prompt and tools.
 
 ### Metrics
 

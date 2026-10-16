@@ -19,6 +19,9 @@ import { declaredMediaTransportCapabilities } from '../providerMediaTransportCap
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
+import type { ChatRowInput } from './OpenAIRequestPreparation.js';
+import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 
 function createProvider(): OpenAIProvider {
   const provider = new OpenAIProvider(
@@ -62,14 +65,50 @@ function createContents(): IContent[] {
   ];
 }
 
+/**
+ * The media pre-pass runs after request normalization, when the call carries
+ * its rows as `requestRows` rather than as the caller's cold stream.
+ */
+function createNormalizedOptions(
+  init: Parameters<typeof createProviderCallOptions>[0] & {
+    contents: IContent[];
+  },
+): NormalizedGenerateChatOptions {
+  return {
+    ...createProviderCallOptions(init),
+    contents: [],
+    requestRows: rowsSelection(init.contents),
+    contentCount: init.contents.length,
+  } as NormalizedGenerateChatOptions;
+}
+
+async function* asyncRows(rows: readonly IContent[]): AsyncGenerator<IContent> {
+  for (const row of rows) yield structuredClone(row);
+}
+
+/** The rows as the chat body is written from them: through the media stage. */
+async function stagedRows(
+  input: ChatRowInput | undefined,
+  rows: readonly IContent[],
+): Promise<IContent[]> {
+  if (input?.mediaStage === undefined)
+    throw new Error('expected a media stage');
+  const staged: IContent[] = [];
+  for await (const row of input.mediaStage(asyncRows(rows))) staged.push(row);
+  return staged;
+}
+
 type KimiMediaProcessor = {
   maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-  ): Promise<NormalizedGenerateChatOptions>;
+    media: RowsMediaInput,
+  ): Promise<ChatRowInput | undefined>;
 };
+
+const MEDIA_INPUT: RowsMediaInput = { requestId: 'provider-request' };
 
 describe('OpenAIProvider Kimi media preprocessing', () => {
   it('leaves video unchanged while the experimental setting is disabled', async () => {
@@ -80,17 +119,13 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       files: { create: filesCreate },
     } as unknown as OpenAI;
     const provider = createProvider();
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 
-    const mediaRequest = await resolveRequestMedia(
-      { requestId: 'provider-request' },
-      options.contents,
-      undefined,
-    );
+    const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
     const result = await (
       provider as unknown as KimiMediaProcessor
     ).maybeProcessKimiMedia(
@@ -98,18 +133,12 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       client,
       new DebugLogger('test:kimi-media'),
       mediaRequest,
+      MEDIA_INPUT,
     );
     await mediaRequest.release();
 
     expect(filesCreate).not.toHaveBeenCalled();
-    expect(result).toBe(options);
-    expect(result.contents[0].blocks[1]).toStrictEqual({
-      type: 'media',
-      mimeType: 'video/mp4',
-      data: 'VklERU8=',
-      encoding: 'base64',
-      filename: 'clip.mp4',
-    });
+    expect(result).toBeUndefined();
   });
 
   it('uploads enabled video and creates a Moonshot file reference', async () => {
@@ -135,7 +164,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     const settings = new SettingsService();
     settings.set('kimi.experimental-video', true);
     settings.set('provider-files', 'workspace');
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       settings,
@@ -163,11 +192,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 
-    const mediaRequest = await resolveRequestMedia(
-      { requestId: 'provider-request' },
-      options.contents,
-      undefined,
-    );
+    const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
     const result = await (
       provider as unknown as KimiMediaProcessor
     ).maybeProcessKimiMedia(
@@ -175,12 +200,15 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       client,
       new DebugLogger('test:kimi-media'),
       mediaRequest,
+      MEDIA_INPUT,
     );
+    // The upload record lives as long as the request that owns it.
+    const rows = await stagedRows(result, createContents());
     await mediaRequest.release();
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
     expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
-    expect(result.contents[0].blocks[1]).toStrictEqual({
+    expect(rows[0].blocks[1]).toStrictEqual({
       type: 'media',
       mimeType: 'video/mp4',
       data: 'ms://video-file',

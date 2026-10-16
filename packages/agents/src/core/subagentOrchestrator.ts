@@ -39,6 +39,13 @@ import {
   buildActivationCliOverrides,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
+import {
+  LOAD_BALANCER_PROVIDER_NAME,
+  buildSubagentModelConfig,
+  buildSubagentPromptConfig,
+  getActivationProfile,
+  getRuntimeStateProfile,
+} from './subagentProfileConfig.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
 import {
   createSettingsSnapshot,
@@ -63,6 +70,10 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { allocateChildSessionId } from '@vybestack/llxprt-code-core/recording/childSessionIds.js';
+import type { ChildSessionJournal } from '@vybestack/llxprt-code-core/recording/childJournal.js';
+import { openChildSessionJournal } from './subagentChildJournal.js';
 import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
@@ -96,8 +107,6 @@ import {
   buildIsolatedAgentConfig,
   prepareIsolatedProviders,
 } from '../api/agentRuntimeAssembly.js';
-
-const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -191,6 +200,7 @@ export class SubagentOrchestrator {
     scope: SubAgentScope,
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
+    childJournal: ChildSessionJournal,
   ): () => Promise<void> {
     return async () => {
       const history = firstDefinedHistory(
@@ -205,6 +215,9 @@ export class SubagentOrchestrator {
         },
         () => disposeHistoryLike(history),
         () => closeIsolatedSessionRuntime(isolatedHandle),
+        // Last: the facade flushes through the recorder before the journal
+        // file and lock are removed (#854 P05c).
+        () => childJournal.dispose(),
       ]);
     };
   }
@@ -305,13 +318,12 @@ export class SubagentOrchestrator {
       'Subagent launch aborted while resolving runtime profile.',
     );
 
-    const promptConfig = this.buildPromptConfig(
+    const promptConfig = buildSubagentPromptConfig(
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
-    );
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
+    const modelConfig = buildSubagentModelConfig(runtimeStateProfile);
     const runConfig = this.resolveRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -319,8 +331,63 @@ export class SubagentOrchestrator {
     );
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
+    // Minted BEFORE any runtime construction: the fs-safe id must exist ahead
+    // of assembly so launch failures clean up deterministically, and the
+    // journal filename prefix is fully random (#854 P05c).
+    const childSessionId = allocateChildSessionId();
+    const childJournal = await openChildSessionJournal({
+      config: this.options.foregroundConfig,
+      workspaceDirs: this.options.workspacePaths.directories(),
+      childSessionId,
+      parentSessionId: this.baseSessionId(),
+      provider: runtimeStateProfile.provider,
+      model: modelConfig.model,
+    });
+    return this.assembleLaunch({
+      subagent,
+      runtimeProfile,
+      promptConfig,
+      modelConfig,
+      runConfig,
+      request,
+      profile,
+      agentRuntimeId,
+      childSessionId,
+      childJournal,
+      signal,
+    });
+  }
+
+  /**
+   * Assembles the isolated runtime and scope for one prepared launch and owns
+   * the failure cleanup for everything allocated inside it.
+   */
+  private async assembleLaunch(params: {
+    subagent: SubagentConfig;
+    runtimeProfile: RuntimeProfileResolution;
+    promptConfig: PromptConfig;
+    modelConfig: ModelConfig;
+    runConfig: RunConfig;
+    request: SubagentLaunchRequest;
+    profile: Profile;
+    agentRuntimeId: string;
+    childSessionId: string;
+    childJournal: ChildSessionJournal;
+    signal?: AbortSignal;
+  }): Promise<SubagentLaunchResult> {
+    const {
+      subagent,
+      promptConfig,
+      modelConfig,
+      runConfig,
+      request,
+      profile,
+      agentRuntimeId,
+      childJournal,
+      signal,
+    } = params;
     const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
-      { subagent, runtimeProfile, modelConfig, agentRuntimeId },
+      params,
       signal,
     );
     let scope: SubAgentScopeInstance | undefined;
@@ -353,11 +420,21 @@ export class SubagentOrchestrator {
         profile,
         config: subagent,
         runtime: runtimeResult,
-        dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
+        dispose: this.buildScopeDispose(
+          scope,
+          runtimeResult,
+          isolatedHandle,
+          childJournal,
+        ),
       };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
-        this.cleanupAfterLaunchFailure(scope, runtimeResult, isolatedHandle),
+        this.cleanupAfterLaunchFailure(
+          scope,
+          runtimeResult,
+          isolatedHandle,
+          childJournal,
+        ),
       );
     }
   }
@@ -366,17 +443,28 @@ export class SubagentOrchestrator {
     scope: SubAgentScopeInstance | undefined,
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
+    childJournal: ChildSessionJournal,
   ): Promise<void> {
     if (scope !== undefined) {
-      await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
-    } else {
-      await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
+      await this.buildScopeDispose(
+        scope,
+        runtimeResult,
+        isolatedHandle,
+        childJournal,
+      )();
+      return;
     }
+    await this.cleanupRuntimeArtifacts(
+      runtimeResult,
+      isolatedHandle,
+      childJournal,
+    );
   }
 
   private async cleanupRuntimeArtifacts(
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
+    childJournal: ChildSessionJournal,
   ): Promise<void> {
     // Reached when the scope was never created (e.g. scope construction
     // failed) AFTER createIsolatedRuntime already activated the config and
@@ -385,6 +473,7 @@ export class SubagentOrchestrator {
     await runCleanupSteps([
       () => disposeHistoryLike(runtimeResult.history),
       () => closeIsolatedSessionRuntime(isolatedHandle),
+      () => childJournal.dispose(),
     ]);
   }
 
@@ -412,76 +501,6 @@ export class SubagentOrchestrator {
       }
       throw error;
     }
-  }
-
-  private buildPromptConfig(
-    basePrompt: string,
-    additions?: string[],
-  ): PromptConfig {
-    const trimmedBase = basePrompt.trim();
-    const trimmedAdditions = (additions ?? [])
-      .map((part) => part.trim())
-      .filter((part): part is string => part.length > 0);
-
-    const promptSections: string[] = [];
-
-    if (trimmedBase) {
-      promptSections.push(trimmedBase);
-    }
-
-    if (trimmedAdditions.length > 0) {
-      const numberedInstructions = trimmedAdditions
-        .map((instruction, index) => `(${index + 1}) ${instruction}`)
-        .join('\n');
-      promptSections.push(
-        [
-          '--- CURRENT TASK DIRECTIVES ---',
-          'Follow these instructions precisely for this run. They take precedence over any default behaviours.',
-          numberedInstructions,
-        ].join('\n'),
-      );
-    }
-
-    const merged = promptSections.join('\n\n');
-
-    return {
-      systemPrompt: merged,
-    };
-  }
-
-  private buildModelConfig(profile: Profile): ModelConfig {
-    return {
-      model: profile.model,
-      temp: profile.modelParams.temperature ?? 0.7,
-      top_p: profile.modelParams.top_p ?? 1,
-    };
-  }
-
-  private static getActivationProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    return isLoadBalancerProfile(runtimeProfile.effectiveProfile)
-      ? runtimeProfile.effectiveProfile
-      : runtimeProfile.primaryProfile;
-  }
-
-  private static getRuntimeStateProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    if (!isLoadBalancerProfile(runtimeProfile.effectiveProfile)) {
-      return runtimeProfile.primaryProfile;
-    }
-    // Keep load-balancer profile metadata/settings while stamping runtime
-    // provider/model to the registered load-balancer provider identity.
-    return {
-      ...runtimeProfile.effectiveProfile,
-      ephemeralSettings: {
-        ...runtimeProfile.effectiveProfile.ephemeralSettings,
-      },
-      modelParams: { ...runtimeProfile.effectiveProfile.modelParams },
-      provider: LOAD_BALANCER_PROVIDER_NAME,
-      model: LOAD_BALANCER_PROVIDER_NAME,
-    };
   }
 
   private baseSessionId(): string {
@@ -522,8 +541,8 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig,
     agentRuntimeId: string,
     subagentName: string,
+    childSessionId: string,
   ): AgentRuntimeState {
-    const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
 
     return createAgentRuntimeState({
@@ -540,7 +559,10 @@ export class SubagentOrchestrator {
         topP: modelConfig.top_p,
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
-      sessionId,
+      // The child's own fs-safe session id, allocated before runtime
+      // construction; the derived `${parent}::${runtimeId}` form failed the
+      // safe-session lock grammar and collapsed filename prefixes (#854).
+      sessionId: childSessionId,
       // The foreground agent's runtime id. `resolveRuntimeId` defaults a
       // runtime's id to its session id when no explicit id is supplied
       // (see runtimeStateFactory), which is how the foreground runtime is
@@ -549,6 +571,7 @@ export class SubagentOrchestrator {
       // not carry the caller's runtime context; if that changes, pass the
       // parent runtime id in explicitly rather than re-deriving it here.
       parentRuntimeId: this.baseSessionId(),
+      parentSessionId: this.baseSessionId(),
       subagentName,
     });
   }
@@ -559,6 +582,8 @@ export class SubagentOrchestrator {
       runtimeProfile: RuntimeProfileResolution;
       modelConfig: ModelConfig;
       agentRuntimeId: string;
+      childSessionId: string;
+      childJournal: ChildSessionJournal;
     },
     signal?: AbortSignal,
   ): Promise<{
@@ -567,62 +592,71 @@ export class SubagentOrchestrator {
   }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
-    const activationProfile =
-      SubagentOrchestrator.getActivationProfile(runtimeProfile);
-    const runtimeStateProfile =
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    const activationProfile = getActivationProfile(runtimeProfile);
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
     const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
 
-    this.throwIfAborted(
-      signal,
-      'Subagent launch aborted before runtime state.',
-    );
-    const runtimeState = this.createRuntimeState(
-      runtimeStateProfile,
-      modelConfig,
-      agentRuntimeId,
-      subagent.name,
-    );
-    const settingsService = this.options.createChildSettings();
-    if (!isLoadBalancerActivation) {
-      populatePreActivationSettings(
+    try {
+      this.throwIfAborted(
+        signal,
+        'Subagent launch aborted before runtime state.',
+      );
+      const runtimeState = this.createRuntimeState(
+        runtimeStateProfile,
+        modelConfig,
+        agentRuntimeId,
+        subagent.name,
+        params.childSessionId,
+      );
+      const settingsService = this.options.createChildSettings();
+      if (!isLoadBalancerActivation) {
+        populatePreActivationSettings(
+          settingsService,
+          runtimeStateProfile,
+          subagent.profile,
+        );
+      } else {
+        settingsService.setCurrentProfileName(subagent.profile);
+        settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
+        settingsService.set(
+          `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
+          LOAD_BALANCER_PROVIDER_NAME,
+        );
+      }
+
+      const isolatedHandle = await this.createIsolatedRuntime(
         settingsService,
+        activationProfile,
         runtimeStateProfile,
         subagent.profile,
+        subagent.name,
+        agentRuntimeId,
+        isLoadBalancerActivation,
       );
-    } else {
-      settingsService.setCurrentProfileName(subagent.profile);
-      settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
-      settingsService.set(
-        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
-        LOAD_BALANCER_PROVIDER_NAME,
-      );
-    }
-
-    const isolatedHandle = await this.createIsolatedRuntime(
-      settingsService,
-      activationProfile,
-      runtimeStateProfile,
-      subagent.profile,
-      subagent.name,
-      agentRuntimeId,
-      isLoadBalancerActivation,
-    );
-    try {
-      const runtimeResult = await this.loadRuntimeInIsolatedScope({
-        subagentName: subagent.name,
-        isolatedHandle,
-        runtimeState,
-        runtimeStateProfile,
-        effectiveProfile,
-        modelConfig,
-        signal,
-      });
-      return { runtimeResult, isolatedHandle };
+      try {
+        const runtimeResult = await this.loadRuntimeInIsolatedScope({
+          subagentName: subagent.name,
+          isolatedHandle,
+          runtimeState,
+          runtimeStateProfile,
+          effectiveProfile,
+          modelConfig,
+          childJournal: params.childJournal,
+          signal,
+        });
+        return { runtimeResult, isolatedHandle };
+      } catch (error) {
+        return await cleanupAfterFailure(error, () =>
+          runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
+        );
+      }
     } catch (error) {
-      return cleanupAfterFailure(error, () =>
-        runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
-      );
+      // The child journal is opened before this runs; dispose it for any
+      // assembly failure, including the pre-activation steps above the
+      // isolated-runtime cleanup (#854 P05c).
+      await cleanupAfterFailure(error, () => params.childJournal.dispose());
+      // cleanupAfterFailure always rethrows; this satisfies control flow.
+      throw error;
     }
   }
 
@@ -633,6 +667,7 @@ export class SubagentOrchestrator {
     runtimeStateProfile: Profile;
     effectiveProfile: Profile;
     modelConfig: ModelConfig;
+    childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSubagentProviderRuntime(
@@ -654,6 +689,7 @@ export class SubagentOrchestrator {
       settingsSnapshot,
       providerRuntime,
       contentGeneratorConfig,
+      childJournal: params.childJournal,
       signal: params.signal,
     });
     await params.isolatedHandle.tokenizerFactory.prepareTokenizer?.(
@@ -678,6 +714,7 @@ export class SubagentOrchestrator {
     settingsSnapshot: ReadonlySettingsSnapshot;
     providerRuntime: ProviderRuntimeContext;
     contentGeneratorConfig: ContentGeneratorConfig;
+    childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): AgentRuntimeLoaderOptions {
     const toolRegistry = this.options.toolRegistry;
@@ -720,6 +757,13 @@ export class SubagentOrchestrator {
         },
         toolRegistry,
         providerManager: params.isolatedHandle.providerManager,
+      },
+      // The child's HistoryService is the facade over its own ephemeral
+      // journal instead of a throwaway temp journal (#854 P05c).
+      overrides: {
+        historyService: new HistoryService({
+          recording: params.childJournal.recording,
+        }),
       },
       signal: params.signal,
     };

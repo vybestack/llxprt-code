@@ -6,13 +6,14 @@
 import type {
   ChronologyTraceEntry,
   IContent,
+  HistoryDumpSnapshot,
 } from '@vybestack/llxprt-code-core';
 import type { CommandContext } from './types.js';
 
 export interface HistoryServiceView {
-  getAll: () => unknown;
-  getChronologyTrace: () => readonly ChronologyTraceEntry[];
-  getRawHistory: () => readonly IContent[];
+  openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
+  getChronologyTrace: () => AsyncIterable<ChronologyTraceEntry>;
+  streamRawHistory: (signal?: AbortSignal) => AsyncIterable<IContent>;
 }
 
 export function getHistoryServiceFromAgent(

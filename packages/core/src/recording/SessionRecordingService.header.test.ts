@@ -84,13 +84,14 @@ describe('SessionRecordingService session_start header (issue #3732)', () => {
     overrides: {
       maxQueueBytes?: number;
       withResolver?: boolean;
+      chatsSubdir?: string;
     } = {},
   ): SessionRecordingService {
-    const { withResolver = true, maxQueueBytes } = overrides;
+    const { withResolver = true, maxQueueBytes, chatsSubdir = '' } = overrides;
     const service = new SessionRecordingService({
       sessionId: 'header-binding-session',
       projectHash: PROJECT_HASH,
-      chatsDir,
+      chatsDir: path.join(chatsDir, chatsSubdir),
       workspaceDirs: [chatsDir],
       provider: 'unknown',
       model: '',
@@ -260,41 +261,16 @@ describe('SessionRecordingService session_start header (issue #3732)', () => {
     });
   });
 
-  it('binds the header when the first content arrives as a prepared batch, and a rolled-back batch leaves the header rebindable', async () => {
+  it('binds the header to the provider/model live at commit when the first content is committed awaitably', async () => {
     const service = createService();
     const message = {
       speaker: 'human' as const,
-      blocks: [{ type: 'text' as const, text: 'batched' }],
+      blocks: [{ type: 'text' as const, text: 'committed' }],
     };
 
     live = { provider: 'codex', model: 'gpt-6-luna' };
-    const rolledBack = service.prepareContentBatch([message]);
-    rolledBack.publish();
-    rolledBack.rollback();
+    await service.commit('content', { content: message });
     live = { provider: 'anthropic', model: 'claude-opus-5-5' };
-    const batch = service.prepareContentBatch([message]);
-    batch.publish();
-    batch.finalize();
-    await service.flush();
-
-    const header = headerOf(await readRecords(service.getFilePath()!));
-    expect({ provider: header.provider, model: header.model }).toStrictEqual({
-      provider: 'anthropic',
-      model: 'claude-opus-5-5',
-    });
-  });
-
-  it('writes the header for the provider/model live at publication, not at prepare, when no provider_switch was recorded', async () => {
-    const service = createService();
-    const message = {
-      speaker: 'human' as const,
-      blocks: [{ type: 'text' as const, text: 'prepared early' }],
-    };
-
-    const batch = service.prepareContentBatch([message]);
-    live = { provider: 'codex', model: 'gpt-6-luna' };
-    batch.publish();
-    batch.finalize();
     await service.flush();
 
     const records = await readRecords(service.getFilePath()!);
@@ -334,21 +310,6 @@ describe('SessionRecordingService session_start header (issue #3732)', () => {
       return probe.getPendingByteCount();
     }
 
-    it('counts the rebuilt header against the limit and rejects the event cleanly when it does not fit', async () => {
-      const exactBytes = await boundHeaderBytes();
-      const limited = createService({ maxQueueBytes: exactBytes - 1 });
-      const headerOnlyBytes = limited.getPendingByteCount();
-
-      expect(() => recordFirstMessage(limited)).toThrow(
-        /queue byte limit exceeded/,
-      );
-
-      expect({
-        materialized: limited.getFilePath() !== null,
-        pendingBytes: limited.getPendingByteCount(),
-      }).toStrictEqual({ materialized: false, pendingBytes: headerOnlyBytes });
-    });
-
     it('accepts an event whose rebuilt header fits the limit exactly', async () => {
       const exactBytes = await boundHeaderBytes();
       const exact = createService({ maxQueueBytes: exactBytes });
@@ -358,44 +319,23 @@ describe('SessionRecordingService session_start header (issue #3732)', () => {
       expect(exact.getPendingByteCount()).toBe(exactBytes);
     });
 
-    it('rejects publication cleanly, leaving state unchanged, when a live change after prepare makes the rebuilt header exceed the limit', async () => {
-      const message = {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'hello' }],
-      };
-      const probe = createService();
-      recordFirstMessage(probe);
-      const unboundBytes = probe.getPendingByteCount();
-
-      const limited = createService({ maxQueueBytes: unboundBytes });
-      const headerOnlyBytes = limited.getPendingByteCount();
-      const batch = limited.prepareContentBatch([message]);
-      live = { provider: 'codex', model: 'gpt-6-luna' };
-
-      expect(() => batch.publish()).toThrow(
-        /Session recording queue byte limit exceeded/,
-      );
-
-      expect({
-        materialized: limited.getFilePath() !== null,
-        pendingBytes: limited.getPendingByteCount(),
-        pendingRecords: limited.getPendingRecordCount(),
-      }).toStrictEqual({
-        materialized: false,
-        pendingBytes: headerOnlyBytes,
-        pendingRecords: 1,
-      });
-    });
-
-    it('rejects a prepared batch whose rebuilt header does not fit the limit', async () => {
+    it('commits the first content with the rebuilt header at the exact limit and writes every byte it counted', async () => {
       const exactBytes = await boundHeaderBytes();
-      const limited = createService({ maxQueueBytes: exactBytes - 1 });
+      // A separate directory keeps the probe's pending write out of this file.
+      const exact = createService({
+        maxQueueBytes: exactBytes,
+        chatsSubdir: 'committed',
+      });
 
-      expect(() =>
-        limited.prepareContentBatch([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-        ]),
-      ).toThrow(/queue byte limit exceeded/);
+      await exact.commit('content', {
+        content: {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        },
+      });
+      const written = await fs.stat(exact.getFilePath()!);
+
+      expect(written.size).toBe(exactBytes);
     });
   });
 });

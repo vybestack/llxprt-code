@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
@@ -42,7 +43,7 @@ function scriptedTransport(
   const provider: IProvider = {
     name: 'telemetry-scripted',
     generateChatCompletion(
-      options: GenerateChatOptions | IContent[],
+      options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
       void options;
       const script = scripts[Math.min(calls, scripts.length - 1)];
@@ -103,9 +104,9 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
 
     const { error } = await collect(
       orchestrator.generateChatCompletion({
-        contents: [],
+        contents: replayableContents([]),
         metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
-      } as GenerateChatOptions),
+      }),
     );
 
     expect(error).toBeUndefined();
@@ -144,9 +145,9 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
 
     const { error } = await collect(
       orchestrator.generateChatCompletion({
-        contents: [],
+        contents: replayableContents([]),
         metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
-      } as GenerateChatOptions),
+      }),
     );
 
     expect(error).toBeDefined();
@@ -167,9 +168,9 @@ describe('attempt lifecycle taxonomy and commitment telemetry (issue #2532)', ()
 
     const { error } = await collect(
       orchestrator.generateChatCompletion({
-        contents: [],
+        contents: replayableContents([]),
         metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
-      } as GenerateChatOptions),
+      }),
     );
 
     expect(error).toBeDefined();

@@ -2,7 +2,7 @@ import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -43,10 +43,19 @@ describe('OpenAIResponsesProvider custom headers', () => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
     setGlobal('fetch', fetchMock);
-    fetchMock.mockResolvedValue({
+    fetchMock.mockImplementation(async () => ({
       ok: true,
-      body: undefined,
-    });
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"type":"response.completed","response":{"id":"resp_headers","output":[]}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      }),
+    }));
   });
 
   afterEach(() => {
@@ -67,7 +76,7 @@ describe('OpenAIResponsesProvider custom headers', () => {
     });
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      streamCallOptions({
         providerName: provider.name,
         contents: [
           {

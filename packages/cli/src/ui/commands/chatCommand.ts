@@ -17,20 +17,13 @@ import type {
 import { CommandKind } from './types.js';
 import {
   CheckpointService,
-  HistoryMutationService,
   SessionDiscovery,
   getProjectHash,
   type ContinueTarget,
-  type IContent,
   type SessionRecordingService,
-  type TextBlock,
-  type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
-import type {
-  ChatDetail,
-  HistoryItemChatList,
-  HistoryItemWithoutId,
-} from '../types.js';
+import { mutateChatHistory } from './chatHistoryMutation.js';
+import type { ChatDetail, HistoryItemChatList } from '../types.js';
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
@@ -451,9 +444,6 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    const chat = client.getChat();
-    const history = chat.getHistory();
-
     const recording = getRecording(context);
     if (!recording) {
       return {
@@ -463,35 +453,20 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    const mutator = new HistoryMutationService();
-    const result = await mutator.clear(history, recording);
-
-    if (!result.ok) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to clear history: ${result.error}`,
-      };
-    }
-    if (result.itemsRemoved === 0) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No conversation to clear.',
-      };
-    }
-
-    await chat.setHistory(result.remainingHistory);
-    context.ui.updateHistoryTokenCount(0);
-    context.ui.clear();
-    return undefined;
+    return mutateChatHistory(
+      client,
+      context.ui,
+      context.services.config,
+      context.signal,
+      recording,
+    );
   },
 };
 
 const restoreHistory = async (
   context: CommandContext,
   turns: number,
-): Promise<SlashCommandActionReturn> => {
+): Promise<SlashCommandActionReturn | void> => {
   const client = context.services.agent?.agentClient;
   if (client?.hasChatInitialized() !== true) {
     return {
@@ -501,7 +476,6 @@ const restoreHistory = async (
     };
   }
 
-  const currentHistory = client.getChat().getHistory();
   const turnsToRestore = Math.abs(turns);
 
   if (turnsToRestore < 1) {
@@ -521,57 +495,14 @@ const restoreHistory = async (
     };
   }
 
-  const mutator = new HistoryMutationService();
-  const result = await mutator.restore(
-    currentHistory,
-    turnsToRestore,
+  return mutateChatHistory(
+    client,
+    context.ui,
+    context.services.config,
+    context.signal,
     recording,
+    turnsToRestore,
   );
-
-  if (!result.ok) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: `Failed to restore history: ${result.error}`,
-    };
-  }
-
-  if (result.itemsRemoved === 0) {
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: 'Not enough history to restore the requested number of turns.',
-    };
-  }
-
-  // Convert to UI history items for display. The slash-command result handler
-  // applies the client history exactly once after durable persistence
-  // succeeds. Model thinking blocks ride along raw here; the load_history
-  // handler filters them with the same emoji rule as the text (#2888).
-  const uiHistory: HistoryItemWithoutId[] = result.remainingHistory.map(
-    (content: IContent) => {
-      const textBlocks = content.blocks.filter(
-        (b): b is TextBlock => b.type === 'text',
-      );
-      const text = textBlocks.map((b) => b.text).join('');
-      const thinkingBlocks = content.blocks.filter(
-        (b): b is ThinkingBlock => b.type === 'thinking',
-      );
-      return {
-        type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
-        text,
-        ...(content.speaker === 'ai' && thinkingBlocks.length > 0
-          ? { thinkingBlocks }
-          : {}),
-      };
-    },
-  );
-
-  return {
-    type: 'load_history',
-    history: uiHistory,
-    clientHistory: result.remainingHistory,
-  };
 };
 
 const restoreCommand: SlashCommand = {
@@ -580,7 +511,7 @@ const restoreCommand: SlashCommand = {
   description:
     'Restore conversation to N turns ago. Usage: /chat restore <number>',
   kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+  action: async (context, args): Promise<SlashCommandActionReturn | void> => {
     const turnsStr = args.trim();
     if (!turnsStr) {
       return {
@@ -685,10 +616,14 @@ const debugCommand: SlashCommand = {
 
     if (chatInitialized && client) {
       try {
-        const chat = client.getChat();
-        const history = chat.getHistory();
-        debugInfo.push(`History entries: ${history.length}`);
+        let count = 0;
+        for await (const _row of client.getHistory(undefined, context.signal)) {
+          count++;
+        }
+        context.signal.throwIfAborted();
+        debugInfo.push(`History entries: ${count}`);
       } catch {
+        context.signal.throwIfAborted();
         debugInfo.push('History entries: unavailable');
       }
     } else {

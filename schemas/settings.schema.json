@@ -616,6 +616,31 @@
           "default": 1048576,
           "type": "number"
         },
+        "scrollbackPagerEnabled": {
+          "title": "Scrollback Pager",
+          "description": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.",
+          "markdownDescription": "Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `false`",
+          "default": false,
+          "type": "boolean"
+        },
+        "scrollbackMarginViewports": {
+          "title": "Scrollback Margin Viewports",
+          "description": "Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.",
+          "markdownDescription": "Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `2`",
+          "default": 2,
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 1
+        },
+        "scrollbackByteFloorKiB": {
+          "title": "Scrollback Byte Floor (KiB)",
+          "description": "Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.",
+          "markdownDescription": "Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.\n\n- Category: `UI`\n- Requires restart: `yes`\n- Default: `256`",
+          "default": 256,
+          "type": "number",
+          "minimum": 0,
+          "multipleOf": 1
+        },
         "memoryImportFormat": {
           "title": "Memory Import Format",
           "description": "Format for importing memory files (tree or flat).",

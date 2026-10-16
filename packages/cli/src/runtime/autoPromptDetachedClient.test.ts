@@ -4,8 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createSessionClientEngineFixture } from '../../../agents/src/api/__tests__/helpers/session-client-engine-fixture.js';
 import { createDetachedAutoPromptClient } from './autoPromptDetachedClient.js';
+
+type Fixture = Awaited<ReturnType<typeof createSessionClientEngineFixture>>;
+
+async function rawHistory(fixture: Fixture): Promise<IContent[]> {
+  const history = fixture.owner.getAgentClient().getHistoryService();
+  if (history === null)
+    throw new Error('Expected the primary client to own a history service');
+  return Array.fromAsync(history.streamRawHistory());
+}
 
 describe('detached auto prompt client', () => {
   it('initializes an owner-tracked client without adding to primary history', async () => {
@@ -24,9 +34,7 @@ describe('detached auto prompt client', () => {
       );
       expect(client).not.toBe(fixture.owner.getAgentClient());
       expect(client.mediaStore).toBe(fixture.media.store);
-      expect(
-        fixture.owner.getAgentClient().getHistoryService()?.getRawHistory(),
-      ).toHaveLength(0);
+      expect(await rawHistory(fixture)).toHaveLength(0);
       await client.dispose();
     } finally {
       await fixture.cleanup();
@@ -46,9 +54,7 @@ describe('detached auto prompt client', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'still usable' }],
       });
-      expect(
-        fixture.owner.getAgentClient().getHistoryService()?.getRawHistory(),
-      ).toHaveLength(1);
+      expect(await rawHistory(fixture)).toHaveLength(1);
     } finally {
       await fixture.cleanup();
     }

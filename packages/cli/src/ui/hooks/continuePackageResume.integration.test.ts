@@ -60,6 +60,7 @@ import {
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { continueCommand } from '../commands/continueCommand.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import {
@@ -95,12 +96,14 @@ function createAgentClient(
   manager: RuntimeProviderManager,
 ): AgentClientContract {
   async function* emptyStream() {}
+  let deferredHistory: readonly IContent[] | undefined;
   const chat: AgentChatContract = {
     takeHistoryAdmissions: () => [],
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyStream(),
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => history.getAll(),
+    getHistory: (_curated, signal) => history.streamRawHistory(signal),
+    streamHistory: (signal) => history.streamRawHistory(signal),
     setHistory: (next) => history.replaceAll([...next]),
     clearHistory: () => history.clear(),
     getHistoryService: () => history,
@@ -133,7 +136,8 @@ function createAgentClient(
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    getHistory: async () => history.getAll(),
+    getHistory: (_curated, signal) => history.streamRawHistory(signal),
+    streamHistory: (signal) => history.streamRawHistory(signal),
     getHistoryService: () => history,
     storeHistoryServiceForReuse: () => {},
     prepareHistoryRebind: () => {
@@ -141,21 +145,43 @@ function createAgentClient(
         'Profile history rebinding is not used by session resume tests',
       );
     },
-    storeHistoryForLaterUse: async () => {},
+    storeHistoryForLaterUse: async (next) => {
+      const rows: IContent[] = [];
+      for await (const row of next) rows.push(row);
+      deferredHistory = rows;
+      await history.replaceAll(deferredHistory);
+    },
+    discardDeferredHistory: async () => {
+      deferredHistory = undefined;
+    },
     dispose: async () => {},
     setTools: async () => {},
     clearTools: () => {},
     updateSystemInstruction: async () => {},
     addHistory: async (content) => history.add(content),
-    resetChat: async () => history.clear(),
+    resetChat: async (preserveHistory) => {
+      const rows: IContent[] = [];
+      for await (const row of preserveHistory ?? []) rows.push(row);
+      await history.replaceAll(rows);
+      deferredHistory = undefined;
+    },
     resumeChat: (next) => history.replaceAll([...next]),
     setHistory: (next) => history.replaceAll([...next]),
+    setHistoryFromSource: async () => {
+      throw new Error('Streamed history requires a real agent client');
+    },
     restoreHistory: (next) => history.replaceAll([...next]),
     addDirectoryContext: async () => {},
     getContentGenerator: () => {
       throw new Error('Content generation is not used by session resume tests');
     },
-    startChat: async () => chat,
+    startChat: async () => {
+      if (deferredHistory !== undefined) {
+        await history.replaceAll([...deferredHistory]);
+        deferredHistory = undefined;
+      }
+      return chat;
+    },
     generateDirectMessage: async () => emptyModelOutput(),
     generateJson: async () => ({}),
     generateContent: async () => emptyModelOutput(),
@@ -325,6 +351,7 @@ function createRecordingCallbacks(
     getCurrentRecording: () => state.recording,
     getCurrentIntegration: () => state.integration,
     getCurrentLockHandle: () => state.lock,
+    getCurrentMetadata: () => state.metadata,
     setRecording: (recording, integration, lock, metadata) => {
       if (failActivation) throw new Error('resume activation rejected');
       state.recording = recording;
@@ -394,6 +421,14 @@ function historyText(history: readonly IContent[]): string {
     .join('\n');
 }
 
+async function readHistoryText(history: HistoryService): Promise<string> {
+  let text = '';
+  await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+    text = historyText(rows);
+  });
+  return text;
+}
+
 describe('continue package perform_resume integration', () => {
   afterEach(() => {
     fixtureFilesystem = undefined;
@@ -402,6 +437,10 @@ describe('continue package perform_resume integration', () => {
   it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
     const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'prior session history' }],
+    });
     const originalSessionId = randomUUID();
     const built = await createConfig(
       join(root, 'destination-workspace'),
@@ -452,7 +491,10 @@ describe('continue package perform_resume integration', () => {
       expect(sessions).toHaveLength(1);
       expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
       expect(state.recording?.getSessionId()).toBe(config.getSessionId());
-      expect(historyText(history.getAll())).toContain(
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain('prior session history');
+      });
+      expect(await readHistoryText(history)).toContain(
         'history restored through perform_resume',
       );
       expect(messages).toStrictEqual([]);
@@ -544,7 +586,12 @@ describe('continue package perform_resume integration', () => {
 
       expect(chatEntries).toStrictEqual([]);
       expect(config.getSessionId()).toBe(originalSessionId);
-      expect(historyText(history.getAll())).toContain(
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain(
+          'history restored through perform_resume',
+        );
+      });
+      expect(await readHistoryText(history)).toContain(
         'original active history',
       );
       expect(
@@ -610,10 +657,11 @@ describe('continue package perform_resume integration', () => {
           file.endsWith('.lock'),
         ),
       ).toStrictEqual([]);
+      const resumedHistoryService = new HistoryService();
       resumed = await createConfig(
         workspace,
         randomUUID(),
-        new HistoryService(),
+        resumedHistoryService,
         sessionId,
       );
       const resumedSetup = await setupSessionRecording(
@@ -622,7 +670,7 @@ describe('continue package perform_resume integration', () => {
         null,
         resumed.sessionClient,
       );
-      expect(historyText(resumedSetup.resumedHistory ?? [])).toContain(
+      expect(await readHistoryText(resumedHistoryService)).toContain(
         'legacy early resume',
       );
       expect(resumedSetup.recordingService.getSessionId()).toBe(sessionId);

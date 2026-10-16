@@ -39,6 +39,7 @@ import {
   delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { guardStream } from './guardedStream.js';
+import { acquireRequestRows } from './utils/requestRowsLease.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   claimProviderErrorObservation,
@@ -143,6 +144,16 @@ export interface RetryOrchestratorConfig {
 export class RetryOrchestrator implements IProvider {
   readonly name: string;
   readonly wrappedProvider: IProvider;
+
+  get contextDumpVersion(): IProvider['contextDumpVersion'] {
+    return this.wrappedProvider.contextDumpVersion;
+  }
+
+  get buildContextDumpBody(): IProvider['buildContextDumpBody'] {
+    return this.wrappedProvider.buildContextDumpBody?.bind(
+      this.wrappedProvider,
+    );
+  }
   private readonly logger = new DebugLogger('llxprt:retry:orchestrator');
   private readonly config: Required<RetryOrchestratorConfig>;
 
@@ -251,42 +262,49 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
+   * Attach the request signal when the caller supplied one (REQ-SP-001).
+   */
+  private toRetryOptions(
+    options: GenerateChatOptions,
+    signal?: AbortSignal,
+  ): GenerateChatOptions {
+    return signal === undefined ? options : withRequestSignal(options, signal);
+  }
+
+  /**
    * Main method with retry orchestration logic
    * Supports both overloaded signatures accepted by the provider contract
    */
   generateChatCompletion(
-    optionsOrContents: GenerateChatOptions | IContent[],
+    optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // Normalize arguments to GenerateChatOptions
-    let options: GenerateChatOptions;
+    return this.generateScopedCompletion(optionsOrContents, tools, signal);
+  }
 
-    if (Array.isArray(optionsOrContents)) {
-      const legacyOptions: GenerateChatOptions = {
-        contents: optionsOrContents,
-        tools,
-      };
-      options =
-        signal === undefined
-          ? legacyOptions
-          : withRequestSignal(legacyOptions, signal);
-    } else {
-      options =
-        signal === undefined
-          ? optionsOrContents
-          : withRequestSignal(optionsOrContents, signal);
+  private async *generateScopedCompletion(
+    input: GenerateChatOptions | AsyncIterable<IContent>,
+    tools?: ProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent> {
+    const request = acquireRequestRows(input, tools, signal);
+    try {
+      yield* this.generateChatCompletionWithRetry(
+        this.toRetryOptions(request.options, signal),
+      );
+    } finally {
+      await request.close();
     }
-
-    return this.generateChatCompletionWithRetry(options);
   }
 
   /**
    * Core retry orchestration logic
    */
   private async *generateChatCompletionWithRetry(
-    options: GenerateChatOptions,
+    optionsOrPromise: GenerateChatOptions | Promise<GenerateChatOptions>,
   ): AsyncIterableIterator<IContent> {
+    const options = await optionsOrPromise;
     if (options.metadata?.loadBalancerDelegate === true) {
       yield* this.wrappedProvider.generateChatCompletion(options);
       return;

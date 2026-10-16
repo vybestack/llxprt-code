@@ -35,6 +35,7 @@
  * for T4d.
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
@@ -239,7 +240,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       expect(countType(second, 'done')).toBe(1);
 
       // history includes messages from BOTH turns (continuity preserved)
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
     } finally {
       await cleanup();
@@ -276,7 +277,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       // context preserved: the follow-up turn sees the prior messages
       const second = await drain(agent.stream('turn two'));
       expect(countType(second, 'done')).toBe(1);
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
     } finally {
       await cleanup();
@@ -312,7 +313,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // PRESENT BEFORE: the seeded signature survives the
       // setHistory → getHistory round-trip WITHOUT stripping (the default).
-      const beforeRoundTrip = await agent.getHistory();
+      const beforeRoundTrip = await collectAgentHistory(agent);
       const beforeSerialized = JSON.stringify(beforeRoundTrip);
       expect(beforeSerialized.includes('sig-from-prior-provider')).toBe(true);
 
@@ -327,7 +328,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
       await agent.setHistory(beforeHistory, { stripThoughts: true });
 
       // ABSENT AFTER: the signature value is GONE from the normalized history.
-      const normalized = await agent.getHistory();
+      const normalized = await collectAgentHistory(agent);
       expect(normalized.length).toBeGreaterThanOrEqual(1);
       const afterSerialized = JSON.stringify(normalized);
       expect(afterSerialized.includes(signatureFromPriorProvider)).toBe(false);
@@ -400,7 +401,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // The conversation context must actually exist before the switch —
       // otherwise the preservation assertion below would be vacuously true.
-      const before = await agent.getHistory();
+      const before = await collectAgentHistory(agent);
       expect(before.length).toBeGreaterThanOrEqual(2);
       expect(JSON.stringify(before).includes('turn one')).toBe(true);
 
@@ -418,7 +419,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
       // Prior history is retained across the rebind: the follow-up history
       // includes messages from BOTH turns (length grew, prior text present).
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
       const historySerialized = JSON.stringify(history);
       expect(historySerialized.includes('turn one')).toBe(true);
@@ -504,7 +505,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
               const newHistoryService = captureHistoryServiceIdentity(agent);
 
               // history length is at least the seeded count (continuity)
-              const history = await agent.getHistory();
+              const history = await collectAgentHistory(agent);
 
               // every seeded text is present in the returned history (checked
               // via direct text-block extraction from the neutral IContent

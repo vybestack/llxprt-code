@@ -44,13 +44,14 @@ export async function runCleanupSteps(
  * may be `undefined`/`null` at runtime. Typed `unknown` so the guards are
  * genuinely necessary (no lint suppression directive needed).
  */
-export function disposeHistoryLike(history: unknown): void {
+export async function disposeHistoryLike(history: unknown): Promise<void> {
   if (history === undefined || history === null) {
     return;
   }
-  const disposable = (history as { dispose?: () => void }).dispose;
+  const disposable = (history as { dispose?: () => void | Promise<void> })
+    .dispose;
   if (typeof disposable === 'function') {
-    disposable.call(history);
+    await disposable.call(history);
     return;
   }
   const clearable = history as {

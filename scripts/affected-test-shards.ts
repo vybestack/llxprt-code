@@ -919,12 +919,18 @@ export interface MatrixRow {
 
 /**
  * Maps a logical shard name to the number of physical CI legs it expands into.
- * A shard absent from this map gets a single `1of1` leg. Only `cli` is
+ * A shard absent from this map gets a single `1of1` leg. `cli` is
  * partitioned (issue #3185): it is the longest shard (~12 min) and splits into
- * three balanced legs to target a sub-10-minute critical path.
+ * three balanced legs to target a sub-10-minute critical path. `agents` is
+ * partitioned too (issue #854): the suite outgrew the 45-minute job limit as
+ * one leg, and its runner consumes the same partition variable. `scripts`
+ * runs ~85 minutes of 8192-row BODY tests in total (issue #854); four legs
+ * balanced by recorded weight keep each near 22 minutes.
  */
 export const SHARD_PARTITION_COUNTS: Readonly<Record<string, number>> = {
   cli: 3,
+  agents: 3,
+  scripts: 4,
 };
 
 /**

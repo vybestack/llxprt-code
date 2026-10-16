@@ -55,9 +55,9 @@ export async function prepareProfileReplacement(
   try {
     signal.throwIfAborted();
     if (replacement) {
-      const history = await client.getHistory();
-      signal.throwIfAborted();
-      await client.startChat(history.length > 0 ? history : undefined);
+      // The replacement holds the carried history as a deferred journal;
+      // starting the chat adopts it without materializing an array.
+      await client.startChat();
     }
     signal.throwIfAborted();
     const loop = prepareLoop({

@@ -21,8 +21,10 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
@@ -96,7 +98,7 @@ class AmbientCredentialProvider extends OpenAIProvider {
 function buildSendSeamShapedOptions(providerName: string) {
   // The agent send seam supplies contents/settings/runtime but never a
   // resolved auth token.
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName,
     settings: new SettingsService(),
     contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],
@@ -116,7 +118,12 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
     );
 
     expect(projection.protocol).toBe('openai-chat');
-    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
+    const estimate = await estimatePromptEnvelope(
+      provider.name,
+      projection,
+      createRuntimeTokenizerFactory(),
+    );
+    expect(estimate.estimatedPromptTokens).toBeGreaterThan(0);
     expect(projection.transportToken).toBeDefined();
 
     // Projection needed a client (media-capable endpoint) and must have built
@@ -125,5 +132,6 @@ describe('OpenAI Chat projection credential parity (issue #2817)', () => {
     // here instead of silently passing a "token is defined" check.
     expect(provider.clientCredentials).toStrictEqual([PROMPT_CREDENTIAL]);
     expect(provider.clientCredentials).not.toContain(TRANSPORT_CREDENTIAL);
+    await projection.releaseIfUnsent?.();
   });
 });

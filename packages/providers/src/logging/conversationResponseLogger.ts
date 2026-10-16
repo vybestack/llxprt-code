@@ -11,6 +11,7 @@ import { writeConversationLog } from './telemetryEmitter.js';
 import { logConversationRequestEntry } from './conversationLogger.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 export interface ConversationLogContext {
   readonly providerName: string;
@@ -34,12 +35,15 @@ export async function writeResponseLog(
   success: boolean,
   error: unknown,
   ctx: ConversationLogContext,
-): Promise<void> {
+  policy?: RequestLoggingPolicy,
+): Promise<void | (() => void | Promise<void>)> {
   try {
     const redactedContent = ctx.redactor
       ? ctx.redactor.redactResponseContent(content, ctx.providerName)
       : content;
-    await writeConversationLog(
+    const policyArguments: [] | [RequestLoggingPolicy] =
+      policy === undefined ? [] : [policy];
+    return await writeConversationLog(
       config,
       redactedContent,
       promptId,
@@ -52,11 +56,14 @@ export async function writeResponseLog(
         turnNumber: ctx.turnNumber,
         defaultModelName: ctx.defaultModelName,
       },
+      ...policyArguments,
     );
   } catch (logError) {
+    if (policy?.strictDurableResponse === true) throw logError;
     ctx.debug.warn(
       () => `Failed to write conversation response log: ${logError}`,
     );
+    return undefined;
   }
 }
 

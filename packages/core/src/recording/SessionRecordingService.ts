@@ -21,7 +21,13 @@
  *
  * Session recording service that writes events to a JSONL file.
  * Uses synchronous enqueue with async background writes, deferred
- * file materialization, and graceful ENOSPC handling.
+ * file materialization, and fail-fast write handling.
+ *
+ * Since PLAN-20260917-ISSUE854.P05b2, append is the commit point:
+ * `commit`/`waitForCommit` await a per-record {seq, byteOffset} watermark,
+ * the queue bound applies backpressure instead of throwing, explicit
+ * `Infinity` opts out of the bound, and write failures reject every pending
+ * commit with the underlying error and poison the recorder.
  */
 
 import {
@@ -30,16 +36,12 @@ import {
 } from '../storage/recorded-media-transfer.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import {
-  mkdirSync,
-  existsSync,
-  writeFileSync,
-  unlinkSync,
-  watch,
-  watchFile,
-  unwatchFile,
-  type Stats,
-} from 'node:fs';
+  RecordingTicketQueue,
+  type PendingRecord,
+} from './recording-ticket-queue.js';
+import { ReplaceWriteGuard } from './replaceWriteGuard.js';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -49,19 +51,51 @@ import {
   type SessionStartPayload,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
+  type DensityMutationPayload,
+  type SyntheticInsertPayload,
+  type CompressionDetailPayload,
+  type CommitWatermark,
+  type RecordingWriterIo,
+  type RecordingWriterObservation,
 } from './types.js';
+import { recordLineVersion } from './recordingVersion.js';
+import {
+  SessionHeaderBinding,
+  toPendingRecord,
+  type HeaderRebind,
+} from './sessionHeaderBinding.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
+import {
+  assertCheckpointReplayable,
+  requireCheckpointName,
+} from './sessionCheckpointGuards.js';
+import {
+  defaultWriterIo,
+  isDiskSpaceError,
+  reportQueueHighWater,
+} from './recordingWriterDefaults.js';
+import { CommitAckRegistry } from './CommitAckRegistry.js';
+import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
+import {
+  stagePurgeRecordingRows,
+  preparePurgeRecordingRecord,
+  validatePurgeRecordingForLiveFold,
+  type PurgeRecordingOptions,
+} from './semanticPurgeRecordingRows.js';
+
+export type { SessionRecordingServiceConfig };
 
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /**
- * Queue depth at which the writer is clearly not keeping up with production.
- * Crossing it is reported once so the condition is diagnosable; records are
- * never dropped, because the session file is the durable transcript.
+ * Default hard bound for serialized records waiting for durable write
+ * (PLAN-20260917-ISSUE854.P05b2). Above it, awaitable committers
+ * (`commit`/`waitForCommit` callers) are held by backpressure instead of the
+ * legacy synchronous throw; explicit `Infinity` is the only opt-out.
  */
-const QUEUE_HIGH_WATER_RECORDS = 4096;
+export const DEFAULT_MAX_QUEUE_BYTES = 8 * 1024 * 1024;
+
 const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'content',
   'session_metadata',
@@ -76,87 +110,6 @@ type RecordingLifecycle =
   | { readonly status: 'disposed' };
 
 /**
- * A record that has already been serialised. Serialising at enqueue time keeps
- * byte accounting free and means each record — including large media payloads —
- * is stringified exactly once instead of once for accounting and again for the
- * write (issue #2852). Only the serialized form is retained: the live payload
- * object graph is not pinned until drain (issue #3432).
- */
-interface PendingRecord {
-  readonly json: string;
-  readonly bytes: number;
-}
-
-/** The session_start line as built at construction, before any rebinding. */
-interface PendingSessionStart {
-  readonly line: SessionRecordLine;
-  readonly payload: SessionStartPayload;
-  readonly record: PendingRecord;
-}
-
-/** A session_start header rebuilt for the provider/model at materialization. */
-interface HeaderRebind {
-  readonly record: PendingRecord;
-  /** Byte growth of the rebuilt header over the buffered one. */
-  readonly growth: number;
-}
-
-export interface PreparedContentBatch {
-  publish(): void;
-  rollback(): void;
-  finalize(): void;
-}
-
-function toPendingRecord(line: SessionRecordLine): PendingRecord {
-  const json = JSON.stringify(line);
-  return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
-}
-
-function toContentBatchRecords(
-  contents: readonly IContent[],
-  lastSeq: number,
-): PendingRecord[] {
-  return contents.map((content, index) =>
-    toPendingRecord({
-      v: recordingVersion({ content }),
-      seq: lastSeq + index + 1,
-      ts: new Date().toISOString(),
-      type: 'content',
-      payload: { content },
-    }),
-  );
-}
-
-function totalRecordBytes(records: readonly PendingRecord[]): number {
-  return records.reduce((total, record) => total + record.bytes, 0);
-}
-
-function containsMediaReference(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  if (seen.has(value)) return false;
-  seen.add(value);
-  if (
-    Reflect.get(value, 'type') === 'media' &&
-    Reflect.get(value, 'encoding') === 'reference'
-  ) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.some((entry) => containsMediaReference(entry, seen));
-  }
-  return Reflect.ownKeys(value).some((key) =>
-    containsMediaReference(Reflect.get(value, key), seen),
-  );
-}
-
-function recordingVersion(payload: unknown): number {
-  return containsMediaReference(payload) ? 2 : 1;
-}
-
-/**
  * Core service for recording session events to a JSONL file.
  *
  * @plan PLAN-20260211-SESSIONRECORDING.P05
@@ -165,13 +118,15 @@ function recordingVersion(payload: unknown): number {
  */
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
-  private queue: PendingRecord[] = [];
+  private readonly queue = new RecordingTicketQueue();
+  private readonly replaceWrites = new ReplaceWriteGuard();
   private queueBytes: number = 0;
   private highWaterReported: boolean = false;
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
   private lifecycle: RecordingLifecycle = { status: 'active' };
+  private closing = false;
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
@@ -179,15 +134,34 @@ export class SessionRecordingService {
   private readonly chatsDir: string;
   private readonly maxQueueBytes: number;
   private readonly mediaStore: LocalMediaStore | undefined;
-  private preContentBuffer: PendingRecord[] = [];
+  private readonly io: RecordingWriterIo;
+  private readonly observeWriter:
+    | ((state: RecordingWriterObservation) => void)
+    | undefined;
+  private writingBatch: readonly PendingRecord[] = [];
+  private writingLines: string | null = null;
+  private readonly preContentBuffer = new RecordingTicketQueue();
   private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
   private lockHandle: LockHandle | null = null;
-  private readonly pendingSessionStart: PendingSessionStart;
-  private readonly resolveProviderModel:
-    | (() => { provider: string; model: string })
-    | undefined;
+  private readonly sessionHeader: SessionHeaderBinding;
+
+  // Awaitable commit protocol state (PLAN-20260917-ISSUE854.P05b2).
+  /** Pending commit acks, seq-ordered watermarks, drain gate, base offset. */
+  private readonly acks = new CommitAckRegistry();
+  /** First write failure, preserved so poisoned commit()/waitForCommit() always reject with it. */
+  private poisonError: unknown = null;
+  private readonly watermarkListeners = new Set<
+    (watermark: CommitWatermark) => void
+  >();
+
+  onCommitWatermark(
+    listener: (watermark: CommitWatermark) => void,
+  ): () => void {
+    this.watermarkListeners.add(listener);
+    return () => this.watermarkListeners.delete(listener);
+  }
 
   static async createLocked(
     config: SessionRecordingServiceConfig,
@@ -219,10 +193,13 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 53-67
    */
   constructor(config: SessionRecordingServiceConfig) {
-    const maxQueueBytes = config.maxQueueBytes ?? Number.MAX_SAFE_INTEGER;
-    if (!Number.isSafeInteger(maxQueueBytes) || maxQueueBytes < 0) {
+    const maxQueueBytes = config.maxQueueBytes ?? DEFAULT_MAX_QUEUE_BYTES;
+    const validBound =
+      (Number.isSafeInteger(maxQueueBytes) && maxQueueBytes >= 0) ||
+      maxQueueBytes === Number.POSITIVE_INFINITY;
+    if (!validBound) {
       throw new Error(
-        'Session recording queue byte limit must be a non-negative safe integer',
+        'Session recording queue byte limit must be a non-negative safe integer or Infinity',
       );
     }
     this.sessionId = config.sessionId;
@@ -230,7 +207,8 @@ export class SessionRecordingService {
     this.chatsDir = config.chatsDir;
     this.maxQueueBytes = maxQueueBytes;
     this.mediaStore = config.mediaStore;
-    this.resolveProviderModel = config.resolveProviderModel;
+    this.io = config.io ?? defaultWriterIo;
+    this.observeWriter = config.observeWriter;
 
     const startPayload: SessionStartPayload = {
       sessionId: config.sessionId,
@@ -240,12 +218,30 @@ export class SessionRecordingService {
       provider: config.provider,
       model: config.model,
       startTime: new Date().toISOString(),
+      kind: config.kind ?? 'main',
+      ...(config.parentSessionId === undefined
+        ? {}
+        : { parentSessionId: config.parentSessionId }),
     };
     const line = this.bufferPreContent('session_start', startPayload);
-    this.pendingSessionStart = {
+    this.sessionHeader = new SessionHeaderBinding(
       line,
-      payload: startPayload,
-      record: this.preContentBuffer[0],
+      startPayload,
+      this.preContentBuffer.read(0),
+      config.resolveProviderModel,
+    );
+  }
+
+  private nextLine(
+    type: SessionEventType,
+    payload: unknown,
+  ): SessionRecordLine {
+    return {
+      v: recordLineVersion(type, payload),
+      seq: this.seq + 1,
+      ts: new Date().toISOString(),
+      type,
+      payload,
     };
   }
 
@@ -262,11 +258,11 @@ export class SessionRecordingService {
   ): SessionRecordLine {
     const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
-    this.reserveQueueBytes(record.bytes);
-    this.seq = line.seq;
     this.preContentBuffer.push(record);
+    this.seq = line.seq;
     this.preContentBytes += record.bytes;
     this.reportHighWater();
+    this.observe('pre-content');
     return line;
   }
 
@@ -279,86 +275,171 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 81-110
    */
   enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
-    if (this.lifecycle.status !== 'active') return null;
+    if (!this.isActive()) return null;
+    this.replaceWrites.admit(type, payload);
     if (!this.materialized && !MATERIALIZING_EVENT_TYPES.has(type)) {
       return this.bufferPreContent(type, payload);
     }
 
     const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
-    const rebind = this.materialized ? null : this.planHeaderRebind();
-    this.reserveQueueBytes(record.bytes + (rebind?.growth ?? 0));
-    if (!this.materialized) {
-      this.materialize();
-      this.queue.push(...this.withReboundHeader(rebind));
-      this.queueBytes += this.preContentBytes + (rebind?.growth ?? 0);
-      this.preContentBuffer = [];
-      this.preContentBytes = 0;
-      this.materialized = true;
-    }
-    this.seq = line.seq;
-    this.queue.push(record);
-    this.queueBytes += record.bytes;
+    this.stageRecord(record, this.pendingHeaderRebind());
     this.reportHighWater();
     this.scheduleDrain();
     return line;
   }
 
-  private nextLine(
+  // -------------------------------------------------------------------------
+  // Awaitable commit protocol (PLAN-20260917-ISSUE854.P05b2).
+  //
+  // Append is the commit point: once a record's bytes are on disk the record
+  // is committed and nothing rolls it back. `commit`/`waitForCommit` return a
+  // per-record ack carrying a monotone {seq, byteOffset} watermark; write
+  // failures reject every pending ack with the underlying error and poison
+  // the recorder for subsequent commits.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Append an event and await its durability. Resolves with the commit
+   * watermark once the record's bytes are on disk. Commits above the queue
+   * byte bound apply backpressure (the caller awaits drain room) instead of
+   * the legacy synchronous throw; a commit always materializes the session
+   * file so the durability it promises has a target.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b2
+   * @requirement G2
+   */
+  async commit(
     type: SessionEventType,
     payload: unknown,
-  ): SessionRecordLine {
-    return {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-      seq: this.seq + 1,
-      ts: new Date().toISOString(),
-      type,
-      payload,
-    };
+  ): Promise<CommitWatermark> {
+    this.requireCommittable();
+    for (;;) {
+      // Line serialization, room check, and admission form one synchronous
+      // segment: no interleaving enqueue can invalidate the room decision
+      // between check and push.
+      const line = this.nextLine(type, payload);
+      const record = toPendingRecord(line);
+      const rebind = this.pendingHeaderRebind();
+      if (
+        !this.admissionBlocked(record.bytes + (rebind?.growth ?? 0)) ||
+        this.queueCannotDrain()
+      ) {
+        return this.admitCommitRecord(line, record, rebind);
+      }
+      await this.acks.nextDrainCompletion();
+      // Waking above does not imply room: the recorder may have been poisoned
+      // or disposed while this commit was gated.
+      this.requireCommittable();
+    }
   }
 
   /**
-   * The session_start header for the provider/model in effect at
-   * materialization, or null when it matches the buffered header. The
-   * recording's own state is untouched: the caller reserves the byte growth
-   * (so the queue limit rejects an overflow before anything changes) and then
-   * applies the plan with {@link withReboundHeader}. `sessionId`, `seq`,
-   * `ts` and `startTime` stay those of the original header.
+   * Await durability of an already-enqueued line, in seq order relative to
+   * other pending commits. Rejects when the write fails or the recorder is
+   * poisoned or disposed — never resolves null.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b2
+   * @requirement G2
    */
-  private planHeaderRebind(): HeaderRebind | null {
-    if (this.resolveProviderModel === undefined) return null;
-    const { provider, model } = this.resolveProviderModel();
-    const pending = this.pendingSessionStart;
-    if (
-      provider === pending.payload.provider &&
-      model === pending.payload.model
-    ) {
-      return null;
-    }
-    const record = toPendingRecord({
-      ...pending.line,
-      payload: { ...pending.payload, provider, model },
-    });
-    return { record, growth: record.bytes - pending.record.bytes };
+  waitForCommit(line: SessionRecordLine): Promise<CommitWatermark> {
+    return this.waitForCommitSequence(line.seq);
   }
 
-  private planHeaderGrowth(): number {
-    return this.planHeaderRebind()?.growth ?? 0;
-  }
-
-  /** The pre-content records with the header swapped for the rebind, if any. */
-  private withReboundHeader(rebind: HeaderRebind | null): PendingRecord[] {
-    if (rebind === null) return this.preContentBuffer;
-    return [rebind.record, ...this.preContentBuffer.slice(1)];
-  }
-
-  private reserveQueueBytes(bytes: number): void {
-    const pendingBytes = this.queueBytes + this.preContentBytes;
-    if (bytes > this.maxQueueBytes - pendingBytes) {
-      throw new Error(
-        `Session recording queue byte limit exceeded: ${pendingBytes} + ${bytes} > ${this.maxQueueBytes}`,
+  waitForCommitSequence(seq: number): Promise<CommitWatermark> {
+    const pending = this.acks.find(seq);
+    if (pending !== undefined) return pending.chained;
+    if (this.lifecycle.status === 'disposed') {
+      return Promise.reject(
+        new Error('waitForCommit: session recording is disposed'),
       );
     }
+    if (this.poisonError !== null) {
+      this.takeRecordingFailure();
+      return Promise.reject(this.poisonError);
+    }
+    const last = this.acks.lastWatermark;
+    if (last !== null && seq <= this.acks.lastAckedSeq) {
+      // Already acked. Durability is monotone, so the latest watermark is a
+      // valid proof for this seq (exact when it was the last record).
+      return Promise.resolve(last);
+    }
+    if (seq > this.seq)
+      return Promise.reject(
+        new Error(
+          `waitForCommit: sequence ${seq} was never enqueued in this recording`,
+        ),
+      );
+    return this.acks.register(seq).chained;
+  }
+
+  /** Throws for disposed or poisoned recorders; commit-family rejects loudly instead of returning null. */
+  requireCommittable(): void {
+    if (this.closing || this.lifecycle.status === 'disposed') {
+      throw new Error('commit: session recording is disposed');
+    }
+    if (this.poisonError !== null) {
+      this.takeRecordingFailure();
+      throw this.poisonError;
+    }
+  }
+
+  /** True when admitting `bytes` more would push the pending queue over the bound. `Infinity` never blocks. */
+  private admissionBlocked(bytes: number): boolean {
+    if (this.maxQueueBytes === Number.POSITIVE_INFINITY) return false;
+    return this.queueBytes + this.preContentBytes + bytes > this.maxQueueBytes;
+  }
+
+  /** True when no drain can start on its own, so waiting for drain room would deadlock. */
+  private queueCannotDrain(): boolean {
+    return !this.draining && this.queue.length === 0;
+  }
+
+  private admitCommitRecord(
+    line: SessionRecordLine,
+    record: PendingRecord,
+    rebind: HeaderRebind | null,
+  ): Promise<CommitWatermark> {
+    this.replaceWrites.admit(line.type, line.payload);
+    this.stageRecord(record, rebind);
+    this.reportHighWater();
+    const ack = this.acks.register(line.seq);
+    this.scheduleDrain();
+    this.observe('admit');
+    return ack.chained;
+  }
+
+  /** The rebuilt header to write at materialization, or null once written. */
+  private pendingHeaderRebind(): HeaderRebind | null {
+    return this.materialized ? null : this.sessionHeader.plan();
+  }
+
+  private stageRecord(
+    record: PendingRecord,
+    rebind: HeaderRebind | null,
+  ): void {
+    if (!this.materialized) {
+      this.materialize();
+      try {
+        let first = true;
+        for (const pending of this.preContentBuffer) {
+          this.queue.push(first && rebind !== null ? rebind.record : pending);
+          first = false;
+        }
+        this.queue.push(record);
+      } catch (error) {
+        this.queue.clear();
+        throw error;
+      }
+      this.queueBytes += this.preContentBytes + (rebind?.growth ?? 0);
+      this.preContentBuffer.clear();
+      this.preContentBytes = 0;
+      this.materialized = true;
+    } else {
+      this.queue.push(record);
+    }
+    this.seq = record.seq;
+    this.queueBytes += record.bytes;
   }
 
   private takeRecordingFailure(): unknown | undefined {
@@ -370,9 +451,26 @@ export class SessionRecordingService {
 
   private transitionToFailure(error: unknown): void {
     const failures: unknown[] = [error];
-    this.queue = [];
+    const hadPendingCommits = this.acks.pendingCount > 0;
+    // Reject every pending commit/waitForCommit with the underlying error
+    // before the teardown below discards their records: the ack registry is
+    // independent of the legacy queue clearing
+    // (PLAN-20260917-ISSUE854.P05b2).
+    this.acks.failAll(error);
+    // The commit rejections carry the failure to their callers, so consume
+    // the one-shot flush() report with them when it is still armed:
+    // `takeRecordingFailure` is a no-op while the lifecycle is still
+    // 'active', and leaving the report armed made dispose()'s flush rethrow
+    // an already-delivered failure (PLAN-20260917-ISSUE854.P05b2).
+    if (
+      hadPendingCommits &&
+      (this.lifecycle.status === 'active' || this.lifecycle.status === 'failed')
+    ) {
+      this.lifecycle = { status: 'failure-reported' };
+    }
+    this.queue.clear();
     this.queueBytes = 0;
-    this.preContentBuffer = [];
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
     try {
       this.chatsDirWatcher?.close();
@@ -380,38 +478,38 @@ export class SessionRecordingService {
       failures.push(cleanupError);
     }
     this.chatsDirWatcher = null;
-    this.lifecycle = {
-      status: 'failed',
-      error:
-        failures.length === 1
-          ? error
-          : new AggregateError(
-              failures,
-              'Session recording write and watcher cleanup failed',
-            ),
-    };
+    const canonicalError =
+      failures.length === 1
+        ? error
+        : new AggregateError(
+            failures,
+            'Session recording write and watcher cleanup failed',
+          );
+    if (this.poisonError === null) {
+      this.poisonError = canonicalError;
+    }
+    // Wake commits gated on drain room so they observe the poison instead of
+    // hanging.
+    this.acks.notifyDrainCompletion();
+    // Preserve a failure-report already consumed above (pending commits
+    // carried it); otherwise arm the one-shot flush() report.
+    this.lifecycle =
+      this.lifecycle.status === 'failure-reported'
+        ? { status: 'failure-reported' }
+        : { status: 'failed', error: canonicalError };
   }
 
-  /**
-   * Reports, once, that the writer has fallen far behind. Deliberately does not
-   * drop records: the JSONL file is the durable transcript, and the queue is
-   * bounded in practice by disk throughput, which far exceeds the rate at which
-   * a model can produce content.
-   */
   private reportHighWater(): void {
-    if (
-      this.highWaterReported ||
-      this.queue.length + this.preContentBuffer.length <
-        QUEUE_HIGH_WATER_RECORDS
-    ) {
-      return;
-    }
-    this.highWaterReported = true;
-    debugLogger.error(
-      `[SessionRecording] pending queue exceeded ${QUEUE_HIGH_WATER_RECORDS} records ` +
-        `(${this.queueBytes + this.preContentBytes} bytes); the session file writer is behind. ` +
-        `No records are dropped.`,
+    if (this.highWaterReported) return;
+    this.highWaterReported = reportQueueHighWater(
+      this.queue.length + this.preContentBuffer.length,
+      this.queueBytes + this.preContentBytes,
     );
+  }
+
+  retireIdleTicketStorage(): void {
+    this.queue.retireIdleStorage();
+    this.preContentBuffer.retireIdleStorage();
   }
 
   /** Number of records waiting to be written. Zero once the queue has drained. */
@@ -422,6 +520,21 @@ export class SessionRecordingService {
   /** Bytes waiting to be written. Zero once the queue has drained. */
   getPendingByteCount(): number {
     return this.queueBytes + this.preContentBytes;
+  }
+
+  private observe(phase: RecordingWriterObservation['phase']): void {
+    this.observeWriter?.({
+      phase,
+      preContent: [],
+      queue: [],
+      batch: this.writingBatch,
+      lines: this.writingLines,
+      preContentBytes: this.preContentBytes,
+      queueBytes: this.queueBytes,
+      pendingAcks: this.acks.pendingCount,
+      lastAckedSeq: this.acks.lastAckedSeq,
+      lastByteOffset: this.acks.baseOffset,
+    });
   }
 
   /**
@@ -457,7 +570,7 @@ export class SessionRecordingService {
     this.drainPromise = this.drain().catch((error: unknown) => {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') {
-        const diag = this.diagnoseMissingPath();
+        const diag = diagnoseMissingPath(this.chatsDir);
         debugLogger.error(
           `[SessionRecording] ENOENT writing session file — recording stopped.
 ` +
@@ -494,20 +607,40 @@ export class SessionRecordingService {
   private async drain(): Promise<void> {
     try {
       while (this.queue.length > 0) {
-        const batch = [...this.queue];
-        const lines = batch.map((record) => record.json).join('\n') + '\n';
-        const shouldContinue = await this.writeBatchToFile(lines);
-        if (!shouldContinue) {
-          return;
+        await this.acks.ensureBaseOffset(this.filePath!);
+        const record = this.queue.read(0);
+        const batch = [record];
+        const batchBytes = record.bytes;
+        const startOffset = this.acks.baseOffset;
+        this.writingBatch = batch;
+        if (batch[0].staged !== undefined) {
+          await this.writeStagedRecord(batch[0]);
+        } else {
+          const lines = batch.map((record) => record.json).join('\n') + '\n';
+          this.writingLines = lines;
+          this.observe('append');
+          await this.writeBatchToFile(lines);
         }
-        this.queue = this.queue.slice(batch.length);
-        this.queueBytes -= batch.reduce(
-          (total, record) => total + record.bytes,
-          0,
-        );
+        if (this.lifecycle.status !== 'active') return;
+        // The append resolved: this batch's bytes are durable. Ack each
+        // record at its exclusive end offset before admitting the next
+        // batch (read-your-write, PLAN-20260917-ISSUE854.P05b2).
+        this.acks.fireBatch(batch, startOffset);
+        const watermark = this.acks.lastWatermark;
+        if (watermark !== null)
+          this.watermarkListeners.forEach((listener) => listener(watermark));
+        this.queue.removeFirst();
+        this.queueBytes -= batchBytes;
+        this.writingBatch = [];
+        this.writingLines = null;
+        this.observe('acked');
       }
     } finally {
+      this.writingBatch = [];
+      this.writingLines = null;
       this.draining = false;
+      this.acks.notifyDrainCompletion();
+      this.observe('drained');
     }
   }
 
@@ -515,6 +648,25 @@ export class SessionRecordingService {
    * Write a batch of events to the file.
    * Returns true if draining should continue, false if it should stop.
    */
+  private async writeStagedRecord(record: PendingRecord): Promise<void> {
+    const staged = record.staged;
+    if (staged === undefined || record.suffix === undefined)
+      throw new Error('Missing staged semantic purge recording');
+    const append = async (text: string): Promise<void> => {
+      this.writingLines = text;
+      this.observe('append');
+      await this.io.appendFile(this.filePath!, text, 'utf8');
+      this.writingLines = null;
+    };
+    try {
+      await append(record.json);
+      for await (const chunk of staged.stream()) await append(chunk);
+      await append(record.suffix);
+    } finally {
+      staged.close();
+    }
+  }
+
   private async writeBatchToFile(lines: string): Promise<boolean> {
     try {
       const filePath = this.filePath!;
@@ -523,13 +675,13 @@ export class SessionRecordingService {
         .split('\n')
         .map((line): unknown => JSON.parse(line));
       if (!containsRecordedMedia(records)) {
-        await fs.appendFile(filePath, lines, 'utf-8');
+        await this.io.appendFile(filePath, lines, 'utf8');
         return true;
       }
       const before = await fs.stat(filePath);
       await publishRecordedMedia(this.mediaStore, records, async () => {
         try {
-          await fs.appendFile(filePath, lines, 'utf-8');
+          await this.io.appendFile(filePath, lines, 'utf8');
         } catch (error) {
           try {
             await fs.truncate(filePath, before.size);
@@ -544,20 +696,12 @@ export class SessionRecordingService {
       });
       return true;
     } catch (error: unknown) {
-      if (this.isDiskSpaceError(error)) {
+      if (isDiskSpaceError(error)) {
         this.transitionToFailure(error);
         return false;
       }
       throw error;
     }
-  }
-
-  /**
-   * Check if an error indicates disk space or permission issues.
-   */
-  private isDiskSpaceError(error: unknown): boolean {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === 'ENOSPC' || code === 'EACCES';
   }
 
   /**
@@ -574,17 +718,8 @@ export class SessionRecordingService {
     if (this.lifecycle.status !== 'active') return;
     if (this.queue.length === 0 && !this.draining) return;
 
-    if (this.drainPromise) {
-      await this.drainPromise;
-      const drainFailure = this.takeRecordingFailure();
-      if (drainFailure !== undefined) throw drainFailure;
-    }
-
-    if (this.queue.length > 0) {
-      this.draining = true;
-      this.drainPromise = this.drain().catch((error: unknown) => {
-        this.transitionToFailure(error);
-      });
+    while (this.queue.length > 0 || this.draining) {
+      this.scheduleDrain();
       await this.drainPromise;
       const drainFailure = this.takeRecordingFailure();
       if (drainFailure !== undefined) throw drainFailure;
@@ -599,7 +734,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md line 162-164
    */
   isActive(): boolean {
-    return this.lifecycle.status === 'active';
+    return this.lifecycle.status === 'active' && !this.closing;
   }
 
   /**
@@ -611,6 +746,10 @@ export class SessionRecordingService {
    */
   getFilePath(): string | null {
     return this.filePath;
+  }
+
+  getLastEnqueuedSequence(): number {
+    return this.seq;
   }
 
   /**
@@ -647,6 +786,9 @@ export class SessionRecordingService {
   /**
    * Initialize for resuming an existing session file.
    * Sets the file path and sequence counter so new events append correctly.
+   * A journal that ends inside a replace transaction (`unfinishedReplaceTxId`)
+   * is closed with a `replace_abort` ahead of every other record, so the file
+   * grammar and the writer guard agree before a new replacement begins.
    *
    * @plan PLAN-20260211-SESSIONRECORDING.P05
    * @requirement REQ-REC-008
@@ -656,14 +798,21 @@ export class SessionRecordingService {
     filePath: string,
     lastSeq: number,
     title?: string | null,
+    unfinishedReplaceTxId?: string,
   ): void {
     this.filePath = filePath;
     this.seq = lastSeq;
     this.materialized = true;
-    this.preContentBuffer = [];
+    this.replaceWrites.resume(unfinishedReplaceTxId ?? null);
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
+    // Watermark offsets are absolute for the (possibly different) journal
+    // file; re-seed from the file size at the next drained batch.
+    this.acks.resetBaseOffset();
     this.sessionTitle = title;
     this.startChatsDirWatcher();
+    if (unfinishedReplaceTxId !== undefined)
+      this.enqueue('replace_abort', { txId: unfinishedReplaceTxId });
   }
 
   /**
@@ -674,6 +823,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
+    this.closing = true;
     const failures: unknown[] = [];
     if (this.lifecycle.status !== 'disposed') {
       try {
@@ -682,10 +832,19 @@ export class SessionRecordingService {
         failures.push(error);
       }
     }
+    // Any commit still pending here can never become durable; reject it
+    // rather than leave the caller hanging
+    // (PLAN-20260917-ISSUE854.P05b2).
+    this.acks.failAll(
+      failures[0] ??
+        new Error('Session recording disposed before commit was durable'),
+    );
+    this.acks.notifyDrainCompletion();
     this.lifecycle = { status: 'disposed' };
-    this.queue = [];
+    this.watermarkListeners.clear();
+    this.queue.clear();
     this.queueBytes = 0;
-    this.preContentBuffer = [];
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
     if (this.chatsDirWatcher) {
       try {
@@ -712,85 +871,21 @@ export class SessionRecordingService {
   }
 
   /**
-   * Diagnose which directory level is missing when ENOENT occurs.
-   */
-  private diagnoseMissingPath(): {
-    chatsDirExists: boolean;
-    parentDir: string;
-    parentDirExists: boolean;
-    grandparentDir: string;
-    grandparentDirExists: boolean;
-  } {
-    const parentDir = path.dirname(this.chatsDir);
-    const grandparentDir = path.dirname(parentDir);
-    return {
-      chatsDirExists: existsSync(this.chatsDir),
-      parentDir,
-      parentDirExists: existsSync(parentDir),
-      grandparentDir,
-      grandparentDirExists: existsSync(grandparentDir),
-    };
-  }
-
-  /**
    * Watch the chatsDir for rename/deletion events.
    * When the directory is removed mid-session, this fires and logs the
    * exact timestamp so it can be correlated with the shell command log.
    */
   private startChatsDirWatcher(): void {
     if (this.chatsDirWatcher) return;
-    try {
-      if (process.platform === 'win32' || process.platform === 'darwin') {
-        const listener = (currentStats: Stats): void => {
-          if (currentStats.nlink === 0) {
-            this.handleChatsDirChange(this.chatsDir);
-          }
-        };
-        watchFile(
-          this.chatsDir,
-          { persistent: false, interval: 100 },
-          listener,
-        );
-        this.chatsDirWatcher = {
-          close: () => unwatchFile(this.chatsDir, listener),
-        };
-        return;
-      }
-
-      const watcher = watch(
-        this.chatsDir,
-        { persistent: false },
-        (eventType) => {
-          if (eventType === 'rename') {
-            this.handleChatsDirChange(this.chatsDir);
-          }
-        },
-      );
-      this.chatsDirWatcher = watcher;
-      watcher.on('error', () => {
-        watcher.close();
-        if (this.chatsDirWatcher === watcher) {
-          this.chatsDirWatcher = null;
-        }
-      });
-    } catch {
-      // If watch fails (e.g. directory already gone), silently skip
-    }
-  }
-
-  private handleChatsDirChange(watchDir: string): void {
-    if (existsSync(watchDir)) {
-      return;
-    }
-    debugLogger.error(
-      `[SessionRecording] chatsDir was removed at ${new Date().toISOString()}!\n` +
-        `  path: ${this.chatsDir}\n` +
-        `  sessionId: ${this.sessionId}\n` +
-        `  filePath: ${this.filePath}\n` +
-        `  Check the preceding shell command for the culprit.`,
+    this.chatsDirWatcher = watchChatsDir(
+      this.chatsDir,
+      this.sessionId,
+      () => this.filePath,
+      () => {
+        // Null the field so a later rollback-restore can re-arm the watch.
+        this.chatsDirWatcher = null;
+      },
     );
-    this.chatsDirWatcher?.close();
-    this.chatsDirWatcher = null;
   }
 
   // -------------------------------------------------------------------------
@@ -809,99 +904,51 @@ export class SessionRecordingService {
     this.enqueue('content', { content });
   }
 
-  prepareContentBatch(contents: readonly IContent[]): PreparedContentBatch {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot record content batch: recording is not active');
-    }
-    if (this.draining) {
-      throw new Error(
-        'Cannot record content batch while recording is draining',
-      );
-    }
-
-    const expectedSeq = this.seq;
-    const records = toContentBatchRecords(contents, expectedSeq);
-    const batchBytes = totalRecordBytes(records);
-    this.reserveQueueBytes(
-      batchBytes + (this.materialized ? 0 : this.planHeaderGrowth()),
-    );
-
-    const queueBefore = this.queue;
-    const queueBytesBefore = this.queueBytes;
-    const preContentBefore = this.preContentBuffer;
-    const preContentBytesBefore = this.preContentBytes;
-    const materializedBefore = this.materialized;
-    const filePathBefore = this.filePath;
-    const watcherBefore = this.chatsDirWatcher;
-    let published = false;
-    let finalized = false;
-
-    return {
-      publish: () => {
-        if (published) throw new Error('Content batch was already published');
-        if (this.seq !== expectedSeq) {
-          throw new Error('Recording changed after content batch preflight');
-        }
-        // The live provider/model may have changed since prepare, so the
-        // header is rebuilt and its growth reserved before any state mutates.
-        const rebind = this.materialized ? null : this.planHeaderRebind();
-        this.reserveQueueBytes(batchBytes + (rebind?.growth ?? 0));
-        published = true;
-        if (!this.materialized) {
-          this.materialize();
-          this.queue = [...this.withReboundHeader(rebind), ...records];
-          this.queueBytes =
-            this.preContentBytes + (rebind?.growth ?? 0) + batchBytes;
-          this.preContentBuffer = [];
-          this.preContentBytes = 0;
-          this.materialized = true;
-        } else {
-          this.queue = [...this.queue, ...records];
-          this.queueBytes += batchBytes;
-        }
-        this.seq = expectedSeq + records.length;
-        this.reportHighWater();
-      },
-      rollback: () => {
-        if (!published || finalized) return;
-        this.rollbackMaterialization(materializedBefore, watcherBefore);
-        this.queue = queueBefore;
-        this.queueBytes = queueBytesBefore;
-        this.preContentBuffer = preContentBefore;
-        this.preContentBytes = preContentBytesBefore;
-        this.materialized = materializedBefore;
-        this.filePath = filePathBefore;
-        this.chatsDirWatcher = watcherBefore;
-        this.seq = expectedSeq;
-        published = false;
-      },
-      finalize: () => {
-        if (!published) {
-          throw new Error('Cannot finalize an unpublished content batch');
-        }
-        finalized = true;
-        this.scheduleDrain();
-      },
-    };
-  }
-
-  private rollbackMaterialization(
-    wasMaterialized: boolean,
-    watcherBefore: { close(): void } | null,
-  ): void {
-    if (!wasMaterialized && this.filePath !== null) {
-      unlinkSync(this.filePath);
-    }
-    if (this.chatsDirWatcher !== watcherBefore) {
-      this.chatsDirWatcher?.close();
-    }
-  }
-
   recordSemanticMediaPurge(
     history: readonly IContent[],
     frontier: { readonly contentIndex: number; readonly blockIndex: number },
   ): void {
     this.enqueue('semantic_media_purge', { history, frontier });
+  }
+
+  async recordSemanticMediaPurgeRows(
+    history: AsyncIterable<IContent>,
+    frontier: { readonly contentIndex: number; readonly blockIndex: number },
+    options: PurgeRecordingOptions = {},
+  ): Promise<void> {
+    this.requireCommittable();
+    const staged = await stagePurgeRecordingRows(history, options.signal);
+    try {
+      for (;;) {
+        this.requireCommittable();
+        options.signal?.throwIfAborted();
+        const { line, record } = preparePurgeRecordingRecord(
+          this.seq + 1,
+          staged,
+          frontier,
+        );
+        const hasRoom =
+          !this.admissionBlocked(record.bytes) || this.queueCannotDrain();
+        if (!hasRoom) await this.acks.nextDrainCompletion();
+        if (hasRoom) await validatePurgeRecordingForLiveFold(record, options);
+        this.requireCommittable();
+        options.signal?.throwIfAborted();
+        if (
+          hasRoom &&
+          record.seq === this.seq + 1 &&
+          (!this.admissionBlocked(record.bytes) || this.queueCannotDrain())
+        ) {
+          await this.admitCommitRecord(
+            line,
+            record,
+            this.pendingHeaderRebind(),
+          );
+          return;
+        }
+      }
+    } finally {
+      staged.close();
+    }
   }
 
   /**
@@ -932,6 +979,52 @@ export class SessionRecordingService {
       'rewind',
       cutSeq === undefined ? { itemsRemoved } : { itemsRemoved, cutSeq },
     );
+  }
+
+  /**
+   * Record a density-mutation event — chronology entries removed outright by
+   * density optimization plus each in-place replacement, so the previously
+   * unjournalled mutation replays exactly (#854).
+   *
+   * Synchronous and non-blocking like `recordContent`; returns the appended
+   * line, or null when recording is inactive/disposed.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordDensityChange(
+    payload: DensityMutationPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('density_mutation', payload);
+  }
+
+  /**
+   * Record a synthetic-insert event — a history entry that did not originate
+   * from a model turn (e.g. a synthetic tool response injected by history
+   * validation), with its own chronology marker and the anchor marker it
+   * follows (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordSyntheticInsert(
+    payload: SyntheticInsertPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('synthetic_insert', payload);
+  }
+
+  /**
+   * Record a compression-detail event — the destroyed span and item count
+   * behind a `compressed` event, as a membership-pinning record. Scalars
+   * only: content suppression is unchanged from `recordCompressed` (#854).
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b1
+   * @requirement G2
+   */
+  recordCompressionDetail(
+    payload: CompressionDetailPayload,
+  ): SessionRecordLine | null {
+    return this.enqueue('compression_detail', payload);
   }
 
   /**
@@ -1012,10 +1105,7 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      throw new Error('Cannot create checkpoint: name must not be empty');
-    }
+    const trimmed = requireCheckpointName('create checkpoint', name);
 
     await this.flushAndRequireActive('create checkpoint');
     const filePath = this.filePath;
@@ -1024,22 +1114,11 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const replay = await replaySession(filePath, this.projectHash, {
-      mediaStore: this.mediaStore,
-    });
-    if (!replay.ok) {
-      throw new Error(`Cannot create checkpoint: ${replay.error}`);
-    }
-    if (replay.sequenceCorrupt) {
-      throw new Error(
-        'Cannot create checkpoint: recording has non-monotonic sequences',
-      );
-    }
-    if (replay.history.length === 0) {
-      throw new Error(
-        'Cannot create checkpoint: conversation has no content yet',
-      );
-    }
+    await assertCheckpointReplayable(
+      filePath,
+      this.projectHash,
+      this.mediaStore,
+    );
 
     const checkpointId = crypto.randomUUID();
     const event = this.enqueue('checkpoint_created', {
@@ -1059,14 +1138,7 @@ export class SessionRecordingService {
    * The lifecycle event is flushed before the promise resolves.
    */
   async deleteCheckpoint(checkpointId: string): Promise<void> {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot delete checkpoint: recording is not active');
-    }
-    if (!this.materialized) {
-      throw new Error(
-        'Cannot delete checkpoint: recording is not materialized',
-      );
-    }
+    this.requireMaterializedRecording('delete checkpoint');
     this.enqueue('checkpoint_deleted', { checkpointId });
     await this.flushAndRequireActive('delete checkpoint');
   }
@@ -1076,18 +1148,8 @@ export class SessionRecordingService {
    * Only display metadata changes; the watermark and ID are unaffected.
    */
   async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot rename checkpoint: recording is not active');
-    }
-    if (!this.materialized) {
-      throw new Error(
-        'Cannot rename checkpoint: recording is not materialized',
-      );
-    }
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      throw new Error('Cannot rename checkpoint: name must not be empty');
-    }
+    this.requireMaterializedRecording('rename checkpoint');
+    const trimmed = requireCheckpointName('rename checkpoint', name);
     this.enqueue('checkpoint_renamed', { checkpointId, name: trimmed });
     await this.flushAndRequireActive('rename checkpoint');
   }
@@ -1106,6 +1168,15 @@ export class SessionRecordingService {
     }
     this.enqueue('session_named', { name: resolved });
     await this.flushAndRequireActive('set session name');
+  }
+
+  private requireMaterializedRecording(operation: string): void {
+    if (this.lifecycle.status !== 'active') {
+      throw new Error(`Cannot ${operation}: recording is not active`);
+    }
+    if (!this.materialized) {
+      throw new Error(`Cannot ${operation}: recording is not materialized`);
+    }
   }
 
   private async flushAndRequireActive(operation: string): Promise<void> {

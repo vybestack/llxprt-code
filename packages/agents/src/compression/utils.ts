@@ -46,6 +46,7 @@ import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -253,7 +254,7 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  context: CompressionContext,
+  context: Omit<CompressionContext, 'history'>,
   resolvedRuntime?: ProviderRequestCollaborators,
   resolvedConfig?: Config,
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
@@ -273,7 +274,7 @@ export async function runVerificationPass(
       providerRuntime.config?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
-        contents: verificationRequest,
+        requestRows: inMemoryRequestSelection(verificationRequest),
         providerRuntime,
         resolvedConfig,
         fallbackConfig: context.config,

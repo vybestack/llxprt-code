@@ -338,6 +338,13 @@ describe('Mounted CLI child execution ownership', () => {
         ),
       ).toBe(true),
     );
+    await waitFor(() =>
+      expect(
+        b.hook?.result.current[0].some(
+          (call) => call.request.callId === 'same-child-call',
+        ),
+      ).toBe(true),
+    );
     expect(
       b.hook?.result.current[0].find(
         (call) => call.request.callId === 'same-child-call',

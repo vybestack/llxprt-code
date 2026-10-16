@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -25,12 +26,15 @@ import {
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import {
+  collectContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -171,13 +175,13 @@ function buildDeps(
 }
 
 /**
- * User-defined type guard bridging the IProvider contract (GenerateChatOptions)
- * to the executor's NormalizedGenerateChatOptions, mirroring how BaseProvider
- * normalizes before dispatching. Avoids an unsafe assertion.
+ * The fake provider receives normalized context but streaming contents from
+ * the orchestrator. Its executor boundary materializes those contents.
  */
 function isNormalizedOptions(
   options: GenerateChatOptions,
-): options is NormalizedGenerateChatOptions {
+): options is GenerateChatOptions &
+  Omit<NormalizedGenerateChatOptions, 'contents'> {
   return (
     typeof options === 'object' &&
     'settings' in options &&
@@ -195,8 +199,11 @@ function createExecutorProvider(deps: ResponsesTestDeps): IProvider {
       if (!isNormalizedOptions(options)) {
         throw new Error('test provider requires normalized options');
       }
-      yield* executeOpenAIResponsesRequest(
-        captureResponsesTestRequest(options, deps),
+      yield* executeResponsesTestRequest(
+        captureResponsesTestRequest(
+          { ...options, contents: await collectContents(options.contents) },
+          deps,
+        ),
         deps,
       );
     },
@@ -222,16 +229,19 @@ async function drainWithPossibleRejection(
   return { messages, error };
 }
 
-describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
-  let fetchMock: FetchMock | undefined;
+let fetchMock: FetchMock | undefined;
 
-  beforeEach(() => {
-    fetchMock = undefined;
-  });
+function resetFetchMock(): void {
+  fetchMock = undefined;
+}
 
-  afterEach(() => {
-    fetchMock?.restore();
-  });
+function restoreFetchMock(): void {
+  fetchMock?.restore();
+}
+
+describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC1/AC2', () => {
+  beforeEach(resetFetchMock);
+  afterEach(restoreFetchMock);
 
   it('AC1: rethrows without replay when the body errors after output', async () => {
     fetchMock = installFetch(
@@ -241,7 +251,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -262,7 +272,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const messages: IContent[] = [];
-    for await (const chunk of executeOpenAIResponsesRequest(
+    for await (const chunk of executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
@@ -293,12 +303,20 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     });
 
     const { error } = await drainWithPossibleRejection(
-      orchestrator.generateChatCompletion(options),
+      orchestrator.generateChatCompletion({
+        ...options,
+        contents: replayableContents(options.contents),
+      }),
     );
 
     expect(error).toBeDefined();
     expect(fetchMock.calls.count).toBe(N);
   });
+});
+
+describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC3', () => {
+  beforeEach(resetFetchMock);
+  afterEach(restoreFetchMock);
 
   it('AC3: EOF without a terminal event rejects with StreamInterruptionError', async () => {
     fetchMock = installFetch(
@@ -312,7 +330,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -336,7 +354,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     );
     const options = buildNormalizedOptions();
     const messages: IContent[] = [];
-    for await (const chunk of executeOpenAIResponsesRequest(
+    for await (const chunk of executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
@@ -350,50 +368,55 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       true,
     );
   });
+});
 
-  // Regression for issue #3049: a nonterminal lifecycle event following an
-  // accepted terminal event in the SAME reader chunk must not mask the
-  // terminal. Previously the parser only inspected the last dispatched type
-  // after the chunk, so a trailing nonterminal event caused EOF to throw a
-  // spurious StreamInterruptionError — behavior that depended on network
-  // chunking.
+// Regression for issue #3049: a nonterminal lifecycle event following an
+// accepted terminal event in the SAME reader chunk must not mask the
+// terminal. Previously the parser only inspected the last dispatched type
+// after the chunk, so a trailing nonterminal event caused EOF to throw a
+// spurious StreamInterruptionError — behavior that depended on network
+// chunking.
 
-  // SSE frames are terminated by a blank line. Build the terminator from a
-  // char code so the fixtures carry no inline escape sequences.
-  const FRAME_END = String.fromCharCode(10) + String.fromCharCode(10);
-  const sse = (json: string): string => 'data: ' + json + FRAME_END;
+// SSE frames are terminated by a blank line. Build the terminator from a
+// char code so the fixtures carry no inline escape sequences.
+const FRAME_END = String.fromCharCode(10) + String.fromCharCode(10);
+const sse = (json: string): string => 'data: ' + json + FRAME_END;
 
-  // A valid nonterminal lifecycle event the real parser accepts (default
-  // case, no handler). Used as the masking event that follows the terminal.
-  const CREATED_EVENT = sse(
-    '{"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}',
-  );
+// A valid nonterminal lifecycle event the real parser accepts (default
+// case, no handler). Used as the masking event that follows the terminal.
+const CREATED_EVENT = sse(
+  '{"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}',
+);
 
-  const ACCEPTED_TERMINAL_FIXTURES: ReadonlyArray<{
-    readonly label: string;
-    readonly event: string;
-    readonly finishReason: string;
-  }> = [
-    {
-      label: 'response.completed',
-      event: TERMINAL_EVENT,
-      finishReason: 'stop',
-    },
-    {
-      label: 'response.done',
-      event: sse(
-        '{"type":"response.done","response":{"id":"resp_1","status":"completed"}}',
-      ),
-      finishReason: 'stop',
-    },
-    {
-      label: 'response.incomplete',
-      event: sse(
-        '{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}',
-      ),
-      finishReason: 'max_tokens',
-    },
-  ];
+const ACCEPTED_TERMINAL_FIXTURES: ReadonlyArray<{
+  readonly label: string;
+  readonly event: string;
+  readonly finishReason: string;
+}> = [
+  {
+    label: 'response.completed',
+    event: TERMINAL_EVENT,
+    finishReason: 'stop',
+  },
+  {
+    label: 'response.done',
+    event: sse(
+      '{"type":"response.done","response":{"id":"resp_1","status":"completed"}}',
+    ),
+    finishReason: 'stop',
+  },
+  {
+    label: 'response.incomplete',
+    event: sse(
+      '{"type":"response.incomplete","response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}',
+    ),
+    finishReason: 'max_tokens',
+  },
+];
+
+describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 terminal', () => {
+  beforeEach(resetFetchMock);
+  afterEach(restoreFetchMock);
 
   for (const fixture of ACCEPTED_TERMINAL_FIXTURES) {
     it(`AC4: completes normally when ${fixture.label} is followed by a nonterminal event in one chunk`, async () => {
@@ -406,7 +429,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       );
       const options = buildNormalizedOptions();
       const { messages, error } = await drainWithPossibleRejection(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(options, buildDeps()),
           buildDeps(),
         ),
@@ -418,6 +441,11 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       ).toBe(true);
     });
   }
+});
+
+describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries', () => {
+  beforeEach(resetFetchMock);
+  afterEach(restoreFetchMock);
 
   it('AC4: terminal-then-nonterminal is chunk-boundary independent (response.completed)', async () => {
     const fixture = ACCEPTED_TERMINAL_FIXTURES[0];
@@ -430,7 +458,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
         }),
     );
     const single = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
         buildDeps(),
       ),
@@ -443,7 +471,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
       async () => new Response(encodeSse([fixture.event, CREATED_EVENT])),
     );
     const split = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
         buildDeps(),
       ),
@@ -478,7 +506,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049', () => {
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),

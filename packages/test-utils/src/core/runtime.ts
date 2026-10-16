@@ -178,6 +178,7 @@ function requireVi(): BunTestVi {
 
 interface ChatSessionConfigShape {
   getSessionId: () => string;
+  getEnableHooks: () => boolean;
   getTelemetryLogPromptsEnabled: () => boolean;
   getUsageStatisticsEnabled: () => boolean;
   getDebugMode: () => boolean;
@@ -279,6 +280,7 @@ export function createChatSessionRuntime(
   };
   const baseConfig = Object.assign(createRuntimeConfigStub(settingsService), {
     getSessionId: () => 'test-session-id',
+    getEnableHooks: () => false,
     getTelemetryLogPromptsEnabled: () => true,
     getUsageStatisticsEnabled: () => true,
     getDebugMode: () => false,

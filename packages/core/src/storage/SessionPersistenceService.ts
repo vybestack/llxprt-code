@@ -7,7 +7,6 @@
 import {
   enforcePendingPersistenceBytes,
   preflightPersistenceRequest,
-  backupCorruptedPersistence,
   pendingPersistenceAccounting,
   savedPersistenceSummary,
   collectPersistenceCleanupFailure,
@@ -18,6 +17,13 @@ import {
   stageRecordedMedia,
 } from './recorded-media-transfer.js';
 import * as fs from 'node:fs';
+import { saveJournalSnapshot } from './journal-persistence-snapshot.js';
+import { saveSessionRowSnapshot } from './session-row-snapshot.js';
+import {
+  reservePersistenceMedia,
+  releasePersistenceMedia,
+  writePersistenceRow,
+} from './session-row-media.js';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { type IContent } from '../services/history/IContent.js';
@@ -27,91 +33,24 @@ import {
   MediaAdmissionService,
   type MediaAdmissionContext,
 } from './media-admission-service.js';
+import { verifyHistoryMedia } from './media-reference-lifecycle.js';
 import {
-  collectMediaReferences,
-  verifyHistoryMedia,
-} from './media-reference-lifecycle.js';
-import {
+  backupCorruptedSession,
   containsMediaDiagnostic,
   errorCode,
 } from './session-persistence-helpers.js';
-import {
-  type ToolResultDisplay,
-  type ToolCallConfirmationDetails,
-} from '@vybestack/llxprt-code-tools';
+import type {
+  PersistedSession,
+  PersistedUIHistoryItem,
+} from './session-persistence-types.js';
+
+export type {
+  PersistedSession,
+  PersistedToolCall,
+  PersistedUIHistoryItem,
+} from './session-persistence-types.js';
 
 const logger = new DebugLogger('llxprt:session:persistence');
-
-/**
- * Persisted tool call display information.
- * Matches CLI's IndividualToolCallDisplay interface for type compatibility.
- */
-export interface PersistedToolCall {
-  /** Unique identifier for the tool call */
-  callId: string;
-  /** Tool name */
-  name: string;
-  /** Human-readable description of what the tool is doing */
-  description: string;
-  /** Tool execution status (string to accept CLI's ToolCallStatus enum) */
-  status: string;
-  /** Result display for completed tools */
-  resultDisplay: ToolResultDisplay | undefined;
-  /** Confirmation details for tools requiring user approval */
-  confirmationDetails: ToolCallConfirmationDetails | undefined;
-  /** Whether to render output as markdown */
-  renderOutputAsMarkdown?: boolean;
-  /** Whether this tool is currently focused in UI */
-  isFocused?: boolean;
-}
-
-/**
- * Minimal interface for persisted UI history items.
- * CLI's HistoryItem should satisfy this interface.
- * Uses permissive types since CLI has multiple history types with different shapes.
- */
-export interface PersistedUIHistoryItem {
-  /** Unique identifier for the history item */
-  id: number;
-  /** Type discriminator for the history item */
-  type: string;
-  /** Optional text content (for user/gemini/info/warning/error messages) */
-  text?: string;
-  /** Optional model identifier (for gemini responses) */
-  model?: string;
-  /** Optional agent ID (for subagent contexts) */
-  agentId?: string;
-  /** Optional tools array - shape varies by type (tool_group vs tools_list) */
-  tools?: unknown[];
-}
-
-/**
- * Persisted session format for --continue functionality
- */
-export interface PersistedSession {
-  /** Schema version for future migrations */
-  version: number;
-  /** Monotonic save generation. Absent in legacy persisted sessions. */
-  generation?: number;
-  /** Unique session identifier */
-  sessionId: string;
-  /** Hash of project root for validation */
-  projectHash: string;
-  /** When session was created */
-  createdAt: string;
-  /** Last update timestamp */
-  updatedAt: string;
-  /** Full conversation history (core format) */
-  history: IContent[];
-  /** UI history items for display restoration (preserves exactly what user sees) */
-  uiHistory?: PersistedUIHistoryItem[];
-  /** Optional metadata */
-  metadata?: {
-    provider?: string;
-    model?: string;
-    tokenCount?: number;
-  };
-}
 
 /**
  * Session file prefix for persistence files
@@ -242,7 +181,7 @@ export class SessionPersistenceService {
   ): Promise<void> {
     const failures: unknown[] = [];
     await collectPersistenceCleanupFailure(failures, () =>
-      this.releaseMedia(reservedContentIds, ownerId),
+      releasePersistenceMedia(reservedContentIds, ownerId, this.mediaStore),
     );
     if (admissionHistory !== undefined) {
       await collectPersistenceCleanupFailure(failures, () =>
@@ -255,59 +194,6 @@ export class SessionPersistenceService {
         failures,
         'Session media ownership release failed',
       );
-    }
-  }
-
-  private async reserveMedia(
-    history: readonly IContent[],
-    ownerId: string,
-  ): Promise<readonly string[]> {
-    if (this.mediaStore === undefined) return [];
-    const references = collectMediaReferences(history);
-    const unique = new Map(
-      references.map((reference) => [reference.contentId, reference]),
-    );
-    const reserved: string[] = [];
-    try {
-      for (const reference of unique.values()) {
-        await this.mediaStore.reserve(reference, ownerId);
-        reserved.push(reference.contentId);
-      }
-      return reserved;
-    } catch (error) {
-      const releaseFailures: unknown[] = [];
-      for (const contentId of reserved) {
-        try {
-          await this.mediaStore.release(contentId, ownerId);
-        } catch (releaseError) {
-          releaseFailures.push(releaseError);
-        }
-      }
-      if (releaseFailures.length > 0) {
-        throw new AggregateError(
-          [error, ...releaseFailures],
-          'Media reservation and rollback failed',
-        );
-      }
-      throw error;
-    }
-  }
-
-  private async releaseMedia(
-    contentIds: readonly string[],
-    ownerId: string,
-  ): Promise<void> {
-    if (this.mediaStore === undefined) return;
-    const failures: unknown[] = [];
-    for (const contentId of contentIds) {
-      try {
-        await this.mediaStore.release(contentId, ownerId);
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(failures, 'Failed to release persisted media');
     }
   }
 
@@ -369,6 +255,72 @@ export class SessionPersistenceService {
       });
       this.startNextSave();
     });
+  }
+
+  async saveRows(
+    rows: AsyncIterable<IContent>,
+    observePendingRow?: () => Promise<void>,
+  ): Promise<void> {
+    const generation = ++this.nextGeneration;
+    await this.acquireTransaction();
+    try {
+      const session = this.buildSession(
+        generation,
+        [],
+        undefined,
+        undefined,
+        new Date().toISOString(),
+      );
+      await saveSessionRowSnapshot(
+        this.sessionFilePath,
+        session,
+        rows,
+        (row, write) =>
+          writePersistenceRow(
+            row,
+            this.sessionId,
+            generation,
+            write,
+            this.mediaStore,
+          ),
+        async (encoded, write) => {
+          const bytes = Buffer.byteLength(encoded, 'utf8');
+          enforcePendingPersistenceBytes(
+            bytes,
+            this.maxQueueBytes,
+            this.pendingBytes,
+          );
+          this.pendingBytes += bytes;
+          try {
+            await write();
+          } finally {
+            this.pendingBytes -= bytes;
+          }
+        },
+        observePendingRow,
+      );
+    } finally {
+      this.finishPreparedSave(undefined);
+    }
+  }
+
+  async saveJournal(journal: string): Promise<void> {
+    await this.acquireTransaction();
+    try {
+      await saveJournalSnapshot(
+        journal,
+        this.sessionFilePath,
+        this.buildSession(
+          ++this.nextGeneration,
+          [],
+          undefined,
+          undefined,
+          new Date().toISOString(),
+        ),
+      );
+    } finally {
+      this.finishPreparedSave(undefined);
+    }
   }
 
   private startNextSave(): void {
@@ -547,9 +499,10 @@ export class SessionPersistenceService {
       );
       state.accountedBytes = serializedBytes;
       this.pendingBytes += accountingDelta;
-      state.reservedContentIds = await this.reserveMedia(
+      state.reservedContentIds = await reservePersistenceMedia(
         state.admittedHistory,
         state.ownerId,
+        this.mediaStore,
       );
       state.previousContents = await this.readPersistenceTarget();
       await fs.promises.mkdir(this.chatsDir, { recursive: true });
@@ -707,7 +660,11 @@ export class SessionPersistenceService {
       );
       pending.accountedBytes = serializedBytes;
       this.pendingBytes += accountingDelta;
-      reservedContentIds = await this.reserveMedia(admittedHistory, ownerId);
+      reservedContentIds = await reservePersistenceMedia(
+        admittedHistory,
+        ownerId,
+        this.mediaStore,
+      );
       await fs.promises.mkdir(this.chatsDir, { recursive: true });
       await fs.promises.writeFile(tempPath, serialized, 'utf-8');
       await publishRecordedFile(
@@ -723,23 +680,20 @@ export class SessionPersistenceService {
     } catch (error: unknown) {
       logger.error('Failed to save session:', error);
       failures.push(error);
-      try {
-        await fs.promises.rm(tempPath, { force: true });
-      } catch (cleanupError: unknown) {
-        failures.push(cleanupError);
-      }
+      await collectPersistenceCleanupFailure(failures, () =>
+        fs.promises.rm(tempPath, { force: true }),
+      );
     }
     if (admittedHistory !== undefined) {
-      try {
-        await this.releaseSaveOwnership(
-          admittedHistory,
+      const history = admittedHistory;
+      await collectPersistenceCleanupFailure(failures, () =>
+        this.releaseSaveOwnership(
+          history,
           admissionContext,
           reservedContentIds,
           ownerId,
-        );
-      } catch (releaseError: unknown) {
-        failures.push(releaseError);
-      }
+        ),
+      );
     }
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
@@ -889,7 +843,11 @@ export class SessionPersistenceService {
 
       // If file is corrupted, back it up and return null
       if (error instanceof SyntaxError) {
-        await this.backupCorruptedSession();
+        await backupCorruptedSession(
+          this.chatsDir,
+          PERSISTED_SESSION_PREFIX,
+          logger,
+        );
       }
 
       return null;
@@ -919,12 +877,5 @@ export class SessionPersistenceService {
   private getCreatedAt(): string {
     this.createdAt ??= new Date().toISOString();
     return this.createdAt;
-  }
-
-  /**
-   * Back up corrupted session file
-   */
-  private backupCorruptedSession(): Promise<void> {
-    return backupCorruptedPersistence(this.chatsDir);
   }
 }

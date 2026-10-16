@@ -23,6 +23,7 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 describe('ChatSession hook execution control', () => {
@@ -59,11 +60,21 @@ describe('ChatSession hook execution control', () => {
         .fn<NonNullable<HookExecutionOwner['beforeToolSelection']>>()
         .mockResolvedValue(undefined),
     };
+    const snapshotEvents = withSnapshotModelEvents({
+      fireBeforeModelEvent: (request) =>
+        mockHookSystem.fireBeforeModelEvent(request),
+      fireAfterModelEvent: (request, response) =>
+        mockHookSystem.fireAfterModelEvent(request, response),
+    });
     hookOwner = {
       sessionId: () => 'explicit-chat-hook',
       transcriptPath: () => undefined,
       beforeModel: mockHookSystem.fireBeforeModelEvent,
       afterModel: mockHookSystem.fireAfterModelEvent,
+      beforeModelSnapshot: (request, signal) =>
+        snapshotEvents.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        snapshotEvents.fireAfterModelSnapshotEvent(request, response, signal),
       beforeToolSelection: mockHookSystem.fireBeforeToolSelectionEvent,
     };
 

@@ -24,7 +24,7 @@ import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 
 void vi.mock('openai', () => ({
@@ -103,7 +103,7 @@ function buildCallOptions(
   providerName: string,
   settings: SettingsService,
 ): GenerateChatOptions {
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName,
     settings,
     contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] }],

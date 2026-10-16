@@ -317,6 +317,53 @@ describe('ConversationFileWriter — Zero-Arg Backward Compat', () => {
 
 // ─── One-Arg Backward Compat (Scenario 6) ───────────────────────────────────
 
+describe('ConversationFileWriter — acknowledged scalar writes', () => {
+  it('rejects the strict write on EISDIR and continues with a later write', async () => {
+    const tmpDir = await createTempDir('cfw-ack-');
+    const logFile = path.join(
+      tmpDir,
+      `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
+    );
+    await fsp.mkdir(logFile);
+    const writer = new ConversationFileWriter(tmpDir);
+    try {
+      await expect(
+        writer.writeEntryAcknowledged({ type: 'strict-failure' }),
+      ).rejects.toMatchObject({ code: 'EISDIR' });
+      await fsp.rmdir(logFile);
+      await writer.writeEntryAcknowledged({ type: 'recovered' });
+      const lines = await readJsonlLines(tmpDir);
+      expect(lines.map((line) => line.type)).toStrictEqual(['recovered']);
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps eager writes fail-open and ordered beside an individual strict failure', async () => {
+    const tmpDir = await createTempDir('cfw-ack-');
+    const logFile = path.join(
+      tmpDir,
+      `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
+    );
+    await fsp.mkdir(logFile);
+    const writer = new ConversationFileWriter(tmpDir);
+    try {
+      await expect(
+        writer.writeEntry({ type: 'eager-failure' }),
+      ).resolves.toBeUndefined();
+      const strict = writer.writeEntryAcknowledged({ type: 'strict-failure' });
+      await expect(strict).rejects.toMatchObject({ code: 'EISDIR' });
+      await fsp.rmdir(logFile);
+      const eager = writer.writeEntry({ type: 'eager-success' });
+      await eager;
+      const lines = await readJsonlLines(tmpDir);
+      expect(lines.map((line) => line.type)).toStrictEqual(['eager-success']);
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('ConversationFileWriter — One-Arg Backward Compat', () => {
   let tmpDir: string;
 

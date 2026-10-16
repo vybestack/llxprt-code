@@ -54,7 +54,14 @@ export type SessionEventType =
   | 'checkpoint_deleted'
   | 'session_forked'
   | 'session_named'
-  | 'semantic_media_purge';
+  | 'semantic_media_purge'
+  | 'density_mutation'
+  | 'chronology_bind'
+  | 'synthetic_insert'
+  | 'compression_detail'
+  | 'replace_begin'
+  | 'replace_commit'
+  | 'replace_abort';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -82,6 +89,13 @@ export interface SessionRecordLine {
 // ---------------------------------------------------------------------------
 
 /**
+ * Lineage recorded on the `session_start` event (#854 P05c): `main` for
+ * ordinary sessions, `subagent` for child journals. Legacy files predate the
+ * field and replay as `main`.
+ */
+export type SessionStartKind = 'main' | 'subagent';
+
+/**
  * Payload for the `session_start` event — always seq=1, first line in file.
  * NOTE: No schema version field here; `v` lives only in the envelope.
  */
@@ -95,13 +109,37 @@ export interface SessionStartPayload {
   model: string;
   /** ISO-8601 timestamp of when the session started. */
   startTime: string;
+  /** Lineage marker; absent on legacy files, which replay as `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id, present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
 }
 
 /**
- * Payload for the `content` event — wraps a single IContent entry.
+ * Payload for the `content` event — wraps a single IContent entry. `tx` marks
+ * a row written inside an open replace transaction (see
+ * {@link ReplaceTransactionFold}).
  */
 export interface ContentPayload {
   content: IContent;
+  tx?: string;
+}
+
+/** Opens a replace transaction; its rows follow as `content` events tagged with `txId`. */
+export interface ReplaceBeginPayload {
+  txId: string;
+}
+
+/** Commits a replace transaction: the `rowCount` tagged rows replace all prior history. */
+export interface ReplaceCommitPayload {
+  txId: string;
+  rowCount: number;
+}
+
+/** Abandons a replace transaction after `rowCount` rows were written; prior history stays. */
+export interface ReplaceAbortPayload {
+  txId: string;
+  rowCount: number;
 }
 
 /**
@@ -137,6 +175,60 @@ export interface RewindPayload {
    * @issue #2934
    */
   cutSeq?: number;
+}
+
+/**
+ * One replacement record inside a `density_mutation` payload. The replacement
+ * inherits the replaced entry's chronology marker, so the journal identifies
+ * the mutation site by that marker alone.
+ */
+export interface DensityReplacementRecord {
+  /** Chronology `seq` of the destroyed entry whose marker the replacement inherits. */
+  readonly replacedSeq: number;
+  readonly replacement: IContent;
+}
+
+/**
+ * Payload for the `density_mutation` event — a durable journal operation for
+ * density optimization: entries removed outright (by chronology `seq`) plus
+ * each in-place replacement. Resolvers drop the removed rows and yield the
+ * replacement content from the original entry's envelope.
+ *
+ * @issue #854
+ */
+export interface DensityMutationPayload {
+  readonly removedSeqs: readonly number[];
+  readonly replacements: readonly DensityReplacementRecord[];
+}
+
+/**
+ * Payload for the `synthetic_insert` event — a history entry that did not
+ * originate from a model turn (e.g. a synthetic tool response from history
+ * validation), carrying its own chronology marker and the marker of the
+ * entry it anchors after. Resolvers attribute the row to this event's own
+ * envelope and place it in fold order after the anchor.
+ *
+ * @issue #854
+ */
+export interface SyntheticInsertPayload {
+  readonly content: IContent;
+  readonly chronologySeq: number;
+  readonly afterSeq: number;
+}
+
+/**
+ * Payload for the `compression_detail` event — a membership-pinning record
+ * for the destroyed span behind a `compressed` event. Scalars only by
+ * design: the summary content stays in the `compressed` payload, so content
+ * suppression is unchanged. Resolvers fold it as a no-op for rows; a
+ * malformed record is skipped and counted.
+ *
+ * @issue #854
+ */
+export interface CompressionDetailPayload {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly itemsCompressed: number;
 }
 
 /**
@@ -255,6 +347,62 @@ export interface SessionInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Awaitable commit protocol
+// ---------------------------------------------------------------------------
+
+/**
+ * Ack returned by {@link SessionRecordingService.commit} and
+ * {@link SessionRecordingService.waitForCommit} once a record's bytes are
+ * durably appended to the session JSONL file.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface CommitWatermark {
+  /** Envelope seq of the committed record. */
+  readonly seq: number;
+  /** Exclusive end byte offset of that record's bytes in the journal at commit time. */
+  readonly byteOffset: number;
+}
+
+/**
+ * Injectable write seam over the recorder's appendFile callsite, mirroring
+ * the resolver's `ResolverIo` seam. Defaults to `fs/promises.appendFile`.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface RecordingWriterIo {
+  appendFile(filePath: string, data: string, encoding: 'utf8'): Promise<void>;
+}
+
+/** Synchronous, opt-in observation of references already held by the writer. */
+export interface RecordingWriterObservation {
+  readonly phase: 'pre-content' | 'admit' | 'append' | 'acked' | 'drained';
+  readonly preContent: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly queue: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly batch: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly lines: string | null;
+  readonly preContentBytes: number;
+  readonly queueBytes: number;
+  readonly pendingAcks: number;
+  readonly lastAckedSeq: number;
+  readonly lastByteOffset: number;
+}
+
+// ---------------------------------------------------------------------------
 // Service configuration
 // ---------------------------------------------------------------------------
 
@@ -270,6 +418,10 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
+  /** Lineage stamped into the `session_start` payload. Defaults to `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id for child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
   /**
    * Reads the provider/model in effect right now. Called once, when the
    * recording materializes, so the written `session_start` header carries the
@@ -277,10 +429,17 @@ export interface SessionRecordingServiceConfig {
    * (the provider can change between startup and the first message).
    */
   resolveProviderModel?: () => { provider: string; model: string };
-  /** Hard bound for serialized records waiting for durable write. */
+  /**
+   * Hard bound for serialized records waiting for durable write. Backpressure
+   * (awaiting drain room) applies above it; `Infinity` is the only opt-out.
+   */
   maxQueueBytes?: number;
   /** Project-owned store used to verify referenced media during lifecycle replay. */
   mediaStore?: LocalMediaStore;
+  /** Write seam for journal appends. Defaults to `fs/promises.appendFile`. */
+  readonly io?: RecordingWriterIo;
+  /** Optional synchronous queue observation for controlled-pause fixtures. */
+  readonly observeWriter?: (state: RecordingWriterObservation) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +465,10 @@ export interface SessionMetadata {
   workspaceDirs: string[];
   cwd?: string;
   startTime: string;
+  /** Lineage; legacy files without the marker replay as `main`. */
+  kind: SessionStartKind;
+  /** Present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
   title?: string | null;
 }
 
@@ -332,6 +495,8 @@ export type ReplayResult =
       sessionName?: string | null;
       /** Self-contained child ancestry from the `session_forked` event. */
       ancestry?: SessionForkedPayload;
+      /** Transaction the journal ends inside, when a replacement was cut off. */
+      unfinishedReplaceTxId?: string;
       readonly semanticMediaPurgeFrontier?: {
         readonly contentIndex: number;
         readonly blockIndex: number;
@@ -378,6 +543,12 @@ export interface SessionSummary {
    * Undefined means never named; null means explicitly cleared.
    */
   name?: string | null;
+  /**
+   * Lineage marker from the `session_start` header (#854 P05c). Absent on
+   * summaries built by older callers, which resolve as `main`; discovery
+   * always populates it and excludes `subagent` journals.
+   */
+  kind?: SessionStartKind;
 }
 
 export type ContinueTarget =

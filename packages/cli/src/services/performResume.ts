@@ -31,8 +31,10 @@ import {
   resumeSession,
   describeUnreadableRecording,
   matchUnreadableRecordings,
-  MediaAdmissionService,
   RecordingIntegration,
+  withRecordingFailureReport,
+  type ResumeResult,
+  type JournalReadCounters,
   type ContinueTarget,
   type UnreadableRecording,
   type IContent,
@@ -54,11 +56,12 @@ export interface RecordingSwapCallbacks {
   getCurrentRecording: () => SessionRecordingService | null;
   getCurrentIntegration: () => RecordingIntegration | null;
   getCurrentLockHandle: () => LockHandle | null;
+  getCurrentMetadata: () => SessionMetadata | null;
   setRecording: (
-    recording: SessionRecordingService,
-    integration: RecordingIntegration,
+    recording: SessionRecordingService | null,
+    integration: RecordingIntegration | null,
     lock: LockHandle | null,
-    metadata: SessionMetadata,
+    metadata: SessionMetadata | null,
   ) => void;
 }
 
@@ -74,6 +77,7 @@ export interface ResumeContext {
   workspaceDirs: string[];
   mediaStore?: LocalMediaStore;
   maxQueueBytes?: number;
+  counters?: JournalReadCounters;
   persistenceFactory?: (sessionId: string) => SessionPersistenceService;
   recordingCallbacks: RecordingSwapCallbacks;
   historyService?: HistoryService | null;
@@ -88,7 +92,7 @@ export interface ResumeContext {
 export type PerformResumeResult =
   | {
       ok: true;
-      history: IContent[];
+      history: AsyncIterable<IContent>;
       metadata: SessionMetadata;
       warnings: string[];
     }
@@ -151,6 +155,7 @@ async function resumeCheckpointTarget(
   const fork = await new SessionTransitionService({
     mediaStore: context.mediaStore,
     maxQueueBytes: context.maxQueueBytes,
+    counters: context.counters,
   }).forkFromCheckpoint(
     target,
     chatsDir,
@@ -161,18 +166,15 @@ async function resumeCheckpointTarget(
     currentRecording,
   );
   if (!fork.ok) return fork;
-  const committed = await commitPreparedTransition(
-    fork.recording,
-    fork.lockHandle,
-    fork.metadata,
-    fork.history,
+  const committed = await commitResumeBoot(
+    { ...fork, warnings: [], skippedRecordings: [] },
     context,
     true,
   );
   if (!committed.ok) return committed;
   return {
     ok: true,
-    history: fork.history,
+    history: fork.boot.streamRows(),
     metadata: fork.metadata,
     warnings: committed.warnings,
   };
@@ -194,6 +196,7 @@ async function resumeLivingSession(
   }
   const result = await resumeSession({
     continueRef: target.session.sessionId,
+    counters: context.counters,
     projectHash,
     chatsDir,
     currentProvider: context.currentProvider,
@@ -207,21 +210,94 @@ async function resumeLivingSession(
       : { maxQueueBytes: context.maxQueueBytes }),
   });
   if (!result.ok) return { ok: false, error: result.error };
-  const committed = await commitPreparedTransition(
-    result.recording,
-    result.lockHandle,
-    result.metadata,
-    result.history,
-    context,
-    false,
-  );
+  const committed = await commitResumeBoot(result, context);
   if (!committed.ok) return committed;
   return {
     ok: true,
-    history: result.history,
+    history: result.boot.streamRows(),
     metadata: result.metadata,
     warnings: [...result.warnings, ...committed.warnings],
   };
+}
+
+async function commitResumeBoot(
+  result: ResumeResult,
+  context: ResumeContext,
+  discardOnFailure = false,
+): Promise<{ ok: true; warnings: string[] } | { ok: false; error: string }> {
+  const callbacks = context.recordingCallbacks;
+  const oldRecording = callbacks.getCurrentRecording();
+  const oldIntegration = callbacks.getCurrentIntegration();
+  const oldLock = callbacks.getCurrentLockHandle();
+  const oldMetadata = callbacks.getCurrentMetadata();
+  const integration = new RecordingIntegration(
+    result.recording,
+    context.persistenceFactory?.(result.recording.getSessionId()),
+  );
+  let warnings: string[] = [];
+  try {
+    const publish = async (): Promise<void> => {
+      if (context.historyService)
+        await integration.subscribeToJournal(context.historyService);
+      context.adoptSessionId?.(result.metadata.sessionId);
+      callbacks.setRecording(
+        result.recording,
+        integration,
+        result.lockHandle,
+        result.metadata,
+      );
+    };
+    if (context.historyService) {
+      warnings = await context.historyService.adoptResumeBoot(
+        result.recording,
+        result.boot,
+        publish,
+      );
+    } else {
+      await publish();
+    }
+  } catch (error) {
+    const failures: unknown[] = [];
+    // Hand the previous state back before the new one is disposed, so the
+    // callbacks never hold a disposed recording.
+    if (callbacks.getCurrentRecording() === result.recording)
+      await runRollbackStep(failures, () =>
+        callbacks.setRecording(
+          oldRecording,
+          oldIntegration,
+          oldLock,
+          oldMetadata,
+        ),
+      );
+    await runRollbackStep(failures, () =>
+      withRecordingFailureReport(integration.dispose()),
+    );
+    await runRollbackStep(failures, () =>
+      context.adoptSessionId?.(context.currentSessionId),
+    );
+    const filePath = discardOnFailure ? result.recording.getFilePath() : null;
+    await runRollbackStep(failures, () => result.recording.dispose());
+    await runRollbackStep(failures, () => result.lockHandle.release());
+    if (filePath !== null) {
+      const { rm } = await import('node:fs/promises');
+      await runRollbackStep(failures, () => rm(filePath, { force: true }));
+    }
+    return {
+      ok: false,
+      error: `Failed to commit session transition: ${errorDetail(error)}${failures.length > 0 ? `; rollback failed: ${failures.map(errorDetail).join('; ')}` : ''}`,
+    };
+  }
+  try {
+    await disposeInfrastructure(oldIntegration, oldRecording, oldLock);
+    return { ok: true, warnings };
+  } catch (error) {
+    return {
+      ok: true,
+      warnings: [
+        `Session transition committed but prior-session cleanup failed: ${errorDetail(error)}`,
+      ],
+    };
+  }
 }
 
 /**
@@ -246,6 +322,7 @@ export async function performResume(
       chatsDir,
       projectHash,
       context.mediaStore,
+      { counters: context.counters },
     );
   const target = await resolveTarget(
     sessionRef,
@@ -333,34 +410,10 @@ async function resolveTarget(
   return resolved.target;
 }
 
-async function restorePreviousHistory(
-  historyService: HistoryService,
-  previousHistory: IContent[] | null,
-  logger?: DebugLogger,
-): Promise<unknown | undefined> {
-  if (previousHistory === null) return undefined;
-  try {
-    await historyService.replaceAll(previousHistory);
-    return undefined;
-  } catch (error: unknown) {
-    logger?.warn(`Failed to restore prior session history: ${error}`);
-    return error;
-  }
-}
-
 function errorDetail(error: unknown): string {
+  if (error instanceof AggregateError)
+    return error.errors.map(errorDetail).join('; rollback failed: ');
   return error instanceof Error ? error.message : String(error);
-}
-
-async function releasePreparedHistoryMedia(
-  history: readonly IContent[],
-  context: ResumeContext,
-): Promise<void> {
-  if (context.mediaStore === undefined) return;
-  await new MediaAdmissionService(context.mediaStore).releaseContents(history, {
-    turnId: 'session-replay',
-    source: 'session-replay',
-  });
 }
 
 async function runRollbackStep(
@@ -372,82 +425,6 @@ async function runRollbackStep(
   } catch (error: unknown) {
     failures.push(error);
   }
-}
-
-async function commitPreparedTransition(
-  recording: SessionRecordingService,
-  lockHandle: LockHandle,
-  metadata: SessionMetadata,
-  history: IContent[],
-  context: ResumeContext,
-  discardOnFailure: boolean,
-): Promise<{ ok: true; warnings: string[] } | { ok: false; error: string }> {
-  const callbacks = context.recordingCallbacks;
-  const oldRecording = callbacks.getCurrentRecording();
-  const oldIntegration = callbacks.getCurrentIntegration();
-  const oldLock = callbacks.getCurrentLockHandle();
-  const historyService = context.historyService ?? null;
-  const previousHistory =
-    historyService === null ? null : [...historyService.getAll()];
-  const integration = new RecordingIntegration(
-    recording,
-    context.persistenceFactory?.(recording.getSessionId()),
-  );
-  try {
-    if (historyService !== null) {
-      await historyService.replaceAll(history);
-      integration.subscribeToHistory(historyService);
-    }
-    context.adoptSessionId?.(metadata.sessionId);
-    callbacks.setRecording(recording, integration, lockHandle, metadata);
-  } catch (error: unknown) {
-    const rollbackFailures: unknown[] = [];
-    await runRollbackStep(rollbackFailures, () => integration.dispose());
-    if (historyService !== null) {
-      const historyRollbackError = await restorePreviousHistory(
-        historyService,
-        previousHistory,
-        context.logger,
-      );
-      if (historyRollbackError !== undefined) {
-        rollbackFailures.push(historyRollbackError);
-      }
-    }
-    await runRollbackStep(rollbackFailures, () => {
-      context.adoptSessionId?.(context.currentSessionId);
-    });
-    await runRollbackStep(rollbackFailures, () =>
-      releasePreparedHistoryMedia(history, context),
-    );
-    const filePath = discardOnFailure ? recording.getFilePath() : null;
-    await runRollbackStep(rollbackFailures, () => recording.dispose());
-    await runRollbackStep(rollbackFailures, () => lockHandle.release());
-    if (filePath !== null) {
-      const { rm } = await import('node:fs/promises');
-      await runRollbackStep(rollbackFailures, () =>
-        rm(filePath, { force: true }),
-      );
-    }
-    const rollbackDetail =
-      rollbackFailures.length === 0
-        ? ''
-        : `; rollback failed: ${rollbackFailures.map(errorDetail).join('; ')}`;
-    return {
-      ok: false,
-      error: `Failed to commit session transition: ${errorDetail(error)}${rollbackDetail}`,
-    };
-  }
-  try {
-    await disposeInfrastructure(oldIntegration, oldRecording, oldLock);
-  } catch (cleanupError: unknown) {
-    return {
-      ok: true,
-      warnings: [
-        `Session transition committed but prior-session cleanup failed: ${errorDetail(cleanupError)}`,
-      ],
-    };
-  }
-  return { ok: true, warnings: [] };
 }
 
 async function disposeInfrastructure(

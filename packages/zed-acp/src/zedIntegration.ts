@@ -59,7 +59,7 @@ import {
   type ZedHostInputs,
   disposeZedSession,
 } from './zed-session-agent.js';
-import { streamZedHistory } from './zed-session-loader.js';
+import { deliverHistoryUpdates } from './zed-session-replay.js';
 import {
   resumeAgentHistory,
   toLoadRequestError,
@@ -354,7 +354,7 @@ export class ZedAgent {
   private async buildAndResumeSession(
     sessionId: string,
     cwd: string | undefined,
-  ): Promise<{ session: Session; history: readonly IContent[] }> {
+  ): Promise<{ session: Session; history: AsyncIterable<IContent> }> {
     const {
       agent,
       config: sessionConfig,
@@ -788,16 +788,15 @@ export class Session {
   debug(msg: string) {
     if (this.config.getDebugMode()) debugLogger.warn(msg);
   }
-  async streamHistory(items: readonly IContent[]): Promise<void> {
-    await streamZedHistory(this.id, items, (update) =>
+  async streamHistory(
+    items: AsyncIterable<IContent> | Iterable<IContent>,
+  ): Promise<void> {
+    await deliverHistoryUpdates(items, this.sessionInfo, this.id, (update) =>
       this.sendUpdateStrict(update),
     );
-    this.sessionInfo.hydrateFromHistory(items);
   }
   async replayLiveHistory(): Promise<void> {
-    await this.streamHistory(
-      await readAgentHistoryForReplay(this.agent, this.id),
-    );
+    await this.streamHistory(readAgentHistoryForReplay(this.agent, this.id));
   }
   async dispose(): Promise<void> {
     return disposeZedSession(

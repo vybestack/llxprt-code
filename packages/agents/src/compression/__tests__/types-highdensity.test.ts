@@ -28,6 +28,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
+import { compressTopDownViaDisk } from './support/topdown-disk-adapter.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import {
@@ -253,21 +254,12 @@ describe('Existing strategy compress compatibility @plan PLAN-20260211-HIGHDENSI
    * @requirement REQ-HD-001.4
    */
   it('TopDownTruncationStrategy.compress with empty history returns noop', async () => {
-    const strategy = new TopDownTruncationStrategy();
     const ctx = buildMinimalContext({ history: [] });
-    const result = await strategy.compress(ctx);
+    const result = await compressTopDownViaDisk(ctx);
     expect(result.kind).toBe('noop');
     expect(result.reason).toBe('empty-history');
     expect(result.metadata.originalMessageCount).toBe(0);
     expect(result.metadata.strategyUsed).toBe('top-down-truncation');
-  });
-
-  /**
-   * @requirement REQ-HD-001.4
-   */
-  it('OneShotStrategy.compress is a function', () => {
-    const strategy = new OneShotStrategy();
-    expect(typeof strategy.compress).toBe('function');
   });
 });
 

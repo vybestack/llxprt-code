@@ -17,6 +17,7 @@ import {
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { OAuthToken } from '@vybestack/llxprt-code-auth';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import {
   MemoryTokenStore,
   makeExpiredToken,
@@ -120,7 +121,7 @@ describe('profile postcommit sibling lifetime', () => {
       messageBus: owner().messageBus,
     });
     const transport = spyOn(globalThis, 'fetch').mockImplementation(
-      async (input, init) => {
+      withFetchPreconnect(async (input, init) => {
         if (
           String(input) !== 'https://console.anthropic.com/v1/oauth/token' ||
           !(init?.body instanceof URLSearchParams) ||
@@ -132,7 +133,7 @@ describe('profile postcommit sibling lifetime', () => {
           refresh_token: 'native-rotated-refresh',
           expires_in: 120,
         });
-      },
+      }),
     );
     let settled = false;
     const operation = agent.profiles

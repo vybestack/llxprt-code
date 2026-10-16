@@ -6,13 +6,16 @@
 
 import React from 'react';
 import { Text } from 'ink';
-import type { Agent, CheckpointInfo } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentHistoryItem,
+  CheckpointInfo,
+} from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
-import {
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
+import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
+import { historyLimitsFromSettings } from '../utils/historyLimitsFromSettings.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type {
   CommandContext,
@@ -74,12 +77,14 @@ function resolveCheckpoint(
 
 async function replayUiHistory(
   context: CommandContext,
-  history: Awaited<ReturnType<Agent['getHistory']>>,
+  history: AsyncIterable<AgentHistoryItem> | Iterable<AgentHistoryItem>,
 ): Promise<void> {
   context.ui.loadHistory(
-    iContentToHistoryItems(
-      [...history],
+    await resumeHistoryWindow(
+      history,
       resolveEmojiFilterMode(context.services.config),
+      undefined,
+      historyLimitsFromSettings(context.services.settings),
     ),
   );
 }
@@ -137,8 +142,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
       };
     try {
       const agent = owner(context);
-      const history = await agent.session.resume(tag);
-      await replayUiHistory(context, history);
+      await replayUiHistory(context, await agent.session.resume(tag));
       return undefined;
     } catch (error) {
       return failure('resume checkpoint', error);
@@ -224,7 +228,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
   clear: async (context) => {
     try {
       const agent = owner(context);
-      if ((await agent.session.getHistory()).length === 0)
+      if (agent.getStats().turnCount === 0)
         return {
           type: 'message',
           messageType: 'info',
@@ -294,12 +298,12 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
   },
   debug: async (context) => {
     const agent = owner(context);
-    const history = await agent.session.getHistory();
+    const entries = agent.getStats().turnCount;
     const recording = agent.session.getRecording();
     return {
       type: 'message',
       messageType: 'info',
-      content: `Chat Debug Information:\n• Chat initialized: ${history.length > 0}\n• History entries: ${history.length}\n• Current model: ${agent.getModel()}\n• Recording: ${recording.path ?? 'not active'}`,
+      content: `Chat Debug Information:\n• Chat initialized: ${entries > 0}\n• History entries: ${entries}\n• Current model: ${agent.getModel()}\n• Recording: ${recording.path ?? 'not active'}`,
     };
   },
 };

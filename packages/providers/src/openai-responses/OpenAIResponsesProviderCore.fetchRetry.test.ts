@@ -2,75 +2,42 @@ import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
-
-const mockSettingsService = {
-  set: vi.fn(),
-  get: vi.fn(),
-  setProviderSetting: vi.fn(),
-  getProviderSettings: vi.fn().mockReturnValue({}),
-  getSettings: vi.fn(),
-  updateSettings: vi.fn(),
-  getAllGlobalSettings: vi.fn().mockReturnValue({}),
-};
-
-const parseResponsesStreamMock = vi.fn(async function* () {
-  yield {
-    role: 'assistant',
-    content: [{ type: 'output_text', text: 'Hello from retry!' }],
-  };
-});
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const fetchMock = vi.fn();
 
-void vi.mock('@vybestack/llxprt-code-settings', () => ({
-  ...realLlxprtCodeSettingsModule,
-  getSettingsService: () => mockSettingsService,
-  SETTINGS_REGISTRY: [],
-}));
+function setupFetchMock(): void {
+  fetchMock.mockReset();
+  setGlobal('fetch', fetchMock);
+}
 
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
-}));
-
-void vi.mock('../openai/parseResponsesStream.js', () => ({
-  parseResponsesStream: parseResponsesStreamMock,
-}));
+function cleanupFetchMock(): void {
+  restoreGlobals();
+  vi.restoreAllMocks();
+}
 
 describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockSettingsService.getSettings.mockResolvedValue({});
-    setGlobal('fetch', fetchMock);
-  });
-
-  afterEach(() => {
-    restoreGlobals();
-    vi.restoreAllMocks();
-  });
+  beforeEach(setupFetchMock);
+  afterEach(cleanupFetchMock);
 
   it('should retry when fetch throws TypeError("fetch failed") on first attempt and succeed on second', async () => {
-    const mockBody = new ReadableStream({
-      start(controller) {
-        controller.close();
-      },
-    });
-
     fetchMock
       .mockRejectedValueOnce(new TypeError('fetch failed'))
-      .mockResolvedValueOnce({
-        ok: true,
-        body: mockBody,
-      });
+      .mockResolvedValueOnce(
+        new Response(
+          `data: {"type":"response.output_text.delta","delta":"Hello from retry!"}
+
+data: {"type":"response.completed","response":{"id":"resp_retry","status":"completed"}}
+
+`,
+          { status: 200 },
+        ),
+      );
 
     const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      streamCallOptions({
         providerName: provider.name,
         contents: [
           {
@@ -94,7 +61,16 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
 
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[0]).toBeDefined();
+    expect(chunks.flatMap((chunk) => chunk.blocks)).toContainEqual({
+      type: 'text',
+      text: 'Hello from retry!',
+    });
   });
+});
+
+describe('OpenAIResponsesProvider connection-phase abort', () => {
+  beforeEach(setupFetchMock);
+  afterEach(cleanupFetchMock);
 
   it('should NOT retry when fetch throws an AbortError (user cancellation)', async () => {
     const abortError = new Error('The operation was aborted');
@@ -104,7 +80,7 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
     const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      streamCallOptions({
         providerName: provider.name,
         contents: [
           {

@@ -225,7 +225,7 @@ describe('Agent-owned CLI client tools', () => {
       'stable',
     ]);
     expect(displayed).toStrictEqual([]);
-    const responses = (await a.agent.getHistory())
+    const responses = (await a.agent.session.getHistory())
       .flatMap((message) => message.blocks)
       .filter((block) => block.type === 'tool_response');
     expect(responses.map((response) => response.callId)).toStrictEqual([

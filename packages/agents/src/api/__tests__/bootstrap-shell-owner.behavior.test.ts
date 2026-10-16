@@ -10,6 +10,7 @@ import { readdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createAgent } from '@vybestack/llxprt-code-agents';
+import { removeScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { AgentImpl } from '../agentImpl.js';
 import { HookControl } from '../control/hooks.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
@@ -43,6 +44,9 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
     ].map((key) => [key, process.env[key]]),
   );
   for (const key of environment.keys()) process.env[key] = root;
+  // The process scratch root lives under TMPDIR; start a fresh one inside this
+  // scenario's directory and drop it before the directory is removed.
+  removeScratchRoot();
   const command = [
     'exec',
     shellQuote(process.execPath),
@@ -189,6 +193,7 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
     );
     await gate.stop();
     if (pgid !== undefined) await awaitShellGroupAbsence(pgid);
+    removeScratchRoot();
     await rm(root, { recursive: true, force: true });
     for (const [key, value] of environment) {
       if (value === undefined) delete process.env[key];

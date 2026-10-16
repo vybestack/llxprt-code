@@ -1,3 +1,5 @@
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -68,252 +70,280 @@ function toolTurn(callId: string, body: string): IContent {
 }
 
 describe('request-shape measurement cost guards (issue #3130)', () => {
-  it('counts each content body exactly once per send', () => {
-    // Three contents, one of which carries a tool result. A tool result is
-    // counted once for its content and once for its own attribution entry;
-    // anything more means a body is being re-serialized.
-    const contents: IContent[] = [
-      textTurn(1),
-      textTurn(2),
-      toolTurn('call-1', 'some tool output'),
-    ];
-    const tokenizer = new CountingTokenizer();
+  it('counts each content body exactly once per send', facadeCallback0);
 
-    computeRequestShape({
-      requestContents: contents,
-      tools: undefined,
-      instructionsText: 'instructions',
-      countTokens: tokenizer.count,
-      previouslySentCallIds: new Set<string>(),
-    });
+  it('does not re-count history that is sent again', facadeCallback1);
 
-    // 3 contents + 1 tool result + 1 instructions block = 5.
-    // Tools are absent, so the tools bucket short-circuits without counting.
-    expect(tokenizer.lengths).toHaveLength(5);
+  it(
+    'bounds the fingerprint so it stops growing with the conversation',
+    facadeCallback2,
+  );
+
+  it('still detects a change inside the cacheable prefix', facadeCallback3);
+
+  it(
+    'keeps one turn identity across the attempts of a single logical turn',
+    facadeCallback4,
+  );
+
+  it('tokenizes a carried content once, not once per send', facadeCallback5);
+
+  it('still reports the carried content cost on later sends', facadeCallback6);
+});
+
+describe('bucket attribution against the real history pipeline (issue #3130)', () => {
+  it('counts a tool result as history, not as an injection', facadeCallback7);
+});
+
+function facadeCallback0(): void {
+  // Three contents, one of which carries a tool result. A tool result is
+  // counted once for its content and once for its own attribution entry;
+  // anything more means a body is being re-serialized.
+  const contents: IContent[] = [
+    textTurn(1),
+    textTurn(2),
+    toolTurn('call-1', 'some tool output'),
+  ];
+  const tokenizer = new CountingTokenizer();
+
+  computeRequestShape({
+    requestContents: contents,
+    tools: undefined,
+    instructionsText: 'instructions',
+    countTokens: tokenizer.count,
+    previouslySentCallIds: new Set<string>(),
   });
 
-  it('does not re-count history that is sent again', () => {
-    // The history pipeline rebuilds every content object each send, so this
-    // measures the per-send pass, not a cache. What must hold is that ONE pass
-    // happens: the character volume for a given request must not multiply.
-    const contents: IContent[] = [toolTurn('call-1', BIG_BODY)];
-    const tokenizer = new CountingTokenizer();
+  // 3 contents + 1 tool result + 1 instructions block = 5.
+  // Tools are absent, so the tools bucket short-circuits without counting.
+  expect(tokenizer.lengths).toHaveLength(5);
+}
 
+function facadeCallback1(): void {
+  // The history pipeline rebuilds every content object each send, so this
+  // measures the per-send pass, not a cache. What must hold is that ONE pass
+  // happens: the character volume for a given request must not multiply.
+  const contents: IContent[] = [toolTurn('call-1', BIG_BODY)];
+  const tokenizer = new CountingTokenizer();
+
+  computeRequestShape({
+    requestContents: contents,
+    tools: undefined,
+    instructionsText: undefined,
+    countTokens: tokenizer.count,
+    previouslySentCallIds: new Set<string>(),
+  });
+
+  // Content pass + tool-result pass over the same body, and nothing more.
+  expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
+}
+
+function facadeCallback2(): void {
+  // Once the prefix budget is spent, later turns must not change the hash.
+  // Otherwise the fingerprint reads the whole conversation on every send,
+  // which is what made this measurement quadratic.
+  const head = Array.from({ length: 2000 }, (_, i) =>
+    identified(textTurn(i), `content-${i}`),
+  );
+
+  const shape = (contents: IContent[]) =>
     computeRequestShape({
       requestContents: contents,
       tools: undefined,
       instructionsText: undefined,
+      countTokens: (t: string) => t.length,
+      previouslySentCallIds: new Set<string>(),
+    }).prefixFingerprint;
+
+  expect(shape([...head, identified(textTurn(9999), 'extra')])).toBe(
+    shape(head),
+  );
+}
+
+function facadeCallback3(): void {
+  // Boundedness must not cost sensitivity where it matters: the head is the
+  // part a provider can cache, so a change there must change the hash.
+  const base = computeRequestShape({
+    requestContents: [textTurn(1)],
+    tools: undefined,
+    instructionsText: 'system prompt A',
+    countTokens: (t: string) => t.length,
+    previouslySentCallIds: new Set<string>(),
+  }).prefixFingerprint;
+  const changed = computeRequestShape({
+    requestContents: [textTurn(1)],
+    tools: undefined,
+    instructionsText: 'system prompt B',
+    countTokens: (t: string) => t.length,
+    previouslySentCallIds: new Set<string>(),
+  }).prefixFingerprint;
+
+  expect(changed).not.toBe(base);
+}
+
+function facadeCallback4(): void {
+  // A discard-restart re-enters the send path with the same promptId. Both
+  // attempts describe the same conversation turn, so both records must name
+  // the same turn_id or the retry cannot be joined to the turn it replaced.
+  const contents: IContent[] = [textTurn(1)];
+  const first = stampTurnIdentityOnInput(contents[0], {
+    promptId: 'p-1',
+    turnId: 'turn-1',
+  });
+  const retried = stampTurnIdentityOnInput(first, {
+    promptId: 'p-1',
+    turnId: 'turn-2-should-not-win',
+  });
+
+  expect(Array.isArray(retried)).toBe(false);
+  if (Array.isArray(retried))
+    throw new Error('expected a single content, not an array');
+  expect(retried.metadata?.turnId).toBe('turn-1');
+  expect(retried.metadata?.promptId).toBe('p-1');
+}
+
+function facadeCallback5(): void {
+  // The whole point: a big tool result that rides along for many turns must
+  // not be re-tokenized every send. Earlier this was linear per send and
+  // quadratic per session (935ms per send by turn 20).
+  const memory = new RequestShapeSessionMemory();
+  const contents: IContent[] = [
+    identified(toolTurn('call-1', BIG_BODY), 'content-1'),
+  ];
+  const tokenizer = new CountingTokenizer();
+
+  for (let send = 0; send < 5; send += 1) {
+    memory.recordRequestShape({
+      // A fresh object each time, exactly as the history pipeline produces.
+      requestContents: contents.map((c) => ({ ...c, blocks: [...c.blocks] })),
+      tools: undefined,
+      instructionsText: undefined,
       countTokens: tokenizer.count,
-      previouslySentCallIds: new Set<string>(),
     });
+  }
 
-    // Content pass + tool-result pass over the same body, and nothing more.
-    expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
-  });
+  // Send 1 measures it. Sends 2-5 must not tokenize the body again, so the
+  // recorded volume stays at one send's worth rather than five.
+  expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
+}
 
-  it('bounds the fingerprint so it stops growing with the conversation', () => {
-    // Once the prefix budget is spent, later turns must not change the hash.
-    // Otherwise the fingerprint reads the whole conversation on every send,
-    // which is what made this measurement quadratic.
-    const head = Array.from({ length: 2000 }, (_, i) =>
-      identified(textTurn(i), `content-${i}`),
-    );
-
-    const shape = (contents: IContent[]) =>
-      computeRequestShape({
-        requestContents: contents,
-        tools: undefined,
-        instructionsText: undefined,
-        countTokens: (t: string) => t.length,
-        previouslySentCallIds: new Set<string>(),
-      }).prefixFingerprint;
-
-    expect(shape([...head, identified(textTurn(9999), 'extra')])).toBe(
-      shape(head),
-    );
-  });
-
-  it('still detects a change inside the cacheable prefix', () => {
-    // Boundedness must not cost sensitivity where it matters: the head is the
-    // part a provider can cache, so a change there must change the hash.
-    const base = computeRequestShape({
-      requestContents: [textTurn(1)],
+function facadeCallback6(): void {
+  // Caching must not silently drop the bucket: a cache hit has to contribute
+  // the same tokens a fresh measurement would.
+  const memory = new RequestShapeSessionMemory();
+  const build = (): IContent[] => [
+    identified(toolTurn('call-1', BIG_BODY), 'content-1'),
+  ];
+  const shape = () =>
+    memory.recordRequestShape({
+      requestContents: build(),
       tools: undefined,
-      instructionsText: 'system prompt A',
+      instructionsText: undefined,
       countTokens: (t: string) => t.length,
-      previouslySentCallIds: new Set<string>(),
-    }).prefixFingerprint;
-    const changed = computeRequestShape({
-      requestContents: [textTurn(1)],
-      tools: undefined,
-      instructionsText: 'system prompt B',
-      countTokens: (t: string) => t.length,
-      previouslySentCallIds: new Set<string>(),
-    }).prefixFingerprint;
-
-    expect(changed).not.toBe(base);
-  });
-
-  it('keeps one turn identity across the attempts of a single logical turn', () => {
-    // A discard-restart re-enters the send path with the same promptId. Both
-    // attempts describe the same conversation turn, so both records must name
-    // the same turn_id or the retry cannot be joined to the turn it replaced.
-    const contents: IContent[] = [textTurn(1)];
-    const first = stampTurnIdentityOnInput(contents[0], {
-      promptId: 'p-1',
-      turnId: 'turn-1',
-    });
-    const retried = stampTurnIdentityOnInput(first, {
-      promptId: 'p-1',
-      turnId: 'turn-2-should-not-win',
     });
 
-    expect(Array.isArray(retried)).toBe(false);
-    if (Array.isArray(retried))
-      throw new Error('expected a single content, not an array');
-    expect(retried.metadata?.turnId).toBe('turn-1');
-    expect(retried.metadata?.promptId).toBe('p-1');
-  });
+  const first = shape();
+  const second = shape();
 
-  it('tokenizes a carried content once, not once per send', () => {
-    // The whole point: a big tool result that rides along for many turns must
-    // not be re-tokenized every send. Earlier this was linear per send and
-    // quadratic per session (935ms per send by turn 20).
-    const memory = new RequestShapeSessionMemory();
-    const contents: IContent[] = [
-      identified(toolTurn('call-1', BIG_BODY), 'content-1'),
-    ];
-    const tokenizer = new CountingTokenizer();
+  expect(second.historyTokens).toBe(first.historyTokens);
+}
 
-    for (let send = 0; send < 5; send += 1) {
-      memory.recordRequestShape({
-        // A fresh object each time, exactly as the history pipeline produces.
-        requestContents: contents.map((c) => ({ ...c, blocks: [...c.blocks] })),
-        tools: undefined,
-        instructionsText: undefined,
-        countTokens: tokenizer.count,
-      });
-    }
+async function facadeCallback7(): Promise<void> {
+  // An ordinary adjacent tool turn remains source history through
+  // ensureToolResponseAdjacency and must not be marked synthetic. Drive the
+  // attribution through the real HistoryService so the premise and token
+  // buckets cover the same provider-ready contents.
+  const history = await createShapeHistory();
 
-    // Send 1 measures it. Sends 2-5 must not tokenize the body again, so the
-    // recorded volume stays at one send's worth rather than five.
-    expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
-  });
-
-  it('still reports the carried content cost on later sends', () => {
-    // Caching must not silently drop the bucket: a cache hit has to contribute
-    // the same tokens a fresh measurement would.
-    const memory = new RequestShapeSessionMemory();
-    const build = (): IContent[] => [
-      identified(toolTurn('call-1', BIG_BODY), 'content-1'),
-    ];
-    const shape = () =>
-      memory.recordRequestShape({
-        requestContents: build(),
-        tools: undefined,
-        instructionsText: undefined,
-        countTokens: (t: string) => t.length,
-      });
-
-    const first = shape();
-    const second = shape();
-
-    expect(second.historyTokens).toBe(first.historyTokens);
-  });
-});
-
-describe('bucket attribution against the real history pipeline (issue #3130)', () => {
-  it('counts a tool result as history, not as an injection', async () => {
-    // An ordinary adjacent tool turn remains source history through
-    // ensureToolResponseAdjacency and must not be marked synthetic. Drive the
-    // attribution through the real HistoryService so the premise and token
-    // buckets cover the same provider-ready contents.
-    const { HistoryService } = await import(
-      '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+  const requestContents = await Array.fromAsync(
+    history.getCuratedForProviderStream([]),
+  );
+  const matchingToolResponse = requestContents
+    .flatMap((content) => content.blocks)
+    .find(
+      (block) => block.type === 'tool_response' && block.callId === 'call-1',
     );
-    const history = new HistoryService();
-    const turnKey = history.generateTurnKey();
-    const nextId = history.getIdGeneratorCallback(turnKey);
-    history.add(
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'read the files' }],
-        metadata: { id: nextId(), turnId: turnKey },
-      },
-      'test-model',
-    );
-    history.add(
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: 'read_many_files',
-            parameters: { paths: ['src'] },
-          },
-        ],
-        metadata: { id: nextId(), turnId: turnKey },
-      },
-      'test-model',
-    );
-    history.add(
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call-1',
-            toolName: 'read_many_files',
-            result: 'FILE BODY',
-          },
-        ],
-        metadata: { id: nextId(), turnId: turnKey },
-      },
-      'test-model',
-    );
-
-    const requestContents = history.getCuratedForProvider([]);
-    const matchingToolResponse = requestContents
-      .flatMap((content) => content.blocks)
-      .find(
+  const baselineRequestContents = requestContents.filter(
+    (content) =>
+      !content.blocks.some(
         (block) => block.type === 'tool_response' && block.callId === 'call-1',
-      );
-    const baselineRequestContents = requestContents.filter(
-      (content) =>
-        !content.blocks.some(
-          (block) =>
-            block.type === 'tool_response' && block.callId === 'call-1',
-        ),
-    );
+      ),
+  );
 
-    expect(matchingToolResponse).toMatchObject({
-      type: 'tool_response',
-      callId: 'call-1',
-      result: 'FILE BODY',
-    });
-    // Guard the premise: unchanged history is not an injected synthetic turn.
-    const toolTurnIsSynthetic = requestContents.some(
-      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
-    );
-    expect(toolTurnIsSynthetic).toBe(false);
-
-    const measure = (contents: IContent[]) =>
-      computeRequestShape({
-        requestContents: contents,
-        tools: undefined,
-        instructionsText: undefined,
-        countTokens: (t: string) => t.length,
-        previouslySentCallIds: new Set<string>(),
-      });
-    const shape = measure(requestContents);
-    const baselineShape = measure(baselineRequestContents);
-    const measuredToolResponse = shape.toolCalls.find(
-      (toolCall) => toolCall.callId === 'call-1',
-    );
-
-    expect(measuredToolResponse?.resultTokens).toBeGreaterThan(0);
-    expect(shape.historyTokens).toBeGreaterThan(baselineShape.historyTokens);
-    expect(shape.injectedTokens).toBe(0);
+  expect(matchingToolResponse).toMatchObject({
+    type: 'tool_response',
+    callId: 'call-1',
+    result: 'FILE BODY',
   });
-});
+  // Guard the premise: unchanged history is not an injected synthetic turn.
+  const toolTurnIsSynthetic = requestContents.some(
+    (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
+  );
+  expect(toolTurnIsSynthetic).toBe(false);
+
+  const measure = (contents: IContent[]) =>
+    computeRequestShape({
+      requestContents: contents,
+      tools: undefined,
+      instructionsText: undefined,
+      countTokens: (t: string) => t.length,
+      previouslySentCallIds: new Set<string>(),
+    });
+  const shape = measure(requestContents);
+  const baselineShape = measure(baselineRequestContents);
+  const measuredToolResponse = shape.toolCalls.find(
+    (toolCall) => toolCall.callId === 'call-1',
+  );
+
+  expect(measuredToolResponse?.resultTokens).toBeGreaterThan(0);
+  expect(shape.historyTokens).toBeGreaterThan(baselineShape.historyTokens);
+  expect(shape.injectedTokens).toBe(0);
+}
+
+async function createShapeHistory(): Promise<HistoryService> {
+  const { HistoryService } = await import(
+    '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+  );
+  const history = new HistoryService();
+  const turnKey = history.generateTurnKey();
+  const nextId = history.getIdGeneratorCallback(turnKey);
+  history.add(
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'read the files' }],
+      metadata: { id: nextId(), turnId: turnKey },
+    },
+    'test-model',
+  );
+  history.add(
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'call-1',
+          name: 'read_many_files',
+          parameters: { paths: ['src'] },
+        },
+      ],
+      metadata: { id: nextId(), turnId: turnKey },
+    },
+    'test-model',
+  );
+  history.add(
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'read_many_files',
+          result: 'FILE BODY',
+        },
+      ],
+      metadata: { id: nextId(), turnId: turnKey },
+    },
+    'test-model',
+  );
+  return history;
+}

@@ -33,6 +33,7 @@ import {
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { ShellJobOwner } from '../../session/shell-job-owner.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
   if (
@@ -63,6 +64,14 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 function textItem(speaker: 'human' | 'ai', text: string): AgentHistoryItem {
   return { speaker, blocks: [{ type: 'text', text }] };
+}
+
+async function collectRows(
+  rows: AsyncIterable<AgentHistoryItem>,
+): Promise<AgentHistoryItem[]> {
+  const collected: AgentHistoryItem[] = [];
+  for await (const row of rows) collected.push(row);
+  return collected;
 }
 
 function itemText(item: AgentHistoryItem): string {
@@ -250,7 +259,7 @@ describe('starting a new conversation session', () => {
             case 'integration':
               return spyOn(
                 RecordingIntegration.prototype,
-                'subscribeToHistory',
+                'subscribeToJournal',
               ).mockImplementationOnce(() => {
                 throw new Error('candidate preparation failed');
               });
@@ -282,7 +291,9 @@ describe('starting a new conversation session', () => {
             enabled: true,
             path: oldPath,
           });
-          expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+          expect(
+            (await collectAgentHistory(agent)).map(itemText),
+          ).toStrictEqual([
             'first question',
             'first answer',
             'second question',
@@ -365,7 +376,7 @@ describe('starting a new conversation session', () => {
   it('leaves no prior conversation turns for the next model request', async () => {
     const afterReset = await withRecordedConversation(async (agent) => {
       await agent.session.startNewSession();
-      return agent.getHistory();
+      return collectAgentHistory(agent);
     });
     expect(afterReset).toStrictEqual([]);
   });
@@ -471,12 +482,14 @@ describe('starting a new conversation session', () => {
       const capture = spyOn(
         FakeProvider.prototype,
         'generateChatCompletion',
-      ).mockImplementation(function (this: FakeProvider, options) {
-        observed = [
-          ...observed,
-          Array.isArray(options) ? options : options.contents,
-        ];
-        return original.call(this, options);
+      ).mockImplementation(async function* (this: FakeProvider, options) {
+        const rows: AgentHistoryItem[] = [];
+        for await (const row of 'contents' in options
+          ? options.contents
+          : options)
+          rows.push(row);
+        observed = [...observed, rows];
+        yield* original.call(this, options);
       });
       try {
         const events = await drain(agent.stream('fresh start'));
@@ -526,7 +539,9 @@ describe('starting a new conversation session', () => {
       expect(
         (await agent.session.listSessions()).map((session) => session.id),
       ).toHaveLength(2);
-      const restored = await agent.session.resume(oldSession.id);
+      const restored = await collectRows(
+        await agent.session.resume(oldSession.id),
+      );
       expect(restored.map(itemText)).toStrictEqual([
         'first question',
         'first answer',
@@ -537,7 +552,9 @@ describe('starting a new conversation session', () => {
         (session) => session.id !== oldSession.id,
       );
       if (newSession === undefined) throw new Error('Expected new session');
-      const postClear = await agent.session.resume(newSession.id);
+      const postClear = await collectRows(
+        await agent.session.resume(newSession.id),
+      );
       expect(postClear.map(itemText)).not.toContain('first question');
       expect(postClear.map(itemText)[0]).toBe('fresh start');
     });
@@ -554,7 +571,7 @@ describe('starting a new conversation session', () => {
       );
       await oldLock.release();
       await agent.session.setRecording({ enabled: false });
-      const restored = await agent.session.resume('latest');
+      const restored = await collectRows(await agent.session.resume('latest'));
       expect(restored.map(itemText)).toStrictEqual([
         'first question',
         'first answer',
@@ -611,7 +628,7 @@ describe('starting a new conversation session', () => {
       await agent.session.startNewSession();
       expect(agent.session.getSessionId()).not.toBe(oldId);
       expect(agent.session.getRecording().enabled).toBe(false);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     });
   });
 
@@ -619,16 +636,16 @@ describe('starting a new conversation session', () => {
     await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
       await agent.setHistory([textItem('human', 'shared conversation')]);
       const sibling = await borrow();
-      const prior = await sibling.getHistory();
+      const prior = await collectAgentHistory(sibling);
       const configId = config.getSessionId();
       await agent.session.setRecording({ enabled: true });
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
-      expect(await sibling.getHistory()).toStrictEqual(prior);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
+      expect(await collectAgentHistory(sibling)).toStrictEqual(prior);
       expect(config.getSessionId()).toBe(configId);
       await agent.session.setRecording({ enabled: false });
-      await agent.session.resume('latest');
-      expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+      await collectRows(await agent.session.resume('latest'));
+      expect((await collectAgentHistory(agent)).map(itemText)).toStrictEqual([
         'shared conversation',
       ]);
     });
@@ -674,7 +691,7 @@ describe('starting a new conversation session', () => {
   it('still retains the initial turn by default while recording', async () => {
     const texts = await withRecordedConversation(async (agent) => {
       await agent.resetChat();
-      return (await agent.getHistory()).map(itemText);
+      return (await collectAgentHistory(agent)).map(itemText);
     });
     expect(texts).toStrictEqual(['first question', 'first answer']);
   });

@@ -1,0 +1,127 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+
+import type { IContent, ToolCallBlock } from './IContent.js';
+import { HistoryServiceCore } from './HistoryServiceCore.js';
+import {
+  findCurrentTurnMarker,
+  type CurrentTurnMarker,
+} from './historyChronology.js';
+import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
+import {
+  findUnmatchedToolCalls as findUnmatchedToolCallsHelper,
+  type ToolPairingStreamOptions,
+} from './historyToolPairing.js';
+
+/**
+ * Read-only query surface of the history service: cold streams over the
+ * journal, tail lookups, and turn recording. Mutation coordination and
+ * lifecycle live in {@link HistoryService}.
+ */
+export abstract class HistoryServiceReads extends HistoryServiceCore {
+  async *streamRawHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(undefined, signal);
+  }
+
+  async getCurrentTurnMarker(): Promise<CurrentTurnMarker | null> {
+    let latest: CurrentTurnMarker | null = null;
+    for await (const row of this.streamRawHistory()) {
+      const marker = findCurrentTurnMarker([row]);
+      if (marker !== null) latest = marker;
+    }
+    return latest;
+  }
+
+  /** Cold chronological suffix stream, preserving slice(-count), including count=0. */
+  async *getRecent(
+    count: number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows({ kind: 'recent', count }, signal);
+  }
+
+  /** Cold stream of all content, including invalid/empty, pinned at first next(). */
+  async *getComprehensive(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(undefined, signal);
+  }
+
+  /**
+   * Get the last user (human) content
+   */
+  getLastUserContent(): IContent | undefined {
+    return this.getLastContent('human');
+  }
+
+  /**
+   * Get the last AI content
+   */
+  getLastAIContent(): IContent | undefined {
+    return this.getLastContent('ai');
+  }
+
+  getLastContent(speaker?: IContent['speaker']): IContent | undefined {
+    return this.journal.withRowSummary((summary) =>
+      summary.lastContent(speaker),
+    );
+  }
+
+  /**
+   * Record a complete turn (user input + AI response + optional tool interactions)
+   */
+  recordTurn(
+    userInput: IContent,
+    aiResponse: IContent,
+    toolInteractions?: IContent[],
+  ): void {
+    this.add(userInput);
+    this.add(aiResponse);
+    if (toolInteractions) {
+      this.addAll(toolInteractions);
+    }
+  }
+
+  /** Get the number of messages in history. */
+  length(): number {
+    return this.journal.getLength();
+  }
+
+  /** Check if history is empty. */
+  isEmpty(): boolean {
+    return this.journal.getLength() === 0;
+  }
+
+  /** Cold sanitized copies over membership pinned at the first next(). */
+  async *clone(): AsyncGenerator<IContent, void, unknown> {
+    for await (const content of this.journal.streamRows()) {
+      yield sanitizeProviderContentForSerialization(content);
+    }
+  }
+
+  /**
+   * Find unmatched tool calls (tool calls without responses)
+   */
+  findUnmatchedToolCalls(
+    options: ToolPairingStreamOptions = {},
+  ): AsyncGenerator<ToolCallBlock, void, unknown> {
+    return findUnmatchedToolCallsHelper(
+      this.logger,
+      this.journal.streamRows(),
+      options,
+    );
+  }
+
+  /** Cold chronological stream of the newest contiguous suffix fitting the budget. */
+  async *getWithinTokenLimit(
+    maxTokens: number,
+    countTokensFn: (content: IContent) => number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(
+      { kind: 'tokens', maxTokens, countTokens: countTokensFn },
+      signal,
+    );
+  }
+}

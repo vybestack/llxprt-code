@@ -31,9 +31,9 @@ import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { OneShotStrategy } from './OneShotStrategy.js';
+import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
-import { MiddleOutStrategy } from './MiddleOutStrategy.js';
+import { compressMiddleOutViaDisk } from './__tests__/support/middleout-disk-adapter.js';
 import { runVerificationPass } from './utils.js';
 import {
   CompressionLoadBalancingProvider,
@@ -207,8 +207,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy();
-    const result = await strategy.compress(context);
+    const result = await compressOneShotViaDisk(context);
 
     expect(result.kind).toBe('applied');
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -227,8 +226,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       preserveThreshold: 0.2,
     });
 
-    const strategy = new MiddleOutStrategy();
-    const result = await strategy.compress(context);
+    const result = await compressMiddleOutViaDisk(context);
 
     expect(result.kind).toBe('applied');
     expect(captured.length).toBeGreaterThanOrEqual(1);
@@ -270,8 +268,7 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
       compressionVerification: true,
     });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     // First call = initial compression, second = verification pass
     expect(captured.length).toBe(2);
@@ -308,8 +305,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       subagentName: 'typescript-expert',
     });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured[0].systemInstruction).toContain('mode=subagent');
@@ -325,8 +321,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(true),
     });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -343,8 +338,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
       config: makeInteractiveConfig(false),
     });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -361,8 +355,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     const history = generateHistory(20);
     const context = buildContext(provider, { history });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     const sysInstr = captured[0].systemInstruction as string;
@@ -376,8 +369,7 @@ describe('Compression request-scoped provider and interactionMode (issue #3176, 
     (provider as { name: string }).name = 'load-balancer';
     const context = buildContext(provider, { history: generateHistory(20) });
 
-    const strategy = new OneShotStrategy();
-    await strategy.compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(captured.length).toBeGreaterThanOrEqual(1);
     expect(captured[0].systemInstruction).toContain('provider=load-balancer');
@@ -495,7 +487,7 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
       subagentName: 'worker',
     });
 
-    await new OneShotStrategy().compress(context);
+    await compressOneShotViaDisk(context);
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledTimes(1);
     expect(calls[0].systemInstruction).toContain(

@@ -12,13 +12,15 @@
  * self-contained diagnostics concern with no callers outside the executor.
  */
 
+import { getRequestSignal } from '../utils/abortSignal.js';
 import type { ResponsesRequest } from './responses-request.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKRequestContext,
+  dumpSDKRequestContextBodyBytes,
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
+import type { dumpSDKRequestContext } from '../utils/dumpSDKContext.js';
 import { buildHttpDumpMetadata } from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -27,6 +29,7 @@ import type {
   ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
+import { diskResponsesBodyBytes } from './responses-disk-body.js';
 import { CODEX_WEBSOCKET_BETA_HEADER } from './openAIResponsesWebSocketTransport.js';
 
 /**
@@ -117,16 +120,40 @@ export async function dumpFinalizedRequest(
     'request',
     deps.providerName,
     () =>
-      dumpSDKRequestContext(
-        deps.providerName,
-        '/responses',
-        requestContext.request,
+      dumpRequest(
+        requestContext,
+        deps,
         baseURLForDump,
         dumpMetadata,
+        getRequestSignal(options),
       ),
     deps.logger,
   );
   return { baseId: result?.baseId, dumpMode };
+}
+
+function dumpRequest(
+  requestContext: RequestContext,
+  deps: ResponsesExecutorDeps,
+  baseURL: string,
+  metadata: RequestDumpMetadata,
+  signal: AbortSignal | undefined,
+): ReturnType<typeof dumpSDKRequestContext> {
+  const source = requestContext.sourcePrompt;
+  // Stream the sanitized disk body; the request object holds empty placeholders.
+  return dumpSDKRequestContextBodyBytes(
+    deps.providerName,
+    '/responses',
+    diskResponsesBodyBytes(
+      requestContext.request,
+      source.toEstimatorProjection(),
+      signal,
+      'dump',
+    ),
+    baseURL,
+    metadata,
+    signal,
+  );
 }
 
 /**

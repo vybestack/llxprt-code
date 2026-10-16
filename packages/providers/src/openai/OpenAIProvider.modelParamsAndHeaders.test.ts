@@ -3,8 +3,12 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -52,31 +56,49 @@ const createBasicMessages = (): IContent[] => [
   },
 ];
 
-describe('OpenAIProvider model params and custom headers', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    settingsServiceRef = { current: new SettingsService() };
-    mockChatCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            role: 'assistant',
-            content: 'Hello!',
-          },
-          finish_reason: 'stop',
-        },
-      ],
-      usage: {
-        prompt_tokens: 1,
-        completion_tokens: 1,
-        total_tokens: 2,
-      },
-    });
-  });
+function createStreamCallOptions(
+  init: Omit<ProviderCallOptionsInit, 'contents'> & {
+    contents: readonly IContent[];
+  },
+): GenerateChatOptions {
+  const { contents, ...rest } = init;
+  const stream = (async function* (): AsyncGenerator<IContent> {
+    yield* contents;
+  })();
+  return {
+    ...createProviderCallOptions({ ...rest, contents: stream }),
+    contents: stream,
+  };
+}
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+function resetMocks(): void {
+  vi.clearAllMocks();
+  settingsServiceRef = { current: new SettingsService() };
+  mockChatCreate.mockResolvedValue({
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: 'Hello!',
+        },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: {
+      prompt_tokens: 1,
+      completion_tokens: 1,
+      total_tokens: 2,
+    },
   });
+}
+
+function restoreMocks(): void {
+  vi.restoreAllMocks();
+}
+
+describe('OpenAIProvider model params and custom headers', () => {
+  beforeEach(resetMocks);
+  afterEach(restoreMocks);
 
   it('should include model parameters from settings in the OpenAI request body', async () => {
     const settingsService = settingsServiceRef.current;
@@ -105,7 +127,7 @@ describe('OpenAIProvider model params and custom headers', () => {
       } as unknown as OpenAI);
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      createStreamCallOptions({
         providerName: provider.name,
         contents: createBasicMessages(),
         settings: settingsService,
@@ -122,6 +144,11 @@ describe('OpenAIProvider model params and custom headers', () => {
 
     getClientSpy.mockRestore();
   });
+});
+
+describe('OpenAIProvider custom headers', () => {
+  beforeEach(resetMocks);
+  afterEach(restoreMocks);
 
   it('should pass custom headers when generating chat completions', async () => {
     const customHeaders = {
@@ -182,7 +209,7 @@ describe('OpenAIProvider model params and custom headers', () => {
       } as unknown as OpenAI);
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      createStreamCallOptions({
         providerName: provider.name,
         contents: createBasicMessages(),
         settings: settingsService,
@@ -203,6 +230,11 @@ describe('OpenAIProvider model params and custom headers', () => {
 
     getClientSpy.mockRestore();
   });
+});
+
+describe('OpenAIProvider socket transport', () => {
+  beforeEach(resetMocks);
+  afterEach(restoreMocks);
 
   it('should configure socket-aware transport when socket settings are present', async () => {
     vi.clearAllMocks();
@@ -257,7 +289,7 @@ describe('OpenAIProvider model params and custom headers', () => {
     provider.setRuntimeSettingsService(settingsService);
 
     const generator = provider.generateChatCompletion(
-      createProviderCallOptions({
+      createStreamCallOptions({
         providerName: provider.name,
         contents: createBasicMessages(),
         settings: settingsService,

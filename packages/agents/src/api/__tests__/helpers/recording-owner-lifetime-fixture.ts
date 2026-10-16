@@ -128,36 +128,43 @@ async function pauseProviderRefresh(
     built.runtime.providerFileLifecycle,
     (provider) => oauth.composeRetryOperations(provider),
   );
+  const { preconnect } = globalThis.fetch;
   const transport = spyOn(globalThis, 'fetch').mockImplementation(
-    async (input, init): Promise<Response> => {
-      if (
-        String(input) !== 'https://console.anthropic.com/v1/oauth/token' ||
-        !(init?.body instanceof URLSearchParams) ||
-        init.body.get('grant_type') !== 'refresh_token' ||
-        !init.signal
-      )
-        throw new Error(`Unexpected provider request: ${String(input)}`);
-      const signal = init.signal;
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          async start(controller): Promise<void> {
-            barrier.entered(signal);
-            await barrier.body;
-            controller.enqueue(
-              new TextEncoder().encode(
-                JSON.stringify({
-                  access_token: 'recording-rotated',
-                  refresh_token: 'recording-rotated-refresh',
-                  expires_in: 120,
-                }),
-              ),
-            );
-            controller.close();
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    },
+    Object.assign(
+      async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (
+          String(input) !== 'https://console.anthropic.com/v1/oauth/token' ||
+          !(init?.body instanceof URLSearchParams) ||
+          init.body.get('grant_type') !== 'refresh_token' ||
+          !init.signal
+        )
+          throw new Error(`Unexpected provider request: ${String(input)}`);
+        const signal = init.signal;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller): Promise<void> {
+              barrier.entered(signal);
+              await barrier.body;
+              controller.enqueue(
+                new TextEncoder().encode(
+                  JSON.stringify({
+                    access_token: 'recording-rotated',
+                    refresh_token: 'recording-rotated-refresh',
+                    expires_in: 120,
+                  }),
+                ),
+              );
+              controller.close();
+            },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+      { preconnect },
+    ),
   );
   return { oauthManager: oauth, restore: () => transport.mockRestore() };
 }

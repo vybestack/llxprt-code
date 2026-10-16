@@ -9,6 +9,7 @@ import {
   getRecordedThinkingBlocks,
 } from './structural-history-fixture.js';
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import {
@@ -203,9 +204,11 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
     );
 
-    const aiEntries = historyService.getAll().filter((c) => c.speaker === 'ai');
-    expect(aiEntries.length).toBeGreaterThan(0);
-    expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const aiEntries = rows.filter((c) => c.speaker === 'ai');
+      expect(aiEntries.length).toBeGreaterThan(0);
+      expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    });
   });
 
   it('filters thinking blocks from history when includeThoughts=false', async () => {
@@ -283,20 +286,22 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       acc,
     );
 
-    expect(
-      historyService.getAll().map((content) => ({
-        speaker: content.speaker,
-        text: content.blocks
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text)
-          .join(''),
-      })),
-    ).toStrictEqual([
-      { speaker: 'human', text: 'prior' },
-      { speaker: 'human', text: 'current' },
-      { speaker: 'ai', text: 'intermediate' },
-      { speaker: 'ai', text: 'final' },
-    ]);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      expect(
+        rows.map((content) => ({
+          speaker: content.speaker,
+          text: content.blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join(''),
+        })),
+      ).toStrictEqual([
+        { speaker: 'human', text: 'prior' },
+        { speaker: 'human', text: 'current' },
+        { speaker: 'ai', text: 'intermediate' },
+        { speaker: 'ai', text: 'final' },
+      ]);
+    });
   });
 
   it('does not replay an existing prefix from full AFC history', async () => {
@@ -350,20 +355,22 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       },
     );
 
-    expect(
-      historyService.getAll().map((content) =>
-        content.blocks
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text)
-          .join(''),
-      ),
-    ).toStrictEqual([
-      'prior question',
-      'prior answer',
-      'current question',
-      'intermediate',
-      'final answer',
-    ]);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      expect(
+        rows.map((content) =>
+          content.blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join(''),
+        ),
+      ).toStrictEqual([
+        'prior question',
+        'prior answer',
+        'current question',
+        'intermediate',
+        'final answer',
+      ]);
+    });
   });
 });
 

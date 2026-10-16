@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import { withDisposalJoinFixture } from './helpers/async-child-disposal-join-fixture.js';
 
 function response(query: boolean): Response {
@@ -67,7 +68,7 @@ describe('public async child query ownership', () => {
       const original = globalThis.fetch;
       const toolResults: string[] = [];
       let requests = 0;
-      globalThis.fetch = async (input, init) => {
+      globalThis.fetch = withFetchPreconnect(async (input, init) => {
         const url = input instanceof Request ? input.url : String(input);
         if (!url.endsWith('/child/chat/completions'))
           return original(input, init);
@@ -84,7 +85,7 @@ describe('public async child query ownership', () => {
         }
         requests += 1;
         return response(requests === 1);
-      };
+      });
       try {
         expect(
           (

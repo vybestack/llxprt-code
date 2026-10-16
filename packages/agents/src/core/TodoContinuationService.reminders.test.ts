@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import {
+  afterAll,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -39,6 +47,11 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   LocalTodoStore: mockTodoStoreConstructor,
 }));
 
+const realTodoReminderModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/todo-reminder-service.js'
+  )),
+};
 void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
@@ -97,9 +110,17 @@ const completedTodo: Todo = {
   status: 'completed',
 };
 
+let service: TodoContinuationService;
+let reminderService: TodoReminderService;
+
 describe('TodoContinuationService', () => {
-  let service: TodoContinuationService;
-  let reminderService: TodoReminderService;
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
+      () => realTodoReminderModule,
+    );
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -145,6 +166,13 @@ describe('TodoContinuationService', () => {
     service = makeService({ todoReminderService: reminderService });
   });
 
+  registerCurrentStateTests();
+  registerAppendReminderTests();
+  registerPendingReminderTests();
+  registerFollowUpTests();
+});
+
+function registerCurrentStateTests(): void {
   describe('getTodoReminderForCurrentState', () => {
     it('returns create list reminder when no todos exist', async () => {
       todoStoreReadMock.mockResolvedValue([]);
@@ -210,7 +238,9 @@ describe('TodoContinuationService', () => {
       expect(result.reminder).toBeNull();
     });
   });
+}
 
+function registerAppendReminderTests(): void {
   describe('appendSystemReminderToRequest', () => {
     it('appends reminder text to request array', () => {
       const req = [{ type: 'text', text: 'original request' }];
@@ -286,7 +316,9 @@ describe('TodoContinuationService', () => {
       ]);
     });
   });
+}
 
+function registerPendingReminderTests(): void {
   describe('applyPendingReminder', () => {
     it('returns the original request and resets pending reminder state when paused', async () => {
       const request = [{ text: 'original request' }];
@@ -307,7 +339,9 @@ describe('TodoContinuationService', () => {
       ).not.toHaveBeenCalled();
     });
   });
+}
 
+function registerFollowUpTests(): void {
   describe('buildFollowUpReminder', () => {
     it('returns update reminder text when active todos exist', () => {
       service.lastTodoSnapshot = [];
@@ -355,4 +389,4 @@ describe('TodoContinuationService', () => {
       expect(result).toBeUndefined();
     });
   });
-});
+}

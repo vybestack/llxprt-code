@@ -248,24 +248,29 @@ async function reclaimProjectEntry(
  * Reclaim unreferenced project media after bounded sequential ownership scans.
  *
  * @param globalTempDirectory - Root containing project-hash directories.
- * @param activeHistory - In-memory history whose media remains protected.
+ * @param activeHistory - History source whose media remains protected.
  * @param limitOverrides - Optional finite scan limits.
  * @returns Number of skipped or corrupt projects.
  */
 export async function reclaimSessionMedia(
   globalTempDirectory: string,
-  activeHistory: readonly IContent[] | undefined,
+  activeHistory: Iterable<IContent> | AsyncIterable<IContent> | undefined,
   limitOverrides: Partial<MediaReclamationLimits> = {},
+  signal?: AbortSignal,
 ): Promise<number> {
   const limits = resolveLimits(limitOverrides);
-  const activeContentIds = new Set(
-    activeHistory === undefined
-      ? []
-      : collectMediaReferences(activeHistory).flatMap((reference) => [
-          reference.originalContentId,
-          reference.selectedContentId,
-        ]),
-  );
+  signal?.throwIfAborted();
+  const activeContentIds = new Set<string>();
+  if (activeHistory !== undefined) {
+    for await (const row of activeHistory) {
+      signal?.throwIfAborted();
+      for (const reference of collectMediaReferences([row])) {
+        activeContentIds.add(reference.originalContentId);
+        activeContentIds.add(reference.selectedContentId);
+      }
+    }
+  }
+  signal?.throwIfAborted();
   let entries: Awaited<ReturnType<typeof opendir>>;
   try {
     entries = await opendir(globalTempDirectory);

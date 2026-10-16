@@ -1,0 +1,117 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { SubagentLaunchResult } from '../subagentOrchestrator.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+
+async function readBody(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+export async function localTransport(directory: string): Promise<{
+  baseUrl: string;
+  count(): number;
+  digest(): string;
+  rejectNext(): void;
+  close(): Promise<void>;
+}> {
+  let count = 0;
+  let digest = '';
+  let rejectNext = false;
+  const failures: string[] = [];
+  const handle = async (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> => {
+    try {
+      if (request.url !== '/v1/responses')
+        throw new Error(`Unexpected URL ${request.url}`);
+      if (
+        request.headers.authorization !== 'Bearer childaccept-not-a-credential'
+      )
+        throw new Error('Unexpected credential');
+      const body = await readBody(request);
+      count += 1;
+      digest = createHash('sha256').update(body).digest('hex');
+      await writeFile(join(directory, `request-${count}.json`), body);
+      if (rejectNext) {
+        rejectNext = false;
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: { message: 'local refusal', type: 'server_error' },
+          }),
+        );
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.end(
+        'data: {"type":"content.delta","delta":"ok"}\n\ndata: {"type":"response.completed","response":{"id":"resp_child_local","status":"completed"}}\n\ndata: [DONE]\n\n',
+      );
+    } catch (error) {
+      failures.push(String(error));
+      response.writeHead(500);
+      response.end('local transport rejected the request');
+    }
+  };
+  const server = createServer((request, response) => {
+    void handle(request, response);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('Missing listener address');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    count: () => count,
+    digest: () => digest,
+    rejectNext: () => {
+      rejectNext = true;
+    },
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      if (failures.length > 0)
+        throw new Error(
+          `Local transport rejected requests: ${failures.join('; ')}`,
+        );
+    },
+  };
+}
+
+export async function sendChildHistory(
+  child: SubagentLaunchResult,
+  contents: AsyncIterable<IContent> = child.runtime.history.getCuratedForProviderStream(),
+): Promise<void> {
+  const provider = child.runtime.providerAdapter.getActiveProvider();
+  const admitted =
+    child.runtime.runtimeContext.prepareProviderInvocation('openai-responses');
+  const invocation = createRuntimeInvocationContext({
+    runtimeId: admitted.runtimeId,
+    providerName: 'openai-responses',
+    ephemeralsSnapshot: {
+      ...admitted.ephemerals,
+      'prompt-caching': 'off',
+      'responses-stateful': true,
+      retries: 2,
+      retrywait: 0,
+    },
+  });
+  for await (const _chunk of provider.generateChatCompletion({
+    contents,
+    invocation,
+    systemInstruction: 'child acceptance',
+  })) {
+    /* drain */
+  }
+}

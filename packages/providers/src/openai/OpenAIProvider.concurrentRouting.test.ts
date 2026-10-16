@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -145,7 +145,7 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
       settingsService: proxySettings,
     });
 
-    const canonicalOptions = createProviderCallOptions({
+    const canonicalOptions = streamCallOptions({
       providerName: 'openai',
       settings: canonicalSettings,
       runtime: canonicalRuntime,
@@ -157,7 +157,7 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
       contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
     });
 
-    const proxyOptions = createProviderCallOptions({
+    const proxyOptions = streamCallOptions({
       providerName: 'openai',
       settings: proxySettings,
       runtime: proxyRuntime,

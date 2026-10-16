@@ -594,7 +594,7 @@ export class Turn {
     await reportError(
       error,
       baseMessage,
-      buildErrorReportContext(
+      await buildErrorReportContext(
         this.chat.getHistory(/*curated*/ true),
         req,
         baseUrl,

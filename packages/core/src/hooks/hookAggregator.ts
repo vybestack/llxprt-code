@@ -27,6 +27,11 @@ import { HookEventName } from './types.js';
 import type { ToolChoice } from '../llm-types/toolDeclaration.js';
 
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
+import {
+  aggregateHookSnapshots,
+  type AggregatedHookSnapshotResult,
+} from './hookSnapshotAggregator.js';
+import type { HookSnapshotResult } from './hookOutputSnapshot.js';
 
 /**
  * Aggregated hook result
@@ -43,6 +48,13 @@ export interface AggregatedHookResult {
  * Hook aggregator that merges results from multiple hooks using event-specific strategies
  */
 export class HookAggregator {
+  aggregateSnapshotResults(
+    results: readonly HookSnapshotResult[],
+    signal?: AbortSignal,
+  ): AggregatedHookSnapshotResult {
+    return aggregateHookSnapshots(results, signal);
+  }
+
   /**
    * Aggregate results from multiple hook executions
    */

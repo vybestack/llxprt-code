@@ -27,22 +27,26 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
 function requireGenerateOptions(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
 ): GenerateChatOptions {
-  if (Array.isArray(options)) {
-    throw new Error('Legacy chat arguments are not used by this test');
+  if (isAsyncIterableContents(options)) {
+    throw new Error('Legacy positional arguments are not used by this test');
   }
   return options;
 }
 
 async function* generateFailingOpenAiPrompt(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
   captured: GenerateChatOptions[],
   recordAttempt: () => number,
 ): AsyncGenerator<IContent> {
@@ -52,7 +56,7 @@ async function* generateFailingOpenAiPrompt(
 }
 
 async function* generateCapturedAnthropicPrompt(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
   captured: GenerateChatOptions[],
 ): AsyncGenerator<IContent> {
   captured.push(requireGenerateOptions(options));
@@ -82,10 +86,12 @@ function createCapturingProvider(name: string): CapturingProvider {
     name,
     captured,
     async *generateChatCompletion(
-      optionsOrContents: GenerateChatOptions | IContent[],
+      optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
-      if (Array.isArray(optionsOrContents)) {
-        throw new Error('Legacy chat arguments are not used by this test');
+      if (isAsyncIterableContents(optionsOrContents)) {
+        throw new Error(
+          'Legacy positional arguments are not used by this test',
+        );
       }
       captured.push(optionsOrContents);
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
@@ -180,12 +186,12 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     const { assembler, invocations } = providerModelAssembler();
 
     await consume(lb, {
-      contents: [createTextContent('first')],
+      contents: replayableContents([createTextContent('first')]),
       systemInstruction: '[provider=load-balancer]',
       systemPromptAssembler: assembler,
     });
     await consume(lb, {
-      contents: [createTextContent('second')],
+      contents: replayableContents([createTextContent('second')]),
       systemInstruction: '[provider=load-balancer]',
       systemPromptAssembler: assembler,
     });
@@ -208,7 +214,7 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     const openai: IProvider = {
       name: 'openai',
       generateChatCompletion: (
-        optionsOrContents: GenerateChatOptions | IContent[],
+        optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
       ) =>
         generateFailingOpenAiPrompt(
           optionsOrContents,
@@ -222,7 +228,7 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     const anthropic: IProvider = {
       name: 'anthropic',
       generateChatCompletion: (
-        optionsOrContents: GenerateChatOptions | IContent[],
+        optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
       ) =>
         generateCapturedAnthropicPrompt(optionsOrContents, anthropicCaptured),
       getModels: async () => [],
@@ -257,7 +263,7 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     const { assembler, invocations } = providerModelAssembler();
 
     await consume(lb, {
-      contents: [createTextContent('request')],
+      contents: replayableContents([createTextContent('request')]),
       systemInstruction: '[provider=load-balancer]',
       systemPromptAssembler: assembler,
     });

@@ -138,16 +138,19 @@ export function makeResumeContext(
   let recording = opts.currentRecording ?? null;
   let integration = opts.currentIntegration ?? null;
   let lockHandle = opts.currentLockHandle ?? null;
+  let metadata: ReturnType<RecordingSwapCallbacks['getCurrentMetadata']> = null;
   void opts.currentSessionId;
 
   const callbacks: RecordingSwapCallbacks = {
     getCurrentRecording: () => recording,
     getCurrentIntegration: () => integration,
     getCurrentLockHandle: () => lockHandle,
-    setRecording: (newRecording, newIntegration, newLock, _newMetadata) => {
+    getCurrentMetadata: () => metadata,
+    setRecording: (newRecording, newIntegration, newLock, newMetadata) => {
       recording = newRecording;
       integration = newIntegration;
       lockHandle = newLock;
+      metadata = newMetadata;
     },
   };
 

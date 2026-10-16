@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import {
@@ -17,6 +18,9 @@ import type { ResolvedAuthToken } from '../types/providerRuntime.js';
 
 export interface ResponsesRequest {
   readonly contents: IContent[];
+  /** Pinned disk selection read at transport; present only on the source route. */
+  readonly requestRows?: ProviderRequestRows;
+  readonly contentCount?: number;
   readonly tools?: ProviderToolset;
   readonly systemInstruction?: string;
   readonly metadata: Record<string, unknown>;
@@ -70,6 +74,8 @@ export function captureResponsesRequest(
   const logicalRequestId = options.metadata['logicalRequestId'];
   return Object.freeze({
     contents: options.contents,
+    requestRows: options.requestRows,
+    contentCount: options.contentCount,
     tools: options.tools,
     systemInstruction: options.systemInstruction,
     metadata: options.metadata,

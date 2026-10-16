@@ -43,6 +43,7 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('ChatSession runtime streaming and abort behavior', () => {
@@ -96,6 +97,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       { name: 'read_file', parametersJsonSchema: {} },
       { name: 'run_shell_command', parametersJsonSchema: {} },
     ];
+    const modelHooks = withSnapshotModelEvents({
+      fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+      fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+    });
     const hookOwner: HookExecutionOwner = {
       sessionId: () => config.getSessionId(),
       transcriptPath: () => undefined,
@@ -107,6 +112,10 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         }),
       beforeModel: async () => new BeforeModelHookOutput({}),
       afterModel: async () => new AfterModelHookOutput({}),
+      beforeModelSnapshot: (request, signal) =>
+        modelHooks.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        modelHooks.fireAfterModelSnapshotEvent(request, response, signal),
     };
     const hookProviderRuntime = createProviderRuntimeContext({
       settingsService,

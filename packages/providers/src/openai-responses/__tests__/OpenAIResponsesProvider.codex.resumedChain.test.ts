@@ -1,4 +1,7 @@
-import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
+import {
+  captureResponsesTestRequest,
+  executeResponsesTestRequest,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -44,7 +47,6 @@ import {
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
   CODEX_BASE_URL,
   buildDeps,
@@ -173,7 +175,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(replayed.history),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -216,7 +218,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(contents),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -257,7 +259,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     });
     try {
       const resumedMessages = await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(resumedContents),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -299,7 +301,7 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
       ];
 
       await drainHarness(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(turn2Contents),
             buildDeps({ getWebSocketTransport: () => transport }),

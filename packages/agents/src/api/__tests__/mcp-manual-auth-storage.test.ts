@@ -60,12 +60,16 @@ describe('manual MCP authentication storage', () => {
         });
       },
     };
-    const network = spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      Response.json({
-        access_token: 'persisted-after-cancel',
-        token_type: 'Bearer',
-        expires_in: 3600,
-      }),
+    const network = spyOn(globalThis, 'fetch').mockImplementation(
+      Object.assign(
+        async () =>
+          Response.json({
+            access_token: 'persisted-after-cancel',
+            token_type: 'Bearer',
+            expires_in: 3600,
+          }),
+        { preconnect: globalThis.fetch.preconnect },
+      ),
     );
     const built = await buildAgent('multi-turn-text.jsonl', {
       folderTrust: false,

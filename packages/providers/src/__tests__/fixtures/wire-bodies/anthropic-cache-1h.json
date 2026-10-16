@@ -1,0 +1,313 @@
+{
+  "route": "anthropic-cache-1h",
+  "cases": {
+    "text-only": {
+      "stream": {
+        "sha256": "34653a44bdbad7574d336329e93824d222af000306e35f3788c0aac8a180755b",
+        "length": 435,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "34653a44bdbad7574d336329e93824d222af000306e35f3788c0aac8a180755b",
+        "length": 435,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"hello\"},{\"role\":\"assistant\",\"content\":\"hi there\"},{\"role\":\"user\",\"content\":\"what is 2+2?\"},{\"role\":\"assistant\",\"content\":\"4\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "system-and-tools": {
+      "stream": {
+        "sha256": "1bc3fe60ee5d08b94b461ad27fb05006167a0b1189e9480d1ee8795440b2f069",
+        "length": 595,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"weather in Paris?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"You are a terse assistant.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "1bc3fe60ee5d08b94b461ad27fb05006167a0b1189e9480d1ee8795440b2f069",
+        "length": 595,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"weather in Paris?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"You are a terse assistant.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "tool-calls-with-results": {
+      "stream": {
+        "sha256": "187a1484816bbe040b71204f13e3ad0e958e07918efddbc2f001528593f6277a",
+        "length": 1131,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"{\\\"temp\\\":21}\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"get_weather\",\"input\":{\"city\":\"London\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"rainy, 14C\"}]},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"You are a terse assistant.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "187a1484816bbe040b71204f13e3ad0e958e07918efddbc2f001528593f6277a",
+        "length": 1131,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"weather in Paris and London?\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"{\\\"temp\\\":21}\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"get_weather\",\"input\":{\"city\":\"London\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"rainy, 14C\"}]},{\"role\":\"assistant\",\"content\":\"Paris 21C, London rainy 14C.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"You are a terse assistant.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "parallel-tool-calls": {
+      "stream": {
+        "sha256": "88b50a7e62f4f8f76d0e20d9dbf75821cc2afb803d8eefcb9c404d4eb20919c6",
+        "length": 984,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading both.\"},{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"path\":\"/a.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_b\",\"name\":\"read_file\",\"input\":{\"path\":\"/b.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"alpha\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_b\",\"content\":\"beta\"},{\"type\":\"text\",\"text\":\"summarise\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "88b50a7e62f4f8f76d0e20d9dbf75821cc2afb803d8eefcb9c404d4eb20919c6",
+        "length": 984,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read both files\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Reading both.\"},{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"path\":\"/a.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_b\",\"name\":\"read_file\",\"input\":{\"path\":\"/b.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"alpha\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_b\",\"content\":\"beta\"},{\"type\":\"text\",\"text\":\"summarise\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-call": {
+      "stream": {
+        "sha256": "116f508e4bbbef3636a7cf430d9bfeb74273b549be2801258c47f3ab75e7884b",
+        "length": 858,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_orphan_1\",\"name\":\"read_file\",\"input\":{\"path\":\"/lost.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_orphan_1\",\"content\":\"[tool execution interrupted]\",\"is_error\":true},{\"type\":\"text\",\"text\":\"never mind, say hi\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "116f508e4bbbef3636a7cf430d9bfeb74273b549be2801258c47f3ab75e7884b",
+        "length": 858,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read it\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_orphan_1\",\"name\":\"read_file\",\"input\":{\"path\":\"/lost.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_orphan_1\",\"content\":\"[tool execution interrupted]\",\"is_error\":true},{\"type\":\"text\",\"text\":\"never mind, say hi\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "orphan-tool-result": {
+      "stream": {
+        "sha256": "4f6a120f3afc8fce5c649e95499e242a33742b76e22190740fd824d7a7e02abf",
+        "length": 648,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"continue\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "4f6a120f3afc8fce5c649e95499e242a33742b76e22190740fd824d7a7e02abf",
+        "length": 648,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"start\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"continue\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "interleaved-tool-results": {
+      "stream": {
+        "sha256": "50285cd310c8363725690e55758a464559529d050c367de4113f6aead4d6f899",
+        "length": 1045,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"path\":\"/a.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_b\",\"name\":\"read_file\",\"input\":{\"path\":\"/b.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"alpha\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_b\",\"content\":\"beta\"},{\"type\":\"text\",\"text\":\"hurry up\"}]},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"good\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "50285cd310c8363725690e55758a464559529d050c367de4113f6aead4d6f899",
+        "length": 1045,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read two files\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_a\",\"name\":\"read_file\",\"input\":{\"path\":\"/a.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_b\",\"name\":\"read_file\",\"input\":{\"path\":\"/b.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_a\",\"content\":\"alpha\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_b\",\"content\":\"beta\"},{\"type\":\"text\",\"text\":\"hurry up\"}]},{\"role\":\"assistant\",\"content\":\"Both read.\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"good\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "displaced-tool-result": {
+      "stream": {
+        "sha256": "9808323f31e23b326ba85de886ba357286f12dfc2955945ef925ff9fd47d5192",
+        "length": 1219,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{\"path\":\"/1.txt\"}},{\"type\":\"text\",\"text\":\"while waiting\"}]},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"read_file\",\"input\":{\"path\":\"/2.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_3\",\"name\":\"read_file\",\"input\":{\"path\":\"/3.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_3\",\"content\":\"[tool execution interrupted]\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"two\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"one\"},{\"type\":\"text\",\"text\":\"done?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "9808323f31e23b326ba85de886ba357286f12dfc2955945ef925ff9fd47d5192",
+        "length": 1219,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"first\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"read_file\",\"input\":{\"path\":\"/1.txt\"}},{\"type\":\"text\",\"text\":\"while waiting\"}]},{\"role\":\"user\",\"content\":\"second\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_2\",\"name\":\"read_file\",\"input\":{\"path\":\"/2.txt\"}},{\"type\":\"tool_use\",\"id\":\"toolu_3\",\"name\":\"read_file\",\"input\":{\"path\":\"/3.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_3\",\"content\":\"[tool execution interrupted]\",\"is_error\":true},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_2\",\"content\":\"two\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_1\",\"content\":\"one\"},{\"type\":\"text\",\"text\":\"done?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "tool-id-shapes": {
+      "stream": {
+        "sha256": "4bb01b64742cb205f4cf0be6fe0f5f5598a6c4dc063c14830e0da8b3de6082cc",
+        "length": 1206,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_abcdefghijklmnop\",\"name\":\"read_file\",\"input\":{\"path\":\"/x\"}},{\"type\":\"tool_use\",\"id\":\"toolu_01ABCdefGHI\",\"name\":\"get_weather\",\"input\":{\"city\":\"Oslo\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_abcdefghijklmnop\",\"content\":\"x-body\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_01ABCdefGHI\",\"content\":\"cold\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_abcdefghijklmnop\",\"name\":\"read_file\",\"input\":{\"path\":\"/y\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_abcdefghijklmnop\",\"content\":\"y-body\"},{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "4bb01b64742cb205f4cf0be6fe0f5f5598a6c4dc063c14830e0da8b3de6082cc",
+        "length": 1206,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_abcdefghijklmnop\",\"name\":\"read_file\",\"input\":{\"path\":\"/x\"}},{\"type\":\"tool_use\",\"id\":\"toolu_01ABCdefGHI\",\"name\":\"get_weather\",\"input\":{\"city\":\"Oslo\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_abcdefghijklmnop\",\"content\":\"x-body\"},{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_01ABCdefGHI\",\"content\":\"cold\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_abcdefghijklmnop\",\"name\":\"read_file\",\"input\":{\"path\":\"/y\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_abcdefghijklmnop\",\"content\":\"y-body\"},{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "reasoning-thinking": {
+      "stream": {
+        "sha256": "e27a7eea1925e5957e2f9c9236abc2d8d4ae0f855d1d720603ac606a9e9baa05",
+        "length": 1226,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"first line of thought\",\"signature\":\"sig-first\"},{\"type\":\"text\",\"text\":\"first answer\"}]},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"second line of thought\"},{\"type\":\"tool_use\",\"id\":\"toolu_think_call\",\"name\":\"get_weather\",\"input\":{\"city\":\"Rome\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_think_call\",\"content\":\"sunny\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"last line of thought\",\"signature\":\"sig-last\"},{\"type\":\"text\",\"text\":\"It is sunny.\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and tomorrow?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "e27a7eea1925e5957e2f9c9236abc2d8d4ae0f855d1d720603ac606a9e9baa05",
+        "length": 1226,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"think hard\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"first line of thought\",\"signature\":\"sig-first\"},{\"type\":\"text\",\"text\":\"first answer\"}]},{\"role\":\"user\",\"content\":\"again\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"second line of thought\"},{\"type\":\"tool_use\",\"id\":\"toolu_think_call\",\"name\":\"get_weather\",\"input\":{\"city\":\"Rome\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_think_call\",\"content\":\"sunny\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"last line of thought\",\"signature\":\"sig-last\"},{\"type\":\"text\",\"text\":\"It is sunny.\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and tomorrow?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "thinking-only-chain": {
+      "stream": {
+        "sha256": "58ae33c674ce0cf533a2fdd6d106c684848b86bb770adaca2076c4e8c85a614b",
+        "length": 479,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"deciding\",\"signature\":\"sig-chain\"},{\"type\":\"text\",\"text\":\"part one\"},{\"type\":\"text\",\"text\":\"part two\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "58ae33c674ce0cf533a2fdd6d106c684848b86bb770adaca2076c4e8c85a614b",
+        "length": 479,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"go\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"deciding\",\"signature\":\"sig-chain\"},{\"type\":\"text\",\"text\":\"part one\"},{\"type\":\"text\",\"text\":\"part two\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "media-inline-image": {
+      "stream": {
+        "sha256": "3cce38419b50ad7e977a337f74dc5416e5888d39e79acc77113de7b76ebd3357",
+        "length": 656,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and the url one?\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://example.test/pixel.png\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "3cce38419b50ad7e977a337f74dc5416e5888d39e79acc77113de7b76ebd3357",
+        "length": 656,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is this?\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and the url one?\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://example.test/pixel.png\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "media-reference-image": {
+      "stream": {
+        "sha256": "994cf07293743c530695f0bd83a7b3588f7fa39783e615aee6f8ae438303968e",
+        "length": 489,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "994cf07293743c530695f0bd83a7b3588f7fa39783e615aee6f8ae438303968e",
+        "length": 489,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "unicode-edges": {
+      "stream": {
+        "sha256": "8840c0ac5aba6a9fc7fb4ae46719618ac63992aa27a44a15feb0e910becc2138",
+        "length": 1006,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_edge_call\",\"name\":\"read_file\",\"input\":{\"2\":\"two\",\"10\":\"ten\",\"path\":\"/ü/雪.txt\",\"b\":1,\"a\":[1,2,{\"z\":null}]}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_edge_call\",\"content\":\"line1\\nline2\\t\\\"quoted\\\"\"}]},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "8840c0ac5aba6a9fc7fb4ae46719618ac63992aa27a44a15feb0e910becc2138",
+        "length": 1006,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"edge \\ud800 lone high, \\udc00 lone low,     \\u0000 \\u001f\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_edge_call\",\"name\":\"read_file\",\"input\":{\"2\":\"two\",\"10\":\"ten\",\"path\":\"/ü/雪.txt\",\"b\":1,\"a\":[1,2,{\"z\":null}]}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_edge_call\",\"content\":\"line1\\nline2\\t\\\"quoted\\\"\"}]},{\"role\":\"assistant\",\"content\":\"emoji 😀 done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-user": {
+      "stream": {
+        "sha256": "5c8316784299857ba4eca6bc939aa1acccbaa34c32469ab9e1afc1d43fe65558",
+        "length": 789,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"seven\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "5c8316784299857ba4eca6bc939aa1acccbaa34c32469ab9e1afc1d43fe65558",
+        "length": 789,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":\"four\"},{\"role\":\"user\",\"content\":\"five\"},{\"role\":\"assistant\",\"content\":\"six\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"seven\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-tool-result": {
+      "stream": {
+        "sha256": "bc439205d1f9a6d2687f10edb9f2f142e9da526af5ea84725a16954eb6fb8be4",
+        "length": 777,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_tail_call\",\"name\":\"read_file\",\"input\":{\"path\":\"/t.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_tail_call\",\"content\":\"tail body\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "bc439205d1f9a6d2687f10edb9f2f142e9da526af5ea84725a16954eb6fb8be4",
+        "length": 777,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_tail_call\",\"name\":\"read_file\",\"input\":{\"path\":\"/t.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_tail_call\",\"content\":\"tail body\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-assistant": {
+      "stream": {
+        "sha256": "26e5fc561581e7a008e9b950c9c2879d71caea4c4928e69b435a803da17c9777",
+        "length": 389,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"four\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "26e5fc561581e7a008e9b950c9c2879d71caea4c4928e69b435a803da17c9777",
+        "length": 389,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":\"two\"},{\"role\":\"user\",\"content\":\"three\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"four\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-anchor": {
+      "stream": {
+        "sha256": "84ae3f89cb55ec2eb7abfeb1597dc483f34a1d7c5863e28f29a56d6f70364496",
+        "length": 552,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"acknowledged\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"another question\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "84ae3f89cb55ec2eb7abfeb1597dc483f34a1d7c5863e28f29a56d6f70364496",
+        "length": 552,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"summary of earlier work\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"acknowledged\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":\"new question\"},{\"role\":\"assistant\",\"content\":\"new answer\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"another question\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"Stable system prompt.\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-tail-thinking": {
+      "stream": {
+        "sha256": "042f098c6fec49c995c51777abf479a59cd7fdd62347fc0621ad487487df1a67",
+        "length": 401,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"visible answer\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"thinking\",\"thinking\":\"trailing thought\",\"signature\":\"sig-tail\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "042f098c6fec49c995c51777abf479a59cd7fdd62347fc0621ad487487df1a67",
+        "length": 401,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"one\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"visible answer\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"thinking\",\"thinking\":\"trailing thought\",\"signature\":\"sig-tail\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "cache-media-purge-boundary": {
+      "stream": {
+        "sha256": "9d8a10fd45933dee8e1be098e0f4e2c18b614d89bfa2ecd0164eb3b31951b569",
+        "length": 609,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "9d8a10fd45933dee8e1be098e0f4e2c18b614d89bfa2ecd0164eb3b31951b569",
+        "length": 609,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    },
+    "responses-stateful-parent": {
+      "stream": {
+        "sha256": "82bc53e675055a11bf5a2a7fc423b1e07e5e2281aa50a6acc6596db81fa4fbfb",
+        "length": 919,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_stateful_call\",\"name\":\"read_file\",\"input\":{\"path\":\"/s.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_stateful_call\",\"content\":\"[tool execution interrupted]\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"},\"is_error\":true}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "82bc53e675055a11bf5a2a7fc423b1e07e5e2281aa50a6acc6596db81fa4fbfb",
+        "length": 919,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"first question\"},{\"role\":\"assistant\",\"content\":\"stored answer\"},{\"role\":\"user\",\"content\":\"second question\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_stateful_call\",\"name\":\"read_file\",\"input\":{\"path\":\"/s.txt\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_stateful_call\",\"content\":\"[tool execution interrupted]\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"},\"is_error\":true}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Weather lookup\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"]}},{\"name\":\"read_file\",\"description\":\"Read a file\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[]}}]}",
+        "contentLength": "present"
+      }
+    },
+    "blockless-row": {
+      "stream": {
+        "sha256": "7713efd179854f8ceea7248030d9b7fc930516742b947e266fd1e83023e2fdd6",
+        "length": 379,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"after\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "7713efd179854f8ceea7248030d9b7fc930516742b947e266fd1e83023e2fdd6",
+        "length": 379,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"before\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"after\"}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"end\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    }
+  }
+}

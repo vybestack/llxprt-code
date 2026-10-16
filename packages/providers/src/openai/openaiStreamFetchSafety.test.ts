@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import OpenAI from 'openai';
 import { createServer } from 'node:http';
@@ -27,7 +28,7 @@ function byteStream(): ReadableStream<Uint8Array> {
 
 /** Build a fetch stub that always returns the given response. */
 function responseFetch(response: Response): typeof fetch {
-  return async () => response;
+  return withFetchPreconnect(async () => response);
 }
 
 /** Return the response body, failing the test when it is absent. */
@@ -52,7 +53,7 @@ async function readBodyBytes(response: Response): Promise<readonly number[]> {
   return bytes;
 }
 
-describe('reader-based OpenAI fetch', () => {
+describe('reader-based OpenAI fetch / clone bytes and iterator ownership', () => {
   it('serves full payload bytes from both original and clone bodies when string-backed', async () => {
     const wrapped = wrapResponseWithReaderIteratedBody(new Response('abc'));
     const clone = wrapped.clone();
@@ -123,7 +124,9 @@ describe('reader-based OpenAI fetch', () => {
       ),
     ).toBe(response);
   });
+});
 
+describe('reader-based OpenAI fetch / untouched responses and metadata', () => {
   it('leaves bodies without native async iteration untouched', async () => {
     const response = new Response(byteStream());
     Object.defineProperty(requireBody(response), Symbol.asyncIterator, {
@@ -188,7 +191,9 @@ describe('reader-based OpenAI fetch', () => {
       });
     }
   });
+});
 
+describe('reader-based OpenAI fetch / fetched clone metadata', () => {
   it('cancels and unlocks on iterator return and remains done', async () => {
     let cancelled = false;
     const source = new ReadableStream<Uint8Array>({
@@ -218,7 +223,9 @@ describe('reader-based OpenAI fetch', () => {
     await reader.cancel();
     reader.releaseLock();
   });
+});
 
+describe('reader-based OpenAI fetch / cancellation, reader access and SDK integration', () => {
   it('makes the real SDK use the owned iterator for SSE and usage-only frames', async () => {
     const usage = { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 };
     const frames = [
@@ -243,23 +250,25 @@ describe('reader-based OpenAI fetch', () => {
     });
     const safeFetch = createReaderBasedStreamFetch(responseFetch(source));
     let ownedIteratorConsumed = false;
-    const instrumentedFetch: typeof fetch = async (input, init) => {
-      const response = await safeFetch(input, init);
-      const body = requireBody(response);
-      if (!isIterableBody(body)) throw new Error('Expected owned iterator');
-      const iterate = body[Symbol.asyncIterator];
-      Object.defineProperty(body, Symbol.asyncIterator, {
-        value() {
-          ownedIteratorConsumed = true;
-          return iterate.call(body);
-        },
-      });
-      return response;
-    };
+    const instrumentedFetch: typeof fetch = withFetchPreconnect(
+      async (input, init) => {
+        const response = await safeFetch(input, init);
+        const body = requireBody(response);
+        if (!isIterableBody(body)) throw new Error('Expected owned iterator');
+        const iterate = body[Symbol.asyncIterator];
+        Object.defineProperty(body, Symbol.asyncIterator, {
+          value() {
+            ownedIteratorConsumed = true;
+            return iterate.call(body);
+          },
+        });
+        return response;
+      },
+    );
     const client = new OpenAI({
       apiKey: 'test',
       baseURL: 'http://localhost/v1',
-      fetch: instrumentedFetch,
+      fetch: withFetchPreconnect(instrumentedFetch),
     });
     const stream = await client.chat.completions.create({
       model: 'test',
@@ -280,7 +289,7 @@ describe('reader-based OpenAI fetch', () => {
     const wrapper = createReaderBasedStreamFetch();
     const response = new Response(null, { status: 204 });
     try {
-      globalThis.fetch = responseFetch(response);
+      globalThis.fetch = withFetchPreconnect(responseFetch(response));
       expect(await wrapper('http://localhost')).toBe(response);
     } finally {
       globalThis.fetch = savedFetch;

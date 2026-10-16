@@ -67,7 +67,10 @@ function expectDiscriminatedResumeResult(
     expect(result).toHaveProperty('history');
     expect(result).toHaveProperty('metadata');
     expect(result).toHaveProperty('warnings');
-    expect(Array.isArray(result.history)).toBe(true);
+    expect(
+      Symbol.asyncIterator in result.history ||
+        Symbol.iterator in result.history,
+    ).toBe(true);
     expect(Array.isArray(result.warnings)).toBe(true);
     return;
   }

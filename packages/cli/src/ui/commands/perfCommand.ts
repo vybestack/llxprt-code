@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { getHistoryServiceFromAgent } from './historyServiceAccess.js';
-import { formatHistoryMemoryBreakdown } from './perfMemoryBreakdown.js';
+import { formatHistoryMemoryBreakdownStream } from './perfMemoryBreakdown.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   perfInspect,
@@ -296,7 +296,7 @@ function createMemorySubCommand(): SlashCommand {
     name: 'memory',
     description: 'Show retained conversation size by block type and tool',
     kind: CommandKind.BUILT_IN,
-    action: (context: CommandContext): MessageActionReturn => {
+    action: async (context: CommandContext): Promise<MessageActionReturn> => {
       const historyService = getHistoryServiceFromAgent(context.services.agent);
       if (historyService === null) {
         return messageInfo(
@@ -304,7 +304,9 @@ function createMemorySubCommand(): SlashCommand {
         );
       }
       return messageInfo(
-        formatHistoryMemoryBreakdown(historyService.getRawHistory()),
+        await formatHistoryMemoryBreakdownStream(
+          historyService.streamRawHistory(),
+        ),
       );
     },
   };

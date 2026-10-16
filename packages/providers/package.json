@@ -198,6 +198,11 @@
       "bun": "./src/ProviderManager.ts",
       "import": "./dist/src/ProviderManager.js"
     },
+    "./logging/requestSizeReport.js": {
+      "types": "./dist/src/logging/requestSizeReport.d.ts",
+      "bun": "./src/logging/requestSizeReport.ts",
+      "import": "./dist/src/logging/requestSizeReport.js"
+    },
     "./logging/ProviderPerformanceTracker.js": {
       "bun": "./src/logging/ProviderPerformanceTracker.ts",
       "import": "./dist/src/logging/ProviderPerformanceTracker.js"
@@ -238,6 +243,15 @@
       "bun": "./src/utils/mediaUtils.ts",
       "import": "./dist/src/utils/mediaUtils.js"
     },
+    "./utils/collectContents.js": {
+      "bun": "./src/utils/collectContents.ts",
+      "import": "./dist/src/utils/collectContents.js"
+    },
+    "./utils/abortSignal.js": {
+      "types": "./dist/src/utils/abortSignal.d.ts",
+      "bun": "./src/utils/abortSignal.ts",
+      "import": "./dist/src/utils/abortSignal.js"
+    },
     "./providerMediaTransportCapabilities.js": {
       "types": "./dist/src/providerMediaTransportCapabilities.d.ts",
       "bun": "./src/providerMediaTransportCapabilities.ts",
@@ -263,10 +277,25 @@
       "bun": "./src/utils/dumpSDKContext.ts",
       "import": "./dist/src/utils/dumpSDKContext.js"
     },
+    "./utils/streamPrettyJson.js": {
+      "types": "./dist/src/utils/streamPrettyJson.d.ts",
+      "bun": "./src/utils/streamPrettyJson.ts",
+      "import": "./dist/src/utils/streamPrettyJson.js"
+    },
     "./utils/request-media-resolution.js": {
       "types": "./dist/src/utils/request-media-resolution.d.ts",
       "bun": "./src/utils/request-media-resolution.ts",
       "import": "./dist/src/utils/request-media-resolution.js"
+    },
+    "./utils/requestScopedBody.js": {
+      "types": "./dist/src/utils/requestScopedBody.d.ts",
+      "bun": "./src/utils/requestScopedBody.ts",
+      "import": "./dist/src/utils/requestScopedBody.js"
+    },
+    "./BaseProviderNormalization.js": {
+      "types": "./dist/src/BaseProviderNormalization.d.ts",
+      "bun": "./src/BaseProviderNormalization.ts",
+      "import": "./dist/src/BaseProviderNormalization.js"
     },
     "./utils/systemPromptPlacement.js": {
       "types": "./dist/src/utils/systemPromptPlacement.d.ts",

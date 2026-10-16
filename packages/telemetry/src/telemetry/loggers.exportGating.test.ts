@@ -104,9 +104,10 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       'secret response body',
     );
 
-    logApiRequest(config, req, selectedTelemetry);
+    await logApiRequest(config, req, selectedTelemetry);
     logApiResponse(config, resp, selectedTelemetry);
 
+    await selectedTelemetry.flush();
     const requestAttrs = attributesAt(0);
     expect(requestAttrs.request_chars).toBe(19);
     expect(requestAttrs.request_text).toBeUndefined();
@@ -124,7 +125,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     });
     const selectedTelemetry = await root(config);
 
-    logApiRequest(
+    await logApiRequest(
       config,
       new ApiRequestEvent('m', 'p', longBody),
       selectedTelemetry,
@@ -135,6 +136,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       selectedTelemetry,
     );
 
+    await selectedTelemetry.flush();
     const requestAttrs = attributesAt(0);
     expect(requestAttrs.request_chars).toBe(5000);
     expect(requestAttrs.request_text).toBe('X'.repeat(4000));
@@ -152,11 +154,12 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     });
     const selectedTelemetry = await root(config);
 
-    logApiRequest(
+    await logApiRequest(
       config,
       new ApiRequestEvent('m', 'p', body),
       selectedTelemetry,
     );
+    await selectedTelemetry.flush();
     const requestAttrs = attributesAt(0);
     expect(requestAttrs.request_chars).toBe(200);
     expect(requestAttrs.request_text).toBe('Y'.repeat(50));
@@ -171,11 +174,12 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     });
     const selectedTelemetry = await root(config);
 
-    logApiRequest(
+    await logApiRequest(
       config,
       new ApiRequestEvent('m', 'p', body),
       selectedTelemetry,
     );
+    await selectedTelemetry.flush();
     const requestAttrs = attributesAt(0);
     expect(requestAttrs.request_chars).toBe(50);
     expect(requestAttrs.request_text).toBe(body);
@@ -188,7 +192,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     });
     const selectedTelemetry = await root(config);
 
-    logApiRequest(
+    await logApiRequest(
       config,
       new ApiRequestEvent('m', 'p', 'private prompt text'),
       selectedTelemetry,
@@ -199,6 +203,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       selectedTelemetry,
     );
 
+    await selectedTelemetry.flush();
     const requestAttrs = attributesAt(0);
     expect(requestAttrs.request_chars).toBe(19);
     expect(requestAttrs.request_text).toBeUndefined();
@@ -206,6 +211,22 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     const responseAttrs = attributesAt(1);
     expect(responseAttrs.response_chars).toBe(21);
     expect(responseAttrs.response_text).toBeUndefined();
+  });
+
+  it('exports the reported request size when no body or artifact is present', async () => {
+    const config = makeConfig();
+    const selectedTelemetry = await root(config);
+
+    await logApiRequest(
+      config,
+      new ApiRequestEvent('m', 'p', undefined, undefined, 48213),
+      selectedTelemetry,
+    );
+
+    await selectedTelemetry.flush();
+    const requestAttrs = attributesAt(0);
+    expect(requestAttrs.request_chars).toBe(48213);
+    expect(requestAttrs.request_text).toBeUndefined();
   });
 
   it('token counts remain present regardless of body gating', async () => {
@@ -228,6 +249,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
 
     logApiResponse(config, resp, selectedTelemetry);
 
+    await selectedTelemetry.flush();
     const responseAttrs = attributesAt(0);
     expect(responseAttrs.input_token_count).toBe(10);
     expect(responseAttrs.output_token_count).toBe(20);

@@ -9,8 +9,8 @@ import {
   writeToStderr,
   SessionEndReason,
   OutputFormat,
-  type IContent,
 } from '@vybestack/llxprt-code-core';
+import type { OwnerResumedRows } from '../cliSessionBootstrap.js';
 
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -101,7 +101,7 @@ export interface SessionDispatchOptions {
   settings: LoadedSettings;
   workspaceRoot: string;
   recordingOwner?: 'agent';
-  resumedHistory?: IContent[] | null;
+  resumedBoot?: OwnerResumedRows | null;
   /** Session-resume warnings the user must see (unreadable recordings, resume failures). */
   recordingStartupWarnings?: readonly string[];
   hasPipedInput: boolean;
@@ -122,7 +122,7 @@ export async function dispatchInteractiveOrNonInteractive({
   settings,
   workspaceRoot,
   recordingOwner,
-  resumedHistory,
+  resumedBoot,
   recordingStartupWarnings = [],
   hasPipedInput,
   readStdinData,
@@ -175,7 +175,7 @@ export async function dispatchInteractiveOrNonInteractive({
         skillOperations,
         restartExtension,
         runtimeMessageBus: sessionMessageBus,
-        resumedHistory: resumedHistory ?? undefined,
+        resumedBoot: resumedBoot ?? undefined,
         suppressStartupWelcome,
       },
     );

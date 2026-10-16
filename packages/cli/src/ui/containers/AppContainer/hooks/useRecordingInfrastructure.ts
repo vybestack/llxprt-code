@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type {
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
+  SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
 
@@ -21,18 +22,23 @@ function createRawResources(
   initialRecordingService?: SessionRecordingService,
   recordingIntegration?: RecordingIntegration,
   initialLockHandle?: LockHandle | null,
+  onRecordingSwapped?: () => void,
 ) {
   const recordingServiceRef = { current: initialRecordingService ?? null };
   const recordingIntegrationRef = { current: recordingIntegration ?? null };
   const lockHandleRef = { current: initialLockHandle ?? null };
+  const metadataRef: { current: SessionMetadata | null } = { current: null };
   const recordingSwapCallbacks: RecordingSwapCallbacks = {
     getCurrentRecording: () => recordingServiceRef.current,
     getCurrentIntegration: () => recordingIntegrationRef.current,
     getCurrentLockHandle: () => lockHandleRef.current,
-    setRecording: (recording, integration, lock) => {
+    getCurrentMetadata: () => metadataRef.current,
+    setRecording: (recording, integration, lock, metadata) => {
       recordingServiceRef.current = recording;
       recordingIntegrationRef.current = integration;
       lockHandleRef.current = lock;
+      metadataRef.current = metadata;
+      onRecordingSwapped?.();
     },
   };
   return {
@@ -49,6 +55,7 @@ export function useRecordingInfrastructure(
   initialLockHandle?: LockHandle | null,
   recordingOwner?: 'agent' | 'raw',
 ): UseRecordingInfrastructureResult {
+  const [, setRevision] = useState(0);
   const rawRef = useRef<ReturnType<typeof createRawResources> | undefined>(
     undefined,
   );
@@ -58,6 +65,7 @@ export function useRecordingInfrastructure(
       initialRecordingService,
       recordingIntegration,
       initialLockHandle,
+      () => setRevision((value) => value + 1),
     );
   const raw = rawRef.current;
 

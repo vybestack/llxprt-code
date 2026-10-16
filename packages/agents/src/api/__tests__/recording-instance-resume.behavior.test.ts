@@ -53,9 +53,11 @@ describe('adopted recording instance path', () => {
         const replay = await replaySession(originalPath, basename(projectTemp));
         if (!replay.ok) throw new Error(replay.error);
         expect(replay.sequenceCorrupt).toBe(false);
-        expect(replay.history).toStrictEqual([
+        // Journal rows additionally carry their chronology stamp.
+        expect(replay.history).toMatchObject([
           content('changed while recording stopped'),
         ]);
+        expect(replay.history).toHaveLength(1);
         const records: unknown[] = (await readFile(originalPath, 'utf8'))
           .trim()
           .split('\n')
@@ -68,8 +70,11 @@ describe('adopted recording instance path', () => {
           },
           { seq: 2, type: 'content' },
           { seq: 3, type: 'session_event' },
-          { seq: 4, type: 'rewind' },
-          { seq: 5, type: 'content' },
+          // Resume leaves the one source row unchanged, so it writes no
+          // chronology_bind for it.
+          { seq: 4, type: 'replace_begin' },
+          { seq: 5, type: 'content', payload: { tx: expect.any(String) } },
+          { seq: 6, type: 'replace_commit', payload: { rowCount: 1 } },
         ]);
         expect(await owner.agent.session.listSessions()).toHaveLength(1);
         expect(chatsDir).toBe(internalConfig(owner.agent).projectChatsDir);

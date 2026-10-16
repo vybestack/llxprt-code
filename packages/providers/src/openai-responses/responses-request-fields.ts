@@ -1,0 +1,205 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
+import type { ResponsesRequest } from './responses-request.js';
+import type { ResponsesInputBuildContext } from './OpenAIResponsesInputBuilder.js';
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { convertToolsToOpenAIResponses } from './schemaConverter.js';
+import {
+  applyOpenAIResponsesReasoning,
+  type AppliedOpenAIResponsesReasoning,
+} from './openai-responses-reasoning.js';
+import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
+import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
+import type {
+  OpenAIResponsesRequest,
+  ResponsesInputItem,
+} from './OpenAIResponsesTypes.js';
+
+export function resolveInvocationEphemerals(
+  options: ResponsesRequest,
+): Record<string, unknown> {
+  return options.invocation.ephemerals;
+}
+
+export async function resolveApiKey(
+  options: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+): Promise<string> {
+  const promptAuthToken = await deps.resolveAuthTokenForPrompt();
+  // Strict guard on the value that becomes the Authorization header:
+  // only forward a genuine non-empty string. Provider implementations
+  // can resolve to '' from deeper auth paths, and a defensive runtime
+  // typeof check ensures a non-string (undefined/null from a loosely
+  // typed implementation) is never injected into the header.
+  if (typeof promptAuthToken === 'string' && promptAuthToken !== '') {
+    return promptAuthToken;
+  }
+  const runtimeToken = await resolveRuntimeAuthToken(
+    options.resolved.authToken,
+  );
+  if (typeof runtimeToken === 'string' && runtimeToken !== '') {
+    return runtimeToken;
+  }
+
+  const isCodex = deps.isCodexMode();
+  throw new Error(
+    isCodex
+      ? 'Codex authentication required. Run /auth codex enable to authenticate.'
+      : 'OpenAI API key is required',
+  );
+}
+
+export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {
+  return options.pdfEnabled;
+}
+
+export function responsesInputContext(
+  options: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+  serverSideParentActive: boolean = false,
+  reasoningIdTime?: number,
+): ResponsesInputBuildContext {
+  const requestReasoningIdTime =
+    reasoningIdTime ?? readRequestReasoningIdTime(options);
+  return {
+    includeReasoningInContext: options.includeReasoningInContext,
+    outputLimits: options.outputLimits,
+    debug: (messageFactory) => deps.logger.debug(messageFactory),
+    serverSideParentActive,
+    mediaPdfEnabled: isResponsesPdfEnabled(options),
+    ...(requestReasoningIdTime === undefined
+      ? {}
+      : { reasoningIdTime: requestReasoningIdTime }),
+  };
+}
+
+export function normalizeBaseURL(baseURLCandidate: string): string {
+  let baseURL = baseURLCandidate;
+  while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1);
+  return baseURL;
+}
+
+export function createRequest(
+  options: ResponsesRequest,
+  input: ResponsesInputItem[],
+  requestOverrides: Record<string, unknown>,
+): OpenAIResponsesRequest {
+  return {
+    model: options.resolved.model,
+    input,
+    stream: true,
+    ...requestOverrides,
+  };
+}
+
+export function applyInstructionsAndTools(
+  request: OpenAIResponsesRequest,
+  systemPrompt: string,
+  options: ResponsesRequest,
+): void {
+  if (systemPrompt) request.instructions = systemPrompt;
+
+  const responsesTools = convertToolsToOpenAIResponses(options.tools);
+  if (responsesTools === undefined || responsesTools.length === 0) return;
+
+  request.tools = responsesTools;
+  if (
+    request.tool_choice === undefined ||
+    request.tool_choice === null ||
+    request.tool_choice === ''
+  ) {
+    request.tool_choice = 'auto';
+  }
+  request.parallel_tool_calls = true;
+}
+
+export function applyReasoningSettings(
+  request: OpenAIResponsesRequest,
+  options: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+): AppliedOpenAIResponsesReasoning {
+  const reasoning = applyOpenAIResponsesReasoning({
+    request,
+    modelBehavior: options.invocation.modelBehavior,
+    fallbacks: options.reasoningFallbacks,
+    providerName: deps.providerName,
+    logger: deps.logger,
+  });
+  deps.logger.debug(
+    () =>
+      `Reasoning check: enabled=${String(reasoning.enabled)}, effort=${String(reasoning.effort)}, summary=${String(reasoning.summary)}, shouldRequest=${reasoning.selected}, includeInResponse=${reasoning.includeThinkingInResponse}`,
+  );
+  if (reasoning.selected) {
+    request.include = ['reasoning.encrypted_content'];
+    deps.logger.debug(
+      () => `Added include parameter: ${JSON.stringify(request.include)}`,
+    );
+  }
+  deps.logger.debug(
+    () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
+  );
+  return reasoning;
+}
+
+export function applyTextVerbosity(
+  request: OpenAIResponsesRequest,
+  options: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+): void {
+  const textVerbosity = options.textVerbosity;
+  if (
+    typeof textVerbosity !== 'string' ||
+    textVerbosity === '' ||
+    !['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
+  ) {
+    return;
+  }
+  request.text = { verbosity: textVerbosity.toLowerCase() };
+  deps.logger.debug(() => `Added text.verbosity to request: ${textVerbosity}`);
+}
+
+export function applyCodexRequestSettings(
+  request: OpenAIResponsesRequest,
+  isCodex: boolean,
+  deps: ResponsesExecutorDeps,
+): void {
+  if (!isCodex) return;
+
+  // store=false is only the Codex DEFAULT. applyStatefulConversation runs
+  // after this and raises it to store=true whenever statefulness is active.
+  // See the design rationale doc comment on applyStatefulConversation in
+  // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
+  request.store = false;
+  for (const parameter of deps.getUnallowedModelParameters(request.model)) {
+    delete request[parameter];
+  }
+  if ('max_output_tokens' in request) {
+    delete request.max_output_tokens;
+    deps.logger.debug(
+      () => 'Codex mode: removed unsupported max_output_tokens from request',
+    );
+  }
+}
+
+export function applyPromptCaching(
+  request: OpenAIResponsesRequest,
+  options: ResponsesRequest,
+  isCodex: boolean,
+): void {
+  const promptCachingSetting = options.promptCaching;
+  if (promptCachingSetting === 'off') return;
+
+  if (
+    typeof request.prompt_cache_key === 'string' &&
+    request.prompt_cache_key.trim() !== ''
+  ) {
+    if (!isCodex) request.prompt_cache_retention = '24h';
+    return;
+  }
+
+  const cacheKey = options.invocation.runtimeId;
+  if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
+
+  request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
+  if (!isCodex) request.prompt_cache_retention = '24h';
+}

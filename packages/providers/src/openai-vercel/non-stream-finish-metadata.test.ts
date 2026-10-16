@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -21,28 +22,30 @@ describe('Vercel non-streaming finish metadata', () => {
     async (wireReason, expected, raw) => {
       const provider = createOpenAI({
         apiKey: 'test-only',
-        fetch: async () =>
-          new Response(
-            JSON.stringify({
-              id: 'finish-test',
-              object: 'chat.completion',
-              created: 0,
-              model: 'test',
-              choices: [
-                {
-                  index: 0,
-                  message: { role: 'assistant', content: 'Answer' },
-                  finish_reason: wireReason,
+        fetch: withFetchPreconnect(
+          async () =>
+            new Response(
+              JSON.stringify({
+                id: 'finish-test',
+                object: 'chat.completion',
+                created: 0,
+                model: 'test',
+                choices: [
+                  {
+                    index: 0,
+                    message: { role: 'assistant', content: 'Answer' },
+                    finish_reason: wireReason,
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 2,
+                  completion_tokens: 3,
+                  total_tokens: 5,
                 },
-              ],
-              usage: {
-                prompt_tokens: 2,
-                completion_tokens: 3,
-                total_tokens: 5,
-              },
-            }),
-            { headers: { 'content-type': 'application/json' } },
-          ),
+              }),
+              { headers: { 'content-type': 'application/json' } },
+            ),
+        ),
       });
       const result = await generateText({
         model: provider.chat('test'),

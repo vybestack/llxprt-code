@@ -83,6 +83,28 @@ function normalizeAttemptIdentity(attemptId: string | undefined): string {
   return trimmed === '' ? randomUUID() : (trimmed ?? randomUUID());
 }
 
+function startApiRequestSpan(
+  telemetry: RootTelemetry,
+  config: Pick<Config, 'getSessionId'>,
+  model: string,
+): TelemetrySpan {
+  return telemetry.spans.start('llxprt.api.request', {
+    attributes: { model, 'session.id': config.getSessionId() },
+  });
+}
+
+function legacyUsageMetadata(
+  event: Parameters<AgentRuntimeTelemetryAdapter['logApiResponse']>[0],
+) {
+  if (event.usageMetadata !== undefined) return event.usageMetadata;
+  if (event.usage === undefined) return undefined;
+  return {
+    inputTokenCount: event.usage.inputTokens,
+    outputTokenCount: event.usage.outputTokens,
+    totalTokenCount: event.usage.totalTokens,
+  };
+}
+
 export function createTelemetryAdapter(
   config: Pick<Config, 'getSessionId'>,
   telemetry: RootTelemetry,
@@ -95,17 +117,9 @@ export function createTelemetryAdapter(
       if (telemetry.isEnabled()) {
         const key = identity(event);
         spans.get(key)?.end();
-        spans.set(
-          key,
-          telemetry.spans.start('llxprt.api.request', {
-            attributes: {
-              model: event.model,
-              'session.id': config.getSessionId(),
-            },
-          }),
-        );
+        spans.set(key, startApiRequestSpan(telemetry, config, event.model));
       }
-      logApiRequest(
+      return logApiRequest(
         config,
         new LegacyApiRequestEvent(
           event.model,
@@ -118,15 +132,7 @@ export function createTelemetryAdapter(
     logApiResponse: (event) => {
       spans.get(identity(event))?.end();
       spans.delete(identity(event));
-      const usageForLegacy =
-        event.usageMetadata ??
-        (event.usage !== undefined
-          ? {
-              inputTokenCount: event.usage.inputTokens,
-              outputTokenCount: event.usage.outputTokens,
-              totalTokenCount: event.usage.totalTokens,
-            }
-          : undefined);
+      const usageForLegacy = legacyUsageMetadata(event);
       // Stable prompt identity matches logApiRequest's correlation key.
       // Trim whitespace so padded IDs normalize to their core value.
       // Empty/whitespace-only attemptId is treated as missing so the

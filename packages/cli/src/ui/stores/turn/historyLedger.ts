@@ -5,7 +5,9 @@
  */
 
 import { Buffer } from 'node:buffer';
+import type { RowOwnership } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
+import { sameRowIdentity, type RowIdentity } from '../../utils/rowIdentity.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
@@ -102,6 +104,28 @@ function createHistoryState(
       entries,
       totalBytes: entries.reduce((total, entry) => total + entry.bytes, 0),
       truncatedItems: 0,
+    },
+    limits,
+  );
+}
+
+/**
+ * Places `items` ahead of the resident entries. Used when rows that precede
+ * the live tail arrive after it (a resumed transcript finishing its load
+ * while the session is already running).
+ */
+function prependHistoryItems(
+  previous: HistoryState,
+  items: readonly HistoryItem[],
+  limits: HistoryLimits,
+): HistoryState {
+  if (limits.maxItems === 0) return previous;
+  const leading = createHistoryState(items, limits);
+  return trimHistoryState(
+    {
+      entries: [...leading.entries, ...previous.entries],
+      totalBytes: leading.totalBytes + previous.totalBytes,
+      truncatedItems: leading.truncatedItems + previous.truncatedItems,
     },
     limits,
   );
@@ -248,6 +272,9 @@ function boundHistoryItem(
     id: item.id,
     type: 'info',
     text: DISPLAY_BOUND_NOTICE,
+    ...(item.rowIdentity !== undefined
+      ? { rowIdentity: item.rowIdentity }
+      : {}),
   };
   return estimateHistoryItemBytes(fallback) <= maxBytes ? fallback : undefined;
 }
@@ -318,16 +345,32 @@ export interface HistoryLedger {
   ) => void;
   remove: (ids: readonly number[]) => void;
   load: (items: readonly HistoryItem[]) => void;
+  /** Inserts `items` before every resident entry, keeping those entries. */
+  prepend: (items: readonly HistoryItem[]) => void;
   clear: () => void;
+  /**
+   * Index of the resident entry carrying `identity`, or -1. Scans only the
+   * resident entries (bounded by the ledger limits), never a session-sized
+   * collection.
+   *
+   * @plan PLAN-20260917-ISSUE854.P02b
+   * @requirement G5
+   */
+  findIndexByIdentity: (identity: RowIdentity) => number;
 }
 
 export function createHistoryLedger(
   initialLimits?: HistoryLimits,
+  ownership?: RowOwnership,
 ): HistoryLedger {
   let limits = initialLimits ?? normalizeHistoryLimits();
   let state = EMPTY_HISTORY_STATE;
 
   const apply = (next: HistoryState): void => {
+    if (ownership) {
+      for (const entry of next.entries) ownership.retain(entry.item);
+      for (const entry of state.entries) ownership.release(entry.item);
+    }
     state = next;
   };
 
@@ -350,9 +393,18 @@ export function createHistoryLedger(
     load: (items) => {
       apply(createHistoryState(items, limits));
     },
+    prepend: (items) => {
+      apply(prependHistoryItems(state, items, limits));
+    },
     clear: () => {
       apply(EMPTY_HISTORY_STATE);
     },
+    findIndexByIdentity: (identity) =>
+      state.entries.findIndex(
+        (entry) =>
+          entry.item.rowIdentity !== undefined &&
+          sameRowIdentity(entry.item.rowIdentity, identity),
+      ),
   };
 }
 

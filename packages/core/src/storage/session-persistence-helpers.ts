@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DebugLogger } from '../debug/index.js';
+import type { DebugLogger } from '../debug/index.js';
 import type { IContent } from '../services/history/IContent.js';
 import { MediaAdmissionError } from './media-admission-service.js';
 import { MediaReferenceValidationError } from './media-reference-lifecycle.js';
@@ -125,14 +125,15 @@ export function preflightPersistenceRequest(
     );
 }
 
-export async function backupCorruptedPersistence(
+export async function backupCorruptedSession(
   chatsDir: string,
+  prefix: string,
+  logger: DebugLogger,
 ): Promise<void> {
-  const logger = new DebugLogger('llxprt:session:persistence');
   try {
     const files = await fs.promises.readdir(chatsDir);
     const sessionFiles = files
-      .filter((f) => f.startsWith('persisted-session-') && f.endsWith('.json'))
+      .filter((f) => f.startsWith(prefix) && f.endsWith('.json'))
       .sort()
       .reverse();
 

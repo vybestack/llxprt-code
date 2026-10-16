@@ -1,3 +1,5 @@
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -207,30 +209,22 @@ function countType(events: readonly JsonlEvent[], type: string): number {
  * provider-content restore do: snapshot, `clear()`, re-`add()`. Runs outside
  * any compression window, which is exactly what makes it a duplicate source.
  */
-function rebuildHistoryInPlace(historyService: HistoryService): void {
-  const snapshot = historyService.getCurated();
-  historyService.clear();
-  for (const content of snapshot) {
-    historyService.add(content);
-  }
+async function rebuildHistoryInPlace(
+  historyService: HistoryService,
+): Promise<void> {
+  await historyService.replaceAll(curatedHistoryForTest(historyService));
 }
 
 /** Run a compression cycle whose rebuild happens under the compression lock. */
-function compressUnderLock(
+async function compressUnderLock(
   historyService: HistoryService,
   summaryText: string,
-): void {
+): Promise<void> {
   historyService.startCompression();
-  const snapshot = historyService.getCurated();
-  const itemsCompressed = snapshot.length;
-  historyService.clear();
-  for (const content of snapshot) {
-    historyService.add(content);
-  }
-  historyService.endCompression(
-    textContent(summaryText, 'ai'),
-    itemsCompressed,
-  );
+  const itemsCompressed = curatedHistoryForTest(historyService).length;
+  const summary = textContent(summaryText, 'ai');
+  await historyService.replaceAll([summary]);
+  historyService.endCompression(summary, itemsCompressed);
 }
 
 interface RecordingHarness {
@@ -250,7 +244,7 @@ async function createHarness(): Promise<RecordingHarness> {
   const recordingService = new SessionRecordingService(makeConfig(chatsDir));
   const integration = new RecordingIntegration(recordingService);
   const historyService = new HistoryService();
-  integration.subscribeToHistory(historyService);
+  await integration.subscribeToJournal(historyService);
   return {
     tempDir,
     chatsDir,
@@ -260,9 +254,39 @@ async function createHarness(): Promise<RecordingHarness> {
   };
 }
 
-describe('RecordingIntegration duplicate content guard @issue:3132', () => {
-  let harness: RecordingHarness;
+let harness: RecordingHarness;
 
+async function flushAndReadEvents(): Promise<JsonlEvent[]> {
+  await harness.integration.flushAtTurnBoundary();
+  const filePath = harness.recordingService.getFilePath();
+  expect(filePath).not.toBeNull();
+  return readEvents(filePath ?? '');
+}
+
+async function flushAndReplay(): Promise<ReplayOkResult> {
+  await harness.integration.flushAtTurnBoundary();
+  const filePath = harness.recordingService.getFilePath();
+  expect(filePath).not.toBeNull();
+  const replay = await replaySession(filePath ?? '', PROJECT_HASH);
+  assertReplayOk(replay);
+  return replay;
+}
+
+function recordToolTurn(label: string): IContent[] {
+  const turn = [
+    textContent(`${label}-user`),
+    toolCallContent(`${label}-alpha`),
+    toolResponseContent(`${label}-alpha`),
+    toolCallContent(`${label}-beta`),
+    toolResponseContent(`${label}-beta`),
+  ];
+  for (const content of turn) {
+    harness.historyService.add(content);
+  }
+  return turn;
+}
+
+describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   beforeEach(async () => {
     harness = await createHarness();
   });
@@ -270,346 +294,449 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   afterEach(async () => {
     await harness.integration.dispose();
     await harness.recordingService.dispose();
-    harness.historyService.dispose();
+    await harness.historyService.dispose();
     await fs.rm(harness.tempDir, { recursive: true, force: true });
   });
 
-  async function flushAndReadEvents(): Promise<JsonlEvent[]> {
-    await harness.integration.flushAtTurnBoundary();
-    const filePath = harness.recordingService.getFilePath();
-    expect(filePath).not.toBeNull();
-    return readEvents(filePath ?? '');
+  it(
+    'records a wholesale history rebuild exactly once',
+    testRecordingCompressionBoundary01,
+  );
+
+  it(
+    'records a compression between turns without duplicating content',
+    testRecordingCompressionBoundary02,
+  );
+
+  it(
+    'keeps content that arrives mid-compression in history without duplicating records',
+    testRecordingCompressionBoundary03,
+  );
+
+  it(
+    'records a truncation-fallback rebuild that follows a compression mid-turn exactly once',
+    testRecordingCompressionBoundary04,
+  );
+
+  it(
+    'records a retried turn crossing a compression boundary without duplicating the original',
+    testRecordingCompressionBoundary05,
+  );
+
+  it(
+    'records content whose chronology marker is reused by a different payload',
+    testRecordingCompressionBoundary06,
+  );
+
+  it(
+    'does not re-record history that is already in the recording when a resumed session rebuilds',
+    testRecordingCompressionBoundary07,
+  );
+
+  it(
+    'records content that carries no chronology marker',
+    testRecordingCompressionBoundary08,
+  );
+
+  it(
+    'records content from a replacement HistoryService whose chronology restarts',
+    testRecordingCompressionBoundary09,
+  );
+
+  it(
+    'does not re-record earlier content when the same HistoryService is re-subscribed',
+    testRecordingCompressionBoundary10,
+  );
+
+  it(
+    'does not append resumed content again when a rebuild reassigns turn IDs',
+    testRecordingCompressionBoundary11,
+  );
+
+  it(
+    'does not re-record seeded disk history when live history is empty at subscribe time',
+    testRecordingCompressionBoundary12,
+  );
+
+  it(
+    'does not re-record an unstamped disk snapshot when its history is rebuilt',
+    testRecordingCompressionBoundary13,
+  );
+});
+
+async function testRecordingCompressionBoundary01(): Promise<void> {
+  const turn = recordToolTurn('rebuild');
+
+  await rebuildHistoryInPlace(harness.historyService);
+
+  const events = await flushAndReadEvents();
+  expect(recordedContents(events)).toHaveLength(turn.length);
+  expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+
+  const replay = await flushAndReplay();
+  expect(collectToolCallIds(replay.history)).toStrictEqual([
+    'call_rebuild-alpha',
+    'call_rebuild-beta',
+  ]);
+  expect(collectToolResponseCallIds(replay.history)).toStrictEqual([
+    'call_rebuild-alpha',
+    'call_rebuild-beta',
+  ]);
+  await collectRowsForAssertions(
+    harness.historyService.streamRawHistory(),
+    async (contentsForAssertions) => {
+      const live = contentsForAssertions;
+      expect(hasNoDuplicates(collectToolCallIds(live))).toBe(true);
+      expect(hasNoDuplicates(collectToolResponseCallIds(live))).toBe(true);
+    },
+  );
+}
+
+async function testRecordingCompressionBoundary02(): Promise<void> {
+  harness.historyService.add(textContent('turn-1-user'));
+  harness.historyService.add(textContent('turn-1-ai', 'ai'));
+
+  await compressUnderLock(harness.historyService, 'between-turns-summary');
+
+  harness.historyService.add(textContent('turn-2-user'));
+
+  const events = await flushAndReadEvents();
+  expect(textsOf(recordedContents(events))).toStrictEqual([
+    'turn-1-user',
+    'turn-1-ai',
+    'turn-2-user',
+  ]);
+  expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+  expect(countType(events, 'compressed')).toBe(1);
+}
+
+async function testRecordingCompressionBoundary03(): Promise<void> {
+  harness.historyService.add(textContent('mid-1-user'));
+  harness.historyService.add(textContent('mid-2-ai', 'ai'));
+
+  // Real ordering: the compression rebuild is queued first, then a stream
+  // add that arrived while the lock was held is flushed behind it.
+  harness.historyService.startCompression();
+  const snapshot = curatedHistoryForTest(harness.historyService);
+  await harness.historyService.replaceAll([
+    textContent('mid-turn-summary', 'ai'),
+  ]);
+  harness.historyService.add(textContent('mid-arrival', 'ai'));
+  harness.historyService.endCompression(
+    textContent('mid-turn-summary', 'ai'),
+    snapshot.length,
+  );
+  await collectRowsForAssertions(
+    harness.historyService.streamRawHistory(),
+    async (contentsForAssertions) => {
+      const live = contentsForAssertions;
+      expect(
+        textsOf(live).filter((text) => text === 'mid-arrival'),
+      ).toHaveLength(1);
+
+      const events = await flushAndReadEvents();
+      expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+      expect(countType(events, 'compressed')).toBe(1);
+    },
+  );
+}
+
+async function testRecordingCompressionBoundary04(): Promise<void> {
+  const turn = recordToolTurn('fallback');
+
+  // The hard-limit path compresses, then rebuilds again outside the lock.
+  await compressUnderLock(harness.historyService, 'fallback-summary');
+  await rebuildHistoryInPlace(harness.historyService);
+
+  const events = await flushAndReadEvents();
+  expect(recordedContents(events)).toHaveLength(turn.length);
+  expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+
+  const replay = await flushAndReplay();
+  expect(hasNoDuplicates(collectToolResponseCallIds(replay.history))).toBe(
+    true,
+  );
+}
+
+async function testRecordingCompressionBoundary05(): Promise<void> {
+  recordToolTurn('retry');
+
+  await compressUnderLock(harness.historyService, 'retry-summary');
+  // The retry re-enforces the context window, which rebuilds history.
+  await rebuildHistoryInPlace(harness.historyService);
+
+  // The retried attempt then contributes genuinely new content.
+  harness.historyService.add(toolCallContent('retry-gamma'));
+  harness.historyService.add(toolResponseContent('retry-gamma'));
+
+  const events = await flushAndReadEvents();
+  expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+  expect(collectToolCallIds(recordedContents(events))).toStrictEqual([
+    'call_retry-alpha',
+    'call_retry-beta',
+    'call_retry-gamma',
+  ]);
+
+  const replay = await flushAndReplay();
+  expect(hasNoDuplicates(collectToolResponseCallIds(replay.history))).toBe(
+    true,
+  );
+  await collectRowsForAssertions(
+    harness.historyService.streamRawHistory(),
+    async (contentsForAssertions) => {
+      const live = contentsForAssertions;
+      expect(hasNoDuplicates(collectToolCallIds(live))).toBe(true);
+      expect(hasNoDuplicates(collectToolResponseCallIds(live))).toBe(true);
+    },
+  );
+}
+
+async function testRecordingCompressionBoundary06(): Promise<void> {
+  const original = toolCallContent('inherit');
+  harness.historyService.add(original);
+
+  // Density optimization and merge both hand a DIFFERENT payload an existing
+  // chronology marker. Identity alone must not suppress it.
+  const replacement: IContent = {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'condensed replacement' }],
+    metadata: { ...original.metadata },
+  };
+  harness.historyService.add(replacement);
+
+  const events = await flushAndReadEvents();
+  const contents = recordedContents(events);
+  expect(contents).toHaveLength(2);
+  expect(textsOf(contents)).toContain('condensed replacement');
+}
+
+async function testRecordingCompressionBoundary07(): Promise<void> {
+  recordToolTurn('resumed');
+  await harness.integration.flushAtTurnBoundary();
+  const filePath = harness.recordingService.getFilePath();
+  expect(filePath).not.toBeNull();
+  const sessionPath = filePath ?? '';
+
+  await harness.integration.dispose();
+  await harness.recordingService.dispose();
+
+  const replayed = await replaySession(sessionPath, PROJECT_HASH);
+  assertReplayOk(replayed);
+  const recordsBeforeResume = replayed.history.length;
+
+  // Resume: append to the same file, restore the replayed history, then
+  // subscribe. A later rebuild must not append the restored entries again.
+  const resumedRecording = new SessionRecordingService(
+    makeConfig(harness.chatsDir),
+  );
+  resumedRecording.initializeForResume(sessionPath, replayed.lastSeq);
+  const resumedIntegration = new RecordingIntegration(resumedRecording);
+  const resumedHistory = new HistoryService({ recording: resumedRecording });
+  await resumedIntegration.subscribeToJournal(resumedHistory);
+
+  try {
+    await compressUnderLock(resumedHistory, 'resumed-summary');
+    await rebuildHistoryInPlace(resumedHistory);
+    resumedHistory.add(textContent('post-resume-user'));
+
+    await resumedIntegration.flushAtTurnBoundary();
+    const events = await readEvents(sessionPath);
+    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
+    expect(recordedContents(events)).toHaveLength(recordsBeforeResume + 1);
+    expect(textsOf(recordedContents(events))).toContain('post-resume-user');
+  } finally {
+    await resumedIntegration.dispose();
+    await resumedRecording.dispose();
+    await resumedHistory.dispose();
   }
+}
 
-  async function flushAndReplay(): Promise<ReplayOkResult> {
-    await harness.integration.flushAtTurnBoundary();
-    const filePath = harness.recordingService.getFilePath();
-    expect(filePath).not.toBeNull();
-    const replay = await replaySession(filePath ?? '', PROJECT_HASH);
-    assertReplayOk(replay);
-    return replay;
-  }
+async function testRecordingCompressionBoundary08(): Promise<void> {
+  harness.historyService.add(textContent('no-marker-1'));
+  harness.historyService.add(textContent('no-marker-2'));
 
-  function recordToolTurn(label: string): IContent[] {
-    const turn = [
-      textContent(`${label}-user`),
-      toolCallContent(`${label}-alpha`),
-      toolResponseContent(`${label}-alpha`),
-      toolCallContent(`${label}-beta`),
-      toolResponseContent(`${label}-beta`),
-    ];
-    for (const content of turn) {
-      harness.historyService.add(content);
-    }
-    return turn;
-  }
+  const events = await flushAndReadEvents();
+  expect(textsOf(recordedContents(events))).toStrictEqual([
+    'no-marker-1',
+    'no-marker-2',
+  ]);
+}
 
-  it('records a wholesale history rebuild exactly once', async () => {
-    const turn = recordToolTurn('rebuild');
+async function testRecordingCompressionBoundary09(): Promise<void> {
+  const replacementService = new HistoryService();
+  await harness.integration.subscribeToJournal(replacementService);
 
-    rebuildHistoryInPlace(harness.historyService);
+  try {
+    // Fresh service: seqs restart at 1 and would collide with the harness
+    // service's seqs, so identity cannot rest on the seq alone.
+    replacementService.add(textContent('replacement-1'));
+    replacementService.add(textContent('replacement-2', 'ai'));
 
     const events = await flushAndReadEvents();
-    expect(recordedContents(events)).toHaveLength(turn.length);
-    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-
-    const replay = await flushAndReplay();
-    expect(collectToolCallIds(replay.history)).toStrictEqual([
-      'call_rebuild-alpha',
-      'call_rebuild-beta',
+    expect(textsOf(recordedContents(events))).toStrictEqual([
+      'replacement-1',
+      'replacement-2',
     ]);
-    expect(collectToolResponseCallIds(replay.history)).toStrictEqual([
-      'call_rebuild-alpha',
-      'call_rebuild-beta',
-    ]);
+  } finally {
+    await replacementService.dispose();
+  }
+}
 
-    const live = harness.historyService.getAll();
-    expect(hasNoDuplicates(collectToolCallIds(live))).toBe(true);
-    expect(hasNoDuplicates(collectToolResponseCallIds(live))).toBe(true);
+async function testRecordingCompressionBoundary10(): Promise<void> {
+  harness.historyService.add(textContent('before-resubscribe'));
+
+  await harness.integration.subscribeToJournal(harness.historyService);
+
+  await rebuildHistoryInPlace(harness.historyService);
+  harness.historyService.add(textContent('after-resubscribe'));
+
+  const events = await flushAndReadEvents();
+  expect(textsOf(recordedContents(events))).toStrictEqual([
+    'before-resubscribe',
+    'after-resubscribe',
+  ]);
+}
+
+interface ResumedSession {
+  readonly recording: SessionRecordingService;
+  readonly integration: RecordingIntegration;
+  readonly history: HistoryService;
+}
+
+/**
+ * Closes the harness session, then resumes the same recording file the way a
+ * resumed session does: the journal is seeded from disk rather than from a
+ * live history array.
+ */
+async function resumeHarnessSession(
+  sessionPath: string,
+): Promise<{ resumed: ResumedSession; replayed: ReplayOkResult }> {
+  await harness.integration.dispose();
+  await harness.recordingService.dispose();
+
+  const replayed = await replaySession(sessionPath, PROJECT_HASH);
+  assertReplayOk(replayed);
+  const recording = new SessionRecordingService(makeConfig(harness.chatsDir));
+  recording.initializeForResume(sessionPath, replayed.lastSeq);
+  const integration = new RecordingIntegration(recording);
+  const history = new HistoryService({ recording });
+  await integration.subscribeToJournal(history);
+  return { resumed: { recording, integration, history }, replayed };
+}
+
+async function closeResumedSession(resumed: ResumedSession): Promise<void> {
+  await resumed.integration.dispose();
+  await resumed.recording.dispose();
+  await resumed.history.dispose();
+}
+
+async function liveTexts(history: HistoryService): Promise<string[]> {
+  let texts: string[] = [];
+  await collectRowsForAssertions(
+    history.streamRawHistory(),
+    (contentsForAssertions) => {
+      texts = textsOf(contentsForAssertions);
+    },
+  );
+  return texts;
+}
+
+async function testRecordingCompressionBoundary11(): Promise<void> {
+  harness.historyService.add({
+    ...textContent('resumed message'),
+    metadata: { turnId: 'original-turn-id' },
   });
+  await harness.integration.flushAtTurnBoundary();
+  let original: IContent | undefined;
+  await collectRowsForAssertions(
+    harness.historyService.streamRawHistory(),
+    (contentsForAssertions) => {
+      expect(contentsForAssertions).toHaveLength(1);
+      original = contentsForAssertions[0];
+    },
+  );
+  if (original === undefined) throw new Error('Expected the recorded row');
 
-  it('does not append resumed content again when a rebuild reassigns turn IDs', async () => {
-    harness.historyService.add({
-      ...textContent('resumed message'),
-      metadata: { turnId: 'original-turn-id' },
-    });
-    await harness.integration.flushAtTurnBoundary();
-    const original = harness.historyService.getAll()[0];
-    harness.historyService.clear();
-    harness.historyService.add({
+  // The rebuild hands the same payload back under a different turn ID.
+  await harness.historyService.replaceAll([
+    {
       ...original,
       metadata: {
         turnId: 'replacement-turn-id',
         chronology: original.metadata?.chronology,
       },
-    });
+    },
+  ]);
 
-    const events = await flushAndReadEvents();
-    expect(textsOf(recordedContents(events))).toStrictEqual([
-      'resumed message',
-    ]);
+  const events = await flushAndReadEvents();
+  expect(textsOf(recordedContents(events))).toStrictEqual(['resumed message']);
+  expect(await liveTexts(harness.historyService)).toStrictEqual([
+    'resumed message',
+  ]);
+}
+
+async function testRecordingCompressionBoundary12(): Promise<void> {
+  harness.historyService.add({
+    ...textContent('disk-only resumed message'),
+    metadata: { turnId: 'disk-turn' },
   });
+  await harness.integration.flushAtTurnBoundary();
+  const sessionPath = harness.recordingService.getFilePath();
+  expect(sessionPath).not.toBeNull();
 
-  it('does not re-record seeded disk history when live history is empty at subscribe time', async () => {
-    harness.historyService.add({
-      ...textContent('disk-only resumed message'),
-      metadata: { turnId: 'disk-turn' },
-    });
-    await harness.integration.flushAtTurnBoundary();
-    const diskHistory = harness.historyService.getAll();
-    await harness.integration.dispose();
-
-    const resumedIntegration = new RecordingIntegration(
-      harness.recordingService,
-    );
-    const liveHistory = new HistoryService();
-    resumedIntegration.rememberRecordedHistory(diskHistory);
-    resumedIntegration.subscribeToHistory(liveHistory);
-    try {
-      liveHistory.add({
-        ...diskHistory[0],
+  const { resumed, replayed } = await resumeHarnessSession(sessionPath ?? '');
+  try {
+    // No row was added through this service: the journal holds the disk
+    // history on its own, so the rebuild below has nothing new to record.
+    expect(await liveTexts(resumed.history)).toStrictEqual([
+      'disk-only resumed message',
+    ]);
+    const diskRow = replayed.history[0];
+    await resumed.history.replaceAll([
+      {
+        ...diskRow,
         metadata: {
           turnId: 'rebuilt-turn',
-          chronology: diskHistory[0].metadata?.chronology,
+          chronology: diskRow.metadata?.chronology,
         },
-      });
-      await resumedIntegration.flushAtTurnBoundary();
-      const filePath = harness.recordingService.getFilePath();
-      expect(filePath).not.toBeNull();
-      const events = await readEvents(filePath ?? '');
-      expect(textsOf(recordedContents(events))).toStrictEqual([
-        'disk-only resumed message',
-      ]);
-    } finally {
-      await resumedIntegration.dispose();
-      liveHistory.dispose();
-    }
-  });
+      },
+    ]);
+    await resumed.integration.flushAtTurnBoundary();
 
-  it('does not re-record an unstamped disk snapshot when its history is rebuilt', async () => {
-    const snapshot = textContent('unstamped disk snapshot');
-    harness.recordingService.recordContent(snapshot);
-    await harness.recordingService.flush();
-    const resumedIntegration = new RecordingIntegration(
-      harness.recordingService,
-    );
-    const liveHistory = new HistoryService();
-    resumedIntegration.rememberRecordedHistory([snapshot]);
-    resumedIntegration.subscribeToHistory(liveHistory);
-    try {
-      liveHistory.add(snapshot);
-      liveHistory.add(textContent('unstamped disk snapshot'));
-      await resumedIntegration.flushAtTurnBoundary();
-      const filePath = harness.recordingService.getFilePath();
-      expect(filePath).not.toBeNull();
-      const events = await readEvents(filePath ?? '');
-      expect(textsOf(recordedContents(events))).toStrictEqual([
-        'unstamped disk snapshot',
-        'unstamped disk snapshot',
-      ]);
-    } finally {
-      await resumedIntegration.dispose();
-      liveHistory.dispose();
-    }
-  });
-
-  it('records a compression between turns without duplicating content', async () => {
-    harness.historyService.add(textContent('turn-1-user'));
-    harness.historyService.add(textContent('turn-1-ai', 'ai'));
-
-    compressUnderLock(harness.historyService, 'between-turns-summary');
-
-    harness.historyService.add(textContent('turn-2-user'));
-
-    const events = await flushAndReadEvents();
+    const events = await readEvents(sessionPath ?? '');
     expect(textsOf(recordedContents(events))).toStrictEqual([
-      'turn-1-user',
-      'turn-1-ai',
-      'turn-2-user',
+      'disk-only resumed message',
     ]);
-    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-    expect(countType(events, 'compressed')).toBe(1);
-  });
+  } finally {
+    await closeResumedSession(resumed);
+  }
+}
 
-  it('keeps content that arrives mid-compression in history without duplicating records', async () => {
-    harness.historyService.add(textContent('mid-1-user'));
-    harness.historyService.add(textContent('mid-2-ai', 'ai'));
+async function testRecordingCompressionBoundary13(): Promise<void> {
+  const snapshot = textContent('unstamped disk snapshot');
+  harness.recordingService.recordContent(snapshot);
+  await harness.recordingService.flush();
+  const sessionPath = harness.recordingService.getFilePath();
+  expect(sessionPath).not.toBeNull();
 
-    // Real ordering: the compression rebuild is queued first, then a stream
-    // add that arrived while the lock was held is flushed behind it.
-    harness.historyService.startCompression();
-    const snapshot = harness.historyService.getCurated();
-    harness.historyService.clear();
-    for (const content of snapshot) {
-      harness.historyService.add(content);
-    }
-    harness.historyService.add(textContent('mid-arrival', 'ai'));
-    harness.historyService.endCompression(
-      textContent('mid-turn-summary', 'ai'),
-      snapshot.length,
-    );
+  const { resumed, replayed } = await resumeHarnessSession(sessionPath ?? '');
+  try {
+    // Rebuilding with the unstamped disk snapshot must not add it to the
+    // history again, while a genuinely new message with identical text is
+    // still recorded. A journal rebuild that has to stamp the snapshot
+    // rewrites it inside one committed replace transaction, so the resolved
+    // (replayed) history is what shows whether a duplicate exists.
+    await resumed.history.replaceAll([replayed.history[0]]);
+    resumed.history.add(textContent('unstamped disk snapshot'));
+    await resumed.integration.flushAtTurnBoundary();
 
-    const live = harness.historyService.getAll();
-    expect(textsOf(live).filter((text) => text === 'mid-arrival')).toHaveLength(
-      1,
-    );
-
-    const events = await flushAndReadEvents();
-    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-    expect(countType(events, 'compressed')).toBe(1);
-  });
-
-  it('records a truncation-fallback rebuild that follows a compression mid-turn exactly once', async () => {
-    const turn = recordToolTurn('fallback');
-
-    // The hard-limit path compresses, then rebuilds again outside the lock.
-    compressUnderLock(harness.historyService, 'fallback-summary');
-    rebuildHistoryInPlace(harness.historyService);
-
-    const events = await flushAndReadEvents();
-    expect(recordedContents(events)).toHaveLength(turn.length);
-    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-
-    const replay = await flushAndReplay();
-    expect(hasNoDuplicates(collectToolResponseCallIds(replay.history))).toBe(
-      true,
-    );
-  });
-
-  it('records a retried turn crossing a compression boundary without duplicating the original', async () => {
-    recordToolTurn('retry');
-
-    compressUnderLock(harness.historyService, 'retry-summary');
-    // The retry re-enforces the context window, which rebuilds history.
-    rebuildHistoryInPlace(harness.historyService);
-
-    // The retried attempt then contributes genuinely new content.
-    harness.historyService.add(toolCallContent('retry-gamma'));
-    harness.historyService.add(toolResponseContent('retry-gamma'));
-
-    const events = await flushAndReadEvents();
-    expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-    expect(collectToolCallIds(recordedContents(events))).toStrictEqual([
-      'call_retry-alpha',
-      'call_retry-beta',
-      'call_retry-gamma',
+    const replay = await replaySession(sessionPath ?? '', PROJECT_HASH);
+    assertReplayOk(replay);
+    expect(textsOf(replay.history)).toStrictEqual([
+      'unstamped disk snapshot',
+      'unstamped disk snapshot',
     ]);
-
-    const replay = await flushAndReplay();
-    expect(hasNoDuplicates(collectToolResponseCallIds(replay.history))).toBe(
-      true,
-    );
-
-    const live = harness.historyService.getAll();
-    expect(hasNoDuplicates(collectToolCallIds(live))).toBe(true);
-    expect(hasNoDuplicates(collectToolResponseCallIds(live))).toBe(true);
-  });
-
-  it('records content whose chronology marker is reused by a different payload', async () => {
-    const original = toolCallContent('inherit');
-    harness.historyService.add(original);
-
-    // Density optimization and merge both hand a DIFFERENT payload an existing
-    // chronology marker. Identity alone must not suppress it.
-    const replacement: IContent = {
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'condensed replacement' }],
-      metadata: { ...original.metadata },
-    };
-    harness.historyService.add(replacement);
-
-    const events = await flushAndReadEvents();
-    const contents = recordedContents(events);
-    expect(contents).toHaveLength(2);
-    expect(textsOf(contents)).toContain('condensed replacement');
-  });
-
-  it('does not re-record history that is already in the recording when a resumed session rebuilds', async () => {
-    recordToolTurn('resumed');
-    await harness.integration.flushAtTurnBoundary();
-    const filePath = harness.recordingService.getFilePath();
-    expect(filePath).not.toBeNull();
-    const sessionPath = filePath ?? '';
-
-    await harness.integration.dispose();
-    await harness.recordingService.dispose();
-
-    const replayed = await replaySession(sessionPath, PROJECT_HASH);
-    assertReplayOk(replayed);
-    const recordsBeforeResume = replayed.history.length;
-
-    // Resume: append to the same file, restore the replayed history, then
-    // subscribe. A later rebuild must not append the restored entries again.
-    const resumedRecording = new SessionRecordingService(
-      makeConfig(harness.chatsDir),
-    );
-    resumedRecording.initializeForResume(sessionPath, replayed.lastSeq);
-    const resumedIntegration = new RecordingIntegration(resumedRecording);
-    const resumedHistory = new HistoryService();
-    await resumedHistory.replaceAll(replayed.history);
-    resumedIntegration.subscribeToHistory(resumedHistory);
-
-    try {
-      compressUnderLock(resumedHistory, 'resumed-summary');
-      rebuildHistoryInPlace(resumedHistory);
-      resumedHistory.add(textContent('post-resume-user'));
-
-      await resumedIntegration.flushAtTurnBoundary();
-      const events = await readEvents(sessionPath);
-      expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-      expect(recordedContents(events)).toHaveLength(recordsBeforeResume + 1);
-      expect(textsOf(recordedContents(events))).toContain('post-resume-user');
-    } finally {
-      await resumedIntegration.dispose();
-      await resumedRecording.dispose();
-      resumedHistory.dispose();
-    }
-  });
-
-  it('records content that carries no chronology marker', async () => {
-    harness.historyService.emit('contentAdded', textContent('no-marker-1'));
-    harness.historyService.emit('contentAdded', textContent('no-marker-2'));
-
-    const events = await flushAndReadEvents();
-    expect(textsOf(recordedContents(events))).toStrictEqual([
-      'no-marker-1',
-      'no-marker-2',
-    ]);
-  });
-
-  it('records content from a replacement HistoryService whose chronology restarts', async () => {
-    const replacementService = new HistoryService();
-    harness.integration.subscribeToHistory(replacementService);
-
-    try {
-      // Fresh service: seqs restart at 1 and would collide with the harness
-      // service's seqs, so identity cannot rest on the seq alone.
-      replacementService.add(textContent('replacement-1'));
-      replacementService.add(textContent('replacement-2', 'ai'));
-
-      const events = await flushAndReadEvents();
-      expect(textsOf(recordedContents(events))).toStrictEqual([
-        'replacement-1',
-        'replacement-2',
-      ]);
-    } finally {
-      replacementService.dispose();
-    }
-  });
-
-  it('does not re-record earlier content when the same HistoryService is re-subscribed', async () => {
-    harness.historyService.add(textContent('before-resubscribe'));
-
-    harness.integration.unsubscribeFromHistory();
-    harness.integration.subscribeToHistory(harness.historyService);
-
-    rebuildHistoryInPlace(harness.historyService);
-    harness.historyService.add(textContent('after-resubscribe'));
-
-    const events = await flushAndReadEvents();
-    expect(textsOf(recordedContents(events))).toStrictEqual([
-      'before-resubscribe',
-      'after-resubscribe',
-    ]);
-  });
-});
+  } finally {
+    await closeResumedSession(resumed);
+  }
+}

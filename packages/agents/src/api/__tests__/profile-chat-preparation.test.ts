@@ -74,7 +74,7 @@ describe('profile-chat-preparation', () => {
           },
         ]);
       }
-      const history = await agent.getHistory();
+      const history = await Array.fromAsync(agent.streamHistory());
       const visibleHistory = client.getHistoryService();
       const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
       const beforeB = ownerB.captureProfile();
@@ -105,7 +105,9 @@ describe('profile-chat-preparation', () => {
         expect(coreEvents.listeners(CoreEvent.ModelChanged)).toStrictEqual(
           listeners,
         );
-        expect(await agent.getHistory()).toStrictEqual(history);
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(
+          history,
+        );
         expect(ownerB.captureProfile()).toStrictEqual(beforeB);
         const eventsB = [];
         for await (const event of ownerB.stream('owner B still works'))
@@ -115,7 +117,9 @@ describe('profile-chat-preparation', () => {
         for await (const event of agent.stream('continue carried context'))
           events.push(event);
         expect(events.some((event) => event.type === 'error')).toBe(false);
-        const recoveredHistory = JSON.stringify(await agent.getHistory());
+        const recoveredHistory = JSON.stringify(
+          await Array.fromAsync(agent.streamHistory()),
+        );
         expect(recoveredHistory).toContain('carried context');
         expect(
           recoveredHistory.split('/workspace/kept-editor.ts').length - 1,
@@ -163,7 +167,7 @@ describe('profile-chat-preparation', () => {
         blocks: [{ type: 'text', text: 'still owned by caller' }],
       },
     ]);
-    const history = await agent.getHistory();
+    const history = await Array.fromAsync(agent.streamHistory());
     const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
     let reads = 0;
     let disposal: Promise<void> | undefined;
@@ -188,7 +192,7 @@ describe('profile-chat-preparation', () => {
       await disposal;
       expect(built.sessionClient.getAgentClient()).toBe(client);
       expect(client.hasChatInitialized()).toBe(true);
-      expect(await client.getHistory()).toStrictEqual(history);
+      expect(await Array.fromAsync(client.getHistory())).toStrictEqual(history);
       expect(coreEvents.listeners(CoreEvent.ModelChanged)).toStrictEqual(
         listeners,
       );

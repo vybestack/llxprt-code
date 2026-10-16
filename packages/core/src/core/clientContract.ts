@@ -39,7 +39,6 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
  * - config/configBaseCore.ts (getAgentClient return type)
  * - utils/summarizer.ts (generateContent)
  * - agents/src/api/agentImpl.ts (generateJson)
- * - utils/checkpointUtils.ts (getHistory)
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
@@ -48,6 +47,7 @@ import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '../services/history/semantic-media-purge.js';
+import type { SemanticPurgeRowSource } from '../services/history/semantic-purge-disk-rows.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
@@ -60,9 +60,17 @@ import type { ContentGenerator } from './contentGenerator.js';
 import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
+import type { JournalReadCounters } from '../recording/journalCounters.js';
+import type { RowOwnership } from '../recording/rowOwnership.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import type { AgentRuntimeProviderAdapter } from '../runtime/AgentRuntimeContext.js';
 import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
+
+export interface DeferredHistorySourceOptions {
+  readonly signal?: AbortSignal;
+  readonly counters?: JournalReadCounters;
+  readonly ownership?: RowOwnership;
+}
 
 /**
  * Neutral request-input type for the agent-client send surface.
@@ -109,13 +117,14 @@ export interface AgentChatRecordingExecution {
   readonly hookOwner?: HookExecutionOwner;
   readonly transcriptPath: () => string | undefined;
   readonly persistSemanticMediaPurge: (
-    history: readonly IContent[],
+    candidate: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ) => Promise<void>;
 }
 
+/** Row form on purpose: an array here would retain context-sized state. */
 export interface AgentHistoryAdmission {
-  readonly history: readonly IContent[];
+  readonly rows: AsyncGenerator<IContent, void, unknown>;
   readonly release: () => Promise<void>;
 }
 
@@ -135,7 +144,12 @@ export interface AgentChatContract {
     prompt_id: string,
     execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput>;
-  getHistory(): readonly IContent[];
+  getHistory(
+    curated?: boolean,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown>;
+  /** Raw rows pinned on first next. Exhaust or return to release; abort is checked during iteration. */
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown>;
   setHistory(history: readonly IContent[]): Promise<void>;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
@@ -196,18 +210,28 @@ export interface AgentClientContract {
     manager: RuntimeProviderManager,
   ): void;
   readonly mediaStore?: LocalMediaStore;
-  initialize(config: ContentGeneratorConfig): Promise<void>;
+  initialize(
+    config: ContentGeneratorConfig,
+    options?: DeferredHistorySourceOptions,
+  ): Promise<void>;
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
   getChat(): AgentChatContract;
-  getHistory(): Promise<readonly IContent[]>;
+  getHistory(
+    curated?: false,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown>;
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
   prepareHistoryRebind(
     service: HistoryService,
     previousChat?: AgentChatContract,
   ): () => void;
-  storeHistoryForLaterUse(history: readonly IContent[]): Promise<void>;
+  storeHistoryForLaterUse(
+    history: readonly IContent[] | AsyncIterable<IContent>,
+    options?: DeferredHistorySourceOptions,
+  ): Promise<void>;
   dispose(): Promise<void>;
   setTools(publicationDeclarations?: readonly ToolDeclaration[]): Promise<void>;
   clearTools(): void;
@@ -215,8 +239,11 @@ export interface AgentClientContract {
     instructions?: InstructionReadOperations,
   ): Promise<void>;
   addHistory(content: IContent): Promise<void>;
-  resetChat(): Promise<void>;
+  resetChat(
+    preserveHistory?: readonly IContent[] | AsyncIterable<IContent>,
+  ): Promise<void>;
   resumeChat(history: readonly IContent[]): Promise<void>;
+  discardDeferredHistory(): Promise<void>;
   setHistory(
     history: readonly IContent[],
     options?: { stripThoughts?: boolean; historyOrigin?: object },
@@ -224,6 +251,10 @@ export interface AgentClientContract {
   restoreHistory(
     historyItems: readonly IContent[],
     historyOrigin?: object,
+  ): Promise<void>;
+  setHistoryFromSource(
+    history: AsyncIterable<IContent>,
+    options?: DeferredHistorySourceOptions,
   ): Promise<void>;
   addDirectoryContext(): Promise<void>;
   getContentGenerator(): ContentGenerator;

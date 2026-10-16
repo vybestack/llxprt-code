@@ -5,6 +5,12 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  BoundedToolCallNames,
+  fullRequestToolCallNames,
+  type ToolCallNames,
+} from './tokenUsageToolCallNames.js';
 import type {
   IContent,
   ContentBlock,
@@ -343,13 +349,6 @@ function stableStringify(value: unknown, seen?: WeakSet<object>): string {
   return serialized;
 }
 
-function computeFingerprint(prefix: string): string {
-  return createHash('sha256')
-    .update(prefix)
-    .digest('hex')
-    .slice(0, FINGERPRINT_HEX_LENGTH);
-}
-
 // ---------------------------------------------------------------------------
 // Core computation helpers
 // ---------------------------------------------------------------------------
@@ -370,21 +369,6 @@ function countToolsSchemaTokens(
 ): number {
   if (toolsJson === 'null' || toolsJson.length <= 2) return 0;
   return countTokens(toolsJson);
-}
-
-/** Build a tool-call id → name map from the request contents. */
-function buildToolCallNameMap(
-  requestContents: readonly IContent[],
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const content of requestContents) {
-    for (const block of content.blocks) {
-      if (block.type === 'tool_call') {
-        map.set(block.id, block.name);
-      }
-    }
-  }
-  return map;
 }
 
 /**
@@ -473,90 +457,140 @@ function buildFingerprintContribution(
   };
 }
 
-export function computeRequestShape(
-  input: RequestShapeInput,
-): RequestShapeResult {
-  const { countTokens, requestContents } = input;
-  const toolCallNames = buildToolCallNameMap(requestContents);
+class RequestShapeAccumulator {
+  private historyTokens = 0;
+  private mediaTokens = 0;
+  private injectedTokens = 0;
+  private readonly toolCalls: ToolCallAttribution[] = [];
+  private newToolResultTokens = 0;
+  private carriedToolResultTokens = 0;
+  private fingerprintBudget = FINGERPRINT_PREFIX_CHAR_BUDGET;
+  private readonly fingerprint = createHash('sha256');
+  private readonly toolsJson: string;
 
-  let historyTokens = 0;
-  let mediaTokens = 0;
-  let injectedTokens = 0;
-  const toolCalls: ToolCallAttribution[] = [];
-  let newToolResultTokens = 0;
-  let carriedToolResultTokens = 0;
+  constructor(
+    private readonly input: Omit<RequestShapeInput, 'requestContents'>,
+    private readonly toolCallNames: ToolCallNames,
+  ) {
+    this.toolsJson = stableStringify(input.tools);
+    this.fingerprint.update(`I:${input.instructionsText ?? ''}`);
+    this.fingerprint.update(`\u0000T:${this.toolsJson}`);
+  }
 
-  const toolsJson = stableStringify(input.tools);
-  // Instructions and tool schemas are the head of the cacheable prefix and are
-  // always included in full; history then fills the remaining budget.
-  const fingerprintParts: string[] = [
-    `I:${input.instructionsText ?? ''}`,
-    `T:${toolsJson}`,
-  ];
-  let fingerprintBudget = FINGERPRINT_PREFIX_CHAR_BUDGET;
-
-  for (const content of requestContents) {
+  add(content: IContent): void {
     const { measurement, fingerprintPart } = resolveContentMeasurement(
       content,
-      countTokens,
-      fingerprintBudget,
-      input.measurementCache,
+      this.input.countTokens,
+      this.fingerprintBudget,
+      this.input.measurementCache,
     );
-
+    this.toolCallNames.observe(content);
     const bucket = classifyContent(content);
-    if (bucket === 'injected') {
-      injectedTokens += measurement.tokens;
-    } else if (bucket === 'media') {
-      mediaTokens += measurement.tokens;
-    } else {
-      historyTokens += measurement.tokens;
+    if (bucket === 'injected') this.injectedTokens += measurement.tokens;
+    else if (bucket === 'media') this.mediaTokens += measurement.tokens;
+    else this.historyTokens += measurement.tokens;
+    this.addToolResults(measurement);
+    if (fingerprintPart !== null) {
+      this.fingerprint.update(`\u0000${fingerprintPart.text}`);
+      this.fingerprintBudget -= fingerprintPart.consumed;
     }
+  }
 
+  private addToolResults(measurement: ContentMeasurement): void {
     for (const result of measurement.toolResults) {
-      toolCalls.push({
+      this.toolCalls.push({
         callId: result.callId,
         toolName: resolveToolName(
           result.callId,
           result.blockToolName,
-          toolCallNames,
+          this.toolCallNames,
         ),
         resultTokens: result.resultTokens,
         wasTruncated: result.wasTruncated,
       });
-      if (input.previouslySentCallIds.has(result.callId)) {
-        carriedToolResultTokens += result.resultTokens;
-      } else {
-        newToolResultTokens += result.resultTokens;
-      }
-    }
-
-    if (fingerprintPart !== null) {
-      fingerprintParts.push(fingerprintPart.text);
-      fingerprintBudget -= fingerprintPart.consumed;
+      if (this.input.previouslySentCallIds.has(result.callId)) {
+        this.carriedToolResultTokens += result.resultTokens;
+      } else this.newToolResultTokens += result.resultTokens;
     }
   }
 
-  const prefixFingerprint = computeFingerprint(fingerprintParts.join('\u0000'));
-  const prefixFingerprintChanged =
-    input.previousFingerprint === undefined
-      ? null
-      : input.previousFingerprint !== prefixFingerprint;
+  finish(): RequestShapeResult {
+    const prefixFingerprint = this.fingerprint
+      .digest('hex')
+      .slice(0, FINGERPRINT_HEX_LENGTH);
+    return {
+      instructionsTokens: countInstructionsTokens(
+        this.input.instructionsText,
+        this.input.countTokens,
+      ),
+      toolsSchemaTokens: countToolsSchemaTokens(
+        this.toolsJson,
+        this.input.countTokens,
+      ),
+      historyTokens: this.historyTokens,
+      mediaTokens: this.mediaTokens,
+      injectedTokens: this.injectedTokens,
+      toolCalls: this.toolCalls,
+      newToolResultTokens: this.newToolResultTokens,
+      carriedToolResultTokens: this.carriedToolResultTokens,
+      prefixFingerprint,
+      prefixFingerprintChanged:
+        this.input.previousFingerprint === undefined
+          ? null
+          : this.input.previousFingerprint !== prefixFingerprint,
+    };
+  }
+}
 
-  return {
-    instructionsTokens: countInstructionsTokens(
-      input.instructionsText,
-      countTokens,
-    ),
-    toolsSchemaTokens: countToolsSchemaTokens(toolsJson, countTokens),
-    historyTokens,
-    mediaTokens,
-    injectedTokens,
-    toolCalls,
-    newToolResultTokens,
-    carriedToolResultTokens,
-    prefixFingerprint,
-    prefixFingerprintChanged,
-  };
+export function computeRequestShape(
+  input: RequestShapeInput,
+): RequestShapeResult {
+  const accumulator = new RequestShapeAccumulator(
+    input,
+    fullRequestToolCallNames(input.requestContents),
+  );
+  for (const content of input.requestContents) accumulator.add(content);
+  return accumulator.finish();
+}
+
+export interface SourceRequestShapeInput
+  extends Omit<RequestShapeInput, 'requestContents'> {
+  readonly requestRows: ProviderRequestRows;
+  readonly signal?: AbortSignal;
+}
+
+export async function computeSourceRequestShape(
+  input: SourceRequestShapeInput,
+): Promise<RequestShapeResult> {
+  const accumulator = new RequestShapeAccumulator(
+    input,
+    new BoundedToolCallNames(DEFAULT_MAX_SENT_CALL_IDS),
+  );
+  const reader = input.requestRows.openReader(input.signal);
+  try {
+    while (await addSourceRow(reader, accumulator, input.signal)) {
+      input.signal?.throwIfAborted();
+    }
+    input.signal?.throwIfAborted();
+    const result = accumulator.finish();
+    input.signal?.throwIfAborted();
+    return result;
+  } finally {
+    await reader.return();
+  }
+}
+
+function addSourceRow(
+  reader: AsyncGenerator<IContent, void, unknown>,
+  accumulator: RequestShapeAccumulator,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  return reader.next().then((next) => {
+    signal?.throwIfAborted();
+    if (next.done === true) return false;
+    accumulator.add(next.value);
+    return true;
+  });
 }
 
 /**
@@ -567,7 +601,7 @@ export function computeRequestShape(
 function resolveToolName(
   callId: string,
   blockToolName: string,
-  toolCallNames: ReadonlyMap<string, string>,
+  toolCallNames: ToolCallNames,
 ): string {
   const fromCall = toolCallNames.get(callId);
   if (fromCall !== undefined && fromCall.length > 0) return fromCall;
@@ -654,6 +688,30 @@ export class RequestShapeSessionMemory implements ContentMeasurementCache {
     }
     this.lastFp = result.prefixFingerprint;
 
+    return result;
+  }
+
+  async recordSourceRequestShape(
+    input: Omit<
+      SourceRequestShapeInput,
+      'previouslySentCallIds' | 'previousFingerprint'
+    >,
+  ): Promise<RequestShapeResult> {
+    const staged = new RequestShapeSessionMemory(this.maxCallIds);
+    for (const [key, measurement] of this.measurements)
+      staged.measurements.set(key, measurement);
+    const result = await computeSourceRequestShape({
+      ...input,
+      previouslySentCallIds: this.sentCallIds,
+      previousFingerprint: this.lastFp,
+      measurementCache: staged,
+    });
+    this.measurements.clear();
+    for (const [key, measurement] of staged.measurements)
+      this.measurements.set(key, measurement);
+    for (const toolCall of result.toolCalls)
+      this.markCallIdSent(toolCall.callId);
+    this.lastFp = result.prefixFingerprint;
     return result;
   }
 

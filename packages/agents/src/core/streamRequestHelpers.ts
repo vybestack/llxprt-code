@@ -22,10 +22,16 @@ import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SendMessageParams } from './chatSession.js';
-import { logApiRequest } from './turnLogging.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import {
+  providerRequestRows,
+  type ProviderRequestRows,
+  type ProviderRequestSnapshot,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -41,7 +47,7 @@ export interface ToolSelectionHookResult {
   conversationLogEmptyTools?: boolean;
 }
 
-/** Result of preparing a request payload with its runtime contexts. */
+/** Request payload shape shared by the stream send and its fallback logging. */
 export interface PreparedRequest {
   requestPayload: {
     contents: IContent[];
@@ -50,21 +56,89 @@ export interface PreparedRequest {
   baseRuntimeContext: ProviderRequestCollaborators;
 }
 
-/**
- * Build the request contents (curated IContent[]) and pending IContent[]
- * from user input. Returns both the provider-ready contents and the raw
- * pending items so downstream enforcement can thread the pending boundary
- * explicitly (issue #2304).
- */
-export function buildRequestContentsResult(
+/** Cold, repeatable request copies preserve the purge transaction and boundary identity. */
+export function streamSemanticPurgeRequest(
+  attempt: SemanticMediaPurgeAttempt | undefined,
+  signal?: AbortSignal,
+): AsyncIterable<IContent> | undefined {
+  if (attempt === undefined) return undefined;
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
+      signal?.throwIfAborted();
+      for await (const row of attempt.requestHistory.streamRows(signal)) {
+        signal?.throwIfAborted();
+        const content = sanitizeProviderContentForSerialization(row);
+        const boundary = row.metadata?.semanticMediaPurgeBoundary;
+        if (row.metadata !== undefined) {
+          content.metadata = structuredClone(row.metadata);
+          if (boundary !== undefined) {
+            content.metadata.semanticMediaPurgeBoundary = { ...boundary };
+          }
+        }
+        yield content;
+      }
+    },
+  };
+}
+
+export interface RequestContentsSnapshot {
+  readonly contents: ProviderRequestRows;
+  readonly pending: ProviderRequestSnapshot['pending'] & {
+    readonly isPending: (index: number) => boolean;
+  };
+}
+
+export async function withRequestContentsSnapshot<T>(
   userContents: IContent | IContent[],
   historyService: HistoryService,
-  historyOverride?: readonly IContent[],
-): { contents: IContent[]; pending: IContent[] } {
+  consume: (request: RequestContentsSnapshot) => Promise<T>,
+  options: ProviderCuratedStreamOptions = {},
+  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+): Promise<T> {
+  const owner = await openRequestContentsSnapshot(
+    userContents,
+    historyService,
+    options,
+    historyOverride,
+  );
+  try {
+    return await consume(
+      Object.freeze({
+        contents: providerRequestRows(owner),
+        pending: Object.freeze({
+          ...owner.pending,
+          isPending: (index: number) => owner.isPending(index),
+        }),
+      }),
+    );
+  } finally {
+    owner.close();
+  }
+}
+
+/** The caller closes this disk selection after the final response or failed attempt. */
+export function openRequestContentsSnapshot(
+  userContents: IContent | IContent[],
+  historyService: HistoryService,
+  options: ProviderCuratedStreamOptions = {},
+  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+): Promise<ProviderRequestSnapshot> {
+  options.signal?.throwIfAborted();
+  return historyService.prepareCuratedForProviderSnapshot(
+    preparePendingContents(userContents, historyService),
+    options,
+    historyOverride,
+  );
+}
+
+export function preparePendingContents(
+  userContents: IContent | IContent[],
+  historyService: HistoryService,
+): IContent[] {
   const inputArray = Array.isArray(userContents)
     ? userContents
     : [userContents];
-  const userIContents: IContent[] = inputArray.map((content) => {
+  return inputArray.map((content) => {
     const turnKey = historyService.generateTurnKey();
     const idGen = historyService.getIdGeneratorCallback(turnKey);
     return {
@@ -72,13 +146,6 @@ export function buildRequestContentsResult(
       metadata: { ...(content.metadata ?? {}), id: idGen(), turnId: turnKey },
     };
   });
-  return {
-    contents: historyService.getCuratedForProvider(
-      userIContents,
-      historyOverride,
-    ),
-    pending: userIContents,
-  };
 }
 
 /**
@@ -177,48 +244,6 @@ export function buildRuntimeContext(
   };
 }
 
-interface PrepareRequestPayloadParams {
-  requestContents: IContent[];
-  tools: ToolDeclaration[] | undefined;
-  logger: DebugLogger;
-  providerRuntimeBuilder: (
-    source: string,
-    extras?: Record<string, unknown>,
-  ) => ProviderRequestCollaborators;
-  providerName: string;
-  modelName: string;
-  baseUrl: string | undefined;
-}
-
-/**
- * Prepare the request payload (contents + tools) and the base provider runtime
- * context. The request-specific runtime context (e.g. abort-signal metadata) is
- * layered on by the caller via buildRuntimeContext.
- */
-export function prepareRequestPayload(
-  args: PrepareRequestPayloadParams,
-): PreparedRequest {
-  args.logger.debug(
-    () => '[StreamProcessor] Calling provider.generateChatCompletion',
-    {
-      providerName: args.providerName,
-      model: args.modelName,
-      historyLength: args.requestContents.length,
-      toolCount: Array.isArray(args.tools) ? args.tools.length : 0,
-      baseUrl: args.baseUrl,
-    },
-  );
-
-  const baseRuntimeContext = args.providerRuntimeBuilder(
-    'StreamProcessor.generateRequest',
-    { historyLength: args.requestContents.length },
-  );
-
-  const requestPayload = { contents: args.requestContents, tools: args.tools };
-
-  return { requestPayload, baseRuntimeContext };
-}
-
 /**
  * Type guard: true when a value is a non-null object record.
  */
@@ -293,21 +318,15 @@ export function applyRequestModifications(
 }
 
 /**
- * Log the outgoing API request via the telemetry runtime context.
+ * The system instruction one turn transmits: the one ChatSession resolved for
+ * this turn and carried on the call, else the session's own. Reading the
+ * call's copy keeps a turn from sending a prompt a concurrent turn resolved.
  */
-export function logOutgoingRequest(
-  runtimeContext: AgentRuntimeContext,
-  requestPayload: { contents: IContent[] },
-  modelName: string,
-  promptId: string,
-): void {
-  logApiRequest(
-    runtimeContext,
-    runtimeContext.state,
-    requestPayload.contents,
-    modelName,
-    promptId,
-  );
+export function turnSystemInstruction(
+  params: SendMessageParams,
+  session: Pick<ChatSessionConfig, 'systemInstruction'>,
+): ChatSessionConfig['systemInstruction'] {
+  return params.config?.systemInstruction ?? session.systemInstruction;
 }
 
 const systemInstructionLogger = new DebugLogger(

@@ -80,8 +80,9 @@ describe('slashCommandHandlers', () => {
         services: {
           config: null,
           agent: null,
-          settings:
-            {} as SlashCommandHandlerDeps['commandContext']['services']['settings'],
+          settings: {
+            merged: { ui: {} },
+          } as SlashCommandHandlerDeps['commandContext']['services']['settings'],
           git: undefined,
           logger: new DebugLogger('test') as unknown as Logger,
         },
@@ -764,6 +765,7 @@ describe('slashCommandHandlers', () => {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
+          getCurrentMetadata: () => null,
           setRecording: () => {
             throw new Error('Mocked resume must not swap recordings');
           },
@@ -776,6 +778,7 @@ describe('slashCommandHandlers', () => {
             ok: true,
             warnings: [],
             metadata: {
+              kind: 'main' as const,
               sessionId: config.getSessionId(),
               projectHash: getProjectHash(config.getProjectRoot()),
               provider: config.getProvider() ?? 'unknown',
@@ -783,14 +786,17 @@ describe('slashCommandHandlers', () => {
               workspaceDirs: [...agent.workspace.getDirectories()],
               startTime: new Date().toISOString(),
             },
-            history: [
-              {
-                speaker: 'human',
+            history: (async function* () {
+              yield {
+                speaker: 'human' as const,
                 blocks: [
-                  { type: 'text', text: new TextDecoder().decode(bytes) },
+                  {
+                    type: 'text' as const,
+                    text: new TextDecoder().decode(bytes),
+                  },
                 ],
-              },
-            ],
+              };
+            })(),
           };
         };
         deps.commands = [

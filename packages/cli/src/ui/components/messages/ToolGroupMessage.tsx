@@ -7,7 +7,10 @@
 import type React from 'react';
 import { useMemo } from 'react';
 import { Box, Text } from 'ink';
-import type { IndividualToolCallDisplay } from '../../types.js';
+import type {
+  HistoryItemToolGroup,
+  IndividualToolCallDisplay,
+} from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import type { TextEmphasis } from './ToolShared.js';
 import { ToolMessage } from './ToolMessage.js';
@@ -28,6 +31,7 @@ import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 interface ToolGroupMessageProps {
   groupId: number;
   toolCalls: IndividualToolCallDisplay[];
+  toolPage?: HistoryItemToolGroup['toolPage'];
   agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -206,7 +210,7 @@ function renderToolCallItem(
     tool.confirmationDetails !== undefined;
 
   return (
-    <Box key={tool.callId} flexDirection="column" minHeight={1}>
+    <Box key={`${index}:${tool.callId}`} flexDirection="column" minHeight={1}>
       <ToolMessage
         key={tool.callId}
         {...tool}
@@ -269,6 +273,7 @@ function useToolGroupState(
 // Main component renders the border and maps the tools using ToolMessage
 export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   toolCalls,
+  toolPage,
   agentId,
   availableTerminalHeight,
   terminalWidth,
@@ -317,6 +322,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       borderColor={borderColor}
       gap={1}
     >
+      {toolPage && (
+        <Text color={Colors.AccentCyan}>
+          {`Tool group ${toolPage.groupIndex}: calls ${toolPage.start + 1}-${toolPage.start + toolCalls.length} of ${toolPage.total}`}
+        </Text>
+      )}
       {agentId && agentId !== DEFAULT_AGENT_ID && (
         <Box marginLeft={1}>
           <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>

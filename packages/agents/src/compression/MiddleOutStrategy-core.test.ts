@@ -11,14 +11,20 @@ import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/p
  *
  * Core behavioral tests for MiddleOutStrategy: interface contract, sandwich
  * split, tool-call boundary respect, LLM call, profile resolution, default
- * model, result assembly shape, and metadata completeness.
+ * model, result assembly shape, and layout completeness.
  */
 
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import {
+  compressMiddleOutViaDisk,
+  requireMiddleOutApplied,
+} from './__tests__/support/middleout-disk-adapter.js';
+import {
   buildContext,
+  buildCountingContext,
+  createCaptureProvider,
   createFakeProvider,
   generateHistory,
   humanMsg,
@@ -53,14 +59,13 @@ describe('MiddleOutStrategy core', () => {
     it('produces correct top/middle/bottom counts for 20 messages with default thresholds', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const result = await strategy.compress(ctx);
-
-      expect(result.metadata.topPreserved).toBe(4);
-      expect(result.metadata.bottomPreserved).toBe(4);
-      expect(result.metadata.middleCompressed).toBe(12);
-      expect(result.metadata.originalMessageCount).toBe(20);
+      expect(result.top).toBe(4);
+      expect(result.bottom).toBe(4);
+      expect(history.length - result.top - result.bottom).toBe(12);
       expect(result.newHistory).toHaveLength(10);
     });
 
@@ -71,13 +76,13 @@ describe('MiddleOutStrategy core', () => {
         topPreserveThreshold: 0.1,
         preserveThreshold: 0.3,
       });
-      const strategy = new MiddleOutStrategy();
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const result = await strategy.compress(ctx);
-
-      expect(result.metadata.topPreserved).toBe(2);
-      expect(result.metadata.bottomPreserved).toBe(6);
-      expect(result.metadata.middleCompressed).toBe(12);
+      expect(result.top).toBe(2);
+      expect(result.bottom).toBe(6);
+      expect(history.length - result.top - result.bottom).toBe(12);
     });
   });
 
@@ -118,15 +123,13 @@ describe('MiddleOutStrategy core', () => {
       ];
 
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
-      const result = await strategy.compress(ctx);
-
-      const topMessages = result.newHistory.slice(
-        0,
-        result.metadata.topPreserved ?? 0,
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
       );
+
+      const topMessages = result.newHistory.slice(0, result.top);
       const bottomMessages = result.newHistory.slice(
-        result.newHistory.length - (result.metadata.bottomPreserved ?? 0),
+        result.newHistory.length - result.bottom,
       );
 
       // Verify: if the last top message is an AI with tool calls, all of
@@ -185,11 +188,11 @@ describe('MiddleOutStrategy core', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new MiddleOutStrategy();
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const result = await strategy.compress(ctx);
-
-      const topCount = result.metadata.topPreserved!;
+      const topCount = result.top;
       const summaryMessage = result.newHistory[topCount];
       expect(summaryMessage).toBeDefined();
       expect(summaryMessage.speaker).toBe('human');
@@ -229,7 +232,6 @@ describe('MiddleOutStrategy core', () => {
         );
 
         const history = generateHistory(20);
-        const strategy = new MiddleOutStrategy();
 
         const ctxWithProfile = buildContext({
           history,
@@ -255,8 +257,10 @@ describe('MiddleOutStrategy core', () => {
             };
           },
         });
-        const profileResult = await strategy.compress(ctxWithProfile);
-        const topCount = profileResult.metadata.topPreserved!;
+        const profileResult = requireMiddleOutApplied(
+          await compressMiddleOutViaDisk(ctxWithProfile),
+        );
+        const topCount = profileResult.top;
         const summaryMsg = profileResult.newHistory[topCount];
 
         return { summaryMsg, profileSummary };
@@ -289,10 +293,11 @@ describe('MiddleOutStrategy core', () => {
         },
       });
 
-      const strategy = new MiddleOutStrategy();
-      const result = await strategy.compress(ctx);
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const topCount = result.metadata.topPreserved!;
+      const topCount = result.top;
       const summaryMsg = result.newHistory[topCount];
       expect(summaryMsg.blocks[0]).toMatchObject({
         type: 'text',
@@ -311,17 +316,17 @@ describe('MiddleOutStrategy core', () => {
     it('produces newHistory of [...top, humanSummary, aiAck, ...bottom]', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
 
-      const result = await strategy.compress(ctx);
-
-      const topCount = result.metadata.topPreserved!;
-      const bottomCount = result.metadata.bottomPreserved!;
+      const topCount = result.top;
+      const bottomCount = result.bottom;
 
       expect(result.newHistory).toHaveLength(topCount + 2 + bottomCount);
 
       for (let i = 0; i < topCount; i++) {
-        expect(result.newHistory[i]).toBe(history[i]);
+        expect(result.newHistory[i]).toStrictEqual(history[i]);
       }
 
       const summaryMsg = result.newHistory[topCount];
@@ -336,7 +341,7 @@ describe('MiddleOutStrategy core', () => {
 
       const originalBottomStart = history.length - bottomCount;
       for (let i = 0; i < bottomCount; i++) {
-        expect(result.newHistory[topCount + 2 + i]).toBe(
+        expect(result.newHistory[topCount + 2 + i]).toStrictEqual(
           history[originalBottomStart + i],
         );
       }
@@ -345,10 +350,10 @@ describe('MiddleOutStrategy core', () => {
     it('AI acknowledgment message has the expected text', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
-
-      const result = await strategy.compress(ctx);
-      const topCount = result.metadata.topPreserved!;
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
+      );
+      const topCount = result.top;
       const ackMsg = result.newHistory[topCount + 1];
 
       expect(ackMsg.speaker).toBe('ai');
@@ -361,41 +366,63 @@ describe('MiddleOutStrategy core', () => {
   });
 
   // -----------------------------------------------------------------------
-  // Metadata completeness
+  // Layout completeness
   // -----------------------------------------------------------------------
 
-  describe('metadata completeness', () => {
-    it('populates all required metadata fields', async () => {
+  describe('layout completeness', () => {
+    function buildCapturingContext(history: IContent[]) {
+      const sent: IContent[] = [];
+      const provider = createCaptureProvider(sent);
+      const { ctx, providerCalls } = buildCountingContext({
+        history,
+        resolveProvider: () => ({
+          invocation: captureProviderInvocation(
+            testProviderRuntime,
+            provider.name,
+          ),
+          provider,
+          runtime: testProviderRuntime,
+        }),
+      });
+      return { ctx, sent, providerCalls };
+    }
+
+    function textOf(row: IContent): string {
+      return row.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    }
+
+    it('populates all required layout fields', async () => {
       const history = generateHistory(20);
-      const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const { ctx, sent, providerCalls } = buildCapturingContext(history);
 
-      const result = await strategy.compress(ctx);
-      const meta = result.metadata;
-
-      expect(meta.originalMessageCount).toBe(20);
-      expect(meta.compressedMessageCount).toBe(result.newHistory.length);
-      expect(meta.strategyUsed).toBe('middle-out');
-      expect(meta.llmCallMade).toBe(true);
-      expect(typeof meta.topPreserved).toBe('number');
-      expect(typeof meta.bottomPreserved).toBe('number');
-      expect(typeof meta.middleCompressed).toBe('number');
-
-      expect(
-        meta.topPreserved! + meta.middleCompressed! + meta.bottomPreserved!,
-      ).toBe(meta.originalMessageCount);
-      expect(meta.compressedMessageCount).toBe(
-        meta.topPreserved! + 2 + meta.bottomPreserved!,
+      const result = requireMiddleOutApplied(
+        await compressMiddleOutViaDisk(ctx),
       );
+
+      expect(new MiddleOutStrategy().name).toBe('middle-out');
+      expect(providerCalls()).toBe(1);
+      expect(typeof result.top).toBe('number');
+      expect(typeof result.bottom).toBe('number');
+
+      // The rows handed to the summarizer are exactly the middle section, so
+      // top + middle + bottom accounts for every original row.
+      const sentTexts = new Set(sent.map(textOf));
+      const summarized = history.filter((row) => sentTexts.has(textOf(row)));
+      const middle = history.slice(result.top, history.length - result.bottom);
+      expect(summarized).toStrictEqual(middle);
+      expect(result.top + middle.length + result.bottom).toBe(history.length);
+      expect(result.newHistory).toHaveLength(result.top + 2 + result.bottom);
     });
 
-    it('sets llmCallMade to true when compression occurs', async () => {
+    it('calls the provider for a summary when compression occurs', async () => {
       const history = generateHistory(20);
-      const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const { ctx, sent, providerCalls } = buildCapturingContext(history);
 
-      const result = await strategy.compress(ctx);
-      expect(result.metadata.llmCallMade).toBe(true);
+      requireMiddleOutApplied(await compressMiddleOutViaDisk(ctx));
+
+      expect(providerCalls()).toBe(1);
+      expect(sent.length).toBeGreaterThan(0);
+      expect(new MiddleOutStrategy().requiresLLM).toBe(true);
     });
   });
 });

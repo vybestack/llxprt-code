@@ -29,6 +29,7 @@ import type {
 } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { replayableContents } from '../utils/collectContents.js';
 import {
   isTerminalRetryError,
   markErrorAfterStreamOutput,
@@ -46,12 +47,12 @@ describe('RetryOrchestrator partial-output boundary (issue 3048 fence)', () => {
         options: GenerateChatOptions,
       ): AsyncIterableIterator<IContent>;
       generateChatCompletion(
-        content: IContent[],
+        content: AsyncIterable<IContent>,
         tools?: ProviderToolset,
         signal?: AbortSignal,
       ): AsyncIterableIterator<IContent>;
       async *generateChatCompletion(
-        _optionsOrContent: GenerateChatOptions | IContent[],
+        _optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
         _tools?: ProviderToolset,
         _signal?: AbortSignal,
       ): AsyncIterableIterator<IContent> {
@@ -82,9 +83,9 @@ describe('RetryOrchestrator partial-output boundary (issue 3048 fence)', () => {
     let rejected: unknown;
     try {
       for await (const chunk of orchestrator.generateChatCompletion({
-        contents: [
+        contents: replayableContents([
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-        ],
+        ]),
       })) {
         collected.push(chunk);
       }

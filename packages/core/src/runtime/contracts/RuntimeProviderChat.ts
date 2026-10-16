@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from './ProviderRetryOperations.js';
 import type { ProviderRequestDiagnostics } from '../providerRequestDiagnostics.js';
 /**
  * @license
@@ -24,6 +25,7 @@ import type { IContent } from '../../services/history/IContent.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
 import type { StructuredError } from '../../core/turn.js';
+import type { ProviderRequestSelection } from '../../services/history/provider-request-snapshot.js';
 import type { StreamLivenessListener } from '../../utils/streamIdleTimeout.js';
 
 export interface RuntimeProviderTool {
@@ -69,13 +71,27 @@ export interface RuntimeSystemPromptAssembler {
   }): Promise<string>;
 }
 
-import type { ProviderRetryOperations } from './ProviderRetryOperations.js';
-
 export interface RuntimeGenerateChatOptions extends ProviderRetryOperations {
   modelParameters?: AdmittedModelParameters;
   runtimeKind?: RuntimeKind;
   requestDiagnostics?: ProviderRequestDiagnostics;
-  contents: IContent[];
+  /**
+   * The conversation history as a stream (issue #854): rows flow from the
+   * journal fold through curation and provider assembly without a retained
+   * array. Providers collect request-scoped at their entry point.
+   *
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  contents: AsyncIterable<IContent>;
+  /**
+   * Provider-neutral request selection (issue #854): immutable membership,
+   * repeatable `openReader(signal)` and an explicit close owner. When present
+   * it is authoritative; `contents` is its single-pass reader view. Providers
+   * and wrappers receive it without any shared-layer collection.
+   */
+  requestRows?: ProviderRequestSelection;
+  /** Row count of {@link requestRows}; must equal `requestRows.count`. */
+  contentCount?: number;
   tools?: RuntimeProviderToolset;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;

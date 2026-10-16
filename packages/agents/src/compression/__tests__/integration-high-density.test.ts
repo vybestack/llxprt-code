@@ -12,6 +12,7 @@ import {
   parseCompressionStrategyName,
 } from '../compressionStrategyFactory.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
+import { compressCountingLlmCalls } from './high-density-compress-helpers.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -79,7 +80,7 @@ describe('Integration: Strategy Resolution Chain', () => {
     for (const name of COMPRESSION_STRATEGIES) {
       const strategy = getCompressionStrategy(name);
       expect(strategy.name).toBe(name);
-      expect(typeof strategy.compress).toBe('function');
+      expect(typeof strategy.requiresLLM).toBe('boolean');
     }
   });
 });
@@ -104,21 +105,25 @@ describe('Integration: Density + Compression Pipeline', () => {
   });
 
   it('compress returns valid result for empty history', async () => {
-    const strategy = new HighDensityStrategy();
     const context = makeMinimalContext([]);
-    const result = await strategy.compress(context);
-    expect(result.kind).toBe('noop');
-    expect(result.reason).toBe('empty-history');
-    expect(result.metadata.llmCallMade).toBe(false);
-    expect(result.metadata.strategyUsed).toBe('high-density');
+    const { result, llmCalls } = await compressCountingLlmCalls(context);
+    // The disk noop carries no reason or metadata; the observable facts are
+    // that nothing was produced, no provider was asked, and the strategy is
+    // high-density.
+    expect(result).toStrictEqual({ kind: 'noop', candidateRows: 0 });
+    expect(llmCalls).toBe(0);
+    expect(new HighDensityStrategy().name).toBe('high-density');
   });
 
   it('compress returns valid CompressionResult for populated history', async () => {
-    const { result } =
+    const { result, llmCalls } =
       await observeCompressReturnsValidCompressionResultForPopulatedHistory();
+    if (result.kind !== 'applied') {
+      throw new Error('Expected the high-density disk route to apply');
+    }
     expect(result.newHistory.length).toBeGreaterThan(0);
-    expect(result.metadata.originalMessageCount).toBe(10);
-    expect(result.metadata.llmCallMade).toBe(false);
+    expect(result.start + result.newHistory.length).toBe(10);
+    expect(llmCalls).toBe(0);
   });
 
   const observeCompressReturnsValidCompressionResultForPopulatedHistory =
@@ -127,11 +132,10 @@ describe('Integration: Density + Compression Pipeline', () => {
         speaker: i % 2 === 0 ? 'human' : 'ai',
         blocks: [{ type: 'text' as const, text: `Message ${i}` }],
       }));
-      const strategy = new HighDensityStrategy();
       const context = makeMinimalContext(history);
-      const result = await strategy.compress(context);
+      const { result, llmCalls } = await compressCountingLlmCalls(context);
 
-      return { result };
+      return { result, llmCalls };
     };
 
   it('existing strategies still work after high-density additions', async () => {
@@ -142,7 +146,7 @@ describe('Integration: Density + Compression Pipeline', () => {
     ] as const) {
       const strategy = getCompressionStrategy(name);
       expect(strategy.name).toBe(name);
-      expect(typeof strategy.compress).toBe('function');
+      expect(typeof strategy.requiresLLM).toBe('boolean');
     }
   });
 });

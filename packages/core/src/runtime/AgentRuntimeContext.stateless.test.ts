@@ -36,7 +36,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     ).toThrow(/provider adapter/i);
   });
 
-  it('should route telemetry events through injected adapter without Config access', () => {
+  it('should route telemetry events through injected adapter without Config access', async () => {
     const provider = {
       getActiveProvider: vi.fn(() => ({ name: 'stub-provider' }) as IProvider),
       setActiveProvider: vi.fn(),
@@ -67,7 +67,7 @@ describe('AgentRuntimeContext stateless enforcement', () => {
     });
 
     const requestEvent = { model: 'stub-model', promptId: 'req-1' };
-    context.telemetry.logApiRequest(requestEvent);
+    await context.telemetry.logApiRequest(requestEvent);
 
     expect(telemetry.logApiRequest).toHaveBeenCalledWith(requestEvent);
     expect(context.provider.getActiveProvider()).toStrictEqual(

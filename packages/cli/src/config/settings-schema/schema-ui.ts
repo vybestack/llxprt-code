@@ -313,6 +313,40 @@ export const UI_SETTINGS_SCHEMA = {
         description: 'Maximum size of history in bytes.',
         showInDialog: false,
       },
+      scrollbackPagerEnabled: {
+        type: 'boolean',
+        label: 'Scrollback Pager',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.',
+        showInDialog: false,
+      },
+      scrollbackMarginViewports: {
+        type: 'number',
+        label: 'Scrollback Margin Viewports',
+        category: 'UI',
+        requiresRestart: true,
+        default: 2,
+        minimum: 0,
+        multipleOf: 1,
+        description:
+          'Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.',
+        showInDialog: false,
+      },
+      scrollbackByteFloorKiB: {
+        type: 'number',
+        label: 'Scrollback Byte Floor (KiB)',
+        category: 'UI',
+        requiresRestart: true,
+        default: 256,
+        minimum: 0,
+        multipleOf: 1,
+        description:
+          'Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.',
+        showInDialog: false,
+      },
       memoryImportFormat: {
         type: 'string',
         label: 'Memory Import Format',

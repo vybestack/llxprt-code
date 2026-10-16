@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../__tests__/resumeRows.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -441,20 +442,10 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
   };
 }
 
-describe('AppContainer.mount', () => {
-  let mockConfig: MockConfig;
-  let mockSettings: ReturnType<typeof createMockSettings>;
+let mockConfig: MockConfig;
+let mockSettings: ReturnType<typeof createMockSettings>;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockConfig = createMockConfig();
-    mockSettings = createMockSettings({});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
+function registerComponentMountTests(): void {
   describe('component mounting', () => {
     it('should mount without throwing errors', () => {
       // Arrange: All dependencies mocked
@@ -535,7 +526,9 @@ describe('AppContainer.mount', () => {
       expect(lastFrame()).toBeDefined();
     });
   });
+}
 
+function registerResumedHistoryMountTest(): void {
   describe('with resumed history', () => {
     it('should mount with resumedHistory without errors', () => {
       // Arrange
@@ -555,7 +548,7 @@ describe('AppContainer.mount', () => {
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
-        resumedHistory,
+        resumedBoot: displayBoot(resumedHistory),
         appState: initialAppState,
         appDispatch: vi.fn(),
       };
@@ -566,7 +559,9 @@ describe('AppContainer.mount', () => {
       }).not.toThrow();
     });
   });
+}
 
+function registerStartupWarningsMountTest(): void {
   describe('with startup warnings', () => {
     it('should mount with startupWarnings without errors', () => {
       // Arrange
@@ -594,7 +589,9 @@ describe('AppContainer.mount', () => {
       }).not.toThrow();
     });
   });
+}
 
+function registerUnmountTest(): void {
   describe('unmount behavior', () => {
     it('should unmount without errors', () => {
       // Arrange
@@ -623,4 +620,21 @@ describe('AppContainer.mount', () => {
       }).not.toThrow();
     });
   });
+}
+
+describe('AppContainer.mount', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConfig = createMockConfig();
+    mockSettings = createMockSettings({});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  registerComponentMountTests();
+  registerResumedHistoryMountTest();
+  registerStartupWarningsMountTest();
+  registerUnmountTest();
 });

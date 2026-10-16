@@ -1,4 +1,3 @@
-import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -59,7 +58,7 @@ export async function resumeAgentHistory(
   sessionId: string,
   sessionConfig: Config,
   listFiles: ChatSessionFileLister = nodeChatSessionFileLister,
-): Promise<readonly IContent[]> {
+): Promise<AsyncIterable<IContent>> {
   try {
     return await agent.session.resume(sessionId);
   } catch (error) {
@@ -129,32 +128,22 @@ export async function hasRecordedSessionFile(
   }
 }
 
-/**
- * Reads a live agent's in-memory conversation as neutral IContent[] for the
- * re-attach replay (#1604). `agent.getHistory()` already returns neutral
- * AgentMessage/IContent values, so preserving them directly keeps every block
- * intact and maps identically to a disk resume. A fresh unprompted session has
- * empty history, yielding an empty array (zero replay updates).
- */
-export async function readAgentHistoryAsIContent(
-  agent: Pick<Agent, 'getHistory'>,
-): Promise<readonly IContent[]> {
-  return [...(await agent.getHistory())];
+/** Raw live membership is pinned on first next and released when replay closes. */
+export async function* readAgentHistoryAsIContent(
+  agent: Pick<Agent, 'streamHistory'>,
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
+  yield* agent.streamHistory(signal);
 }
 
-/**
- * {@link readAgentHistoryAsIContent} with replay-failure normalization: a
- * getHistory()/conversion rejection is wrapped exactly like a delivery failure
- * ({@link wrapReplayFailure} -> internalError, phase:'replay') so a re-attach
- * load always rejects with a well-formed RequestError — consistent with the
- * disk-resume path's error semantics.
- */
-export async function readAgentHistoryForReplay(
-  agent: Pick<Agent, 'getHistory'>,
+/** Source failures during traversal use the same replay classification as delivery failures. */
+export async function* readAgentHistoryForReplay(
+  agent: Pick<Agent, 'streamHistory'>,
   sessionId: string,
-): Promise<readonly IContent[]> {
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
   try {
-    return await readAgentHistoryAsIContent(agent);
+    yield* readAgentHistoryAsIContent(agent, signal);
   } catch (error) {
     throw wrapReplayFailure(sessionId, error);
   }
@@ -191,18 +180,4 @@ export function toLoadRequestError(
     rawDetail ||
     (error instanceof Error ? error.constructor.name : 'unknown error');
   return acp.RequestError.internalError({ sessionId, reason: detail }, detail);
-}
-
-export async function streamZedHistory(
-  sessionId: string,
-  items: readonly IContent[],
-  send: (update: acp.SessionUpdate) => Promise<void>,
-): Promise<void> {
-  for (const update of mapHistoryToSessionUpdates(items)) {
-    try {
-      await send(update);
-    } catch (error) {
-      throw wrapReplayFailure(sessionId, error);
-    }
-  }
 }

@@ -13,6 +13,7 @@ import {
   type WorkspaceTrustControlPort,
   patchStdio,
   ExitCodes,
+  sweepDeadScratchRoots,
   type ProfileDefinitionReads,
   type SessionSettingsOwner,
   type RuntimePolicyOwner,
@@ -186,6 +187,9 @@ function setupProcessLifecycle(): () => void {
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
+  // Reclaim disk scratch left by processes that were killed before their exit
+  // hook could remove it; this process's own root is removed on exit.
+  sweepDeadScratchRoots();
   return cleanupStdio;
 }
 
@@ -306,7 +310,7 @@ async function constructForegroundAgentAndDispatch(
   await connectIdeClientIfEnabled(agent.ide);
 
   const recordingStartupWarnings: string[] = [];
-  const resumedHistory = await setupOwnerSessionRecording(
+  const resumedBoot = await setupOwnerSessionRecording(
     config,
     agent,
     argv,
@@ -324,7 +328,7 @@ async function constructForegroundAgentAndDispatch(
     workspaceRoot,
     recordingOwner: 'agent',
     runtimeSettings: { owner: settingsOwner, store: settingsService },
-    resumedHistory,
+    resumedBoot,
     recordingStartupWarnings,
     hasPipedInput,
     readStdinData,
@@ -466,6 +470,31 @@ async function exitIfAuthenticationFailed(authFailed: boolean): Promise<void> {
   }
 }
 
+type ActivationSessionClient = Awaited<
+  ReturnType<typeof bootstrapRuntimeAndConfig>
+>['activationOperation']['sessionClient'];
+
+/** Direct image mode and expired-session cleanup, both of which precede agent construction. */
+async function runPreAgentSessionSteps(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  sessionClient: ActivationSessionClient,
+): Promise<void> {
+  // Direct image mode: detect after config/auth but BEFORE conversational
+  // dispatch. Image mode runs the image-operation service directly and exits.
+  await exitIfDirectImage(argv, sessionClient);
+
+  // Cleanup sessions before agent construction.
+  await cleanupExpiredSessions(
+    config,
+    settings.merged,
+    undefined,
+    undefined,
+    (signal) => sessionClient.getAgentClient().streamHistory(signal),
+  );
+}
+
 export async function main() {
   // Capture and scrub LLXPRT_JSP_BOOTSTRAP_FILE before any child-capable
   // startup. No file I/O; resolved later, validated at observation setup.
@@ -545,13 +574,11 @@ export async function main() {
 
     await exitIfAuthenticationFailed(initialAuthFailed);
 
-    // Direct image mode: detect after config/auth but BEFORE conversational
-    // dispatch. Image mode runs the image-operation service directly and exits.
-    await exitIfDirectImage(argv, activationOperation.sessionClient);
-
-    // Cleanup sessions before agent construction.
-    await cleanupExpiredSessions(config, settings.merged, undefined, () =>
-      activationOperation.sessionClient.getAgentClient().getHistory(),
+    await runPreAgentSessionSteps(
+      config,
+      settings,
+      argv,
+      activationOperation.sessionClient,
     );
 
     await constructForegroundAgentAndDispatch(

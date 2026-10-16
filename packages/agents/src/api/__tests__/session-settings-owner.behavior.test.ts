@@ -166,12 +166,19 @@ async function withSharedConfig(
   const endpoint = await modelWire();
   const fetchTransport = globalThis.fetch;
   const loopbackOnly = spyOn(globalThis, 'fetch').mockImplementation(
-    (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      if (url.origin !== new URL(endpoint.url).origin)
-        throw new Error(`Unexpected non-loopback model request: ${url.origin}`);
-      return fetchTransport(input, init);
-    },
+    Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(
+          input instanceof Request ? input.url : String(input),
+        );
+        if (url.origin !== new URL(endpoint.url).origin)
+          throw new Error(
+            `Unexpected non-loopback model request: ${url.origin}`,
+          );
+        return fetchTransport(input, init);
+      },
+      { preconnect: fetchTransport.preconnect },
+    ),
   );
   const config = new Config(
     toConfigParameters({

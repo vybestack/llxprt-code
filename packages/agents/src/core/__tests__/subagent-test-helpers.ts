@@ -292,7 +292,7 @@ function createDefaultHistory(): HistoryService {
   const history = new HistoryService();
   vi.spyOn(history, 'clear');
   vi.spyOn(history, 'add');
-  vi.spyOn(history, 'getCuratedForProvider');
+  vi.spyOn(history, 'getCuratedForProviderStream');
   vi.spyOn(history, 'getIdGeneratorCallback');
   vi.spyOn(history, 'findUnmatchedToolCalls');
   vi.spyOn(history, 'generateTurnKey');

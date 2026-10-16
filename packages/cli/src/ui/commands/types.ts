@@ -77,7 +77,12 @@ export interface CommandContext {
     agent: Agent | null;
     settings: LoadedSettings;
     git:
-      | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
+      | Pick<
+          WorkspaceCheckpointOperations,
+          | 'createFileSnapshot'
+          | 'getCurrentCommitHash'
+          | 'restoreProjectFromSnapshot'
+        >
       | undefined;
     logger: Logger;
     subagentManager?: SubagentDefinitionReads & SubagentDefinitionWrites;

@@ -81,75 +81,87 @@ void vi.mock('./ToolConfirmationMessage.js', () => ({
   },
 }));
 
-describe('<ToolGroupMessage />', () => {
-  const mockConfig: Config = { getMcpServers: () => undefined } as Config;
+const mockConfig: Config = { getMcpServers: () => undefined } as Config;
 
-  const createToolCall = (
-    overrides: Partial<IndividualToolCallDisplay> = {},
-  ): IndividualToolCallDisplay => ({
-    callId: 'tool-123',
-    name: 'test-tool',
-    description: 'A tool for testing',
-    resultDisplay: 'Test result',
-    status: ToolCallStatus.Success,
-    confirmationDetails: undefined,
-    renderOutputAsMarkdown: false,
-    ...overrides,
-  });
+const createToolCall = (
+  overrides: Partial<IndividualToolCallDisplay> = {},
+): IndividualToolCallDisplay => ({
+  callId: 'tool-123',
+  name: 'test-tool',
+  description: 'A tool for testing',
+  resultDisplay: 'Test result',
+  status: ToolCallStatus.Success,
+  confirmationDetails: undefined,
+  renderOutputAsMarkdown: false,
+  ...overrides,
+});
 
-  const baseProps = {
-    groupId: 1,
-    terminalWidth: 80,
-    get config() {
-      return composeFixtureRuntime(mockConfig);
-    },
-    isFocused: true,
-    agentId: 'helper-agent',
-  };
+const baseProps = {
+  groupId: 1,
+  terminalWidth: 80,
+  get config() {
+    return composeFixtureRuntime(mockConfig);
+  },
+  isFocused: true,
+  agentId: 'helper-agent',
+};
 
-  const defaultTodo: Todo = {
-    id: 'todo-1',
-    content: 'Implement role-based access control',
-    status: 'in_progress',
-    subtasks: [
-      {
-        id: 'sub-1',
-        content: 'Define role enum',
-        toolCalls: [
-          {
-            id: 'call-1',
-            name: 'read_file',
-            parameters: { path: 'src/app.ts' },
-            timestamp: new Date('2025-01-01T00:00:00Z'),
-          },
-        ],
-      },
-    ],
-  };
-
-  const renderWithContexts = (
-    component: React.ReactElement,
+const defaultTodo: Todo = {
+  id: 'todo-1',
+  content: 'Implement role-based access control',
+  status: 'in_progress',
+  subtasks: [
     {
-      todos = [],
-      showTodoPanel = true,
-    }: { todos?: Todo[]; showTodoPanel?: boolean } = {},
-  ) => {
-    const todoContextValue = {
-      todos,
-      updateTodos: vi.fn(),
-      refreshTodos: vi.fn(),
-    };
+      id: 'sub-1',
+      content: 'Define role enum',
+      toolCalls: [
+        {
+          id: 'call-1',
+          name: 'read_file',
+          parameters: { path: 'src/app.ts' },
+          timestamp: new Date('2025-01-01T00:00:00Z'),
+        },
+      ],
+    },
+  ],
+};
 
-    return render(
-      <TodoContext.Provider value={todoContextValue}>
-        {React.cloneElement(
-          component as React.ReactElement<{ showTodoPanel?: boolean }>,
-          { showTodoPanel },
-        )}
-      </TodoContext.Provider>,
-    );
+const renderWithContexts = (
+  component: React.ReactElement,
+  {
+    todos = [],
+    showTodoPanel = true,
+  }: { todos?: Todo[]; showTodoPanel?: boolean } = {},
+) => {
+  const todoContextValue = {
+    todos,
+    updateTodos: vi.fn(),
+    refreshTodos: vi.fn(),
   };
 
+  return render(
+    <TodoContext.Provider value={todoContextValue}>
+      {React.cloneElement(
+        component as React.ReactElement<{ showTodoPanel?: boolean }>,
+        { showTodoPanel },
+      )}
+    </TodoContext.Provider>,
+  );
+};
+
+const execConfirmationDetails = (
+  onConfirm: ToolCallConfirmationDetails['onConfirm'],
+  title = 'Confirm Execution',
+): ToolCallConfirmationDetails => ({
+  type: 'exec',
+  title,
+  command: 'echo "hello"',
+  rootCommand: 'echo',
+  rootCommands: ['echo'],
+  onConfirm,
+});
+
+function registerTool1_1(): void {
   describe('Golden Snapshots', () => {
     it('renders single successful tool call', () => {
       const toolCalls = [createToolCall()];
@@ -206,7 +218,11 @@ describe('<ToolGroupMessage />', () => {
       );
       expect(lastFrame()).toMatchSnapshot();
     });
+  });
+}
 
+function registerTool1_2(): void {
+  describe.each([['Golden Snapshots']])('%s', () => {
     it('renders shell command with yellow border', () => {
       const toolCalls = [
         createToolCall({
@@ -274,7 +290,11 @@ describe('<ToolGroupMessage />', () => {
       );
       expect(lastFrame()).toMatchSnapshot();
     });
+  });
+}
 
+function registerTool1_3(): void {
+  describe.each([{ name: 'Golden Snapshots' }])('$name', () => {
     it('renders when not focused', () => {
       const toolCalls = [createToolCall()];
       const { lastFrame } = render(
@@ -312,7 +332,9 @@ describe('<ToolGroupMessage />', () => {
       expect(lastFrame()).toMatchSnapshot();
     });
   });
+}
 
+function registerTool2_1(): void {
   describe('Border Color Logic', () => {
     it('uses yellow border when tools are pending', () => {
       const toolCalls = [createToolCall({ status: ToolCallStatus.Pending })];
@@ -351,7 +373,9 @@ describe('<ToolGroupMessage />', () => {
       expect(lastFrame()).toMatchSnapshot();
     });
   });
+}
 
+function registerTool3_1(): void {
   describe('Height Calculation', () => {
     it('calculates available height correctly with multiple tools with results', () => {
       const toolCalls = [
@@ -378,7 +402,9 @@ describe('<ToolGroupMessage />', () => {
       expect(lastFrame()).toMatchSnapshot();
     });
   });
+}
 
+function registerTool4_1(): void {
   describe('Confirmation Handling', () => {
     it('shows confirmation dialog for first confirming tool only', () => {
       const toolCalls = [
@@ -412,7 +438,9 @@ describe('<ToolGroupMessage />', () => {
       expect(lastFrame()).toMatchSnapshot();
     });
   });
+}
 
+function registerTool5_1(): void {
   describe('Todo panel toggle behavior', () => {
     afterEach(() => {
       mockToolMessage.mockClear();
@@ -448,6 +476,14 @@ describe('<ToolGroupMessage />', () => {
       expect(todoWriteCall?.resultDisplay).toBe(
         '✦ Todo list updated (1 task).',
       );
+    });
+  });
+}
+
+function registerTool5_2(): void {
+  describe.each([['Todo panel toggle behavior']])('%s', () => {
+    afterEach(() => {
+      mockToolMessage.mockClear();
     });
 
     it('restores textual todo output when panel is disabled', () => {
@@ -521,7 +557,9 @@ describe('<ToolGroupMessage />', () => {
       );
     });
   });
+}
 
+function registerTool6_1(): void {
   describe('Ordinary tool visibility with an active todo', () => {
     afterEach(() => {
       mockToolMessage.mockClear();
@@ -545,23 +583,12 @@ describe('<ToolGroupMessage />', () => {
       expect(frame).toContain('Read README');
     });
   });
+}
 
-  // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5: mixed-state queue behavior, no snapshots
+function registerTool7_1(): void {
   describe('mixed-state queue', () => {
     afterEach(() => {
       mockToolMessage.mockClear();
-    });
-
-    const execConfirmationDetails = (
-      onConfirm: ToolCallConfirmationDetails['onConfirm'],
-      title = 'Confirm Execution',
-    ): ToolCallConfirmationDetails => ({
-      type: 'exec',
-      title,
-      command: 'echo "hello"',
-      rootCommand: 'echo',
-      rootCommands: ['echo'],
-      onConfirm,
     });
 
     it('renders exactly one confirmation with the confirming call at high emphasis and the rest at low emphasis', () => {
@@ -629,6 +656,14 @@ describe('<ToolGroupMessage />', () => {
         expect(props?.status).toBe(expectedByCallId.get(callId)?.status);
       }
     });
+  });
+}
+
+function registerTool7_2(): void {
+  describe.each([['mixed-state queue']])('%s', () => {
+    afterEach(() => {
+      mockToolMessage.mockClear();
+    });
 
     it('renders only the first of two confirming calls', () => {
       // @plan PLAN-20260824-ISSUE2021.P05 @requirement REQ-2021.5
@@ -673,4 +708,29 @@ describe('<ToolGroupMessage />', () => {
       expect(secondCall?.emphasis).toBe('low');
     });
   });
+}
+
+describe('<ToolGroupMessage />', () => {
+  it('labels a bounded page as part of its original tool group', () => {
+    const { lastFrame } = render(
+      <ToolGroupMessage
+        {...baseProps}
+        toolCalls={[createToolCall()]}
+        toolPage={{ start: 16, total: 1024, groupIndex: 5 }}
+      />,
+    );
+    expect(lastFrame()).toContain('Tool group 5: calls 17-17 of 1024');
+  });
+
+  registerTool1_1();
+  registerTool1_2();
+  registerTool1_3();
+  registerTool2_1();
+  registerTool3_1();
+  registerTool4_1();
+  registerTool5_1();
+  registerTool5_2();
+  registerTool6_1();
+  registerTool7_1();
+  registerTool7_2();
 });

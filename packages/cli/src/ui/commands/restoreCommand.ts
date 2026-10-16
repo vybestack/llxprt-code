@@ -16,6 +16,10 @@ import {
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import {
+  openDiskCheckpoint,
+  type DiskCheckpoint,
+} from './checkpoint-restore-source.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
@@ -85,57 +89,105 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
   };
 }
 
-interface ToolCallCheckpoint {
-  history?: Parameters<NonNullable<LoadHistory>>[0];
-  clientHistory?: Parameters<
-    NonNullable<
-      CommandContext['services']['agent']
-    >['agentClient']['setHistory']
-  >[0];
-  commitHash?: string;
-  toolCall: { name: string; args: Record<string, unknown> };
+type CheckpointGit = NonNullable<CommandContext['services']['git']>;
+
+/**
+ * Rewrites the project files from a snapshot and can put them back.
+ *
+ * The history replacement is the step that can still fail after the files
+ * change, and the replaced history cannot be recovered once published. The
+ * files are therefore the side that rolls back: the working tree is captured
+ * in a snapshot before the restore touches it, and `rollback` restores that
+ * snapshot.
+ */
+interface ProjectFileRestore {
+  restore(): Promise<void>;
+  /** Returns the failure to report, joined with any rollback failure. */
+  rollback(failure: unknown): Promise<unknown>;
+}
+
+function createProjectFileRestore(
+  git: CheckpointGit | undefined,
+  snapshot: string | undefined,
+  signal: AbortSignal,
+): ProjectFileRestore {
+  let priorState: string | undefined;
+  return {
+    async restore() {
+      signal.throwIfAborted();
+      if (git === undefined || snapshot === undefined) return;
+      const created = await git.createFileSnapshot('Project before /restore');
+      // A snapshot of a tree identical to HEAD commits nothing and returns ''.
+      priorState = created === '' ? await git.getCurrentCommitHash() : created;
+      await git.restoreProjectFromSnapshot(snapshot);
+      signal.throwIfAborted();
+    },
+    async rollback(failure) {
+      if (git === undefined || priorState === undefined) return failure;
+      try {
+        await git.restoreProjectFromSnapshot(priorState);
+      } catch (rollbackError) {
+        return new AggregateError(
+          [failure, rollbackError],
+          `Restore failed and the project files could not be rolled back: ${String(failure)}; ${String(rollbackError)}`,
+        );
+      }
+      return failure;
+    },
+  };
 }
 
 async function applyCheckpointRestoration(
   context: CommandContext,
-  config: CliUiRuntime,
-  toolCallData: ToolCallCheckpoint,
+  checkpoint: DiskCheckpoint,
 ): Promise<void> {
-  const { services, ui } = context;
-  const { git: gitService } = services;
-  const loadHistory = getRuntimeLoadHistory(ui);
-
-  if (Array.isArray(toolCallData.history)) {
-    if (loadHistory == null) {
-      throw new Error('loadHistory function is not available.');
+  const { data, rows } = checkpoint;
+  const loadHistory = getRuntimeLoadHistory(context.ui);
+  if (Array.isArray(data.history) && loadHistory == null)
+    throw new Error('loadHistory function is not available.');
+  const snapshot =
+    typeof data.commitHash === 'string' && data.commitHash.length > 0
+      ? data.commitHash
+      : undefined;
+  const files = createProjectFileRestore(
+    context.services.git,
+    snapshot,
+    context.signal,
+  );
+  try {
+    if (rows !== undefined) {
+      const agent = context.services.agent;
+      if (!agent) throw new Error('Session agent is unavailable');
+      // The files change at the end of the admission source, before the
+      // history is published; a later failure rolls them back below.
+      await agent.agentClient.setHistoryFromSource(
+        (async function* () {
+          yield* rows;
+          await checkpoint.close();
+          await files.restore();
+        })(),
+        { signal: context.signal },
+      );
+    } else {
+      await checkpoint.close();
+      await files.restore();
     }
-    loadHistory(toolCallData.history);
+  } catch (error) {
+    throw await files.rollback(error);
   }
-
-  if (Array.isArray(toolCallData.clientHistory)) {
-    const agent = services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.setHistory(toolCallData.clientHistory);
-  }
-
-  if (
-    typeof toolCallData.commitHash === 'string' &&
-    toolCallData.commitHash.length > 0
-  ) {
-    await gitService?.restoreProjectFromSnapshot(toolCallData.commitHash);
-    ui.addItem(
+  if (Array.isArray(data.history)) loadHistory?.(data.history);
+  if (snapshot !== undefined)
+    context.ui.addItem(
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',
       },
       Date.now(),
     );
-  }
 }
 
 async function restoreCheckpoint(
   context: CommandContext,
-  config: CliUiRuntime,
   args: string,
   checkpointDir: string,
   jsonFiles: string[],
@@ -151,16 +203,17 @@ async function restoreCheckpoint(
   }
 
   const filePath = path.join(checkpointDir, selectedFile);
-  const data = await fs.readFile(filePath, 'utf-8');
-  const toolCallData = JSON.parse(data) as ToolCallCheckpoint;
-
-  await applyCheckpointRestoration(context, config, toolCallData);
-
-  return {
-    type: 'tool',
-    toolName: toolCallData.toolCall.name,
-    toolArgs: toolCallData.toolCall.args,
-  };
+  const checkpoint = await openDiskCheckpoint(filePath, context.signal);
+  try {
+    await applyCheckpointRestoration(context, checkpoint);
+    return {
+      type: 'tool',
+      toolName: checkpoint.data.toolCall.name,
+      toolArgs: checkpoint.data.toolCall.args,
+    };
+  } finally {
+    await checkpoint.close();
+  }
 }
 
 async function restoreAction(
@@ -197,13 +250,7 @@ async function restoreAction(
       return listCheckpoints(jsonFiles);
     }
 
-    return await restoreCheckpoint(
-      context,
-      config,
-      args,
-      checkpointDir,
-      jsonFiles,
-    );
+    return await restoreCheckpoint(context, args, checkpointDir, jsonFiles);
   } catch (error) {
     if (
       error instanceof Error &&

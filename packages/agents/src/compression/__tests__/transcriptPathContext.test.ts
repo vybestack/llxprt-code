@@ -23,7 +23,6 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionStrategy,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -31,7 +30,25 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { ChatSession } from '../../core/chatSession.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
+import { OneShotStrategy } from '../OneShotStrategy.js';
+import { SummaryTransport } from './middleout-disk-helpers.js';
+import type { CompressionAttemptContext } from '../compressionContextBuilder.js';
+import { regressionHistory } from './compression-regression-fixtures.js';
+
+const observedContexts = new WeakMap<
+  CompressionHandler,
+  CompressionAttemptContext
+>();
+async function observeContext(
+  handler: CompressionHandler,
+  prompt: string,
+): Promise<CompressionAttemptContext> {
+  await handler.performCompression(prompt);
+  const context = observedContexts.get(handler);
+  if (context === undefined)
+    throw new Error('Compression hook did not receive context');
+  return context;
+}
 
 function makeHandler(historyService: HistoryService): CompressionHandler {
   const runtimeContext: AgentRuntimeContext = buildRuntimeContext(
@@ -46,13 +63,16 @@ function makeHandler(historyService: HistoryService): CompressionHandler {
     provider,
     runtime: runtimeContext.providerRuntime,
   };
-  return new CompressionHandler(
+  const result = new CompressionHandler(
     runtimeContext,
     historyService,
     {},
     vi.fn().mockResolvedValue(providerResult),
-    vi.fn().mockResolvedValue(undefined),
+    async (context) => {
+      observedContexts.set(result, context);
+    },
   );
+  return result;
 }
 
 function textContent(text: string): IContent {
@@ -68,13 +88,53 @@ function requireFilePath(service: SessionRecordingService): string {
   return filePath;
 }
 
-describe('CompressionHandler transcriptPath wiring (#2933)', () => {
-  let tempDir: string;
-  let historyService: HistoryService;
-  let handler: CompressionHandler;
-  let installed: SessionRecordingService | undefined;
-  const created: SessionRecordingService[] = [];
+async function newRecordingService(
+  name: string,
+): Promise<SessionRecordingService> {
+  const chatsDir = path.join(tempDir, name);
+  await fs.mkdir(chatsDir, { recursive: true });
+  const service = new SessionRecordingService({
+    sessionId: `session-${name}`,
+    projectHash: 'abc123def456',
+    chatsDir,
+    workspaceDirs: [tempDir],
+    cwd: tempDir,
+    provider: 'test-provider',
+    model: 'test-model',
+  });
+  created.push(service);
+  return service;
+}
 
+/** A recorder that has actually written its JSONL file to disk. */
+async function materializedRecordingService(
+  name: string,
+): Promise<SessionRecordingService> {
+  const service = await newRecordingService(name);
+  service.recordContent(textContent('hello'));
+  await service.flush();
+  return service;
+}
+
+function installLiveProvider(
+  handler: CompressionHandler,
+  getInstalled: () => SessionRecordingService | undefined,
+): void {
+  handler.setTranscriptPathProvider(() => {
+    const recording = getInstalled();
+    return recording?.isActive() === true
+      ? (recording.getFilePath() ?? undefined)
+      : undefined;
+  });
+}
+
+let tempDir: string;
+let historyService: HistoryService;
+let handler: CompressionHandler;
+let installed: SessionRecordingService | undefined;
+const created: SessionRecordingService[] = [];
+
+describe('CompressionHandler transcriptPath wiring (#2933)', () => {
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'issue2933-'));
     historyService = new HistoryService();
@@ -89,73 +149,35 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
     await fs.rm(tempDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
-
-  async function newRecordingService(
-    name: string,
-  ): Promise<SessionRecordingService> {
-    const chatsDir = path.join(tempDir, name);
-    await fs.mkdir(chatsDir, { recursive: true });
-    const service = new SessionRecordingService({
-      sessionId: `session-${name}`,
-      projectHash: 'abc123def456',
-      chatsDir,
-      workspaceDirs: [tempDir],
-      cwd: tempDir,
-      provider: 'test-provider',
-      model: 'test-model',
-    });
-    created.push(service);
-    return service;
-  }
-
-  /** A recorder that has actually written its JSONL file to disk. */
-  async function materializedRecordingService(
-    name: string,
-  ): Promise<SessionRecordingService> {
-    const service = await newRecordingService(name);
-    service.recordContent(textContent('hello'));
-    await service.flush();
-    return service;
-  }
-
-  function installLiveProvider(): void {
-    handler.setTranscriptPathProvider(() => {
-      const recording = installed;
-      return recording?.isActive() === true
-        ? (recording.getFilePath() ?? undefined)
-        : undefined;
-    });
-  }
-
   it('omits transcriptPath entirely when no provider is injected', async () => {
-    const context = await handler.buildCompressionContext('prompt-1');
+    const context = await observeContext(handler, 'prompt-1');
 
     expect('transcriptPath' in context).toBe(false);
   });
 
   it('omits transcriptPath when no recording service is installed', async () => {
-    installLiveProvider();
+    installLiveProvider(handler, () => installed);
 
-    const context = await handler.buildCompressionContext('prompt-1');
+    const context = await observeContext(handler, 'prompt-1');
 
     expect('transcriptPath' in context).toBe(false);
   });
 
   it('omits transcriptPath while the recording has not materialized a file', async () => {
     installed = await newRecordingService('unmaterialized');
-    installLiveProvider();
+    installLiveProvider(handler, () => installed);
 
     expect(installed.getFilePath()).toBeNull();
-    const context = await handler.buildCompressionContext('prompt-1');
+    const context = await observeContext(handler, 'prompt-1');
 
     expect('transcriptPath' in context).toBe(false);
   });
 
   it('publishes the materialized journal path once the file exists on disk', async () => {
     installed = await materializedRecordingService('active');
-    installLiveProvider();
+    installLiveProvider(handler, () => installed);
 
-    const context = await handler.buildCompressionContext('prompt-1');
+    const context = await observeContext(handler, 'prompt-1');
 
     const materializedPath = requireFilePath(installed);
     expect(context.transcriptPath).toBe(materializedPath);
@@ -171,26 +193,26 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
     expect(secondPath).not.toBe(firstPath);
 
     installed = first;
-    installLiveProvider();
-    const before = await handler.buildCompressionContext('prompt-1');
+    installLiveProvider(handler, () => installed);
+    const before = await observeContext(handler, 'prompt-1');
     expect(before.transcriptPath).toBe(firstPath);
 
     // A resume replaces the live recording service.
     installed = second;
-    const afterSwap = await handler.buildCompressionContext('prompt-2');
+    const afterSwap = await observeContext(handler, 'prompt-2');
     expect(afterSwap.transcriptPath).toBe(secondPath);
 
     // Recording is turned off again.
     installed = undefined;
-    const afterStop = await handler.buildCompressionContext('prompt-3');
+    const afterStop = await observeContext(handler, 'prompt-3');
     expect('transcriptPath' in afterStop).toBe(false);
   });
 
   it('stops publishing the path once the recorder is no longer active', async () => {
     installed = await materializedRecordingService('deactivated');
-    installLiveProvider();
+    installLiveProvider(handler, () => installed);
     const materializedPath = requireFilePath(installed);
-    const before = await handler.buildCompressionContext('prompt-1');
+    const before = await observeContext(handler, 'prompt-1');
     expect(before.transcriptPath).toBe(materializedPath);
 
     // A recorder that stops still remembers the file it was writing to; the
@@ -199,7 +221,7 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
     expect(installed.isActive()).toBe(false);
     expect(installed.getFilePath()).toBe(materializedPath);
 
-    const after = await handler.buildCompressionContext('prompt-2');
+    const after = await observeContext(handler, 'prompt-2');
 
     expect('transcriptPath' in after).toBe(false);
   });
@@ -207,7 +229,7 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
   it('omits transcriptPath rather than publishing an empty string', async () => {
     handler.setTranscriptPathProvider(() => '');
 
-    const context = await handler.buildCompressionContext('prompt-1');
+    const context = await observeContext(handler, 'prompt-1');
 
     expect('transcriptPath' in context).toBe(false);
   });
@@ -221,12 +243,15 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
   it('a path installed on the chat reaches the strategy that builds the summary', async () => {
     const historyService = new HistoryService();
     const runtimeContext = buildRuntimeContext(historyService, {
+      compressionStrategy: 'one-shot',
       contextLimit: 200_000,
       compressionThreshold: 0.8,
     });
-    for (const text of ['first', 'second', 'third', 'fourth']) {
-      historyService.add(textContent(text));
-    }
+    historyService.addAll(regressionHistory());
+    const transport = new SummaryTransport();
+    vi.spyOn(runtimeContext.provider, 'getActiveProvider').mockReturnValue(
+      transport,
+    );
     const chat = new ChatSession(
       runtimeContext,
       {} as unknown as ContentGenerator,
@@ -234,27 +259,13 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       [],
     );
 
-    let seenContext: CompressionContext | undefined;
-    const strategy: CompressionStrategy = {
-      name: 'one-shot',
-      requiresLLM: true,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: async (context) => {
+    let seenContext: Omit<CompressionContext, 'history'> | undefined;
+    const compressDisk = OneShotStrategy.prototype.compressDisk;
+    vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
+      function (this: OneShotStrategy, context, candidate) {
         seenContext = context;
-        return {
-          kind: 'applied',
-          newHistory: [textContent('summary')],
-          metadata: {
-            originalMessageCount: 4,
-            compressedMessageCount: 1,
-            strategyUsed: 'one-shot',
-            llmCallMade: false,
-          },
-        };
+        return compressDisk.call(this, context, candidate);
       },
-    };
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
-      strategy,
     );
 
     chat.setTranscriptPathProvider(() => '/chats/live-session.jsonl');
@@ -266,38 +277,42 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
   it('compresses an unbound chat without publishing a sibling transcript', async () => {
     const history = new HistoryService();
     const runtime = buildRuntimeContext(history, {
+      compressionStrategy: 'one-shot',
       contextLimit: 200_000,
       compressionThreshold: 0.8,
     });
-    for (const text of ['one', 'two', 'three', 'four']) {
-      history.add(textContent(text));
-    }
-    const chat = new ChatSession(runtime, {} as ContentGenerator, {}, []);
-    let seenContext: CompressionContext | undefined;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
-      name: 'one-shot',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: async (context) => {
+    history.addAll(regressionHistory());
+    const transport = new SummaryTransport();
+    vi.spyOn(runtime.provider, 'getActiveProvider').mockReturnValue(transport);
+    const chat = new ChatSession(
+      runtime,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+    let seenContext: Omit<CompressionContext, 'history'> | undefined;
+    const compressDisk = OneShotStrategy.prototype.compressDisk;
+    vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
+      function (this: OneShotStrategy, context, candidate) {
         seenContext = context;
-        return {
-          kind: 'applied',
-          newHistory: [textContent('summary')],
-          metadata: {
-            originalMessageCount: context.history.length,
-            compressedMessageCount: 1,
-            strategyUsed: 'one-shot',
-            llmCallMade: false,
-          },
-        };
+        return compressDisk.call(this, context, candidate);
       },
-    });
+    );
 
     await chat.performCompression('unbound-compression');
 
+    expect(seenContext).toBeDefined();
     expect(seenContext?.transcriptPath).toBeUndefined();
-    expect(chat.getHistory().map((content) => content.blocks)).toStrictEqual([
-      textContent('summary').blocks,
-    ]);
+    const compressed: IContent[] = [];
+    for await (const content of chat.getHistory()) compressed.push(content);
+    expect(compressed.length).toBeLessThan(regressionHistory().length);
+    expect(
+      compressed.some((content) =>
+        content.blocks.some(
+          (block) =>
+            block.type === 'text' && block.text.includes('kept details'),
+        ),
+      ),
+    ).toBe(true);
   });
 });

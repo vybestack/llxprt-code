@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import {
   afterEach,
   beforeEach,
@@ -65,6 +66,19 @@ function idToken(): string {
   return `${encode({ alg: 'none' })}.${encode({ account_id: 'shared-account' })}.signature`;
 }
 
+function createTokenResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      access_token: 'shared-access',
+      refresh_token: 'shared-refresh',
+      token_type: 'Bearer',
+      expires_in: 3600,
+      id_token: idToken(),
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
 describe('CodexOAuthProvider public single-flight', () => {
   const originalFetch = globalThis.fetch;
 
@@ -73,17 +87,8 @@ describe('CodexOAuthProvider public single-flight', () => {
     (shouldLaunchBrowser as Mock<typeof shouldLaunchBrowser>).mockReturnValue(
       true,
     );
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          access_token: 'shared-access',
-          refresh_token: 'shared-refresh',
-          token_type: 'Bearer',
-          expires_in: 3600,
-          id_token: idToken(),
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    globalThis.fetch = withFetchPreconnect(
+      vi.fn().mockResolvedValue(createTokenResponse()),
     );
   });
 

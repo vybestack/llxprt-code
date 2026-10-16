@@ -25,7 +25,8 @@ import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import { withChatSessionFactoryMediaFixture } from './__tests__/support/chatSessionFactoryMediaTestHelper.js';
 
 const realHistoryServiceModule = {
   ...(await import(
@@ -104,7 +105,6 @@ void vi.mock(
       getTotalTokens: vi.fn().mockReturnValue(0),
       waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
       isEmpty: vi.fn().mockReturnValue(false),
-      getAll: vi.fn().mockReturnValue([]),
     })),
   }),
 );
@@ -119,7 +119,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { installChatSessionFactoryConfigFixture } from './chatSessionFactoryConfigFixture.js';
+import { installChatSessionFactoryConfigFixture } from './__tests__/support/chatSessionFactoryConfigFixture.js';
 
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
@@ -174,7 +174,6 @@ function makeReusedHistoryService(): HistoryService & {
     getTotalTokens: vi.fn().mockReturnValue(0),
     waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
     isEmpty: vi.fn().mockReturnValue(false),
-    getAll: vi.fn().mockReturnValue([]),
   } as unknown as HistoryService & {
     resetTokenAccounting: ReturnType<typeof vi.fn>;
     recalculateTotalTokens: ReturnType<typeof vi.fn>;
@@ -337,7 +336,9 @@ describe('createChatSession explicit media input', () => {
           toolRegistry: undefined,
         });
 
-        const retained = historyService.getAll();
+        const retained = await collectHistoryFixture(
+          historyService.streamRawHistory(),
+        );
         expect(retained).toHaveLength(2);
         for (const entry of retained) {
           const block = entry.blocks[0];

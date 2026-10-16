@@ -4,15 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ContentBlock, IContent } from '../services/history/IContent.js';
+import type { IContent } from '../services/history/IContent.js';
 import type { LocalMediaStore } from './local-media-store.js';
+import { MediaMetricByteIndex } from './media-metric-byte-index.js';
 
 export interface PendingByteMetricSource {
   getPendingByteCount(): number;
 }
 
 export interface HistoryMetricSource {
-  getRawHistory(): readonly IContent[];
+  streamRawHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown>;
 }
 
 export interface RequestMaterializationMetricSource {
@@ -88,56 +91,63 @@ function addBytes(name: string, total: number, bytes: number): number {
   return requireByteCount(name, total + requireByteCount(name, bytes));
 }
 
-function measureRetainedBlock(
-  block: ContentBlock,
-  referenceBytes: Map<string, number>,
-  residentEncodedBytes: number,
-): number {
-  if (block.type !== 'media') return residentEncodedBytes;
-  if (block.encoding === 'base64') {
-    return addBytes(
-      'residentEncodedBytes',
-      residentEncodedBytes,
-      Buffer.byteLength(block.data, 'ascii'),
-    );
-  }
-  if (block.encoding !== 'reference') return residentEncodedBytes;
-  const retained = referenceBytes.get(block.contentId);
-  if (retained !== undefined && retained !== block.byteLength) {
-    throw new Error(
-      `Media reference ${block.contentId} has inconsistent byte lengths`,
-    );
-  }
-  referenceBytes.set(
-    block.contentId,
-    requireByteCount('localRetainedBlobBytes', block.byteLength),
-  );
-  return residentEncodedBytes;
-}
-
-function measureRetainedHistory(
-  history: readonly IContent[],
+function measureRetainedContent(
+  content: IContent,
+  referenceBytes: MediaMetricByteIndex,
+  retained: RetainedHistoryMetrics,
 ): RetainedHistoryMetrics {
-  const referenceBytes = new Map<string, number>();
-  let residentEncodedBytes = 0;
-  for (const content of history) {
-    for (const block of content.blocks) {
-      residentEncodedBytes = measureRetainedBlock(
-        block,
-        referenceBytes,
+  let { residentEncodedBytes, localRetainedBlobBytes } = retained;
+  for (const block of content.blocks) {
+    if (block.type !== 'media') continue;
+    if (block.encoding === 'base64') {
+      residentEncodedBytes = addBytes(
+        'residentEncodedBytes',
         residentEncodedBytes,
+        Buffer.byteLength(block.data, 'ascii'),
+      );
+    } else if (block.encoding === 'reference') {
+      localRetainedBlobBytes = addBytes(
+        'localRetainedBlobBytes',
+        localRetainedBlobBytes,
+        referenceBytes.add(
+          block.contentId,
+          requireByteCount('localRetainedBlobBytes', block.byteLength),
+        ),
       );
     }
   }
-  let localRetainedBlobBytes = 0;
-  for (const bytes of referenceBytes.values()) {
-    localRetainedBlobBytes = addBytes(
-      'localRetainedBlobBytes',
-      localRetainedBlobBytes,
-      bytes,
-    );
-  }
   return { localRetainedBlobBytes, residentEncodedBytes };
+}
+
+async function measureRetainedHistory(
+  history: AsyncGenerator<IContent, void, unknown>,
+): Promise<RetainedHistoryMetrics> {
+  const referenceBytes = new MediaMetricByteIndex();
+  let retained: RetainedHistoryMetrics = {
+    localRetainedBlobBytes: 0,
+    residentEncodedBytes: 0,
+  };
+  try {
+    for await (const content of history) {
+      retained = measureRetainedContent(content, referenceBytes, retained);
+    }
+    return retained;
+  } finally {
+    referenceBytes.close();
+  }
+}
+
+type RetainedMetricResult =
+  | { readonly ok: true; readonly metrics: RetainedHistoryMetrics }
+  | { readonly ok: false; readonly error: unknown };
+
+function observeRetainedMetrics(
+  history: AsyncGenerator<IContent, void, unknown>,
+): Promise<RetainedMetricResult> {
+  return measureRetainedHistory(history).then(
+    (metrics): RetainedMetricResult => ({ ok: true, metrics }),
+    (error: unknown): RetainedMetricResult => ({ ok: false, error }),
+  );
 }
 
 function decodedImageCacheMetrics(
@@ -184,45 +194,51 @@ function osPeakFootprintBytes(): number | null {
 export class MediaLifecycleMetrics {
   constructor(private readonly sources: MediaLifecycleMetricsSources) {}
 
-  async snapshot(): Promise<MediaLifecycleMetricsSnapshot> {
-    const retained = measureRetainedHistory(
-      this.sources.history.getRawHistory(),
-    );
-    const request = this.sources.requestResolver.accounting();
-    const recordingQueueBytes = requireByteCount(
-      'recordingQueueBytes',
-      this.sources.recording.getPendingByteCount(),
-    );
-    const persistenceQueueBytes = requireByteCount(
-      'persistenceQueueBytes',
-      this.sources.persistence.getPendingByteCount(),
-    );
-    const provider = this.sources.providerFileRetention.snapshot();
-    const decodedImageCache = decodedImageCacheMetrics(
-      this.sources.decodedImageCache,
-    );
-    const processMetrics = processMemoryMetrics();
-    const peakFootprint = osPeakFootprintBytes();
-    const diskSpoolBytes = requireByteCount(
-      'diskSpoolBytes',
-      await this.sources.store.getStoredByteLength(),
-    );
-    return {
-      ...retained,
-      activeRequestMaterializationBytes: requireByteCount(
-        'activeRequestMaterializationBytes',
-        request.materializedNormalizedBytes,
-      ),
-      recordingQueueBytes,
-      persistenceQueueBytes,
-      diskSpoolBytes,
-      decodedImageCache,
-      providerFileRetainedBytes: requireByteCount(
-        'providerFileRetainedBytes',
-        provider.retainedBytes,
-      ),
-      process: processMetrics,
-      osPeakFootprintBytes: peakFootprint,
-    };
+  async snapshot(signal?: AbortSignal): Promise<MediaLifecycleMetricsSnapshot> {
+    const history = this.sources.history.streamRawHistory(signal);
+    const retained = observeRetainedMetrics(history);
+    try {
+      const request = this.sources.requestResolver.accounting();
+      const recordingQueueBytes = requireByteCount(
+        'recordingQueueBytes',
+        this.sources.recording.getPendingByteCount(),
+      );
+      const persistenceQueueBytes = requireByteCount(
+        'persistenceQueueBytes',
+        this.sources.persistence.getPendingByteCount(),
+      );
+      const provider = this.sources.providerFileRetention.snapshot();
+      const decodedImageCache = decodedImageCacheMetrics(
+        this.sources.decodedImageCache,
+      );
+      const processMetrics = processMemoryMetrics();
+      const peakFootprint = osPeakFootprintBytes();
+      const measured = await retained;
+      if (!measured.ok) throw measured.error;
+      const diskSpoolBytes = requireByteCount(
+        'diskSpoolBytes',
+        await this.sources.store.getStoredByteLength(),
+      );
+      return {
+        ...measured.metrics,
+        activeRequestMaterializationBytes: requireByteCount(
+          'activeRequestMaterializationBytes',
+          request.materializedNormalizedBytes,
+        ),
+        recordingQueueBytes,
+        persistenceQueueBytes,
+        diskSpoolBytes,
+        decodedImageCache,
+        providerFileRetainedBytes: requireByteCount(
+          'providerFileRetainedBytes',
+          provider.retainedBytes,
+        ),
+        process: processMetrics,
+        osPeakFootprintBytes: peakFootprint,
+      };
+    } finally {
+      await history.return();
+      await retained;
+    }
   }
 }

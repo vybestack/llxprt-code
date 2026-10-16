@@ -51,6 +51,9 @@ import { convertToVercelMessages } from './messageConversion.js';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
@@ -112,6 +115,23 @@ function resolveAbortSignal(
   return isAbortSignal(signal) ? signal : undefined;
 }
 
+/**
+ * Issue #854 P05b4: the wire body is owned by a request-scoped lease and the
+ * media request's finish releases it, so the message arrays are spliced once
+ * the transport call settles (any outcome) instead of outliving it.
+ */
+function registerVercelRequestBodyLease(
+  mediaRequest: ResolvedMediaRequest,
+  materializedMessages: ModelMessage[],
+): void {
+  const requestBodyLease = acquireRequestScopedBody('openai-vercel', {
+    messages: materializedMessages,
+  });
+  mediaRequest.registerCleanup(() => {
+    void requestBodyLease.release();
+  });
+}
+
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openaivercel');
@@ -149,6 +169,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return false;
   }
 
+  /** The transport reads `requestRows` itself (issue #854 WP10). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
   private convertToModelMessages(
     contents: IContent[],
     options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
@@ -177,16 +202,19 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): Promise<VercelMediaPreparation> {
     requireAssembledSystemInstruction(options.systemInstruction);
-    const mediaRequest = await resolveRequestMedia(
-      captureRequestMediaInput(
-        options.metadata['logicalRequestId'],
-        options.invocation.runtimeId,
-        this.requestMediaBudgetBytes,
-        this.requestMediaResolver,
-      ),
-      options.contents,
-      options.invocation.signal,
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
     );
+    const mediaRequest = readsRequestRowsAtTransport(options)
+      ? await openTransportRowsMedia(options, media)
+      : await resolveRequestMedia(
+          media,
+          options.contents,
+          options.invocation.signal,
+        );
     try {
       return {
         mediaRequest,
@@ -240,6 +268,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const { mediaRequest, effectiveOptions } =
       await this.resolveMediaPreparation(options);
+    registerVercelRequestBodyLease(mediaRequest, materializedMessages);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const { tools, metadata } = effectiveOptions;
@@ -252,6 +281,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       materializedMessages.push(
         ...this.convertRequestContents(effectiveOptions, modelId, rs),
       );
+      // The SDK messages are the one body this request needs; the transient
+      // neutral rows go away now that they exist (issue #854 WP10).
+      if (readsRequestRowsAtTransport(effectiveOptions))
+        dropTransportRows(mediaRequest);
 
       const formattedTools = convertToolsToOpenAIVercel(tools);
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
@@ -311,7 +344,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     } catch (error) {
       outcome = { status: 'failed', error };
     } finally {
-      materializedMessages.splice(0);
       await finishMediaRequest(mediaRequest, outcome);
     }
   }

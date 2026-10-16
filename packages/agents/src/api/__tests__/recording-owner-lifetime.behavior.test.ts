@@ -39,23 +39,25 @@ describe('recording owner lifetime', () => {
           },
         ]);
         const failure = new Error('External append failed');
-        const fault =
-          failureKind === 'append'
-            ? spyOn(fs, 'appendFile').mockImplementationOnce(async () => {
-                throw failure;
-              })
-            : undefined;
         if (failureKind === 'queue') {
+          // The journal recorder applies backpressure above the queue bound
+          // instead of rejecting the commit, so a bound smaller than the seed
+          // row must not fail startup by itself.
           agent.setEphemeralSetting('session-recording-queue-max-bytes', 4096);
+          await agent.session.setRecording({ enabled: true });
+          await agent.session.setRecording({ enabled: false });
         }
+        const fault = spyOn(fs, 'appendFile').mockImplementationOnce(
+          async () => {
+            throw failure;
+          },
+        );
         try {
           await expect(
             agent.session.setRecording({ enabled: true }),
-          ).rejects.toThrow(
-            failureKind === 'append' ? failure : 'queue byte limit exceeded',
-          );
+          ).rejects.toThrow(failure);
         } finally {
-          fault?.mockRestore();
+          fault.mockRestore();
           agent.setEphemeralSetting(
             'session-recording-queue-max-bytes',
             undefined,
@@ -225,9 +227,13 @@ describe('recording owner lifetime', () => {
     });
   }, 30000);
 
-  it.each([1, 3])(
-    'releases the lock after rejected subscription %i and lets the replacement recorder record another turn',
-    async (failureAt) => {
+  // The journal attachment replaces the per-event listener registrations: the
+  // subscription is one attachment, which can fail while it registers its
+  // retirement listener (before the recorder owns the history) or after the
+  // history has already been attached to the new recorder.
+  it.each(['registering the retirement listener', 'after the attachment'])(
+    'releases the lock after a subscription rejected %s and lets the replacement recorder record another turn',
+    async (failurePoint) => {
       await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
         await agent.setHistory([
           {
@@ -251,18 +257,20 @@ describe('recording owner lifetime', () => {
           history.listenerCount(event),
         );
         let acquiredFiles: string[] = [];
-        const subscribe = history.on.bind(history);
-        let registrations = 0;
-        const subscription = spyOn(history, 'on').mockImplementation(
-          (event, listener) => {
-            registrations += 1;
-            if (registrations === failureAt) {
-              acquiredFiles = readdirSync(chatsDir);
-              throw failure;
-            }
-            return subscribe(event, listener);
-          },
-        );
+        const attach = history.attachJournal.bind(history);
+        const subscription =
+          failurePoint === 'after the attachment'
+            ? spyOn(history, 'attachJournal').mockImplementation(
+                async (...args) => {
+                  await attach(...args);
+                  acquiredFiles = readdirSync(chatsDir);
+                  throw failure;
+                },
+              )
+            : spyOn(history, 'onJournalRetired').mockImplementation(() => {
+                acquiredFiles = readdirSync(chatsDir);
+                throw failure;
+              });
         try {
           await expect(
             agent.session.setRecording({ enabled: true }),

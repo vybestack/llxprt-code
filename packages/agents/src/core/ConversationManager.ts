@@ -12,9 +12,11 @@
  * metadata injection, and model output consolidation.
  */
 
-import { isDeepStrictEqual } from 'node:util';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type {
+  HistoryService,
+  ToolPairingStreamOptions,
+} from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
   ThinkingBlock,
@@ -124,17 +126,8 @@ export class ConversationManager {
     this.baseURL = baseURL;
   }
 
-  /**
-   * Stamps turnKey metadata onto an IContent for history recording.
-   * The idGen and matcher are carried for future tool-call ID canonicalization
-   * but are not applied to already-neutral blocks.
-   */
-  private stampHistoryIds(
-    content: IContent,
-    _idGen: (() => string) | undefined,
-    _matcher: (() => { historyId: string; toolName?: string }) | undefined,
-    turnKey: string,
-  ): IContent {
+  /** Stamps turnKey metadata without changing already-neutral tool IDs. */
+  private stampHistoryIds(content: IContent, turnKey: string): IContent {
     return {
       ...content,
       metadata: {
@@ -155,29 +148,21 @@ export class ConversationManager {
     return this.historyService;
   }
 
-  /**
-   * Creates a position-based matcher for tool responses.
-   * Returns a function that matches tool responses to their calls, or undefined
-   * if there are no unmatched tool calls.
-   */
-  makePositionMatcher():
-    | (() => { historyId: string; toolName?: string })
-    | undefined {
-    const queue = this.historyService
-      .findUnmatchedToolCalls()
-      .map((b) => ({ historyId: b.id, toolName: b.name }));
-
-    // Return undefined if there are no unmatched tool calls
-    if (queue.length === 0) {
-      return undefined;
+  /** Pull unmatched call identities in FIFO order; close the cursor on abandonment. */
+  async *makePositionMatcher(
+    options: ToolPairingStreamOptions = {},
+  ): AsyncGenerator<{ historyId: string; toolName: string }, void, unknown> {
+    for await (const block of this.historyService.findUnmatchedToolCalls(
+      options,
+    )) {
+      const match = { historyId: block.id, toolName: block.name };
+      options.ownership?.retain(match);
+      try {
+        yield match;
+      } finally {
+        options.ownership?.release(match);
+      }
     }
-
-    // Return a function that always returns a valid value (never undefined)
-    return () => {
-      const result = queue.shift();
-      // If queue is empty, return a fallback value
-      return result ?? { historyId: '', toolName: undefined };
-    };
   }
 
   /**
@@ -186,11 +171,9 @@ export class ConversationManager {
    */
   convertUserInputToIContents(userContent: IContent | IContent[]): IContent[] {
     const contents = Array.isArray(userContent) ? userContent : [userContent];
-    const matcher = this.makePositionMatcher();
     return contents.map((content) => {
       const turnKey = this.historyService.generateTurnKey();
-      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      return this.stampHistoryIds(content, idGen, matcher, turnKey);
+      return this.stampHistoryIds(content, turnKey);
     });
   }
 
@@ -211,14 +194,9 @@ export class ConversationManager {
     validateHistory(initialHistory);
 
     // Add each entry
-    const matcher = this.makePositionMatcher();
     for (const content of initialHistory) {
       const turnKey = this.historyService.generateTurnKey();
-      const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-      this.historyService.add(
-        this.stampHistoryIds(content, idGen, matcher, turnKey),
-        model,
-      );
+      this.historyService.add(this.stampHistoryIds(content, turnKey), model);
     }
   }
 
@@ -269,7 +247,7 @@ export class ConversationManager {
     );
 
     // Record user turn
-    this._recordUserTurn(
+    await this._recordUserTurn(
       userContent,
       automaticFunctionCallingHistory,
       newHistoryEntries,
@@ -291,6 +269,7 @@ export class ConversationManager {
     );
 
     await this.historyService.addBatch(newHistoryEntries, generatingModel, {
+      streamPublication: true,
       origin,
       ...(afterPublication === undefined ? {} : { afterPublication }),
     });
@@ -302,33 +281,23 @@ export class ConversationManager {
    *
    * Mutates newHistoryEntries by appending user turn entries.
    */
-  private _recordUserTurn(
+  private async _recordUserTurn(
     userInput: IContent | IContent[],
     automaticFunctionCallingHistory: IContent[] | undefined,
     newHistoryEntries: IContent[],
     generatingModel: string,
     baseURL: string | undefined,
-  ): void {
+  ): Promise<void> {
     if (
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
     ) {
       // Provider AFC history may repeat turns already recorded locally. Compare
       // stable semantic content so generated metadata does not defeat deduping.
-      const existingHistory = this.historyService.getCurated();
-      let matchingPrefixLength = 0;
-      while (
-        matchingPrefixLength < existingHistory.length &&
-        matchingPrefixLength < automaticFunctionCallingHistory.length &&
-        existingHistory[matchingPrefixLength].speaker ===
-          automaticFunctionCallingHistory[matchingPrefixLength].speaker &&
-        isDeepStrictEqual(
-          existingHistory[matchingPrefixLength].blocks,
-          automaticFunctionCallingHistory[matchingPrefixLength].blocks,
-        )
-      ) {
-        matchingPrefixLength += 1;
-      }
+      const matchingPrefixLength =
+        await this.historyService.matchingCuratedPrefix(
+          automaticFunctionCallingHistory,
+        );
       for (const content of automaticFunctionCallingHistory.slice(
         matchingPrefixLength,
       )) {
@@ -337,33 +306,10 @@ export class ConversationManager {
         );
       }
     } else {
-      const matcher = this.makePositionMatcher();
-      // Handle both single IContent and IContent[] (for paired tool call/response)
-      if (Array.isArray(userInput)) {
-        // This is a paired tool call/response from the executor
-        // Add each entry to history
-        for (const content of userInput) {
-          const turnKey = this.historyService.generateTurnKey();
-          const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-          const userIContent = this.stampHistoryIds(
-            content,
-            idGen,
-            matcher,
-            turnKey,
-          );
-          newHistoryEntries.push(userIContent);
-        }
-      } else {
-        // Normal user message
+      const contents = Array.isArray(userInput) ? userInput : [userInput];
+      for (const content of contents) {
         const turnKey = this.historyService.generateTurnKey();
-        const idGen = this.historyService.getIdGeneratorCallback(turnKey);
-        const userIContent = this.stampHistoryIds(
-          userInput,
-          idGen,
-          matcher,
-          turnKey,
-        );
-        newHistoryEntries.push(userIContent);
+        newHistoryEntries.push(this.stampHistoryIds(content, turnKey));
       }
     }
   }
@@ -543,28 +489,17 @@ export class ConversationManager {
     }
   }
 
-  /**
-   * Gets the conversation history in neutral IContent format.
-   * @param curated - If true, returns curated history; otherwise returns all history
-   *
-   * Entries are returned BY REFERENCE — no deep clone (issue #3109). Two
-   * separate guarantees are at work, and they are not the same strength:
-   *
-   * - Membership is isolated: both HistoryService.getAll() and getCurated()
-   *   already build a fresh array, so splicing or reordering the result cannot
-   *   reach the live history. `readonly` makes that a compile error too.
-   * - Entry contents are SHARED. `readonly IContent[]` is shallow, so it does
-   *   NOT stop a caller from mutating `entry.blocks` or a block in place. That
-   *   entries are not mutated after insertion is an invariant maintained by the
-   *   history layer (post-insertion edits replace the array slot — see
-   *   HistoryService.replaceToolResponse and applyDensityMutations), not
-   *   something the type system enforces. This matches what
-   *   HistoryService.getAll()/getCurated() have always exposed to their callers.
-   */
-  getHistory(curated: boolean = false): readonly IContent[] {
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
+    return this.historyService.streamRawHistory(signal);
+  }
+
+  getHistory(
+    curated: boolean = false,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
     return curated
-      ? this.historyService.getCurated()
-      : this.historyService.getAll();
+      ? this.historyService.streamCuratedHistory(signal)
+      : this.streamHistory(signal);
   }
 
   /**
@@ -590,7 +525,7 @@ export class ConversationManager {
    * Sets the full chat history, replacing any existing history.
    */
   async setHistory(
-    history: readonly IContent[],
+    history: Iterable<IContent> | AsyncIterable<IContent>,
     historyOrigin?: object,
   ): Promise<void> {
     // The second argument to historyService.add is only a logging/token-
@@ -598,17 +533,31 @@ export class ConversationManager {
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
-    const restored = history.map((content) => {
-      const turnKey = this.historyService.generateTurnKey();
-      return {
+    return this.historyService.detachedValues
+      .replace(this.stampRestoredRows(history), generatingModel, {
+        publishBatch: true,
+        origin: historyOrigin,
+      })
+      .then(() => this.historyService.resetCacheAnchorSeq());
+  }
+
+  private async *stampRestoredRows(
+    history: Iterable<IContent> | AsyncIterable<IContent>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    for await (const content of history) {
+      // Keep stamped prefix rows byte-identical for journal-backed truncation.
+      if (content.metadata?.chronology !== undefined) {
+        yield content;
+        continue;
+      }
+      yield {
         ...content,
-        metadata: { ...content.metadata, turnId: turnKey },
+        metadata: {
+          ...content.metadata,
+          turnId: this.historyService.generateTurnKey(),
+        },
       };
-    });
-    await this.historyService.replaceBatch(restored, generatingModel, {
-      origin: historyOrigin,
-    });
-    this.historyService.resetCacheAnchorSeq();
+    }
   }
 
   /**

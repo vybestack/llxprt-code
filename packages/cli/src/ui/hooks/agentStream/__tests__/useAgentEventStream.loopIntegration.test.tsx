@@ -128,8 +128,8 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
     getChat() {
       return chat;
     },
-    async getHistory() {
-      return state.history;
+    async *getHistory() {
+      yield* state.history;
     },
     storeHistoryServiceForReuse: () => {},
     storeHistoryForLaterUse: async (h: IContent[]) => {

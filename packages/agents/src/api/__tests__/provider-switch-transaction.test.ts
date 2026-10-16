@@ -90,7 +90,9 @@ describe('provider switch transaction ownership', () => {
       managerB,
       null,
       () => 'subagent',
-      () => second.sessionClient.refreshAuth(),
+      // The agent owns its client replacement; the fixture's owner would
+      // dispose the client that the agent still borrows.
+      () => b.sessionClient.refreshAuth(),
       second.settingsOwner,
     );
     try {
@@ -140,8 +142,10 @@ describe('provider switch transaction ownership', () => {
       for await (const event of b.stream('Continue on the committed sibling')) {
         if (event.type === 'error') throw new Error(event.error.message);
       }
-      expect(JSON.stringify(await a.getHistory())).toContain('restored owner');
-      expect(JSON.stringify(await b.getHistory())).toContain(
+      expect(JSON.stringify(await a.session.getHistory())).toContain(
+        'restored owner',
+      );
+      expect(JSON.stringify(await b.session.getHistory())).toContain(
         'committed sibling',
       );
     } finally {

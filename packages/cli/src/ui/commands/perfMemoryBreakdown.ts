@@ -15,6 +15,7 @@
 
 import {
   computeHistorySizeBreakdown,
+  computeHistorySizeBreakdownStream,
   type HistorySizeBreakdown,
   type IContent,
 } from '@vybestack/llxprt-code-core';
@@ -104,7 +105,18 @@ function renderLargest(breakdown: HistorySizeBreakdown, lines: string[]): void {
 export function formatHistoryMemoryBreakdown(
   history: readonly IContent[],
 ): string {
-  const breakdown = computeHistorySizeBreakdown(history, TOP_RESPONSES);
+  return formatBreakdown(computeHistorySizeBreakdown(history, TOP_RESPONSES));
+}
+
+export async function formatHistoryMemoryBreakdownStream(
+  history: AsyncIterable<IContent>,
+): Promise<string> {
+  return formatBreakdown(
+    await computeHistorySizeBreakdownStream(history, TOP_RESPONSES),
+  );
+}
+
+function formatBreakdown(breakdown: HistorySizeBreakdown): string {
   const lines: string[] = [];
 
   lines.push('History Memory (retained conversation)');

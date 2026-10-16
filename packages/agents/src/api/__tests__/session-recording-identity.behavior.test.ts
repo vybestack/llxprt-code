@@ -77,7 +77,9 @@ describe('Agent recording identity transitions', () => {
       const owner = await build('identity-owner');
       const config = internalConfig(owner.agent);
       const restored = await owner.agent.session.resume('identity-source');
-      expect(JSON.stringify(restored)).toContain('identity-seed');
+      expect(JSON.stringify(await Array.fromAsync(restored))).toContain(
+        'identity-seed',
+      );
       expect(config.getSessionId()).toBe('identity-source');
       expect(owner.agent.getRuntimeId()).toBe('identity-owner');
       expect(owner.agent.session.getRecording().path).toBe(sourcePath);
@@ -162,12 +164,12 @@ describe('Agent recording identity transitions', () => {
       expect(await readFile(previousPath, 'utf8')).toContain(
         'after-failed-adoption',
       );
-      expect(JSON.stringify(await agent.getHistory())).toContain(
-        'prior-history',
-      );
-      expect(JSON.stringify(await agent.getHistory())).not.toContain(
-        'source-history',
-      );
+      expect(
+        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+      ).toContain('prior-history');
+      expect(
+        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+      ).not.toContain('source-history');
       expect(await locks(config.projectChatsDir)).toHaveLength(1);
       await agent.session.setRecording({ enabled: false });
       await agent.session.setRecording({ enabled: true });
@@ -194,7 +196,11 @@ describe('Agent recording identity transitions', () => {
       const config = internalConfig(agent);
       const client = agent.agentClient;
       const failure = new Error('prior history unavailable');
-      const fault = spyOn(client, 'getHistory').mockRejectedValueOnce(failure);
+      const fault = spyOn(client, 'getHistoryService').mockImplementationOnce(
+        () => {
+          throw failure;
+        },
+      );
       try {
         await expect(agent.session.resume('history-source')).rejects.toThrow(
           failure,

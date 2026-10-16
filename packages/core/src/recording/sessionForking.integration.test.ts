@@ -100,13 +100,24 @@ function tempDirHelper(): {
     },
   };
 }
+const tmp = tempDirHelper();
+const chatsDir = (): string => path.join(tmp.getDir(), 'chats');
 
-describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
-  const tmp = tempDirHelper();
+function recordSiblingHistory(parent: SessionRecordingService): void {
+  parent.recordContent(makeContent('A', 'human'));
+  parent.recordContent(makeContent('B', 'ai'));
+  parent.recordContent(makeContent('C', 'human'));
+}
+async function finishSiblingParent(
+  parent: SessionRecordingService,
+): Promise<void> {
+  await parent.flush();
+  await parent.dispose();
+}
+
+describe('session forking and branching @plan:2026-07-28-issue-2625: child initially replays A-C before F/G are added', () => {
   beforeEach(tmp.setup);
   afterEach(tmp.teardown);
-  const chatsDir = () => path.join(tmp.getDir(), 'chats');
-
   describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('child initially replays A-C before F/G are added', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -147,8 +158,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       requireForkSuccess(result);
       {
         // Child history should be A, B, C (not D, E)
-        expect(result.history).toHaveLength(3);
-        const texts = result.history.map((h) => textOf(h.blocks[0]));
+        const rows = await Array.fromAsync(result.boot.streamRows());
+        expect(rows).toHaveLength(3);
+        const texts = rows.map((h) => textOf(h.blocks[0]));
         expect(texts).toStrictEqual(['A', 'B', 'C']);
 
         // Child recording is active and can append F/G
@@ -172,7 +184,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
         }
       }
     });
+  });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: uses checkpoint metadata refreshed under the source lock for ancestry', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
+  describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('uses checkpoint metadata refreshed under the source lock for ancestry', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
       parent.recordContent(makeContent('A', 'human'));
@@ -216,7 +234,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       await result.lockHandle.release();
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: source replay excludes child F/G; child replay excludes source D/E', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A2: source and child remain independent', () => {
     it('source replay excludes child F/G; child replay excludes source D/E', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -284,16 +306,17 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       }
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: two forks have distinct IDs and identical initial state', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A3: repeated checkpoint forks create siblings', () => {
     it('two forks have distinct IDs and identical initial state', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
-      parent.recordContent(makeContent('C', 'human'));
+      recordSiblingHistory(parent);
       const cp = await parent.createCheckpoint('atC');
-      await parent.flush();
-      await parent.dispose();
+      await finishSiblingParent(parent);
 
       const transition = new SessionTransitionService();
 
@@ -355,7 +378,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       );
 
       // Identical initial state
-      expect(fork1.history).toStrictEqual(fork2.history);
+      expect(await Array.fromAsync(fork1.boot.streamRows())).toStrictEqual(
+        await Array.fromAsync(fork2.boot.streamRows()),
+      );
 
       try {
         await fork1.recording.dispose();
@@ -369,7 +394,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       }
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: child resumes after checkpoint deletion and parent deletion', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A4: children are self-contained', () => {
     it('child resumes after checkpoint deletion and parent deletion', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -436,7 +465,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       }
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: lists live checkpoint names as deletion blockers', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A5: source deletion blocker enumeration', () => {
     it('lists live checkpoint names as deletion blockers', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -454,7 +487,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       expect(blockers).toHaveLength(1);
       expect(blockers[0].name).toBe('foo');
     });
+  });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: returns no blockers after checkpoint tombstones', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
+  describe('A5: source deletion blocker enumeration', () => {
     it('returns no blockers after checkpoint tombstones', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
       parent.recordContent(makeContent('A', 'human'));
@@ -478,7 +517,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       expect(blockers).toHaveLength(0);
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: does not read or fork a closed source while another owner holds its lock', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('source locking and failed-child cleanup', () => {
     it('does not read or fork a closed source while another owner holds its lock', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -521,7 +564,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       }
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: forked session rejects second lock acquisition', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A11: forked sessions hold locks', () => {
     it('forked session rejects second lock acquisition', async () => {
       const parent = new SessionRecordingService(makeConfig(chatsDir()));
@@ -601,7 +648,11 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       ).toBe(true);
     });
   });
+});
 
+describe('session forking and branching @plan:2026-07-28-issue-2625: checkpoint after provider switch replays with correct provider', () => {
+  beforeEach(tmp.setup);
+  afterEach(tmp.teardown);
   describe('A9: checkpoint replay fidelity', () => {
     it('checkpoint after provider switch replays with correct provider', async () => {
       const parent = new SessionRecordingService(
@@ -642,7 +693,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625', () => {
       requireForkSuccess(fork);
 
       // Child should have 3 items (A, B, C) with the active provider context.
-      expect(fork.history).toHaveLength(3);
+      expect(await Array.fromAsync(fork.boot.streamRows())).toHaveLength(3);
       expect(fork.metadata).toMatchObject({
         provider: 'anthropic',
         model: 'claude-4',

@@ -19,12 +19,11 @@ import type {
 import { CommandKind } from './types.js';
 import { getHistoryServiceFromAgent as getHistoryService } from './historyServiceAccess.js';
 import type { CommandArgumentSchema } from './schema/types.js';
-import type { DumpMode } from '@vybestack/llxprt-code-providers';
 import {
-  buildProviderDumpBody,
-  dumpRequestContext,
+  type DumpMode,
+  buildProviderDumpBodyStream,
+  dumpRequestContextStream,
 } from '@vybestack/llxprt-code-providers';
-import type { IContent } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
@@ -54,56 +53,59 @@ async function dumpImmediateContext(
       content: historyUnavailableMessage,
     };
   }
-  const history = historyService.getAll() as IContent[];
-  const { providerName, buildContextDumpBody, activeModel, activeBaseURL } =
-    context.runtimeApi.getProviderDumpMetadata();
-
-  let body: Record<string, unknown>;
-  if (typeof buildContextDumpBody === 'function') {
+  const policy = config.getEphemeralSettings();
+  const limits = parseOutputLimits(policy);
+  const {
+    providerName,
+    contextDumpVersion,
+    buildContextDumpBody: pluginConverter,
+    activeModel,
+    activeBaseURL,
+  } = context.runtimeApi.getProviderDumpMetadata();
+  if (pluginConverter !== undefined && contextDumpVersion !== 2) {
+    throw new Error(
+      `Provider '${providerName}' uses an unsupported eager context dump hook. Upgrade the plugin to contextDumpVersion 2 with async bounded conversion.`,
+    );
+  }
+  if (
+    pluginConverter === undefined &&
+    isGeminiFamilyProviderName(providerName)
+  ) {
+    throw new Error(
+      `Provider '${providerName}' cannot build a context dump: install/load the @vybestack/llxprt-plugin-google-gemini runtime plugin and retry.`,
+    );
+  }
+  const history = await historyService.openDumpSnapshot();
+  try {
     // Plugin-owned providers (Gemini) build their own wire body at runtime;
     // the base package never imports plugin code.
-    body = buildContextDumpBody(history, activeModel, config);
-  } else {
-    if (isGeminiFamilyProviderName(providerName)) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          `Provider '${providerName}' cannot build a context dump: Gemini wire ` +
-          'conversion is provided by the @vybestack/llxprt-plugin-google-gemini ' +
-          'runtime plugin. Install/load that plugin (it contributes the gemini ' +
-          'provider) and retry.',
-      };
-    }
-    const policy = config.getEphemeralSettings();
-    body = buildProviderDumpBody({
+    const body =
+      pluginConverter === undefined
+        ? buildProviderDumpBodyStream({
+            providerName,
+            history,
+            policy,
+            config: limits,
+            model: activeModel,
+            baseURL: activeBaseURL,
+          })
+        : await pluginConverter(history, activeModel, limits);
+    const request = { url: 'immediate-context-dump', method: 'DUMP', body };
+    const result = await dumpRequestContextStream(
+      request,
       providerName,
-      history,
-      policy,
-      config: parseOutputLimits(policy),
-      model: activeModel,
-      baseURL: activeBaseURL,
-    });
+      undefined,
+      history.chronology(),
+      { media: 'raw', signal: context.signal },
+    );
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Immediate request context dumped to ${result.requestFilename}\nNo model request was sent, so no model response dump was created.\nDump directory: ${result.dumpDir}`,
+    };
+  } finally {
+    await history.close();
   }
-  const request = {
-    url: 'immediate-context-dump',
-    method: 'DUMP',
-    body,
-  };
-  // Chronology is written alongside the request, never inside request.body:
-  // the body must stay byte-for-byte what the provider would receive (#1721).
-  const result = await dumpRequestContext(
-    request,
-    providerName,
-    undefined,
-    historyService.getChronologyTrace(),
-    { media: 'raw' },
-  );
-  return {
-    type: 'message',
-    messageType: 'info',
-    content: `Immediate request context dumped to ${result.requestFilename}\nNo model request was sent, so no model response dump was created.\nDump directory: ${result.dumpDir}`,
-  };
 }
 
 /**

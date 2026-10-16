@@ -23,6 +23,7 @@ import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/in
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ConversationManager } from '../ConversationManager.js';
@@ -194,9 +195,11 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       usage,
     );
 
-    const aiEntries = historyService.getAll().filter((c) => c.speaker === 'ai');
-    expect(aiEntries.length).toBeGreaterThan(0);
-    expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const aiEntries = rows.filter((c) => c.speaker === 'ai');
+      expect(aiEntries.length).toBeGreaterThan(0);
+      expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    });
   });
 });
 

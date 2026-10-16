@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { guardStream } from '../guardedStream.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
 import { isTerminalRetryError } from '../retryErrorClassification.js';
 import {
@@ -57,7 +58,10 @@ interface TrackedStream {
 }
 
 function createRequestContext(): RetryRequestContext {
-  return resolveRetryRequestContext({ contents: [] }, requestDefaults);
+  return resolveRetryRequestContext(
+    { contents: replayableContents([]) },
+    requestDefaults,
+  );
 }
 
 function trackIterator(

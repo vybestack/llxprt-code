@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   fetchAnthropicUsage,
@@ -11,18 +12,36 @@ import {
   formatAllUsagePeriods,
 } from './usageInfo.js';
 
-describe('usageInfo', () => {
+let fetchMock: ReturnType<typeof vi.fn>;
+function setupUsageInfoFetchAnthropicUsageBeforeEach(): void {
+  fetchMock = vi.fn();
+  global.fetch = withFetchPreconnect(fetchMock);
+}
+
+function setupUsageInfoFetchAnthropicUsageAfterEach(): void {
+  vi.restoreAllMocks();
+}
+
+function setupUsageInfoFormatUsagePeriodBeforeEach(): void {
+  vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
+}
+
+function setupUsageInfoFormatUsagePeriodAfterEach(): void {
+  vi.useRealTimers();
+}
+
+function setupUsageInfoFormatAllUsagePeriodsBeforeEach(): void {
+  vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
+}
+
+function setupUsageInfoFormatAllUsagePeriodsAfterEach(): void {
+  vi.useRealTimers();
+}
+
+describe('usageInfo / token validation and authenticated usage', () => {
   describe('fetchAnthropicUsage', () => {
-    let fetchMock: ReturnType<typeof vi.fn>;
-
-    beforeEach(() => {
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
+    beforeEach(setupUsageInfoFetchAnthropicUsageBeforeEach);
+    afterEach(setupUsageInfoFetchAnthropicUsageAfterEach);
 
     it('should return null for non-OAuth token', async () => {
       const result = await fetchAnthropicUsage('sk-ant-api123-not-oat');
@@ -84,6 +103,13 @@ describe('usageInfo', () => {
       const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
       expect(result).toBeNull();
     });
+  });
+});
+
+describe('usageInfo / usage response handling', () => {
+  describe('fetchAnthropicUsage', () => {
+    beforeEach(setupUsageInfoFetchAnthropicUsageBeforeEach);
+    afterEach(setupUsageInfoFetchAnthropicUsageAfterEach);
 
     it('should handle unknown fields using passthrough', async () => {
       const mockResponse = {
@@ -151,15 +177,12 @@ describe('usageInfo', () => {
       expect(result).toStrictEqual(mockResponse);
     });
   });
+});
 
+describe('usageInfo / period formatting', () => {
   describe('formatUsagePeriod', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    beforeEach(setupUsageInfoFormatUsagePeriodBeforeEach);
+    afterEach(setupUsageInfoFormatUsagePeriodAfterEach);
 
     it('should format usage period with hours until reset', () => {
       const period = {
@@ -221,15 +244,12 @@ describe('usageInfo', () => {
       expect(result).toContain('15.2% used');
     });
   });
+});
 
+describe('usageInfo / aggregate formatting', () => {
   describe('formatAllUsagePeriods', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ now: new Date('2025-11-04T10:00:00Z') });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    beforeEach(setupUsageInfoFormatAllUsagePeriodsBeforeEach);
+    afterEach(setupUsageInfoFormatAllUsagePeriodsAfterEach);
 
     it('should format all available usage periods', () => {
       const usage = {

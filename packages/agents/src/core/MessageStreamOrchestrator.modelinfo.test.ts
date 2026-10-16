@@ -114,6 +114,80 @@ interface BuildOptions {
   estimatePendingTokens?: (contents: IContent[]) => Promise<number>;
 }
 
+function buildModelInfoServices(): Pick<
+  MessageStreamDeps,
+  | 'logger'
+  | 'loopDetector'
+  | 'todoContinuationService'
+  | 'ideContextTracker'
+  | 'agentHookManager'
+  | 'complexityAnalyzer'
+> {
+  return {
+    logger: {
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+    } as unknown as DebugLogger,
+    loopDetector: {
+      reset: vi.fn(),
+      turnStarted: vi.fn().mockResolvedValue(false),
+      addAndCheck: vi.fn().mockReturnValue(false),
+      checkpoint: vi.fn().mockReturnValue({}),
+      restore: vi.fn(),
+    } as unknown as LoopDetectionService,
+    todoContinuationService: {
+      clearPausedState: vi.fn().mockResolvedValue(undefined),
+      toolActivityCount: 0,
+      toolCallReminderLevel: 'none',
+      consecutiveComplexTurns: 0,
+      lastTodoSnapshot: [],
+      recordModelActivity: vi.fn(),
+      isTodoPauseResponse: vi.fn().mockReturnValue(false),
+      isTodoToolCall: vi.fn().mockReturnValue(false),
+      applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
+      getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
+        todos: [],
+        activeTodos: [],
+        reminder: undefined,
+      }),
+      areTodoSnapshotsEqual: vi.fn().mockReturnValue(true),
+      processComplexityAnalysis: vi.fn().mockReturnValue(undefined),
+      appendTodoSuffixToRequest: vi.fn(),
+      appendSystemReminderToRequest: vi.fn(),
+      updateTodoToolAvailabilityFromDeclarations: vi.fn(),
+      setLastTodoToolTurn: vi.fn(),
+      checkpoint: vi.fn().mockReturnValue({}),
+      restore: vi.fn(),
+      shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
+    } as unknown as MessageStreamDeps['todoContinuationService'],
+    ideContextTracker: {
+      isEnabled: () => false,
+      getContextParts: vi.fn().mockReturnValue({
+        contextParts: [],
+        newIdeContext: undefined,
+      }),
+      recordSentContext: vi.fn(),
+    } as unknown as MessageStreamDeps['ideContextTracker'],
+    agentHookManager: {
+      cleanupOldHookState: vi.fn(),
+      fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
+      fireAfterAgentHookSafe: vi.fn().mockResolvedValue(undefined),
+    } as unknown as MessageStreamDeps['agentHookManager'],
+    complexityAnalyzer: {
+      analyzeComplexity: vi.fn().mockReturnValue({
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: false,
+      }),
+    } as unknown as ComplexityAnalyzer,
+  };
+}
+
 function buildOrchestrator(options: BuildOptions = {}): {
   orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
   state: HarnessState;
@@ -173,76 +247,15 @@ function buildOrchestrator(options: BuildOptions = {}): {
   const deps: MessageStreamDeps = {
     config,
     getChat: () => mockChat as unknown as ChatSession,
-    logger: {
-      debug: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      info: vi.fn(),
-    } as unknown as DebugLogger,
-    loopDetector: {
-      reset: vi.fn(),
-      turnStarted: vi.fn().mockResolvedValue(false),
-      addAndCheck: vi.fn().mockReturnValue(false),
-      checkpoint: vi.fn().mockReturnValue({}),
-      restore: vi.fn(),
-    } as unknown as LoopDetectionService,
-    todoContinuationService: {
-      clearPausedState: vi.fn().mockResolvedValue(undefined),
-      toolActivityCount: 0,
-      toolCallReminderLevel: 'none',
-      consecutiveComplexTurns: 0,
-      lastTodoSnapshot: [],
-      recordModelActivity: vi.fn(),
-      isTodoPauseResponse: vi.fn().mockReturnValue(false),
-      isTodoToolCall: vi.fn().mockReturnValue(false),
-      applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
-      getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
-        todos: [],
-        activeTodos: [],
-        reminder: undefined,
-      }),
-      areTodoSnapshotsEqual: vi.fn().mockReturnValue(true),
-      processComplexityAnalysis: vi.fn().mockReturnValue(undefined),
-      appendTodoSuffixToRequest: vi.fn(),
-      appendSystemReminderToRequest: vi.fn(),
-      updateTodoToolAvailabilityFromDeclarations: vi.fn(),
-      setLastTodoToolTurn: vi.fn(),
-      checkpoint: vi.fn().mockReturnValue({}),
-      restore: vi.fn(),
-      shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
-    } as unknown as MessageStreamDeps['todoContinuationService'],
-    ideContextTracker: {
-      isEnabled: () => false,
-      getContextParts: vi.fn().mockReturnValue({
-        contextParts: [],
-        newIdeContext: undefined,
-      }),
-      recordSentContext: vi.fn(),
-    } as unknown as MessageStreamDeps['ideContextTracker'],
-    agentHookManager: {
-      cleanupOldHookState: vi.fn(),
-      fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
-      fireAfterAgentHookSafe: vi.fn().mockResolvedValue(undefined),
-    } as unknown as MessageStreamDeps['agentHookManager'],
+    ...buildModelInfoServices(),
     getEffectiveModelIdentity: identityFn,
-    getHistory: vi.fn().mockResolvedValue([]),
+    readLastHistoryRow: vi.fn().mockResolvedValue(undefined),
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
     startChat: vi.fn().mockResolvedValue(mockChat),
-    getPreviousHistory: vi.fn().mockReturnValue(undefined),
     setChat: vi.fn(),
     hasChat: vi.fn().mockReturnValue(true),
-    complexityAnalyzer: {
-      analyzeComplexity: vi.fn().mockReturnValue({
-        complexityScore: 0.2,
-        isComplex: false,
-        detectedTasks: [],
-        sequentialIndicators: [],
-        questionCount: 0,
-        shouldSuggestTodos: false,
-      }),
-    } as unknown as ComplexityAnalyzer,
     getLastPromptId: () => state.lastPromptId,
     setLastPromptId: (id: string) => {
       state.lastPromptId = id;
@@ -283,14 +296,16 @@ async function collectModelInfos(
     .map((e) => e.value);
 }
 
-describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
-      (_model: string, userContextLimit?: number) =>
-        userContextLimit ?? 1_000_000,
-    );
-  });
+function resetModelInfoMocks(): void {
+  vi.clearAllMocks();
+  (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
+    (_model: string, userContextLimit?: number) =>
+      userContextLimit ?? 1_000_000,
+  );
+}
+
+describe('MessageStreamOrchestrator ModelInfo initial sequence (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('emits ModelInfo for a new prompt', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -345,6 +360,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     // No new prompt, no identity change → zero ModelInfo events
     expect(infos2).toHaveLength(0);
   });
+});
+
+describe('MessageStreamOrchestrator ModelInfo context and continuation (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('emits ModelInfo when only profile changes on continuation', async () => {
     const { orchestrator, state } = buildOrchestrator({
@@ -365,37 +384,6 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos[0]?.displayLabel).toBe('profile-b:gpt-4');
   });
 
-  it('restores all committed previous history when initializing the next chat', async () => {
-    const previousHistory: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'first user turn' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'first model response' }],
-      },
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'second user turn' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'second model response' }],
-      },
-    ];
-    const { orchestrator } = buildOrchestrator();
-    const deps = orchestrator['deps'];
-    (deps.hasChat as Mock<typeof deps.hasChat>).mockReturnValue(false);
-    (
-      deps.getPreviousHistory as Mock<typeof deps.getPreviousHistory>
-    ).mockReturnValue(previousHistory);
-
-    await collectModelInfos(orchestrator, 'prompt-restore-history');
-
-    expect(deps.startChat).toHaveBeenCalledWith(previousHistory);
-  });
-
   it('does not make a generic first-turn context decision before provider finalization', async () => {
     const { orchestrator, mockChat } = buildOrchestrator({
       model: 'claude-opus-4-8',
@@ -408,6 +396,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
 
     expect(mockChat.getContextLimit).not.toHaveBeenCalled();
   });
+});
+
+describe('MessageStreamOrchestrator ModelInfo display labels (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('B1: load-balancer profile reports the active sub-profile model, not the config default', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -454,6 +446,10 @@ describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () =>
     expect(infos).toHaveLength(1);
     expect(infos[0]?.displayLabel).toBe('gpt-5.6-sol');
   });
+});
+
+describe('MessageStreamOrchestrator — ModelInfo emission (issue #1770)', () => {
+  beforeEach(resetModelInfoMocks);
 
   it('issue #2544: reports the routed Codex identity, never a stale manager Gemini identity', async () => {
     const { orchestrator } = buildOrchestrator({
@@ -550,7 +546,9 @@ describe('buildEffectiveModelIdentity — model precedence (issue #2544)', () =>
     expect(identity.model).toBe('gpt-5.6-sol');
     expect(identity.model).not.toBe('gemini-pro');
   });
+});
 
+describe('buildEffectiveModelIdentity provider accessors (issue #2544)', () => {
   it('does not evaluate provider models when the sequence model is available', () => {
     const routedProvider = {
       name: 'codex',

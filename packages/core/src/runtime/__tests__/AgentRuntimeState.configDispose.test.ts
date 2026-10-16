@@ -94,7 +94,7 @@ describe('Config workspace disposal', () => {
           ],
         },
       ]);
-      expect(await client.getHistory()).toHaveLength(1);
+      expect(await Array.fromAsync(client.getHistory())).toHaveLength(1);
       await first.agent.dispose();
       expect(() => first.agent.agentClient).toThrow('disposed');
       await sibling.agent.agentClient.setHistory([
@@ -103,7 +103,9 @@ describe('Config workspace disposal', () => {
           blocks: [{ type: 'text', text: 'sibling still works' }],
         },
       ]);
-      expect(await sibling.agent.agentClient.getHistory()).toHaveLength(1);
+      expect(
+        await Array.fromAsync(sibling.agent.agentClient.getHistory()),
+      ).toHaveLength(1);
     } finally {
       await first.agent.dispose();
       await sibling.agent.dispose();

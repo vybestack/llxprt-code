@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -110,7 +111,7 @@ function makeStubFetch(response: { status: number; body: unknown }): {
   captured: () => CapturedRequest | undefined;
 } {
   let captured: CapturedRequest | undefined;
-  const fetchImpl: typeof fetch = async (input, init?) => {
+  const fetchImpl: typeof fetch = withFetchPreconnect(async (input, init?) => {
     const url = typeof input === 'string' ? input : input.toString();
     captured = { url, init: init ?? {} };
     if (init?.signal?.aborted === true) {
@@ -120,7 +121,7 @@ function makeStubFetch(response: { status: number; body: unknown }): {
       status: response.status,
       headers: { 'content-type': 'application/json' },
     });
-  };
+  });
   return { fetchImpl, captured: () => captured };
 }
 
@@ -138,6 +139,17 @@ function makeBackend(overrides?: {
   });
 }
 
+let workspaceRoot = '';
+async function setupCodexImageBackendEditBeforeEach(): Promise<void> {
+  workspaceRoot = await fs.promises.realpath(
+    await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-image-edit-')),
+  );
+}
+
+async function setupCodexImageBackendEditAfterEach(): Promise<void> {
+  await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
+}
+
 describe('buildCodexImageEditEndpoint', () => {
   it('returns the canonical edit endpoint when no base url is given', () => {
     expect(buildCodexImageEditEndpoint(undefined)).toBe(
@@ -152,16 +164,9 @@ describe('buildCodexImageEditEndpoint', () => {
   });
 });
 
-describe('CodexImageBackend.edit', () => {
-  let workspaceRoot = '';
-  beforeEach(async () => {
-    workspaceRoot = await fs.promises.realpath(
-      await fs.promises.mkdtemp(path.join(os.tmpdir(), 'llxprt-image-edit-')),
-    );
-  });
-  afterEach(async () => {
-    await fs.promises.rm(workspaceRoot, { recursive: true, force: true });
-  });
+describe('CodexImageBackend.edit / request body and headers', () => {
+  beforeEach(setupCodexImageBackendEditBeforeEach);
+  afterEach(setupCodexImageBackendEditAfterEach);
 
   it('posts to the edit endpoint with model gpt-image-2 and input images as data URLs', async () => {
     const inputPng = makeRealMinimalPng();
@@ -230,6 +235,11 @@ describe('CodexImageBackend.edit', () => {
     expect(headers['originator']).toBe('codex_cli_rs');
     expect(headers['Content-Type']).toBe('application/json');
   });
+});
+
+describe('CodexImageBackend.edit / response normalization and input validation', () => {
+  beforeEach(setupCodexImageBackendEditBeforeEach);
+  afterEach(setupCodexImageBackendEditAfterEach);
 
   it('normalizes the edit response into a base64/png result', async () => {
     const inputPath = path.join(workspaceRoot, 'input.png');
@@ -284,10 +294,10 @@ describe('CodexImageBackend.edit', () => {
 
   it('rejects an empty prompt before any file read or fetch', async () => {
     let fetchCalled = false;
-    const fetchImpl: typeof fetch = async () => {
+    const fetchImpl: typeof fetch = withFetchPreconnect(async () => {
       fetchCalled = true;
       return new Response('{}', { status: 200 });
-    };
+    });
     const backend = makeBackend({ fetchImpl });
     expect(
       await captureRejection(
@@ -299,6 +309,11 @@ describe('CodexImageBackend.edit', () => {
     ).toBeInstanceOf(ImageValidationError);
     expect(fetchCalled).toBe(false);
   });
+});
+
+describe('CodexImageBackend.edit / file validation and HTTP errors', () => {
+  beforeEach(setupCodexImageBackendEditBeforeEach);
+  afterEach(setupCodexImageBackendEditAfterEach);
 
   it('rejects a URL input path', async () => {
     const backend = makeBackend();
@@ -371,6 +386,11 @@ describe('CodexImageBackend.edit', () => {
     >;
     expect(body['model']).toBe(CODEX_IMAGE_MODEL);
   });
+});
+
+describe('CodexImageBackend.edit / model selection, abort and WebP', () => {
+  beforeEach(setupCodexImageBackendEditBeforeEach);
+  afterEach(setupCodexImageBackendEditAfterEach);
 
   it('propagates abort on edit', async () => {
     const inputPath = path.join(workspaceRoot, 'input.png');

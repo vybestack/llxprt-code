@@ -14,8 +14,112 @@
  * limitations under the License.
  */
 
+import type { EventEmitter } from 'events';
 import type { IContent } from './IContent.js';
+import type { HistoryBatchValues } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
+
+/**
+ * Why an interior span of chronology seqs left the curated context while the
+ * surrounding entries stayed.
+ *
+ * @plan PLAN-20260917-ISSUE854.P03
+ * @requirement G3,G4
+ */
+export type RemovedInteriorReason =
+  | 'compressed'
+  | 'density-replaced'
+  | 'density-removed'
+  | 'rewound'
+  | 'cleared';
+
+/**
+ * An inclusive span of chronology seqs removed from the interior of the
+ * curated context. Spans are produced sorted by start and strictly disjoint;
+ * adjacent same-reason spans are coalesced, different-reason spans stay
+ * separate.
+ *
+ * @plan PLAN-20260917-ISSUE854.P03
+ * @requirement G3,G4
+ */
+export interface RemovedInteriorSpan {
+  /** Lowest chronology seq of the removed span (inclusive). */
+  start: number;
+  /** Highest chronology seq of the removed span (inclusive). */
+  end: number;
+  /** Which mutation removed the span. */
+  reason: RemovedInteriorReason;
+}
+
+/**
+ * Snapshot of the curated in-memory context boundary: the chronology seqs of
+ * the first and last entries of the exact history array the model sees, plus
+ * the membership projection of everything removed from its interior.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-004
+ */
+export interface ContextRange {
+  /** Chronology seq of the first entry of the curated history. */
+  firstSeq: number;
+  /** Chronology seq of the last entry of the curated history. */
+  lastSeq: number;
+  /** Number of entries in the curated history. */
+  totalEntries: number;
+  /**
+   * Inclusive spans of chronology seqs removed from the context interior,
+   * cumulative across mutations: spans derived by earlier mutations persist
+   * in later snapshots (compressed spans are re-derived from summary
+   * metadata; density/rewound/cleared spans accumulate in the service).
+   *
+   * @plan PLAN-20260917-ISSUE854.P03
+   */
+  removedInterior: RemovedInteriorSpan[];
+  /**
+   * True when membership cannot be stated exactly because some entries lack
+   * chronology markers (unmarked legacy history); `removedInterior` is then
+   * empty.
+   *
+   * @plan PLAN-20260917-ISSUE854.P03
+   */
+  approximate: boolean;
+}
+
+/**
+ * One compression summary projection: the summary entry's own chronology seq
+ * plus the span of destroyed entries it replaced.
+ *
+ * @plan PLAN-20260917-ISSUE854.P01
+ * @requirement REQ-854-004
+ */
+export interface ContextSummaryInfo {
+  /** The summary entry's own chronology seq. */
+  seq: number;
+  /** First destroyed entry's chronology seq (from chronologyReplaced). */
+  replacedFromSeq: number;
+  /** Last destroyed entry's chronology seq (from chronologyReplaced). */
+  replacedToSeq: number;
+  /** Number of entries the summary replaced. */
+  itemCount: number;
+  /** Summary text (joined text blocks). */
+  text: string;
+}
+
+type NativeEventArguments = Parameters<Parameters<EventEmitter['on']>[1]>;
+
+export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
+  event: Event,
+  listener: Event extends 'contentBatchAdded'
+    ? (contents: HistoryBatchValues) => void
+    : Parameters<EventEmitter['on']>[1],
+) => Host;
+
+export type HistoryEventEmission = <Event extends string | symbol>(
+  event: Event,
+  ...args: Event extends 'contentBatchAdded'
+    ? [contents: HistoryBatchValues]
+    : NativeEventArguments
+) => boolean;
 
 /**
  * Typed EventEmitter interface for HistoryService events.
@@ -30,8 +134,12 @@ export interface HistoryServiceEventEmitter {
     listener: (content: IContent, origin?: object) => void,
   ): this;
   on(
+    event: 'contextRangeChanged',
+    listener: (range: ContextRange) => void,
+  ): this;
+  on(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
+    listener: (contents: HistoryBatchValues) => void,
   ): this;
   on(event: 'compressionStarted', listener: (origin?: object) => void): this;
   on(
@@ -48,7 +156,8 @@ export interface HistoryServiceEventEmitter {
   ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent, origin?: object): boolean;
-  emit(event: 'contentBatchAdded', contents: readonly IContent[]): boolean;
+  emit(event: 'contextRangeChanged', range: ContextRange): boolean;
+  emit(event: 'contentBatchAdded', contents: HistoryBatchValues): boolean;
   emit(event: 'compressionStarted', origin?: object): boolean;
   emit(event: 'compressionLockReleased', origin?: object): boolean;
   emit(
@@ -66,8 +175,12 @@ export interface HistoryServiceEventEmitter {
     listener: (content: IContent, origin?: object) => void,
   ): this;
   off(
+    event: 'contextRangeChanged',
+    listener: (range: ContextRange) => void,
+  ): this;
+  off(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
+    listener: (contents: HistoryBatchValues) => void,
   ): this;
   off(event: 'compressionStarted', listener: (origin?: object) => void): this;
   off(

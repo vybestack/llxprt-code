@@ -110,11 +110,10 @@ describe('compressionStrategyFactory @plan PLAN-20260211-COMPRESSION.P09', () =>
 
   describe('interface contract across all strategies @requirement REQ-CS-001.2', () => {
     for (const strategyName of COMPRESSION_STRATEGIES) {
-      it(`${strategyName}: name matches, requiresLLM is boolean, compress is function`, () => {
+      it(`${strategyName}: name matches, requiresLLM is boolean`, () => {
         const strategy = getCompressionStrategy(strategyName);
         expect(strategy.name).toBe(strategyName);
         expect(typeof strategy.requiresLLM).toBe('boolean');
-        expect(typeof strategy.compress).toBe('function');
       });
     }
   });

@@ -12,6 +12,7 @@ import {
   SessionDiscovery,
   SessionTransitionService,
   resumeSession,
+  withRecordingFailureReport,
   listSessions,
   deleteSession,
   writeToStdout,
@@ -19,6 +20,7 @@ import {
   getProjectHash,
   CONTINUE_LATEST,
   type ContinueTarget,
+  type ResumeCursorBoot,
   type IContent,
   type LockHandle,
   clientMediaStore,
@@ -40,6 +42,7 @@ import {
   buildMcpAuthFactoryRegistry,
   type McpAuthProviderFactory,
 } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import { restoreResumeBoot } from './services/restoreResumeBoot.js';
 import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
@@ -121,12 +124,16 @@ type RecordingClientOwner = {
   workspaceDirectories(): readonly string[];
 };
 
+/** Restored-prefix stream handed from owner-route resume to the UI. */
+export type OwnerResumedRows = Pick<ResumeCursorBoot, 'streamRows'>;
+
 export interface ResolvedRecording {
   recordingService: SessionRecordingService;
-  resumedHistory: IContent[] | null;
+  resumedBoot: ResumeCursorBoot | null;
   resumedLockHandle: LockHandle | null;
   /** The resumed session's ID, or null for new/fallback sessions. */
   resumedSessionId: string | null;
+  discardOnFailure?: true;
   /**
    * Plain-text warnings raised while resuming (unreadable recordings skipped,
    * resume failures, history-restore fallback). The caller surfaces them to the
@@ -362,7 +369,7 @@ function registerRecordingCleanup(
     const failures: unknown[] = [];
     for (const operation of [
       () => stopObservationProducer(),
-      () => recordingIntegration.dispose(),
+      () => withRecordingFailureReport(recordingIntegration.dispose()),
       () => recordingService.dispose(),
       () => lockHandle?.release() ?? Promise.resolve(),
       () => Promise.resolve(sessionPersistence.close()),
@@ -399,6 +406,22 @@ function activateRecording(
   );
   setupObservation(config, bootstrapSelection);
   return integration;
+}
+
+async function resetAfterFailedResume(
+  agentClient: AgentClientContract,
+): Promise<void> {
+  try {
+    await agentClient.resetChat();
+  } catch (resetErr) {
+    debugLogger.warn(
+      chalk.yellow(
+        `Failed to reset chat after restoreHistory failure: ${
+          resetErr instanceof Error ? resetErr.message : String(resetErr)
+        }`,
+      ),
+    );
+  }
 }
 
 function createCliSessionPersistence(
@@ -451,25 +474,30 @@ export async function setupSessionRecording(
     chatsDir,
     sessionPersistence,
     recordingService,
-    resumedHistory,
+    resumedBoot,
     resumedLockHandle,
     resumedSessionId,
+    discardOnFailure,
     startupWarnings,
   } = await prepareLegacyRecording(config, argv, sessionClient);
+
+  if (resumedBoot !== null) registerCleanup(() => resumedBoot.close());
   let activeRecordingService = recordingService;
   let activeLockHandle = resumedLockHandle;
   let didFallback = false;
 
-  if (resumedHistory && resumedHistory.length > 0) {
+  if (resumedBoot !== null) {
     const agentClient = sessionClient.getAgentClient();
     try {
-      await agentClient.restoreHistory(resumedHistory);
-      // Adoption happens here — AFTER a successful restoreHistory — so a
-      // corrupted session's ID is never adopted. TodoStore and other
-      // session-scoped services see only a successfully-resumed session ID.
-      if (resumedSessionId !== null) {
-        config.adoptSessionId(resumedSessionId);
-      }
+      await restoreResumeBoot(
+        agentClient,
+        recordingService,
+        resumedBoot,
+        () => {
+          if (resumedSessionId !== null)
+            config.adoptSessionId(resumedSessionId);
+        },
+      );
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
       recordStartupWarning(
@@ -480,20 +508,15 @@ export async function setupSessionRecording(
       // Release resources FIRST so cleanup runs even if resetChat or
       // buildNewRecordingService throw (issue #1873).
       await releaseResumedResources(recordingService, resumedLockHandle);
+      const failedChild = discardOnFailure
+        ? recordingService.getFilePath()
+        : null;
+      if (failedChild !== null)
+        await fsPromises.rm(failedChild, { force: true });
       // restoreHistory is not atomic — it may have partially populated the
       // AgentClient's history before throwing. Reset so no half-restored
       // items persist into the fresh session.
-      try {
-        await agentClient.resetChat();
-      } catch (resetErr) {
-        debugLogger.warn(
-          chalk.yellow(
-            `Failed to reset chat after restoreHistory failure: ${
-              resetErr instanceof Error ? resetErr.message : String(resetErr)
-            }`,
-          ),
-        );
-      }
+      await resetAfterFailedResume(agentClient);
       // Rebuild the configured session recording after the failed resume.
       // Lock acquisition and file materialization remain fail-fast.
       activeRecordingService = await buildFallbackRecording(
@@ -526,7 +549,7 @@ export async function setupSessionRecording(
     recordingService: activeRecordingService,
     recordingIntegration,
     sessionPersistence,
-    resumedHistory: didFallback ? null : resumedHistory,
+    resumedBoot: didFallback ? null : resumedBoot,
     resumedLockHandle: activeLockHandle,
     resumedSessionId: didFallback ? null : resumedSessionId,
     startupWarnings,
@@ -539,7 +562,7 @@ async function resumeOwnerRecording(
   continueRef: string,
   location: { chatsDir: string; projectHash: string },
   startupWarnings: string[],
-): Promise<IContent[] | null> {
+): Promise<OwnerResumedRows | null> {
   // Discovery here only classifies the reference against unreadable recordings
   // so they can be reported to the user; the owner performs the actual resume.
   const { targets, unreadableRecordings } =
@@ -568,7 +591,7 @@ async function resumeOwnerRecording(
     await session.setRecording({ enabled: true });
     return null;
   }
-  let resumed: readonly IContent[];
+  let resumed: AsyncIterable<IContent>;
   try {
     resumed = await session.resume(
       resumeRef === CONTINUE_LATEST ? 'latest' : resumeRef,
@@ -590,7 +613,8 @@ async function resumeOwnerRecording(
     await session.setRecording({ enabled: true });
     return null;
   }
-  return [...resumed];
+  // The restored prefix is streamed to the UI; it is never collected here.
+  return { streamRows: () => resumed };
 }
 
 export async function setupOwnerSessionRecording(
@@ -599,7 +623,7 @@ export async function setupOwnerSessionRecording(
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   bootstrapSelection: BootstrapSelection | null,
   startupWarnings: string[] = [],
-): Promise<IContent[] | null> {
+): Promise<OwnerResumedRows | null> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = config.projectChatsDir;
   await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
@@ -607,9 +631,9 @@ export async function setupOwnerSessionRecording(
 
   try {
     const continueRef = config.getContinueSessionRef();
-    let history: IContent[] | null;
+    let resumedRows: OwnerResumedRows | null;
     if (continueRef) {
-      history = await resumeOwnerRecording(
+      resumedRows = await resumeOwnerRecording(
         agent.session,
         clientMediaStore(agent.agentClient),
         continueRef,
@@ -618,12 +642,12 @@ export async function setupOwnerSessionRecording(
       );
     } else {
       await agent.session.setRecording({ enabled: true });
-      history = null;
+      resumedRows = null;
     }
 
     registerCleanup(() => stopObservationProducer());
     setupObservation(config, bootstrapSelection);
-    return history;
+    return resumedRows;
   } catch (error: unknown) {
     if (agent.session.getRecording().enabled) {
       try {
@@ -706,7 +730,8 @@ async function forkStartupCheckpoint(
   }
   return {
     recordingService: result.recording,
-    resumedHistory: result.history,
+    resumedBoot: result.boot,
+    discardOnFailure: true,
     resumedLockHandle: result.lockHandle,
     resumedSessionId: result.metadata.sessionId,
     startupWarnings: [],
@@ -727,7 +752,7 @@ async function freshSessionRecording(
       chatsDir,
       sessionClient,
     ),
-    resumedHistory: null,
+    resumedBoot: null,
     resumedLockHandle: null,
     resumedSessionId: null,
     startupWarnings,
@@ -773,7 +798,7 @@ async function resumeReadableSession(
   }
   return {
     recordingService: resumeResult.recording,
-    resumedHistory: resumeResult.history,
+    resumedBoot: resumeResult.boot,
     resumedLockHandle: resumeResult.lockHandle,
     resumedSessionId: resumeResult.metadata.sessionId,
     startupWarnings,

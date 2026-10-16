@@ -18,9 +18,10 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
-import * as process from 'node:process';
+import process from 'node:process';
 import { ZedAgent } from './zedIntegration.js';
 import type { ZedSessionProviderInputs } from './zed-session-agent.js';
+import { toAcpReadableStream } from './acp-readable-stream.js';
 
 const DISPOSAL_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 
@@ -189,7 +190,7 @@ export async function runZedIntegration(
   // locked web stream) is the only way to make the ACP ndJsonStream reader
   // observe EOF/abort so connection.closed settles.
   const stdinSource = process.stdin;
-  const stdin = Readable.toWeb(stdinSource) as ReadableStream<Uint8Array>;
+  const stdin = toAcpReadableStream(Readable.toWeb(stdinSource));
   const owner: ZedConnectionOwner = {
     config,
     profileApplication,

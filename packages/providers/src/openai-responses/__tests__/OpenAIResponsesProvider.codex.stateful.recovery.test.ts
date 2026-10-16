@@ -1,4 +1,7 @@
-import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
+import {
+  captureResponsesTestRequest,
+  executeResponsesTestRequest,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -37,7 +40,6 @@ import {
   userTextsOf,
 } from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
   CODEX_BASE_URL,
   buildDeps,
@@ -94,7 +96,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           },
         });
         const messages = await drain(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(buildOptions(contents), deps),
             deps,
           ),
@@ -169,7 +171,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
         ];
         await drain(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(historyWithDeadParent),
               deps,
@@ -205,7 +207,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q3' }] },
         ];
         await drain(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(historyAfterRecovery),
               deps,
@@ -250,7 +252,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
         ];
         await drainHarness(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(contents),
               buildDeps({ getWebSocketTransport: () => transport }),
@@ -292,7 +294,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
         ];
         await drainHarness(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(contents),
               buildDeps({ getWebSocketTransport: () => transport }),
@@ -337,7 +339,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
         ];
         await drainHarness(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(contents),
               buildDeps({ getWebSocketTransport: () => transport }),
@@ -379,7 +381,7 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
         ];
         await drainHarness(
-          executeOpenAIResponsesRequest(
+          executeResponsesTestRequest(
             captureResponsesTestRequest(
               buildOptions(contents),
               buildDeps({ getWebSocketTransport: () => transport }),
@@ -434,7 +436,7 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
     });
     try {
       await drain(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(contentsWithParent),
             buildDeps({ getWebSocketTransport: () => transport }),
@@ -465,7 +467,7 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
     };
     try {
       await drain(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(
             buildOptions(contentsWithParent),
             buildDeps({

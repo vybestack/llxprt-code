@@ -20,6 +20,7 @@ import { createIsolatedRuntimeContext } from './runtimeActivationBindings.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProvider } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 function config(settings: SettingsService, label = 'shared-label') {
   const host = new Config({
@@ -91,12 +92,12 @@ describe('Config-independent provider owner lifecycle', () => {
     if (selected === undefined)
       throw new Error('Expected active local provider');
     for await (const chunk of selected.generateChatCompletion({
-      contents: [
+      contents: replayableContents([
         {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'local request before release' }],
         },
-      ],
+      ]),
     })) {
       expect(chunk.blocks.length).toBeGreaterThan(0);
     }

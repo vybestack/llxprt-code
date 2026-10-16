@@ -106,6 +106,7 @@ describe('performResume with an unreadable recording present (issue #3732)', () 
         getCurrentRecording: () => null,
         getCurrentIntegration: () => null,
         getCurrentLockHandle: () => null,
+        getCurrentMetadata: () => null,
         setRecording: (recording, _integration, lock, metadata) => {
           committed = recording;
           committedLock = lock;

@@ -28,6 +28,7 @@ import type { Logger } from '@vybestack/llxprt-code-core/core/logger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+import { compressTopDownViaDisk } from './__tests__/support/topdown-disk-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — build realistic IContent messages
@@ -312,8 +313,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       // 9 messages × 500 = 4500 < 4800, 10 messages × 500 = 5000 > 4800
       expect(result.newHistory.length).toBeLessThanOrEqual(10);
@@ -339,8 +339,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 100,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.kind).toBe('noop');
       expect(result.reason).toBe('already-under-target');
@@ -373,8 +372,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.kind).toBe('applied');
       if (result.kind !== 'applied') return;
@@ -399,8 +397,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 100,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.kind).toBe('noop');
       expect(result.reason).toBe('already-under-target');
@@ -420,8 +417,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.kind).toBe('applied');
       if (result.kind !== 'applied') return;
@@ -443,8 +439,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 1000,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       // Should keep 9 messages (9000 < 9600)
       expect(result.newHistory).toHaveLength(9);
@@ -471,8 +466,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       // If we got here without throwing, the LLM was not called
       expect(result.metadata.llmCallMade).toBe(false);
@@ -495,8 +489,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       // Every message in newHistory should be a reference to an original message
       for (const msg of result.newHistory) {
@@ -517,8 +510,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       const kept = result.newHistory.length;
       const startIndex = history.length - kept;
@@ -547,8 +539,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 10000,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.newHistory.length).toBeGreaterThanOrEqual(2);
     });
@@ -563,8 +554,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 50000,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       // min(2, 1) = 1
       expect(result.newHistory).toHaveLength(1);
@@ -581,8 +571,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 50000,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.newHistory).toHaveLength(2);
       expect(result.newHistory[0]).toBe(history[0]);
@@ -623,8 +612,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(firstSpeakerIsNotTool(result)).toBe(true);
 
@@ -661,8 +649,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.newHistory.length).toBeLessThan(history.length);
       assertNoOrphanedToolCalls(result);
@@ -684,8 +671,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 500,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.metadata.originalMessageCount).toBe(20);
       expect(result.metadata.compressedMessageCount).toBe(
@@ -705,8 +691,7 @@ describe('TopDownTruncationStrategy', () => {
         estimateTokens: async (contents) => contents.length * 20,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.metadata.originalMessageCount).toBe(5);
       expect(result.metadata.compressedMessageCount).toBe(5);
@@ -725,8 +710,7 @@ describe('TopDownTruncationStrategy', () => {
         currentTokenCount: 0,
       });
 
-      const strategy = new TopDownTruncationStrategy();
-      const result = await strategy.compress(ctx);
+      const result = await compressTopDownViaDisk(ctx);
 
       expect(result.kind).toBe('noop');
       expect(result.reason).toBe('empty-history');
@@ -794,10 +778,9 @@ describe('TopDownTruncationStrategy image token accounting', () => {
   }
 
   it('truncates more aggressively when the history contains an image', async () => {
-    const strategy = new TopDownTruncationStrategy();
     const estimateTokens = realEstimator('anthropic');
 
-    const textOnly = await strategy.compress(
+    const textOnly = await compressTopDownViaDisk(
       buildContext({
         history: textHistory(),
         contextLimit: 10000,
@@ -806,7 +789,7 @@ describe('TopDownTruncationStrategy image token accounting', () => {
         estimateTokens,
       }),
     );
-    const withImage = await strategy.compress(
+    const withImage = await compressTopDownViaDisk(
       buildContext({
         history: withTrailingImage(textHistory()),
         contextLimit: 10000,
@@ -824,10 +807,9 @@ describe('TopDownTruncationStrategy image token accounting', () => {
   });
 
   it('charges an image according to the active provider', async () => {
-    const strategy = new TopDownTruncationStrategy();
     const history = withTrailingImage(textHistory());
 
-    const anthropic = await strategy.compress(
+    const anthropic = await compressTopDownViaDisk(
       buildContext({
         history,
         contextLimit: 10000,
@@ -836,7 +818,7 @@ describe('TopDownTruncationStrategy image token accounting', () => {
         estimateTokens: realEstimator('anthropic'),
       }),
     );
-    const unknownProvider = await strategy.compress(
+    const unknownProvider = await compressTopDownViaDisk(
       buildContext({
         history,
         contextLimit: 10000,

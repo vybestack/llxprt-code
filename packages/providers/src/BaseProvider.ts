@@ -5,12 +5,8 @@
  */
 
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import {
-  readInvocationPolicyRecord,
-  readInvocationPolicyValue,
-} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { composeProviderOwner, type ProviderOwner } from './providerOwner.js';
-import { copyProviderRequestOptions } from './requestAdmission.js';
 /**
  * Base provider class with authentication precedence logic
  */
@@ -24,11 +20,15 @@ import {
 import {
   type IProvider,
   type GenerateChatOptions,
+  type MaterializedGenerateChatOptions,
+  type ProviderRuntimeOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
+import { isAsyncIterableContents } from './utils/collectContents.js';
+import type { RequestRowsScope } from './utils/requestRowsLease.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -48,17 +48,26 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   assertProviderRequestData,
+  attachDeferredHistory,
+  materializeCallOptions,
+  readProviderSettings,
   isRuntimeInvocationContext,
   normalizeProviderGenerateChatOptions,
+  readsRequestRowsAtTransport,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
+import {
+  readProviderModelParams,
+  readProviderSetting,
+  writeProviderModelParams,
+  writeProviderSetting,
+} from './BaseProviderSettings.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
   UserMemoryInput,
 } from './types/providerRuntime.js';
 import { resolveRuntimeAuthToken } from './utils/authToken.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -84,7 +93,19 @@ export interface BaseProviderConfig {
   mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
 
-export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
+export interface NormalizedGenerateChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  /**
+   * The incoming history, collected once at normalization. Empty when the
+   * provider reads the call's rows at its transport (`requestRows`).
+   */
+  contents: IContent[];
+  /**
+   * The staging of a call that arrived without `requestRows` and was sent
+   * from rows kept on disk (issue #854 C2). The call's owner closes it when
+   * the request ends; the close is idempotent.
+   */
+  stagedRows?: Pick<RequestRowsScope, 'close'>;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
   invocation: RuntimeInvocationContext;
   tools?: ProviderToolset;
@@ -604,16 +625,20 @@ export abstract class BaseProvider implements IProvider {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    contents: IContent[],
+    contents: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 1-5
+   *
+   * The positional history is the provider-facing stream (issue #854,
+   * PLAN-20260917-ISSUE854.P05b3); it is collected request-scoped here and
+   * normalization stays array-based until P05b4.
    */
   generateChatCompletion(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const normalizedPromise = this.normalizeGenerateChatOptions(
@@ -657,7 +682,12 @@ export abstract class BaseProvider implements IProvider {
           throw new Error('Provider iterator not initialised');
         }
         if (iterator.return) {
-          return withContext(() => iterator.return!(value));
+          try {
+            return await withContext(() => iterator.return!(value));
+          } finally {
+            if (normalizedOptions !== undefined)
+              await this.releaseNormalizedOptions(normalizedOptions);
+          }
         }
         return { done: true, value: undefined } as IteratorResult<IContent>;
       },
@@ -667,10 +697,14 @@ export abstract class BaseProvider implements IProvider {
         if (!iterator) {
           throw new Error('Provider iterator not initialised');
         }
-        if (iterator.throw) {
-          return withContext(() => iterator.throw!(error));
+        try {
+          if (iterator.throw)
+            return await withContext(() => iterator.throw!(error));
+          throw error;
+        } finally {
+          if (normalizedOptions !== undefined)
+            await this.releaseNormalizedOptions(normalizedOptions);
         }
-        throw error;
       },
       [Symbol.asyncIterator]() {
         return this;
@@ -688,6 +722,37 @@ export abstract class BaseProvider implements IProvider {
   protected abstract generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
+
+  /**
+   * Whether a call is sent from rows staged on the request's scratch disk
+   * instead of a collected history array (issue #854). A provider on the rows
+   * route reads `options.requestRows` and never sees `options.contents`.
+   */
+  protected takesRowsRoute(): boolean {
+    return false;
+  }
+
+  /**
+   * Whether this provider's concrete transport reads `requestRows` itself.
+   * Other providers receive the selection's rows through `contents`.
+   */
+  protected ownsRequestRowsTransport(): boolean {
+    return false;
+  }
+
+  protected async releaseUnstartedOptions(
+    _options: NormalizedGenerateChatOptions,
+  ): Promise<void> {}
+
+  private async releaseNormalizedOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<void> {
+    try {
+      await this.releaseUnstartedOptions(options);
+    } finally {
+      await options.stagedRows?.close();
+    }
+  }
 
   /**
    * Normalize caller-supplied chat options for prompt-envelope projection
@@ -757,6 +822,7 @@ export abstract class BaseProvider implements IProvider {
       } finally {
         normalized.resolved.authToken = '';
         delete normalized.resolved.authFailure;
+        await this.releaseNormalizedOptions(normalized);
       }
     }.call(this);
   }
@@ -769,37 +835,64 @@ export abstract class BaseProvider implements IProvider {
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
   private async normalizeGenerateChatOptions(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
     resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
-    const providedOptions: GenerateChatOptions = Array.isArray(
-      contentsOrOptions,
-    )
-      ? { contents: contentsOrOptions, tools: maybeTools }
-      : copyProviderRequestOptions(contentsOrOptions);
+    const readsRowsAtTransport =
+      !isAsyncIterableContents(contentsOrOptions) &&
+      readsRequestRowsAtTransport(contentsOrOptions) &&
+      this.ownsRequestRowsTransport();
+    const stagesRows = !readsRowsAtTransport && this.takesRowsRoute();
+    const normalized = await this.normalizeProvidedOptions(
+      await materializeCallOptions(
+        contentsOrOptions,
+        maybeTools,
+        readsRowsAtTransport,
+        stagesRows,
+      ),
+      maybeTools,
+      resolveAuthentication,
+    );
+    if (!stagesRows) return normalized;
+    try {
+      return await attachDeferredHistory(normalized, contentsOrOptions);
+    } catch (error) {
+      return this.releaseUnstartedAfterFailure(normalized, error);
+    }
+  }
+
+  /**
+   * A call that fails before it starts never reaches the transport that would
+   * discharge its prepared projection, so the projection is released here. A
+   * release that also fails is reported together with the primary failure.
+   */
+  private async releaseUnstartedAfterFailure(
+    options: NormalizedGenerateChatOptions,
+    error: unknown,
+  ): Promise<never> {
+    try {
+      await this.releaseUnstartedOptions(options);
+    } catch (releaseError) {
+      throw new AggregateError(
+        [error, releaseError],
+        'Request failed and its prepared projection could not be released',
+      );
+    }
+    throw error;
+  }
+
+  private async normalizeProvidedOptions(
+    providedOptions: MaterializedGenerateChatOptions,
+    maybeTools: ProviderToolset | undefined,
+    resolveAuthentication: boolean,
+  ): Promise<NormalizedGenerateChatOptions> {
     const owner = this.owner;
     const capturedPolicy = captureInvocationEphemerals({
       ...this.providerConfig?.readConnectionPolicy?.(),
       ...owner.capturePolicy(),
     });
-    const providerSettingsSnapshot = {
-      ...readInvocationPolicyRecord(capturedPolicy[this.name]),
-    };
-    const providerSettings = {
-      temperature:
-        typeof providerSettingsSnapshot.temperature === 'number'
-          ? providerSettingsSnapshot.temperature
-          : undefined,
-      maxTokens:
-        typeof providerSettingsSnapshot.maxTokens === 'number'
-          ? providerSettingsSnapshot.maxTokens
-          : undefined,
-      streaming:
-        typeof providerSettingsSnapshot.streaming === 'boolean'
-          ? providerSettingsSnapshot.streaming
-          : undefined,
-    };
+    const providerSettings = readProviderSettings(capturedPolicy, this.name);
     const selectedPolicy = isRuntimeInvocationContext(
       providedOptions.invocation,
     )
@@ -807,23 +900,14 @@ export abstract class BaseProvider implements IProvider {
       : capturedPolicy;
     const resolvedBaseURL = this.computeBaseURL(selectedPolicy);
     const resolvedModel = this.computeModel(selectedPolicy);
-    const configuredHeaders = getProviderCustomHeaders(this.providerConfig);
-    const ephemeralsSnapshot = selectedPolicy;
     const providerDefaults = captureInvocationEphemerals(
       this.captureProviderDefaults(),
     );
     const { token: resolvedAuth, failure: authFailure } =
       await this.admitAuthentication(
         owner,
-        {
-          ...providedOptions,
-          metadata: {
-            ...providedOptions.metadata,
-            profileId:
-              providedOptions.metadata?.profileId ??
-              readInvocationPolicyValue(ephemeralsSnapshot, 'currentProfile'),
-          },
-        },
+        providedOptions,
+        selectedPolicy,
         resolvedBaseURL,
         resolveAuthentication,
       );
@@ -836,15 +920,16 @@ export abstract class BaseProvider implements IProvider {
       resolvedModel,
       resolvedBaseURL,
       providerSettings,
-      ephemeralsSnapshot,
+      ephemeralsSnapshot: selectedPolicy,
       providerDefaults,
-      configuredHeaders: configuredHeaders ?? {},
+      configuredHeaders: getProviderCustomHeaders(this.providerConfig) ?? {},
     });
   }
 
   private async admitAuthentication(
     owner: ProviderOwner,
-    providedOptions: GenerateChatOptions,
+    providedOptions: ProviderRuntimeOptions,
+    policy: Readonly<Record<string, unknown>>,
     resolvedBaseURL: string | undefined,
     resolveAuthentication: boolean,
   ): Promise<{
@@ -855,7 +940,9 @@ export abstract class BaseProvider implements IProvider {
       return { token: providedOptions.resolved?.authToken ?? '' };
     const runtimeId = providedOptions.invocation?.runtimeId;
     const { authIntent } = providedOptions.metadata ?? {};
-    const profileId = providedOptions.metadata?.profileId;
+    const profileId =
+      providedOptions.metadata?.profileId ??
+      readInvocationPolicyValue(policy, 'currentProfile');
     const authInput: Parameters<ProviderOwner['readAuthentication']>[0] = {
       includeOAuth: this.isOAuthEligible(
         providedOptions.resolved?.baseURL ?? resolvedBaseURL,
@@ -963,20 +1050,7 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     fallback?: T,
   ): Promise<T | undefined> {
-    try {
-      const settings = await this.owner.readProviderData();
-      const value = settings[key];
-      const shouldUseFallback = isFalsyLikeValue(value);
-      return shouldUseFallback ? fallback : (value as T);
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to get ${key} from SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-      return fallback;
-    }
+    return readProviderSetting(this.owner, this.name, key, fallback);
   }
 
   /**
@@ -986,18 +1060,7 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     value: T,
   ): Promise<void> {
-    try {
-      await this.owner.writeProviderData({
-        [key]: value,
-      });
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to set ${key} in SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-    }
+    await writeProviderSetting(this.owner, this.name, key, value);
   }
 
   /**
@@ -1048,46 +1111,7 @@ export abstract class BaseProvider implements IProvider {
   protected async getModelParamsFromSettings(): Promise<
     Record<string, unknown> | undefined
   > {
-    try {
-      const settings = await this.owner.readProviderData();
-
-      // Extract model parameters from settings, excluding standard fields
-      const {
-        enabled: _enabled,
-        'auth-key': _authKey,
-        'auth-keyfile': _authKeyfile,
-        'base-url': _baseUrl,
-        model: _model,
-        max_tokens,
-        temperature,
-        // Defensive: strip legacy sensitive aliases that should never reach
-        // the model params pass-through, even if present in imported/malformed
-        // provider settings data.
-        apiKey: _legacyApiKey,
-        apiKeyfile: _legacyApiKeyfile,
-        'api-key': _legacyApiKeyDash,
-        'api-keyfile': _legacyApiKeyfileDash,
-        ...additionalSettings
-      } = settings;
-
-      // Include registered model parameters when present
-      const params: Record<string, unknown> = {};
-      if (temperature !== undefined) params.temperature = temperature;
-      if (max_tokens !== undefined) params.max_tokens = max_tokens;
-
-      return Object.keys(params).length > 0 ||
-        Object.keys(additionalSettings).length > 0
-        ? { ...params, ...additionalSettings }
-        : undefined;
-    } catch (error) {
-      if (process.env.DEBUG) {
-        debugLogger.error(
-          `Failed to get model params from SettingsService for ${this.name}:`,
-          error,
-        );
-      }
-      return undefined;
-    }
+    return readProviderModelParams(this.owner, this.name);
   }
 
   /**
@@ -1096,15 +1120,7 @@ export abstract class BaseProvider implements IProvider {
   protected async setModelParamsInSettings(
     params: Record<string, unknown> | undefined,
   ): Promise<void> {
-    if (params === undefined) {
-      await this.owner.writeProviderData({
-        temperature: undefined,
-        max_tokens: undefined,
-      });
-      return;
-    }
-
-    await this.owner.writeProviderData(params);
+    await writeProviderModelParams(this.owner, params);
   }
 
   /**
@@ -1125,20 +1141,6 @@ export abstract class BaseProvider implements IProvider {
     }
     return getProviderCustomHeaders(this.providerConfig);
   }
-}
-
-// Import ProviderSettings type to avoid circular dependency
-/**
- * Helper function to check if a value is falsy-like.
- * Used for determining when to use fallback values for provider settings.
- */
-function isFalsyLikeValue(value: unknown): boolean {
-  // Check undefined/null first
-  if (value === undefined || value === null) return true;
-  // Check false, empty string, or 0
-  if (value === false || value === '' || value === 0) return true;
-  // Check NaN for numbers
-  return typeof value === 'number' && Number.isNaN(value);
 }
 
 export interface ProviderSettings {

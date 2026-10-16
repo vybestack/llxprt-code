@@ -32,10 +32,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   CompressionContext,
   CompressionProviderResult,
-  CompressionResultMetadata,
   CompressionStrategy,
-  StrategyCompressionResult,
-  StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
@@ -44,14 +41,7 @@ import {
   PromptResolutionError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import {
-  adjustForToolCallBoundary,
-  aggregateTextFromBlocks,
-  buildTriggerInstruction,
-  COMPRESSION_SECURITY_PREAMBLE,
-  runVerificationPass,
-  sanitizeHistoryForCompression,
-} from './utils.js';
+import { aggregateTextFromBlocks, runVerificationPass } from './utils.js';
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
 import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/compression/transcriptPathNotice.js';
@@ -72,6 +62,12 @@ function destructureProviderResult(result: CompressionProviderResult): {
   };
 }
 
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { diskSummaryRequestSelection } from './middleOutDiskPlan.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
+
 const MINIMUM_COMPRESS_MESSAGES = 4;
 
 // ---------------------------------------------------------------------------
@@ -87,96 +83,72 @@ export class OneShotStrategy implements CompressionStrategy {
     defaultThreshold: 0.85,
   };
 
-  async compress(
-    context: CompressionContext,
-  ): Promise<StrategyCompressionResult> {
-    const { history } = context;
+  readonly summaryRequestOwnership = new RowOwnership();
 
-    if (history.length === 0) {
-      return this.structuralNoop(history, 'empty-history');
-    }
-
-    const { toCompress, toKeep } = this.computeSplit(context);
-
-    if (toCompress.length < MINIMUM_COMPRESS_MESSAGES) {
-      return this.structuralNoop(history, 'too-few-compressible');
-    }
-
-    const compressionProfile =
-      context.runtimeContext.ephemerals.compressionProfile();
-    const {
-      provider,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
-    } = destructureProviderResult(
-      await context.resolveProvider(compressionProfile),
+  async compressDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: HistoryDensityRows;
+    },
+    candidate: HistoryDensityRows,
+  ): Promise<
+    | { readonly kind: 'applied'; readonly top: number }
+    | { readonly kind: 'noop' }
+  > {
+    let bottom = Math.floor(
+      context.history.length *
+        (1 - context.runtimeContext.ephemerals.preserveThreshold()),
     );
-
-    const compressionRequest = this.buildCompressionRequest(
-      context,
-      toCompress,
+    if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
+    bottom = adjustDiskToolBoundary(context.history, bottom);
+    if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
+    const result = destructureProviderResult(
+      await context.resolveProvider(
+        context.runtimeContext.ephemerals.compressionProfile(),
+      ),
     );
-
+    const request = diskSummaryRequestSelection(
+      context.history,
+      { top: 0, bottom, injection: [] },
+      this.resolvePrompt(context),
+      this.buildContextInjections(context),
+      this.summaryRequestOwnership,
+    );
     const {
       text: summary,
-      usage: capturedUsage,
+      usage,
       diagnostics,
     } = await this.callProvider(
-      provider,
-      compressionRequest,
+      result.provider,
+      request,
       context,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
+      result.resolvedRuntime,
+      result.resolvedConfig,
+      result.resolvedOptions,
+      result.invocation,
     );
-
-    if (!summary.trim()) {
-      throw new EmptySummaryError('one-shot', diagnostics);
-    }
-
+    if (!summary.trim()) throw new EmptySummaryError('one-shot', diagnostics);
     const finalSummary = await this.maybeVerifySummary(
       context,
-      provider,
+      result.provider,
       summary,
-      resolvedRuntime,
-      resolvedConfig,
-      resolvedOptions,
-      invocation,
+      result.resolvedRuntime,
+      result.resolvedConfig,
+      result.resolvedOptions,
+      result.invocation,
     );
-
-    return this.assembleResult(
-      history,
-      toKeep,
-      toCompress,
+    for (const row of this.summaryRows(
       finalSummary,
-      capturedUsage,
+      usage,
       context.activeTodos,
-    );
-  }
-
-  private buildCompressionRequest(
-    context: CompressionContext,
-    toCompress: IContent[],
-  ): IContent[] {
-    const prompt = this.resolvePrompt(context);
-    const triggerInstruction = buildTriggerInstruction(toCompress);
-    return [
-      COMPRESSION_SECURITY_PREAMBLE,
-      { speaker: 'human', blocks: [{ type: 'text', text: prompt }] },
-      ...sanitizeHistoryForCompression(toCompress),
-      ...this.buildContextInjections(context),
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: triggerInstruction }],
-      },
-    ];
+    ))
+      candidate.append(row);
+    for (let index = bottom; index < context.history.length; index++)
+      candidate.append(context.history.readRow(index));
+    return { kind: 'applied', top: 0 };
   }
 
   private async maybeVerifySummary(
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     provider: IProvider,
     summary: string,
     resolvedRuntime: ProviderRequestCollaborators,
@@ -198,88 +170,40 @@ export class OneShotStrategy implements CompressionStrategy {
     );
   }
 
-  private assembleResult(
-    history: readonly IContent[],
-    toKeep: IContent[],
-    toCompress: IContent[],
+  private summaryRows(
     finalSummary: string,
     capturedUsage: UsageStats | undefined,
     activeTodos: string | undefined,
-  ): StrategyCompressionResult {
-    const summaryEntry: IContent = {
-      speaker: 'human' as const,
-      blocks: [{ type: 'text' as const, text: finalSummary }],
-      metadata: {
-        isSummary: true,
-        synthetic: true,
-        reason: 'compression-state-snapshot',
-        ...(capturedUsage ? { usage: capturedUsage } : {}),
-      },
-    };
-
-    const newHistory: IContent[] = [
-      summaryEntry,
+  ): IContent[] {
+    return [
       {
-        speaker: 'ai' as const,
+        speaker: 'human',
+        blocks: [{ type: 'text', text: finalSummary }],
+        metadata: {
+          isSummary: true,
+          synthetic: true,
+          reason: 'compression-state-snapshot',
+          ...(capturedUsage ? { usage: capturedUsage } : {}),
+        },
+      },
+      {
+        speaker: 'ai',
         blocks: [
-          {
-            type: 'text' as const,
-            text: buildContinuationDirective(activeTodos),
-          },
+          { type: 'text', text: buildContinuationDirective(activeTodos) },
         ],
         metadata: {
           synthetic: true,
           reason: 'compression-continuation',
         },
       },
-      ...toKeep,
     ];
-
-    const metadata: CompressionResultMetadata = {
-      originalMessageCount: history.length,
-      compressedMessageCount: newHistory.length,
-      strategyUsed: 'one-shot',
-      llmCallMade: true,
-      topPreserved: 0,
-      bottomPreserved: toKeep.length,
-      middleCompressed: toCompress.length,
-      ...(capturedUsage ? { usage: capturedUsage } : {}),
-    };
-
-    return { kind: 'applied', newHistory, metadata };
   }
 
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private computeSplit(context: CompressionContext): {
-    toCompress: IContent[];
-    toKeep: IContent[];
-  } {
-    const history = context.history as IContent[];
-    const preserveThreshold =
-      context.runtimeContext.ephemerals.preserveThreshold();
-
-    let splitIndex = Math.floor(history.length * (1 - preserveThreshold));
-
-    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
-      return { toCompress: [], toKeep: [...history] };
-    }
-
-    splitIndex = adjustForToolCallBoundary(history, splitIndex);
-
-    if (splitIndex < MINIMUM_COMPRESS_MESSAGES) {
-      return { toCompress: [], toKeep: [...history] };
-    }
-
-    return {
-      toCompress: history.slice(0, splitIndex),
-      toKeep: history.slice(splitIndex),
-    };
-  }
-
-  private resolvePrompt(context: CompressionContext): string {
+  private resolvePrompt(context: Omit<CompressionContext, 'history'>): string {
     const resolved = context.promptResolver.resolveFile(
       context.promptBaseDir,
       'compression.md',
@@ -317,8 +241,8 @@ export class OneShotStrategy implements CompressionStrategy {
 
   private async callProvider(
     provider: IProvider,
-    request: IContent[],
-    context: CompressionContext,
+    request: ProviderRequestSelection,
+    context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRequestCollaborators,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
@@ -347,7 +271,7 @@ export class OneShotStrategy implements CompressionStrategy {
         resolvedRuntime,
       ).generateChatCompletion(
         await buildCompressionChatOptions({
-          contents: request,
+          requestRows: request,
           providerRuntime: resolvedRuntime,
           resolvedConfig,
           fallbackConfig: context.config,
@@ -401,30 +325,13 @@ export class OneShotStrategy implements CompressionStrategy {
     }
   }
 
-  private structuralNoop(
-    history: readonly IContent[],
-    reason: StructuralNoopReason,
-  ): StrategyCompressionResult {
-    return {
-      kind: 'noop',
-      reason,
-      metadata: {
-        originalMessageCount: history.length,
-        compressedMessageCount: history.length,
-        strategyUsed: 'one-shot',
-        llmCallMade: false,
-        topPreserved: 0,
-        bottomPreserved: 0,
-        middleCompressed: 0,
-      },
-    };
-  }
-
   /**
    * @plan PLAN-20260211-HIGHDENSITY.P23
    * @requirement REQ-HD-011.3, REQ-HD-012.2
    */
-  private buildContextInjections(context: CompressionContext): IContent[] {
+  private buildContextInjections(
+    context: Omit<CompressionContext, 'history'>,
+  ): IContent[] {
     const injections: IContent[] = [];
 
     if (context.activeTodos && context.activeTodos.trim().length > 0) {

@@ -101,7 +101,9 @@ describe('LB stats through the REAL registerProvider wrapping chain', () => {
 
     try {
       for await (const _chunk of raw.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+        ],
       })) {
         // consume
       }

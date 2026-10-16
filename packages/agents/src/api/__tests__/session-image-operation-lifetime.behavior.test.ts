@@ -25,6 +25,7 @@ import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
 import { createAgent } from '../createAgent.js';
 import { fromConfig } from '../fromConfig.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
@@ -499,12 +500,12 @@ describe('default root image composition', () => {
       await store.saveToken('codex', firstCredential);
       const realFetch = globalThis.fetch;
       const transport = spyOn(globalThis, 'fetch').mockImplementation(
-        (input, init) => {
+        withFetchPreconnect((input, init) => {
           const url = input instanceof Request ? input.url : String(input);
           if (!url.startsWith(wire.endpoint))
             throw new Error(`Unexpected external image endpoint ${url}`);
           return realFetch(input, init);
-        },
+        }),
       );
       const selectedSettings = new SettingsService();
       selectedSettings.setProviderSetting('openai', 'base-url', wire.endpoint);

@@ -18,7 +18,7 @@ export type ZedSessionAgentPort = Pick<
   | 'getProviderContextLimit'
   | 'getApprovalMode'
   | 'setApprovalMode'
-  | 'getHistory'
+  | 'streamHistory'
   | 'compress'
   | 'dispose'
 > & {
@@ -58,7 +58,7 @@ export function projectZedSessionAgent(agent: Agent): ZedSessionAgentPort {
     getProviderContextLimit: () => agent.getProviderContextLimit(),
     getApprovalMode: () => agent.getApprovalMode(),
     setApprovalMode: (mode) => agent.setApprovalMode(mode),
-    getHistory: () => agent.getHistory(),
+    streamHistory: (signal) => agent.streamHistory(signal),
     compress: (options) => agent.compress(options),
     dispose: () => agent.dispose(),
     tools: {

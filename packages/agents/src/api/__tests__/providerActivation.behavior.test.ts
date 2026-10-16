@@ -171,8 +171,11 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const active = built.providerManager.getActiveProvider();
       expect(active?.name).toBe('gemini');
       const chunks: string[] = [];
+      // The activated provider reads its history as a stream (issue #854);
+      // this activation probe sends no rows.
+      async function* noContents(): AsyncIterable<never> {}
       for await (const chunk of active!.generateChatCompletion({
-        contents: [],
+        contents: noContents(),
         invocation: built.settingsOwner.prepareProviderInvocation(
           'gemini-activation',
           'gemini',

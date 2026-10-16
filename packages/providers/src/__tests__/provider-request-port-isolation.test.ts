@@ -15,6 +15,7 @@ import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProvi
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 describe('call-bound provider ports', () => {
   const directories: string[] = [];
@@ -80,7 +81,9 @@ describe('call-bound provider ports', () => {
     return {
       provider,
       options: {
-        contents: [{ speaker: 'human', blocks: [reference] }],
+        contents: replayableContents([
+          { speaker: 'human', blocks: [reference] },
+        ]),
         invocation,
         systemInstruction: 'Describe the image.',
       },
@@ -213,7 +216,7 @@ describe('call-bound provider ports', () => {
       promptEnvelopeTransportToken: rightProjection.transportToken,
     };
     abort.abort(new Error('owner cancelled'));
-    await expect(drain(left)).rejects.toThrow(/aborted/i);
+    await expect(drain(left)).rejects.toThrow('owner cancelled');
     expect(left.resolver.accounting().activeRequestCount).toBe(0);
     expect(right.resolver.accounting().activeRequestCount).toBe(1);
     expect(await drain(right)).toContain('delivered');

@@ -16,6 +16,8 @@ import {
   type ProviderFinalizedPromptProjection,
 } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
+import { segmentChunks, SourceFamilyInput } from '../source-family-input.js';
+import { countAtSafeBoundaries } from './official-segment-chunking.js';
 import type { ModelPromptEstimatorRegistration } from '../ModelPromptEstimatorRegistry.js';
 import type { AssetManifest } from './assetManifest.js';
 import { KimiK3Tokenizer, KIMI_K3_MANIFEST } from './kimiK3Tokenizer.js';
@@ -133,7 +135,14 @@ function isFinalizedPromptProjection(
 function readProjection(
   request: RuntimePromptEstimateRequest,
   spec: OfficialFamilySpec,
-): ProviderFinalizedPromptProjection {
+): ProviderFinalizedPromptProjection | SourceFamilyInput {
+  const source = request.finalizedProjection;
+  if (
+    source instanceof SourceFamilyInput &&
+    source.projection.protocol === request.protocol
+  ) {
+    return source;
+  }
   if (
     !isFinalizedPromptProjection(request.finalizedProjection, request.protocol)
   ) {
@@ -217,6 +226,36 @@ function countProjectionImageTokens(
   return total;
 }
 
+/**
+ * Sealed-segment counterpart of {@link countProjection}. The unit of counting
+ * is the same one segment per prompt key, so the sum is identical. Within a
+ * segment, text is counted in bounded chunks cut only where the pre-tokenizer
+ * (and MiniMax's NFC normalizer) provably splits, so the segment is never one
+ * string; see official-segment-chunking.ts for the cut rules and the single
+ * run-sized exception for text with no such boundary.
+ */
+async function countSourceSegments(
+  counter: OfficialSegmentCounter,
+  source: SourceFamilyInput,
+  canonicalModel: string,
+): Promise<number> {
+  let total = 0;
+  for (const segment of source.projection.promptSegments) {
+    total += await countAtSafeBoundaries(
+      segmentChunks(segment, source.signal),
+      (text) => counter.countTokens(text),
+    );
+  }
+  // The literal 'openai' provider mirrors countProjectionImageTokens.
+  return (
+    total +
+    (await source.countImageTokens({
+      provider: 'openai',
+      model: canonicalModel,
+    }))
+  );
+}
+
 async function estimateOfficialPrompt(
   request: RuntimePromptEstimateRequest,
   spec: OfficialFamilySpec,
@@ -226,8 +265,14 @@ async function estimateOfficialPrompt(
   try {
     return {
       count:
-        countProjection(counter, projection) +
-        countProjectionImageTokens(projection, request.canonicalModel),
+        projection instanceof SourceFamilyInput
+          ? await countSourceSegments(
+              counter,
+              projection,
+              request.canonicalModel,
+            )
+          : countProjection(counter, projection) +
+            countProjectionImageTokens(projection, request.canonicalModel),
       method: 'exact',
       family: spec.family,
       estimatorVersion: spec.estimatorVersion,

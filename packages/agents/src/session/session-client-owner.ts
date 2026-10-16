@@ -1,10 +1,14 @@
-import { OwnedClientLedger } from './session-client-cleanup.js';
+import {
+  OwnedClientLedger,
+  throwSettledFailures,
+} from './session-client-cleanup.js';
 import {
   prepareNewSessionClient,
   prepareDetachedSessionClient,
   type PreparedSessionClient,
 } from './session-new-client.js';
 import { SessionImageAdmission } from './session-image-admission.js';
+import { createSessionMcpApproval } from './session-mcp-approval.js';
 import {
   bindClientTokenization,
   bindFactoryClient,
@@ -52,9 +56,6 @@ import { createTaskRegistration } from '../api/runtimeFactories.js';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { summarizeToolOutput } from '@vybestack/llxprt-code-core/utils/summarizer.js';
 import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
-import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../api/agent.js';
 import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
@@ -63,6 +64,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
+  DeferredHistorySourceOptions,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
@@ -213,23 +215,22 @@ export class SessionClientOwner {
   private sessionPolicy: SessionPolicyOwner | undefined;
   private ownsSessionPolicy = false;
   private readonly policyWrites = new Set<Promise<void>>();
-  get messageBus() {
+  private requireSessionPolicy(): SessionPolicyOwner {
     if (this.sessionPolicy === undefined)
       throw new Error('Missing session policy composition');
-    return this.sessionPolicy.messageBus;
+    return this.sessionPolicy;
+  }
+  get messageBus() {
+    return this.requireSessionPolicy().messageBus;
   }
   addSessionPolicyRule(
     rule: Parameters<SessionPolicyOwner['confirmation']['addRule']>[0],
   ): void {
     this.getAgentClient();
-    if (this.sessionPolicy === undefined)
-      throw new Error('Missing session policy composition');
-    this.sessionPolicy.confirmation.addRule(rule);
+    this.requireSessionPolicy().confirmation.addRule(rule);
   }
   get policyInspection() {
-    if (this.sessionPolicy === undefined)
-      throw new Error('Missing session policy composition');
-    return this.sessionPolicy.inspection;
+    return this.requireSessionPolicy().inspection;
   }
   private readonly mcpBindingToken = Symbol('MCP session client');
   private readonly images = new SessionImageAdmission();
@@ -448,32 +449,12 @@ export class SessionClientOwner {
     this.ownsSessionPolicy =
       this.borrowedClient === undefined && this.borrowedBus === undefined;
     this.sessionPolicy = policy;
-    const approval = createMcpApprovalPolicy(
-      { ...policy.decisions, ...policy.confirmation },
-      (message) => {
-        const write = persistPolicyToToml(message);
-        this.policyWrites.add(write);
-        void write.then(
-          () => this.policyWrites.delete(write),
-          () => this.policyWrites.delete(write),
-        );
-        return write;
-      },
+    const sessionApproval = createSessionMcpApproval(
+      policy,
+      workspace.policyOwner.session,
+      this.policyWrites,
       () => this.getAgentClient(),
     );
-    const sessionApproval = {
-      ...approval,
-      evaluate: (...args: Parameters<typeof approval.evaluate>) => {
-        const upstream = workspace.policyOwner.session.decisions.evaluate(
-          args[0].serverName + '__' + args[0].toolName,
-          args[1],
-          args[0].serverName,
-        );
-        return upstream === PolicyDecision.DENY
-          ? upstream
-          : approval.evaluate(...args);
-      },
-    };
     return { policy, sessionApproval };
   }
 
@@ -629,8 +610,11 @@ export class SessionClientOwner {
     return pending;
   }
 
-  refreshAuth(_authMethod?: string): Promise<void> {
-    return this.enqueue(() => this.replaceClient());
+  refreshAuth(
+    _authMethod?: string,
+    options: DeferredHistorySourceOptions = {},
+  ): Promise<void> {
+    return this.enqueue(() => this.replaceClient(options));
   }
 
   prepareNewSession(
@@ -658,7 +642,9 @@ export class SessionClientOwner {
     );
   }
 
-  private async replaceClient(): Promise<void> {
+  private async replaceClient(
+    options: DeferredHistorySourceOptions,
+  ): Promise<void> {
     const sessionId = this.runtimeState.sessionId;
     const previous = this.client;
     const canReuseBorrowed = previous === this.borrowedClient;
@@ -675,6 +661,7 @@ export class SessionClientOwner {
     const { history, historyService } = await extractExistingState(
       logger,
       previous,
+      options,
     );
     const prepared = buildNewContentGeneratorConfig(
       this.contentGeneratorFactory,
@@ -694,6 +681,7 @@ export class SessionClientOwner {
         historyService,
         prepared.contentGeneratorConfig,
         previous.getContentGeneratorConfig()?.vertexai,
+        options,
       );
     } catch (error) {
       await this.ownedClients.releaseFailedReplacement(next, error);
@@ -851,19 +839,18 @@ export class SessionClientOwner {
         const policy = await Promise.allSettled([
           this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
         ]);
-        const failures = [
-          ...hooks,
-          ...instructions,
-          ...services,
-          ...binding,
-          ...clients,
-          ...writes,
-          ...policy,
-        ].flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
+        throwSettledFailures(
+          [
+            ...hooks,
+            ...instructions,
+            ...services,
+            ...binding,
+            ...clients,
+            ...writes,
+            ...policy,
+          ],
+          'Session client cleanup failed',
         );
-        if (failures.length > 0)
-          throw new AggregateError(failures, 'Session client cleanup failed');
       },
     );
     return this.closing;

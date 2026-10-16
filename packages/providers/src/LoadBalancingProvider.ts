@@ -12,6 +12,7 @@ import type {
 } from './IProvider.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderManager } from './ProviderManager.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
@@ -45,10 +46,7 @@ import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
 import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from './loadBalancing/failoverSettings.js';
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
-import {
-  buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal,
-  normalizeLoadBalancerOptions,
-} from './loadBalancing/resolvedOptionsBuilder.js';
+import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 import {
   assertMemberAuthCurrent,
   resolveMemberAuthentication,
@@ -57,7 +55,6 @@ import {
   createAdmittedMemberDispatchGuard,
   resolveAdmittedMemberDelegate,
 } from './loadBalancing/admittedMemberCredential.js';
-import { cloneForContextLimit } from './loadBalancing/contextLimitClone.js';
 import {
   getRequestSignal,
   rethrowIfAborted,
@@ -65,6 +62,7 @@ import {
 import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
 import {
   projectLoadBalancerPromptEnvelope,
+  releaseEstimateOnlyPromptEnvelope,
   type PromptEnvelopeProjection,
 } from './loadBalancing/promptEnvelopeProjection.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
@@ -82,12 +80,20 @@ import {
   LoadBalancerCompressionCallbackError,
   LoadBalancerContextLimitError,
 } from './loadBalancing/contextLimitError.js';
-import { handleFailoverError as handleFailoverErrorFn } from './loadBalancing/failoverErrorHandler.js';
+import {
+  handleFailoverError as handleFailoverErrorFn,
+  type FailoverErrorContext,
+} from './loadBalancing/failoverErrorHandler.js';
 import type { EstimationResult } from './loadBalancing/loadBalancerTokenEstimator.js';
 import {
   estimatePreparedPrompt,
   optionsWithPromptProjection,
+  optionsWithRequestRows,
 } from './loadBalancing/preparedPromptOptions.js';
+import {
+  runStagedCall,
+  stageCallOptions,
+} from './loadBalancing/stagedCallOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
   loadBalancerModels,
@@ -312,16 +318,9 @@ export class LoadBalancingProvider
       () =>
         `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
     );
-    const clonedContents = cloneForContextLimit(
-      options.contents,
-      this.config.profileName,
-      subProfile.name,
-      result.tokens,
-      contextLimit,
-    );
-    let compressed: IContent[];
+    let replacement: ProviderRequestSelection;
     try {
-      compressed = await this.compressionCallback(clonedContents, {
+      replacement = await this.compressionCallback({
         estimatedTokens: result.tokens,
         contextLimit,
       });
@@ -332,7 +331,7 @@ export class LoadBalancingProvider
         cause: error instanceof Error ? error : new Error(String(error)),
       });
     }
-    const compressedOptions = { ...options, contents: compressed };
+    const compressedOptions = optionsWithRequestRows(options, replacement);
     const compressedResult = await this.estimateForSubProfile(
       subProfile,
       compressedOptions,
@@ -408,23 +407,34 @@ export class LoadBalancingProvider
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: GenerateChatOptions | IContent[],
+    optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // Normalize parameters to GenerateChatOptions format
-    let options: GenerateChatOptions;
-    if (Array.isArray(optionsOrContent)) {
-      options = {
-        contents: optionsOrContent,
-        tools,
-      };
-    } else {
-      options = normalizeLoadBalancerOptions(optionsOrContent);
-    }
+    // A neutral requestRows selection is already repeatable and pinned: every
+    // attempt reopens it. A one-shot contents stream is staged on scratch disk
+    // once, so each attempt reopens the same rows (issue #854).
+    const staged = await stageCallOptions(optionsOrContent, tools, signal);
+    yield* runStagedCall(staged, (options) => this.sendStagedCall(options));
+  }
+
+  private async *sendStagedCall(
+    stagedOptions: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    const { promptEnvelopeTransportToken: peekToken, ...callOptions } =
+      stagedOptions;
+    const options: GenerateChatOptions = callOptions;
+    // The send projects the member it selects itself, so a peek's delegate
+    // lease (issue #854) is spent once the send starts. The spent token is
+    // dropped from the options: a member that saw it beside its own request
+    // would treat the call as already prepared and blank the system
+    // instruction and tools instead of preparing them itself.
+    await releaseEstimateOnlyPromptEnvelope(peekToken);
     this.resetTokenAccountingDiagnostics();
 
     // Branch on strategy
@@ -795,6 +805,8 @@ export class LoadBalancingProvider
   ): AsyncGenerator<IContent, boolean> {
     let attempts = 0;
     const maxAttempts = Math.max(1, settings.retryCount);
+    const advanceToNextBackend = (): boolean =>
+      this.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
     while (attempts < maxAttempts && hasTransportAttemptRemaining(options)) {
       attempts++;
       let startTime = 0;
@@ -826,21 +838,13 @@ export class LoadBalancingProvider
           error instanceof LoadBalancerContextLimitError
         ) {
           contextLimitErrors.push({ profile: subProfile.name, error });
-          return this.failoverState.advanceFrom(
-            requestOwner,
-            currentIndex,
-            numProfiles,
-          );
+          return advanceToNextBackend();
         }
         if (!requestStarted) {
           recordBackendFailure(errors, subProfile.name, error);
-          return this.failoverState.advanceFrom(
-            requestOwner,
-            currentIndex,
-            numProfiles,
-          );
+          return advanceToNextBackend();
         }
-        const handled = this.handleFailoverError(
+        const handled = handleFailoverErrorFn(
           error,
           subProfile,
           startTime,
@@ -853,6 +857,7 @@ export class LoadBalancingProvider
           numProfiles,
           requestOwner,
           hasTransportAttemptRemaining(options),
+          this.failoverErrorDeps(),
         );
         if (handled === 'immediate-throw') throw error;
         if (handled === 'break') break;
@@ -943,40 +948,13 @@ export class LoadBalancingProvider
     );
   }
 
-  private handleFailoverError(
-    error: unknown,
-    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    startTime: number,
-    attempts: number,
-    maxAttempts: number,
-    settings: FailoverSettings,
-    errors: Array<{ profile: string; error: Error }>,
-    requestCommitted: boolean,
-    currentIndex: number,
-    numProfiles: number,
-    requestOwner: symbol,
-    transportAttemptRemaining: boolean,
-  ): 'immediate-throw' | 'break' | 'retry' {
-    return handleFailoverErrorFn(
-      error,
-      subProfile,
-      startTime,
-      attempts,
-      maxAttempts,
-      settings,
-      errors,
-      requestCommitted,
-      currentIndex,
-      numProfiles,
-      requestOwner,
-      transportAttemptRemaining,
-      {
-        logger: this.logger,
-        circuitBreaker: this.circuitBreaker,
-        failoverState: this.failoverState,
-        recordFail: (name, st, err) => this.recordFail(name, st, err),
-      },
-    );
+  private failoverErrorDeps(): FailoverErrorContext {
+    return {
+      logger: this.logger,
+      circuitBreaker: this.circuitBreaker,
+      failoverState: this.failoverState,
+      recordFail: (name, st, err) => this.recordFail(name, st, err),
+    };
   }
 
   /**

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { CommandContext } from '../types.js';
-import type { IContent } from '@vybestack/llxprt-code-core';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { getProviderDumpMetadata } from '../../../runtime/providerInspection.js';
 export function bindDumpManager(
   context: CommandContext,
@@ -16,11 +16,8 @@ export function bindDumpManager(
           | {
               getCurrentModel?: () => string | undefined;
               baseURL?: string;
-              buildContextDumpBody?: (
-                history: IContent[],
-                model?: string,
-                config?: unknown,
-              ) => Record<string, unknown>;
+              contextDumpVersion?: number;
+              buildContextDumpBody?: IProvider['buildContextDumpBody'];
             }
           | undefined;
       }

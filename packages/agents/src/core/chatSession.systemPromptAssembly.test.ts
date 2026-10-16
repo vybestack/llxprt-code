@@ -70,6 +70,7 @@ interface AssemblyFixture {
 function buildFixture(
   assembler: SystemPromptAssembler,
   initialModel: string,
+  beforeToolSelection?: () => Promise<void>,
 ): AssemblyFixture {
   const settingsService = new SettingsService();
   const config = new Config({
@@ -118,14 +119,21 @@ function buildFixture(
   configureProviderRuntimeFactories(config, manager);
   manager.registerProvider(provider);
 
-  // Minimal hook stubs so sendMessage does not crash on hook lookups.
+  // Minimal hook stubs so sendMessage does not crash on hook lookups. A
+  // `beforeToolSelection` barrier turns hooks on and holds a turn after its
+  // prompt was resolved and before its request options are built.
   Object.defineProperties(config, {
     getConversationLoggingEnabled: { value: () => false },
-    getEnableHooks: { value: () => false },
+    getEnableHooks: { value: () => beforeToolSelection !== undefined },
     getHookSystem: {
       value: () => ({
         initialize: async () => undefined,
         isInitialized: () => true,
+        getRegistry: () => ({ getHooksForEvent: () => [] }),
+        fireBeforeToolSelectionEvent: async () => {
+          await beforeToolSelection?.();
+          return undefined;
+        },
         fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
         fireAfterModelEvent: async () => new AfterModelHookOutput({}),
       }),
@@ -313,6 +321,11 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     // send-level lock.
     const events: string[] = [];
     let turn = 0;
+    let secondResolved: () => void = () => {};
+    const secondHasResolved = new Promise<void>((resolve) => {
+      secondResolved = resolve;
+    });
+    let selections = 0;
 
     const fx = buildFixture(
       {
@@ -322,10 +335,17 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
           // Yield inside assembly to widen the interleaving window.
           await new Promise((resolve) => setTimeout(resolve, 0));
           events.push(`resolve:end:${id}`);
+          if (id === 2) queueMicrotask(secondResolved);
           return `[model=${model}:turn${id}]`;
         },
       },
       'model-a',
+      // Hold the first turn after its prompt is resolved until the second
+      // turn has replaced the shared instruction, then let it build its
+      // request. Without a per-turn copy the first turn would send turn 2's.
+      async () => {
+        if (++selections === 1) await secondHasResolved;
+      },
     );
 
     const first = fx.chat.sendMessage({ message: 'first' }, 'p1');

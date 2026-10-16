@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
@@ -70,7 +71,7 @@ describe('provider owner generation boundary', () => {
         ).not.toBe('');
         await agent.dispose();
         expect(
-          (await client.getHistory()).flatMap((turn) =>
+          (await collectHistoryFixture(client.getHistory())).flatMap((turn) =>
             turn.blocks
               .filter((block) => block.type === 'text')
               .map((block) => block.text),

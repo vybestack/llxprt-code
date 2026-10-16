@@ -18,6 +18,8 @@
  */
 
 import type { IContent, UsageStats } from '../../services/history/IContent.js';
+import type { HistoryIndexedRows } from '../../services/history/historyMutationSnapshot.js';
+import type { DiskDensityResult } from '../../services/history/historyDiskDensity.js';
 import {
   getErrorStatus,
   isNetworkTransientError,
@@ -243,8 +245,11 @@ export interface CompressionStrategy {
   readonly name: CompressionStrategyName;
   readonly requiresLLM: boolean;
   readonly trigger: StrategyTrigger;
-  compress(context: CompressionContext): Promise<StrategyCompressionResult>;
   optimize?(history: readonly IContent[], config: DensityConfig): DensityResult;
+  optimizeRows?(
+    history: HistoryIndexedRows,
+    config: DensityConfig,
+  ): DiskDensityResult;
 }
 
 /**

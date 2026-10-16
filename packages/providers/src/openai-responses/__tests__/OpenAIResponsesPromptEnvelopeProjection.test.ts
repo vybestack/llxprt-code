@@ -22,12 +22,15 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
+  type PromptEnvelopeProjection,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type {
   RuntimePromptEstimateRequest,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
+import { Gpt56SourceProjection } from '../../tokenizers/gpt56-source-projection.js';
+import { promptTextPieces } from '../../tokenizers/source-family-input.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -74,24 +77,26 @@ function buildCallOptions(
   });
 }
 
-function finalizedPromptLength(request: RuntimePromptEstimateRequest): number {
+async function finalizedPromptLength(
+  request: RuntimePromptEstimateRequest,
+): Promise<number> {
   const projection = request.finalizedProjection;
-  if (
-    typeof projection !== 'object' ||
-    projection === null ||
-    !('promptText' in projection) ||
-    typeof projection.promptText !== 'string'
-  ) {
-    throw new Error('Expected a finalized provider prompt projection');
+  // Responses requests are sent from prompt-key files on disk; the legacy
+  // JSON prompt text is the concatenation of their pieces.
+  if (projection instanceof Gpt56SourceProjection) {
+    let length = 0;
+    for await (const piece of promptTextPieces(projection))
+      length += piece.length;
+    return length;
   }
-  return projection.promptText.length;
+  throw new Error('Expected a finalized provider prompt projection');
 }
 
 function createLengthTokenizerFactory(): RuntimeTokenizerFactory {
   return {
     getTokenizer: () => undefined,
     estimatePrompt: async (request) => ({
-      count: finalizedPromptLength(request),
+      count: await finalizedPromptLength(request),
       method: 'exact',
       family: 'projection-length-fixture',
       estimatorVersion: '1',
@@ -99,6 +104,19 @@ function createLengthTokenizerFactory(): RuntimeTokenizerFactory {
       projectionRevision: request.projectionRevision,
     }),
   };
+}
+
+/** The finalized prompt length of the request the projection will send. */
+async function projectedLength(
+  provider: OpenAIResponsesProvider,
+  projection: PromptEnvelopeProjection,
+): Promise<number> {
+  const estimate = await estimatePromptEnvelope(
+    provider.name,
+    projection,
+    createLengthTokenizerFactory(),
+  );
+  return estimate.transmittedTokens;
 }
 
 function createRecordingFetch(
@@ -179,7 +197,7 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
+    expect(await projectedLength(provider, projection)).toBeGreaterThan(0);
     expect(provider.promptAuthResolutions).toStrictEqual([]);
   });
 
@@ -538,8 +556,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const smallTokens = await small.legacyEstimate();
-    const largeTokens = await large.legacyEstimate();
+    const smallTokens = await projectedLength(provider, small);
+    const largeTokens = await projectedLength(provider, large);
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -568,8 +586,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
       }),
     );
 
-    const withoutTokens = await withoutTools.legacyEstimate();
-    const withTokens = await withTools.legacyEstimate();
+    const withoutTokens = await projectedLength(provider, withoutTools);
+    const withTokens = await projectedLength(provider, withTools);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -590,8 +608,8 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         'Always answer with extensive detail, follow every formatting rule, explain assumptions, and avoid unsupported speculation in every response.',
     });
 
-    const withoutTokens = await withoutInstruction.legacyEstimate();
-    const withTokens = await withLongInstruction.legacyEstimate();
+    const withoutTokens = await projectedLength(provider, withoutInstruction);
+    const withTokens = await projectedLength(provider, withLongInstruction);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -705,7 +723,9 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
     const large = await project('A'.repeat(100_000));
 
     expect(small.unsupportedMedia[0]?.mediaType).toBe('audio');
-    expect(await large.legacyEstimate()).toBe(await small.legacyEstimate());
+    expect(await projectedLength(provider, large)).toBe(
+      await projectedLength(provider, small),
+    );
   });
 
   it('surfaces disabled PDFs and all unsupported substitutions structurally', async () => {

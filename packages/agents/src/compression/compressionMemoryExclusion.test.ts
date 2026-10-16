@@ -47,7 +47,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
-import { OneShotStrategy } from './OneShotStrategy.js';
+import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Sentinels
@@ -122,8 +122,13 @@ function extractText(contents: readonly IContent[]): string {
   return parts.join('\n');
 }
 
+/** A captured request whose streamed rows were collected while it was open. */
+type CapturedRequest = Omit<RuntimeGenerateChatOptions, 'contents'> & {
+  contents: IContent[];
+};
+
 function createOptionsCapturingProvider(
-  captured: RuntimeGenerateChatOptions[],
+  captured: CapturedRequest[],
   summaryText: string,
 ): IProvider {
   return {
@@ -131,7 +136,11 @@ function createOptionsCapturingProvider(
     getModels: async () => [],
     getDefaultModel: () => COMPRESSION_MODEL,
     async *generateChatCompletion(options: RuntimeGenerateChatOptions) {
-      captured.push(options);
+      // The disk route streams request rows lazily from rows that are closed
+      // once compression returns, so read them while the request is open.
+      const contents: IContent[] = [];
+      for await (const content of options.contents) contents.push(content);
+      captured.push({ ...options, contents });
       yield {
         speaker: 'ai' as const,
         blocks: [{ type: 'text' as const, text: summaryText }],
@@ -307,7 +316,7 @@ describe('Compression memory exclusion (issue #3174)', () => {
 
   const observeStrategyRequestExcludesMemoryMCPKeepsTheStateSnapshotTemplateAndApplies =
     async () => {
-      const captured: RuntimeGenerateChatOptions[] = [];
+      const captured: CapturedRequest[] = [];
       const provider = createOptionsCapturingProvider(captured, VALID_SNAPSHOT);
       const context = buildCompressionContext({
         history: generateHistory(20),
@@ -315,12 +324,10 @@ describe('Compression memory exclusion (issue #3174)', () => {
         provider,
       });
 
-      const strategy = new OneShotStrategy();
-      const result = await strategy.compress(context);
+      const result = await compressOneShotViaDisk(context);
 
       const request = captured[0];
       const sysInstr = request.systemInstruction;
-
       const requestText = extractText(request.contents);
 
       const summarizedHistory =

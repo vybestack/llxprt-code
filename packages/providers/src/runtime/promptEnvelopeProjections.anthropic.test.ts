@@ -24,9 +24,12 @@ import { describe, it, expect } from 'bun:test';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import {
   projectAnthropicPromptEnvelope,
+  projectAnthropicPromptEnvelopeFromSource,
   PROJECTION_REVISION,
   type ProviderFinalizedPromptProjection,
 } from './promptEnvelopeProjections.js';
+import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import { projectBodyFromSegments } from './__tests__/support/promptBodySegments.js';
 
 /**
  * Handcrafted minimal PNG whose IHDR declares 1586x991.
@@ -382,5 +385,93 @@ describe('projectAnthropicPromptEnvelope (issue #2817)', () => {
       projection.finalizedProjection as ProviderFinalizedPromptProjection;
     expect(finalized.imageEntries).toBeUndefined();
     expect(finalized.promptText).toContain('[binary media bytes omitted]');
+  });
+});
+
+describe('projectAnthropicPromptEnvelopeFromSource (issue #854 E5)', () => {
+  async function sourceProjection(
+    releaseIfUnsent = async (): Promise<void> => undefined,
+  ) {
+    const source = await projectBodyFromSegments(
+      'anthropic-messages',
+      {
+        model: 'claude-3-5-sonnet',
+        system: 'Be brief.',
+        messages: [{ role: 'user', content: 'Hello' }],
+      },
+      'claude-3-5-sonnet',
+    );
+    const transportToken = Object.freeze({});
+    const projection = projectAnthropicPromptEnvelopeFromSource(source, {
+      model: 'claude-3-5-sonnet',
+      unsupportedMedia: [
+        { kind: 'unsupported', reason: 'audio', mediaType: 'audio' },
+      ],
+      transportToken,
+      releaseIfUnsent,
+    });
+    return { source, projection, transportToken };
+  }
+
+  it('carries the Anthropic identity, the model and the sealed source', async () => {
+    const { source, projection, transportToken } = await sourceProjection();
+    try {
+      expect(projection.protocol).toBe('anthropic-messages');
+      expect(projection.method).toBe('messages/v1');
+      expect(projection.model).toBe('claude-3-5-sonnet');
+      expect(projection.projectionRevision).toBe(PROJECTION_REVISION);
+      expect(projection.transportToken).toBe(transportToken);
+      expect(projection.finalizedProjection).toBeInstanceOf(
+        Gpt56SourceProjection,
+      );
+      expect(projection.unsupportedMedia).toStrictEqual([
+        { kind: 'unsupported', reason: 'audio', mediaType: 'audio' },
+      ]);
+      expect(Object.isFrozen(projection)).toBe(true);
+    } finally {
+      await source.dispose();
+    }
+  });
+
+  it('can only be estimated through the source estimator', async () => {
+    const { source, projection } = await sourceProjection();
+    try {
+      await expect(projection.legacyEstimate()).rejects.toThrow(
+        'A source projection requires the pinned source estimator',
+      );
+    } finally {
+      await source.dispose();
+    }
+  });
+
+  it('hands the release of an unsent projection to its owner', async () => {
+    let released = 0;
+    const { source, projection } = await sourceProjection(async () => {
+      released++;
+    });
+    try {
+      await projection.releaseIfUnsent?.();
+      expect(released).toBe(1);
+    } finally {
+      await source.dispose();
+    }
+  });
+
+  it('rejects a projection without a model', async () => {
+    const source = await projectBodyFromSegments(
+      'anthropic-messages',
+      { messages: [{ role: 'user', content: 'Hello' }] },
+      'claude-3-5-sonnet',
+    );
+    try {
+      expect(() =>
+        projectAnthropicPromptEnvelopeFromSource(source, {
+          model: ' ',
+          releaseIfUnsent: async () => undefined,
+        }),
+      ).toThrow('request body must carry a non-empty string "model" field');
+    } finally {
+      await source.dispose();
+    }
   });
 });

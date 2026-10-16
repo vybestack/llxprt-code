@@ -25,7 +25,7 @@ import {
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
-  type IContent,
+  type ResumeCursorBoot,
   type IdeInfo,
   type MessageBus,
   type RecordingIntegration,
@@ -40,6 +40,10 @@ import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
+import {
+  useScrollbackBootstrap,
+  type ScrollbackPagerBinding,
+} from './useScrollbackBootstrap.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
@@ -61,7 +65,7 @@ export interface AppBootstrapProps {
   agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   version: string;
   runtimeMessageBus?: MessageBus;
   appState: AppState;
@@ -109,6 +113,13 @@ export interface AppBootstrapResult {
   recordingSwapCallbacks: ReturnType<
     typeof useRecordingInfrastructure
   >['recordingSwapCallbacks'];
+  /**
+   * P02e: pager binding when the boot-time scrollback flag was on and the
+   * session journal resolved; null keeps today's non-pager transcript path.
+   */
+  scrollbackPager: ScrollbackPagerBinding | null;
+  /** P02e: one-line restart prompt when the scrollback flag changed mid-session. */
+  scrollbackRestartNotice: string | null;
   idePromptAnswered: boolean;
   setIdePromptAnswered: React.Dispatch<React.SetStateAction<boolean>>;
   currentIDE: IdeInfo | undefined;
@@ -121,14 +132,14 @@ export interface AppBootstrapResult {
   nightly: boolean;
   runtimeMessageBus?: MessageBus;
   startupWarnings: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
 }
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, agent, settings, resumedHistory } = props;
+  const { uiRuntime, agent, settings, resumedBoot } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -165,7 +176,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     }),
     [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
-  const { addItem, loadHistory } = useRetractableHistory(
+  const { addItem, prependHistory } = useRetractableHistory(
     props.turnStore,
     historyLimits,
   );
@@ -178,8 +189,8 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     uiRuntime,
     agent,
     addItem,
-    loadHistory,
-    resumedHistory,
+    prependHistory,
+    resumedBoot,
   });
   // Store mirrors: the context summary renders from the settings store.
   useEffect(() => {
@@ -303,6 +314,21 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
+  const { session: agentSession } = props.agent;
+  const agentJournalSource = useMemo(
+    () => ({
+      getCurrentRecording: () => {
+        const path = agentSession.getRecording().path;
+        return path ? { getFilePath: () => path } : null;
+      },
+    }),
+    [agentSession],
+  );
+  const sb = useScrollbackBootstrap({
+    settings: props.settings,
+    recordingSwapCallbacks: e.recordingSwapCallbacks ?? agentJournalSource,
+    addItem: h.addItem,
+  });
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
@@ -314,7 +340,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],
-    resumedHistory: props.resumedHistory,
+    resumedBoot: props.resumedBoot,
     recordingIntegration: props.recordingIntegration,
     recordingOwner: props.recordingOwner,
     nightly: h.nightly,
@@ -329,6 +355,8 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     updateTodos: t.updateTodos,
     recordingIntegrationRef: e.recordingIntegrationRef,
     recordingSwapCallbacks: e.recordingSwapCallbacks,
+    scrollbackPager: sb.pager,
+    scrollbackRestartNotice: sb.restartNotice,
     idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,

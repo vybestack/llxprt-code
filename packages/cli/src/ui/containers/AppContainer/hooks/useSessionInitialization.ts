@@ -3,21 +3,19 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resumeHistoryWindow } from '../../../utils/streamHistoryItems.js';
 
 import { useEffect, useRef, useState } from 'react';
-import type { IContent } from '@vybestack/llxprt-code-core';
+import type { ResumeCursorBoot } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
-import {
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../../../utils/iContentToHistoryItems.js';
+import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 
 /**
  * @hook useSessionInitialization
  * @description One-time session initialization with state machine
- * @inputs uiRuntime, addItem, loadHistory, resumedHistory
+ * @inputs uiRuntime, addItem, prependHistory, resumedBoot
  * @outputs SessionInitState
  * @sideEffects Session start hook, history seeding
  * @cleanup AbortController.abort() on change/unmount
@@ -41,8 +39,8 @@ export interface UseSessionInitializationParams {
   uiRuntime: UiRuntime;
   agent: Agent;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
-  loadHistory: (newHistory: HistoryItem[]) => void;
-  resumedHistory?: IContent[];
+  prependHistory: (leading: HistoryItem[]) => void;
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
 }
 
 export interface UseSessionInitializationResult {
@@ -96,8 +94,8 @@ export function useSessionInitialization({
   uiRuntime,
   agent,
   addItem,
-  loadHistory,
-  resumedHistory,
+  prependHistory,
+  resumedBoot,
 }: UseSessionInitializationParams): UseSessionInitializationResult {
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [coreMemoryFileCount, setCoreMemoryFileCount] = useState<number>(0);
@@ -106,28 +104,43 @@ export function useSessionInitialization({
   const hasTriggeredSessionStart = useRef(false);
   const hasSeededResumedHistory = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Effect: Seed resumed history into history manager.
-  // The guard ref prevents redundant loadHistory calls across StrictMode
-  // double-mount while keeping resumedHistory as a static mount-time prop.
+  // The restored rows load asynchronously, so the SessionStart message or the
+  // first turn may already be in the history; they are prepended, never
+  // replacing what arrived meanwhile. The guard ref prevents redundant seeding
+  // across StrictMode double-mount while keeping resumedBoot as a static
+  // mount-time prop.
   useEffect(() => {
-    if (
-      hasSeededResumedHistory.current ||
-      !resumedHistory ||
-      resumedHistory.length === 0
-    ) {
-      return undefined;
-    }
+    if (hasSeededResumedHistory.current || !resumedBoot) return undefined;
     hasSeededResumedHistory.current = true;
-    const uiItems = iContentToHistoryItems(
-      resumedHistory,
+    void resumeHistoryWindow(
+      resumedBoot.streamRows(),
       resolveEmojiFilterMode(uiRuntime.ephemeral),
+    ).then(
+      (items) => {
+        if (mounted.current && items.length > 0) prependHistory(items);
+      },
+      (error: unknown) => {
+        if (!mounted.current) return;
+        addItem(
+          {
+            type: 'error',
+            text: `Could not display resumed history: ${String(error)}`,
+          },
+          Date.now(),
+        );
+      },
     );
-    if (uiItems.length > 0) {
-      loadHistory(uiItems);
-    }
     return undefined;
-  }, [loadHistory, resumedHistory, uiRuntime]);
+  }, [prependHistory, resumedBoot, uiRuntime, addItem]);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {

@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn, type Mock } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
@@ -123,7 +123,7 @@ describe('owner-backed /chat command route', () => {
         const restored = await action('restore')(context, '1');
         expect(restored).toBeUndefined();
         expect(setHistory).not.toHaveBeenCalled();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain(
+        expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
           'second',
         );
         expect(context.ui.loadHistory).toHaveBeenCalledWith([
@@ -132,7 +132,9 @@ describe('owner-backed /chat command route', () => {
         ]);
         await agent.setHistory([human('first'), ai('one'), human('third')]);
         expect(await action('clear')(context, '')).toBeUndefined();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain('third');
+        expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
+          'third',
+        );
         expect(context.ui.clear).toHaveBeenCalled();
       } finally {
         setHistory.mockRestore();
@@ -156,13 +158,14 @@ describe('owner-backed /chat command route', () => {
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
-      const original = client.restoreHistory.bind(client);
-      const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
-        async (...args) => {
-          await original(...args);
-          throw new Error('restore interrupted');
-        },
-      );
+      const original = client.setHistoryFromSource.bind(client);
+      const fault = spyOn(
+        client,
+        'setHistoryFromSource',
+      ).mockImplementationOnce(async (...args) => {
+        await original(...args);
+        throw new Error('restore interrupted');
+      });
       try {
         expect(await action('restore')(context, '1')).toMatchObject({
           messageType: 'error',
@@ -176,7 +179,9 @@ describe('owner-backed /chat command route', () => {
       const replay = await replaySession(path, basename(config.projectTempDir));
       if (!replay.ok) throw new Error(replay.error);
       expect(JSON.stringify(replay.history)).toContain('second');
-      expect(JSON.stringify(await agent.getHistory())).toContain('second');
+      expect(JSON.stringify(await agent.session.getHistory())).toContain(
+        'second',
+      );
       expect(context.ui.clear).not.toHaveBeenCalled();
     });
   }, 30000);
@@ -233,7 +238,9 @@ describe('owner-backed /chat command route', () => {
         expect.objectContaining({ type: 'gemini', text: 'first' }),
       ]);
       expect(context.ui.clear).not.toHaveBeenCalled();
-      expect(JSON.stringify(await agent.getHistory())).not.toContain('later');
+      expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
+        'later',
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);
@@ -252,4 +259,79 @@ describe('owner-backed /chat command route', () => {
       ).toHaveLength(1);
     });
   }, 30000);
+
+  it('counts history for /chat clear without materializing or streaming it', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({ services: { agent } });
+      const materialized = spyOn(agent.session, 'getHistory');
+      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const publicScan = spyOn(agent, 'streamHistory');
+      try {
+        expect(await action('clear')(context, '')).toMatchObject({
+          content: 'No conversation to clear.',
+        });
+        expect(materialized).not.toHaveBeenCalled();
+        expect(clientScan).not.toHaveBeenCalled();
+        expect(publicScan).not.toHaveBeenCalled();
+      } finally {
+        materialized.mockRestore();
+        clientScan.mockRestore();
+        publicScan.mockRestore();
+      }
+    });
+  }, 30000);
+
+  it('counts history for /chat debug without materializing or streaming it', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.setHistory([human('first'), ai('one'), human('second')]);
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({ services: { agent } });
+      const materialized = spyOn(agent.session, 'getHistory');
+      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const publicScan = spyOn(agent, 'streamHistory');
+      try {
+        const debug = await action('debug')(context, '');
+        expect(debug).toMatchObject({
+          content: expect.stringMatching(
+            /Chat initialized: true[\s\S]*History entries: 3/,
+          ),
+        });
+        expect(materialized).not.toHaveBeenCalled();
+        expect(clientScan).not.toHaveBeenCalled();
+        expect(publicScan).not.toHaveBeenCalled();
+      } finally {
+        materialized.mockRestore();
+        clientScan.mockRestore();
+        publicScan.mockRestore();
+      }
+    });
+  }, 30000);
+
+  it('replays a restored transcript up to the configured historyMaxItems', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      const pairs = 1000;
+      await agent.setHistory(
+        Array.from({ length: pairs }, (_unused, index) => [
+          human(`question ${index}`),
+          ai(`answer ${index}`),
+        ]).flat(),
+      );
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({
+        services: {
+          agent,
+          settings: { merged: { ui: { historyMaxItems: pairs * 2 } } },
+        },
+      });
+
+      expect(await action('restore')(context, '1')).toBeUndefined();
+
+      const [loaded] = (
+        context.ui.loadHistory as Mock<(items: readonly unknown[]) => void>
+      ).mock.calls[0];
+      expect(loaded).toHaveLength((pairs - 1) * 2);
+      expect(loaded.at(-1)).toMatchObject({ text: `answer ${pairs - 2}` });
+    });
+  }, 60000);
 });

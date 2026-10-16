@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { OAuthManager } from '../../auth/index.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
 import {
@@ -85,18 +85,21 @@ async function captureSerializedRequest(
 ): Promise<Record<string, unknown>> {
   let requestBody: string | undefined;
   vi.spyOn(globalThis, 'fetch').mockImplementation(
-    async (
-      _input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      if (init?.body !== undefined && init.body !== null) {
-        requestBody =
-          typeof init.body === 'string'
-            ? init.body
-            : await new Response(init.body).text();
-      }
-      return streamingResponse();
-    },
+    Object.assign(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body !== undefined && init.body !== null) {
+          requestBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return streamingResponse();
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    ),
   );
 
   const settings = new SettingsService();
@@ -107,7 +110,7 @@ async function captureSerializedRequest(
   })) {
     settings.setProviderSetting(provider.name, key, value);
   }
-  const options = createProviderCallOptions({
+  const options = streamCallOptions({
     providerName: provider.name,
     settings,
     contents: [

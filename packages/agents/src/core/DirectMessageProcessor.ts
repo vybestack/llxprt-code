@@ -36,6 +36,7 @@ import {
 import {
   applyRequestModifications,
   extractSystemInstructionText,
+  turnSystemInstruction,
 } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -69,6 +70,7 @@ import {
 } from './hookEnvelopeHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
+import { replayableContents } from '@vybestack/llxprt-code-providers/utils/collectContents.js';
 import {
   ensureResponseText,
   extractResponseText,
@@ -191,7 +193,7 @@ export class DirectMessageProcessor {
       return emptyModelOutput();
     }
 
-    logApiRequest(
+    await logApiRequest(
       this.runtimeContext,
       this.runtimeContext.state,
       userIContents,
@@ -448,6 +450,7 @@ export class DirectMessageProcessor {
       runtimeContext,
       timeoutSignal,
       params.config?.providerRequestContext,
+      turnSystemInstruction(params, this.generationConfig),
     );
     const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
       streamResponse,
@@ -489,6 +492,7 @@ export class DirectMessageProcessor {
     runtimeContext: ProviderRequestCollaborators,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
+    systemInstruction: ChatSessionConfig['systemInstruction'],
   ): AsyncIterable<IContent> {
     this.logger.debug(
       () =>
@@ -509,7 +513,8 @@ export class DirectMessageProcessor {
       runtimeContext.providerFileLifecycle,
       runtimeContext.config?.getTargetDir(),
     ).generateChatCompletion({
-      contents: contentsForApi,
+      // Retry boundaries can reopen the provider-facing history.
+      contents: replayableContents(contentsForApi),
       tools: effectiveToolsFromConfig,
       invocation: this.runtimeContext.prepareProviderInvocation(
         provider.name,
@@ -520,9 +525,7 @@ export class DirectMessageProcessor {
         ...runtimeContext.metadata,
         _retryRequestContext: requestContext,
       },
-      systemInstruction: extractSystemInstructionText(
-        this.generationConfig.systemInstruction,
-      ),
+      systemInstruction: extractSystemInstructionText(systemInstruction),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     });
   }

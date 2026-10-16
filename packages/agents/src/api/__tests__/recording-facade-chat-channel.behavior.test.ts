@@ -10,8 +10,7 @@ import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { drain } from './helpers/agentHarness.js';
 import { describe, expect, it, spyOn } from 'bun:test';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
-import type { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 function pathOf(state: { enabled: boolean; path?: string }): string {
@@ -26,38 +25,24 @@ describe('facade recording chat execution on a borrowed client', () => {
     await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
       const sibling = await borrow();
       const seenPaths: Array<string | undefined> = [];
-      const strategy: CompressionStrategy = {
-        name: 'one-shot',
-        requiresLLM: true,
-        trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-        compress: async (context) => {
-          seenPaths.push(context.transcriptPath);
-          return {
-            kind: 'applied',
-            newHistory: [
-              {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'text',
-                    text: `summary-path:${context.transcriptPath ?? 'absent'}`,
-                  },
-                ],
-              },
-            ],
-            metadata: {
-              originalMessageCount: context.history.length,
-              compressedMessageCount: 1,
-              strategyUsed: 'one-shot',
-              llmCallMade: false,
-            },
-          };
-        },
-      };
+      // Compression publishes through the disk runners, so the summary the
+      // provider would write is injected at the strategy's disk entry point.
       const strategySpy = spyOn(
-        compressionFactory,
-        'getCompressionStrategy',
-      ).mockReturnValue(strategy);
+        OneShotStrategy.prototype,
+        'compressDisk',
+      ).mockImplementation(async (context, candidate) => {
+        seenPaths.push(context.transcriptPath);
+        candidate.append({
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: `summary-path:${context.transcriptPath ?? 'absent'}`,
+            },
+          ],
+        });
+        return { kind: 'applied', top: 0 };
+      });
       try {
         await agent.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: 'seed for A' }] },

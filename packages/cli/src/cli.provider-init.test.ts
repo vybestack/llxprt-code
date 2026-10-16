@@ -54,19 +54,14 @@ void vi.mock('./config/settings.js', () => ({
   migrateDeprecatedSettings: vi.fn(),
 }));
 
-void vi.mock('./config/config.js', () => ({
-  loadCliConfig: vi.fn(),
-}));
+void vi.mock('./config/config.js', () => ({ loadCliConfig: vi.fn() }));
+void vi.mock('./config/cliArgParser.js', () => ({ parseArguments: vi.fn() }));
 
-void vi.mock('./config/cliArgParser.js', () => ({
-  parseArguments: vi.fn(),
-}));
-
-const actualActual = {
+const actualRuntime = {
   ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
 };
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ...actualActual,
+  ...actualRuntime,
   switchActiveProvider: vi.fn(async () => ({
     changed: true,
     previousProvider: null,
@@ -82,12 +77,9 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
 }));
 
 void vi.mock('./config/extension.js', () => ({
-  ExtensionStorage: {
-    getUserExtensionsDir: vi.fn(() => '/tmp/extensions'),
-  },
+  ExtensionStorage: { getUserExtensionsDir: vi.fn(() => '/tmp/extensions') },
   loadExtensions: vi.fn(() => []),
 }));
-
 void vi.mock('./utils/cleanup.js', () => ({
   cleanupCheckpoints: vi.fn(() => Promise.resolve()),
   registerCleanup: vi.fn(),
@@ -104,14 +96,13 @@ void vi.mock('./cliAgentBootstrap.js', () => ({
   })),
 }));
 
-const actualActual2 = { ...(await import('@vybestack/llxprt-code-core')) };
+const actualCore = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
-  ...actualActual2,
+  ...actualCore,
   writeToStdout: vi.fn().mockReturnValue(true),
   writeToStderr: vi.fn().mockReturnValue(true),
   patchStdio: vi.fn(() => vi.fn()),
 }));
-
 void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
   terminalCapabilityManager: {
     detectCapabilities: vi.fn(() => Promise.resolve()),
@@ -122,37 +113,27 @@ void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
     getTerminalBackgroundColor: vi.fn(() => undefined),
   },
 }));
-
 void vi.mock('./ui/utils/terminalContract.js', () => ({
   drainStdinBuffer: vi.fn(() => Promise.resolve()),
 }));
-
 void vi.mock('./utils/stdinSafety.js', () => ({
-  StdinRawModeManager: vi.fn(() => ({
-    enable: vi.fn(),
-    disable: vi.fn(),
-  })),
+  StdinRawModeManager: vi.fn(() => ({ enable: vi.fn(), disable: vi.fn() })),
 }));
-
 void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
-
 void vi.mock('./utils/bootstrap.js', () => ({
   shouldRelaunchForMemory: vi.fn(() => []),
   computeSandboxMemoryArgs: vi.fn(() => ['--max-old-space-size=3072']),
   parseDockerMemoryToMB: vi.fn(() => undefined),
   isDebugMode: vi.fn(() => false),
 }));
-
 void vi.mock('./utils/relaunch.js', () => ({
   relaunchAppInChildProcess: vi.fn(() => Promise.resolve(0)),
 }));
-
 void vi.mock('./utils/sessionCleanup.js', () => ({
   cleanupExpiredSessions: vi.fn(() => Promise.resolve()),
 }));
-
 void vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
@@ -387,9 +368,8 @@ describe('cli main provider initialization', () => {
       sessionId: freshId,
       sessionIdentityOwnership: 'config',
     });
-    const client = owner.agentClient;
     if (failRestore) {
-      vi.spyOn(client, 'setHistory').mockRejectedValueOnce(
+      vi.spyOn(owner.session, 'resume').mockRejectedValueOnce(
         new Error('restore failed on purpose'),
       );
     }
@@ -403,7 +383,7 @@ describe('cli main provider initialization', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await cli.main();
-      const history = await owner.getHistory();
+      const history = await Array.fromAsync(owner.streamHistory());
       for await (const _event of owner.stream('provider-init-continued')) {
         /* consume the fake provider turn */
       }

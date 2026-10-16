@@ -29,6 +29,13 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { scanSessionMetadata } from './boundedSessionScan.js';
+import {
+  scanFirstUserMessage,
+  type FirstUserMessageScanOptions,
+} from './firstUserMessageScan.js';
+import { readMetadataJsonLines } from './metadataJsonLines.js';
+import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
   SESSION_TITLE_MAX_LENGTH,
   type ContinueResolution,
@@ -37,11 +44,12 @@ import {
   type SessionStartPayload,
   type UnreadableRecording,
 } from './types.js';
-import { readSessionHeader, replaySession } from './ReplayEngine.js';
+import { readSessionHeader } from './ReplayEngine.js';
 import {
   INVALID_SESSION_START_MESSAGE,
   isSessionStartHeader,
 } from './sessionStartHeader.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
@@ -64,6 +72,25 @@ export interface SessionResolutionError {
   error: string;
 }
 
+/**
+ * Options for the bounded continue-target discovery pass (issue #854 P05d).
+ * The counters are optional; absent means uninstrumented.
+ */
+export interface BoundedDiscoveryOptions {
+  readonly counters?: JournalReadCounters;
+}
+
+/**
+ * Result shape shared with `listContinueTargetsDetailed` so pickers migrate
+ * by swapping the call name.
+ */
+export interface BoundedContinueTargets {
+  targets: ContinueTarget[];
+  skippedCount: number;
+  recordingErrors: readonly string[];
+  unreadableRecordings: readonly UnreadableRecording[];
+}
+
 type FirstLineResult =
   | { readonly ok: true; readonly payload: object }
   | { readonly ok: false; readonly reason: string };
@@ -81,6 +108,7 @@ type FirstLineResult =
  */
 async function readSessionStartLine(
   filePath: string,
+  counters?: JournalReadCounters,
 ): Promise<FirstLineResult> {
   const firstLine = await readBoundedFirstLine(filePath);
   if (firstLine === null || firstLine.trim() === '') {
@@ -88,7 +116,9 @@ async function readSessionStartLine(
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(firstLine);
+    const projection = new MetadataJsonProjection();
+    projection.push(firstLine);
+    parsed = projection.finish();
   } catch {
     return {
       ok: false,
@@ -96,6 +126,7 @@ async function readSessionStartLine(
         'Missing or corrupt session_start event: first line is not valid JSON',
     };
   }
+  counters?.recordDecoded();
   if (
     typeof parsed !== 'object' ||
     parsed === null ||
@@ -121,15 +152,16 @@ async function readSessionStartLine(
  */
 export async function readFirstLineFromFile(
   filePath: string,
+  counters?: JournalReadCounters,
 ): Promise<SessionStartPayload | null> {
-  const result = await readSessionStartLine(filePath);
+  const result = await readSessionStartLine(filePath, counters);
   return result.ok ? (result.payload as SessionStartPayload) : null;
 }
 
-type SessionScan = {
+interface SessionScan {
   sessions: SessionSummary[];
   unreadableRecordings: UnreadableRecording[];
-};
+}
 
 /** Sort newest-first by modification time; ids are validated strings. */
 function sortNewestFirst(summaries: SessionSummary[]): void {
@@ -162,18 +194,20 @@ export class SessionDiscovery {
   }
 
   /**
-   * Readable continue targets. Recordings that fail replay are left out; use
-   * {@link listContinueTargetsDetailed} to learn which ones and why.
+   * Readable continue targets. Recordings that fail the metadata scan are left
+   * out; use {@link listContinueTargetsDetailed} to learn which ones and why.
    */
   static async listContinueTargets(
     chatsDir: string,
     projectHash: string,
     mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<ContinueTarget[]> {
     const detailed = await this.listContinueTargetsDetailed(
       chatsDir,
       projectHash,
       mediaStore,
+      options,
     );
     return detailed.targets;
   }
@@ -181,78 +215,69 @@ export class SessionDiscovery {
   static async listContinueTargetsDetailed(
     chatsDir: string,
     projectHash: string,
-    mediaStore?: LocalMediaStore,
-  ): Promise<{
-    targets: ContinueTarget[];
-    skippedCount: number;
-    recordingErrors: readonly string[];
-    unreadableRecordings: readonly UnreadableRecording[];
-  }> {
-    const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
-    const sessionTargets: Array<ContinueTarget | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
+    _mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    return SessionDiscovery.listContinueTargetsDetailedBounded(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const checkpointTargets: ContinueTarget[][] = Array.from(
-      { length: detailed.sessions.length },
-      () => [],
+  }
+
+  static async listContinueTargetsDetailedBounded(
+    chatsDir: string,
+    projectHash: string,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    // Named-class call, not `this`: pickers and the test kit may extract and
+    // invoke this static unbound, so it must not depend on the receiver.
+    const detailed = await SessionDiscovery.listSessionsDetailed(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const unreadable: Array<UnreadableRecording | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
-    );
-    let nextIndex = 0;
-    const worker = async (): Promise<void> => {
-      while (nextIndex < detailed.sessions.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const summary = detailed.sessions[index];
-        const replay = await replaySession(summary.filePath, projectHash, {
-          mediaStore,
-        });
-        if (!replay.ok || replay.sequenceCorrupt) {
-          const reason = replay.ok ? 'non-monotonic sequences' : replay.error;
-          debugLogger.debug(
-            `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
-          );
-          unreadable[index] = {
-            sessionId: summary.sessionId,
-            filePath: summary.filePath,
-            reason,
-          };
-          continue;
-        }
-        const namedSummary = { ...summary, name: replay.sessionName };
-        sessionTargets[index] = { kind: 'session', session: namedSummary };
-        checkpointTargets[index] = (replay.checkpoints ?? [])
-          .filter((checkpoint) => !checkpoint.deleted)
-          .map((checkpoint) => ({
-            kind: 'checkpoint',
-            source: namedSummary,
-            checkpointId: checkpoint.checkpointId,
-            checkpointName: checkpoint.name,
-            sequence: checkpoint.sequence,
-          }));
-      }
-    };
-    const workerCount = Math.min(8, detailed.sessions.length);
-    await Promise.all(Array.from({ length: workerCount }, worker));
-    const unreadableRecordings = [
+    const targets: ContinueTarget[] = [];
+    const checkpoints: ContinueTarget[] = [];
+    const unreadable: UnreadableRecording[] = [
       ...detailed.unreadableRecordings,
-      ...unreadable.filter(
-        (recording): recording is UnreadableRecording => recording !== null,
-      ),
     ];
+    for (const summary of detailed.sessions) {
+      const scan = await scanSessionMetadata(
+        summary.filePath,
+        projectHash,
+        options.counters ?? null,
+      );
+      if (!scan.ok || scan.sequenceCorrupt) {
+        const reason = scan.ok ? 'non-monotonic sequences' : scan.error;
+        debugLogger.debug(
+          `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
+        );
+        unreadable.push({
+          sessionId: summary.sessionId,
+          filePath: summary.filePath,
+          reason,
+        });
+        continue;
+      }
+      const namedSummary = { ...summary, name: scan.sessionName };
+      targets.push({ kind: 'session', session: namedSummary });
+      for (const checkpoint of scan.checkpoints) {
+        if (checkpoint.deleted) continue;
+        checkpoints.push({
+          kind: 'checkpoint',
+          source: namedSummary,
+          checkpointId: checkpoint.checkpointId,
+          checkpointName: checkpoint.name,
+          sequence: checkpoint.sequence,
+        });
+      }
+    }
     return {
-      targets: [
-        ...sessionTargets.filter(
-          (target): target is ContinueTarget => target !== null,
-        ),
-        ...checkpointTargets.flat(),
-      ],
-      skippedCount: unreadableRecordings.length,
-      recordingErrors: unreadableRecordings.map(describeUnreadableRecording),
-      unreadableRecordings,
+      targets: [...targets, ...checkpoints],
+      skippedCount: unreadable.length,
+      recordingErrors: unreadable.map(describeUnreadableRecording),
+      unreadableRecordings: unreadable,
     };
   }
 
@@ -395,6 +420,7 @@ export class SessionDiscovery {
   static async listSessionsDetailed(
     chatsDir: string,
     projectHash: string,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<{
     sessions: SessionSummary[];
     skippedCount: number;
@@ -403,6 +429,7 @@ export class SessionDiscovery {
     const { sessions, unreadableRecordings } = await scanSessions(
       chatsDir,
       projectHash,
+      options,
     );
     return {
       sessions,
@@ -419,10 +446,22 @@ export class SessionDiscovery {
    * Check if a session file contains any content events (user or assistant messages).
    * Returns false for non-existent files, empty files, or files with only session_start.
    */
-  static async hasContentEvents(filePath: string): Promise<boolean> {
+  static async hasContentEvents(
+    filePath: string,
+    counters?: JournalReadCounters,
+  ): Promise<boolean> {
     try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      return fileContent.split('\n').some((line) => isContentEventLine(line));
+      for await (const line of readMetadataJsonLines(filePath)) {
+        if (line.parsed === null) continue;
+        counters?.recordDecoded();
+        if (
+          typeof line.parsed === 'object' &&
+          'type' in line.parsed &&
+          line.parsed.type === 'content'
+        )
+          return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -440,20 +479,9 @@ export class SessionDiscovery {
   static async readFirstUserMessage(
     filePath: string,
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
+    options: FirstUserMessageScanOptions = {},
   ): Promise<string | null> {
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      for (const line of lines) {
-        const text = extractUserMessageText(line);
-        if (text !== null) {
-          return text.length > maxLength ? text.slice(0, maxLength) : text;
-        }
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    return scanFirstUserMessage(filePath, maxLength, options);
   }
 
   /**
@@ -503,6 +531,7 @@ export class SessionDiscovery {
 async function scanSessions(
   chatsDir: string,
   projectHash: string,
+  options: BoundedDiscoveryOptions = {},
 ): Promise<SessionScan> {
   let entries: string[];
   try {
@@ -521,10 +550,19 @@ async function scanSessions(
   );
   for (const fileName of sessionFiles) {
     const filePath = path.join(chatsDir, fileName);
-    const result = await readSessionSummary(filePath);
+    const result = await readSessionSummary(filePath, options.counters);
     if (!result.ok) {
       unreadableRecordings.push(result.unreadable);
-    } else if (result.summary.projectHash === projectHash) {
+      continue;
+    }
+    // Subagent child journals are never resumable sessions: the filter runs
+    // BEFORE the sort/index so `--continue` latest resolution and every
+    // downstream picker index only main sessions (#854 P05c). Children are
+    // healthy files, not corruption, so they are not reported as unreadable.
+    if (
+      result.summary.projectHash === projectHash &&
+      result.summary.kind !== 'subagent'
+    ) {
       sessions.push(result.summary);
     }
   }
@@ -534,6 +572,7 @@ async function scanSessions(
 
 async function readSessionSummary(
   filePath: string,
+  counters?: JournalReadCounters,
 ): Promise<
   | { ok: true; summary: SessionSummary }
   | { ok: false; unreadable: UnreadableRecording }
@@ -551,7 +590,7 @@ async function readSessionSummary(
     };
   }
 
-  const first = await readSessionStartLine(filePath);
+  const first = await readSessionStartLine(filePath, counters);
   if (!first.ok) {
     return { ok: false, unreadable: { filePath, reason: first.reason } };
   }
@@ -581,65 +620,12 @@ async function readSessionSummary(
       fileSize: stat.size,
       provider: header.provider,
       model: header.model,
+      // Legacy headers predate the lineage marker and read as `main`.
+      kind: header.kind === 'subagent' ? 'subagent' : 'main',
       ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
       createdAt: header.startTime,
     },
   };
-}
-
-function isContentEventLine(line: string): boolean {
-  if (!line.trim()) {
-    return false;
-  }
-  try {
-    const event = JSON.parse(line) as Record<string, unknown>;
-    return event.type === 'content';
-  } catch {
-    return false;
-  }
-}
-
-function extractUserMessageText(line: string): string | null {
-  if (!line.trim()) {
-    return null;
-  }
-  let event: Record<string, unknown>;
-  try {
-    event = JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  if (event.type !== 'content') {
-    return null;
-  }
-
-  const payload = event.payload as Record<string, unknown> | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const contentObj = payload.content as Record<string, unknown> | undefined;
-  if (!contentObj || typeof contentObj !== 'object') {
-    return null;
-  }
-
-  if (contentObj.speaker !== 'human') {
-    return null;
-  }
-
-  const blocks = contentObj.blocks as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (!Array.isArray(blocks)) {
-    return null;
-  }
-
-  const text = blocks
-    .filter((block) => block.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text as string)
-    .join('');
-
-  return text || null;
 }
 
 /**

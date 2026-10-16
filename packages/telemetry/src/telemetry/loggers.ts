@@ -1,4 +1,3 @@
-import type { RootTelemetry } from './root-telemetry.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -6,7 +5,8 @@ import type { RootTelemetry } from './root-telemetry.js';
  */
 
 import type { Attributes } from '@opentelemetry/api';
-import { type LogRecord, type LogAttributes } from '@opentelemetry/api-logs';
+import type { LogRecord, LogAttributes } from '@opentelemetry/api-logs';
+import type { RootTelemetry } from './root-telemetry.js';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import type {
   TelemetryConfig,
@@ -58,7 +58,11 @@ import type {
   ExtensionEnableEvent,
   ExtensionDisableEvent,
 } from './types.js';
-import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
+import type { UiEvent } from './uiTelemetry.js';
+import { artifactAttributes, emitRequestArtifact } from './request-artifact.js';
+import { logTelemetryEvent, recordTelemetryEvent } from './telemetry-event.js';
+import { aggregateLocally, recordEmitter } from './log-record-emission.js';
+export { acknowledgeTerminalTelemetry } from './log-record-emission.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { getPerfPhaseObserver } from '../perf/perfPhaseObserver.js';
@@ -67,32 +71,6 @@ type Config = TelemetryConfig;
 type SessionConfig = Pick<TelemetryConfig, 'getSessionId'>;
 type ToolLoggingConfig = SessionConfig & TelemetryPromptConfig;
 
-/**
- * Fail-open wrapper for local aggregation. Errors in the telemetry
- * service must never break the calling stream/tool/api path.
- */
-function aggregateLocally(event: UiEvent): void {
-  try {
-    uiTelemetryService.addEvent(event);
-  } catch (err) {
-    try {
-      debugLogger.error(
-        `[TELEMETRY] Local aggregation failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    } catch {
-      // Secondary logger failure must not escape the fail-open wrapper
-    }
-  }
-}
-
-/**
- * Fail-open wrapper for SDK export. Errors in the export pipeline must
- * never break the calling stream/tool/api path.
- */
-/**
- * Fail-open wrapper for SDK metric recording. Errors in metric instruments
- * must never break the calling stream/tool/api/file/routing path.
- */
 function getCommonAttributes(config: SessionConfig): Attributes {
   return { 'session.id': config.getSessionId() };
 }
@@ -191,7 +169,7 @@ export function logToolCall(
     'event.name': EVENT_TOOL_CALL,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry, uiEvent);
 
   if (!telemetry.isEnabled()) {
     if (process.env.VERBOSE === 'true') {
@@ -354,20 +332,34 @@ export function logApiRequest(
   config: SessionConfig,
   event: ApiRequestEvent,
   telemetry: RootTelemetry,
-): void {
+  signal?: AbortSignal,
+  acknowledged = false,
+): void | Promise<void> {
+  if (acknowledged) telemetry.assertRequestArtifactExporter();
   if (!telemetry.isEnabled()) return;
 
-  // Strip the body before spreading: every other field stays exported as
-  // before; only request_text is gated behind the explicit opt-in.
-  const { request_text, ...eventWithoutBody } = event;
+  // Strip bodies and local paths before export; both opt-ins govern API content.
+  const { request_text, request_artifact, request_chars, ...eventWithoutBody } =
+    event;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...eventWithoutBody,
     'event.name': EVENT_API_REQUEST,
     'event.timestamp': new Date().toISOString(),
-    request_chars: request_text?.length ?? 0,
+    request_chars:
+      request_artifact?.content_chars ??
+      request_chars ??
+      request_text?.length ??
+      0,
   };
 
+  if (isApiBodyExportAllowed(telemetry) && request_artifact !== undefined) {
+    Object.assign(attributes, artifactAttributes(request_artifact));
+    const emit = recordEmitter(telemetry, signal, acknowledged);
+    return emit({ body: `API request to ${event.model}.`, attributes }).then(
+      () => emitRequestArtifact(request_artifact, attributes, emit, signal),
+    );
+  }
   if (isApiBodyExportAllowed(telemetry) && request_text !== undefined) {
     attributes.request_text = truncateBody(
       request_text,
@@ -379,6 +371,7 @@ export function logApiRequest(
     body: `API request to ${event.model}.`,
     attributes,
   };
+  if (acknowledged) return telemetry.publishAcknowledged(logRecord, signal);
   telemetry.events.record(() => logRecord);
 }
 
@@ -393,7 +386,7 @@ export function logApiError(
     'event.name': EVENT_API_ERROR,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry, uiEvent);
 
   if (!telemetry.isEnabled()) return;
 
@@ -438,7 +431,7 @@ export function logApiResponse(
     'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry, uiEvent);
 
   if (!telemetry.isEnabled()) return;
 
@@ -602,53 +595,43 @@ export function logSlashCommand(
   telemetry.events.record(() => logRecord);
 }
 
-// Generic function to log telemetry events to the configured system
-function logTelemetryEvent(
+export function logConversationRequest(
   config: Config,
-  event:
-    | ConversationRequestEvent
-    | ConversationResponseEvent
-    | ProviderSwitchEvent
-    | ProviderCapabilityEvent,
+  event: ConversationRequestEvent,
   telemetry: RootTelemetry,
-): void {
-  if (!telemetry.isEnabled()) return;
-  telemetry.events.record(() => {
-    const attributes: LogAttributes = { ...getCommonAttributes(config) };
-    for (const [key, value] of Object.entries(event)) {
-      if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      )
-        attributes[key] = value;
-      else if (value !== undefined) attributes[key] = safeJsonStringify(value);
-    }
-    return { body: `Telemetry event: ${event['event.name']}`, attributes };
+  signal?: AbortSignal,
+  acknowledged = false,
+): void | Promise<void> {
+  if (!isConversationExportAllowed(telemetry)) return;
+  if (acknowledged) telemetry.assertRequestArtifactExporter();
+  return logTelemetryEvent(config, event, telemetry, {
+    artifact: event.request_artifact,
+    signal,
+    acknowledged,
   });
 }
 
-export function logConversationRequest(
+export function logConversationResponse(
   config: Config,
-  event: ConversationRequestEvent | ConversationResponseEvent,
+  event: ConversationResponseEvent,
   telemetry: RootTelemetry,
 ): void {
-  if (!telemetry.isEnabled()) return;
-  const privacy = telemetry.readPrivacySettings();
-  if (privacy.logConversations && privacy.logPrompts)
-    logTelemetryEvent(config, event, telemetry);
+  if (!isConversationExportAllowed(telemetry)) return;
+  recordTelemetryEvent(config, event, telemetry);
 }
 
-export const logConversationResponse = logConversationRequest;
+function isConversationExportAllowed(telemetry: RootTelemetry): boolean {
+  const privacy = telemetry.readPrivacySettings();
+  return privacy.logConversations && privacy.logPrompts;
+}
 
 export function logProviderSwitch(
   config: Config,
   event: ProviderSwitchEvent | ProviderCapabilityEvent,
   telemetry: RootTelemetry,
 ): void {
-  if (!telemetry.isEnabled()) return;
   if (telemetry.readPrivacySettings().logConversations)
-    logTelemetryEvent(config, event, telemetry);
+    recordTelemetryEvent(config, event, telemetry);
 }
 
 export const logProviderCapability = logProviderSwitch;

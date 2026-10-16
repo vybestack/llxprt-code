@@ -15,7 +15,14 @@ import { hasHeaderName } from './AnthropicProviderInternals.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
 import type { DumpMode } from '../utils/dumpContext.js';
-import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
+import {
+  withBoundedJsonHttpBody,
+  type BoundedJsonHttpBody,
+} from '../utils/boundedJsonBody.js';
+import {
+  withSpooledJsonHttpBody,
+  type WireBodySpool,
+} from '../utils/wire-body-spool.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -25,6 +32,7 @@ import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -133,6 +141,37 @@ export function buildAnthropicCustomHeaders(params: {
   return customHeaders;
 }
 
+export type AnthropicApiCall = () => Promise<{
+  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
+  response: Response | undefined;
+}>;
+
+/** Posts one attempt of the Messages body with an exact Content-Length. */
+function postMessages(
+  client: Anthropic,
+  body: BoundedJsonHttpBody,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal: AbortSignal | undefined,
+) {
+  const headers = {
+    ...customHeaders,
+    'content-type': 'application/json',
+    'content-length': String(body.byteLength),
+  };
+  return client
+    .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
+      '/v1/messages',
+      {
+        body: body.stream,
+        headers,
+        stream: streaming,
+        ...(signal === undefined ? {} : { signal }),
+      },
+    )
+    .withResponse();
+}
+
 /**
  * Create API call closure with response headers
  */
@@ -141,29 +180,35 @@ export function createAnthropicApiCall(
   requestBody: Record<string, unknown>,
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
-): () => Promise<{
-  data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-  response: Response | undefined;
-}> {
+): AnthropicApiCall {
   return async () =>
-    withBoundedJsonHttpBody(requestBody, async (body) => {
-      const headers = {
-        ...customHeaders,
-        'content-type': 'application/json',
-        'content-length': String(body.byteLength),
-      };
-      return client
-        .post<Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>>(
-          '/v1/messages',
-          {
-            body: body.stream,
-            headers,
-            stream: requestBody['stream'] === true,
-            ...(signal === undefined ? {} : { signal }),
-          },
-        )
-        .withResponse();
-    });
+    withBoundedJsonHttpBody(requestBody, (body) =>
+      postMessages(
+        client,
+        body,
+        requestBody['stream'] === true,
+        customHeaders,
+        signal,
+      ),
+    );
+}
+
+/**
+ * Create the API call closure for a sealed spool. Every call streams a fresh
+ * read of the file and declares its sealed size as the Content-Length; the
+ * spool's owner disposes it.
+ */
+export function createSpooledAnthropicApiCall(
+  client: Anthropic,
+  spool: WireBodySpool,
+  streaming: boolean,
+  customHeaders: Record<string, string>,
+  signal?: AbortSignal,
+): AnthropicApiCall {
+  return async () =>
+    withSpooledJsonHttpBody(spool, (body) =>
+      postMessages(client, body, streaming, customHeaders, signal),
+    );
 }
 
 /**
@@ -176,7 +221,8 @@ export interface ApiExecutionParams {
   }>;
   dumpMode: DumpMode | undefined;
   baseURL: string;
-  requestBody: Record<string, unknown>;
+  /** What the request dump records: the body, or a body streamed from files. */
+  requestBody: Record<string, unknown> | StreamedDumpBody;
   streamingEnabled: boolean;
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };

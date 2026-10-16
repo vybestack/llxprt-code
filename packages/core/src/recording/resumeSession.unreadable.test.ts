@@ -23,6 +23,7 @@ import {
   writeLegacyUnknownProviderSession,
   writeUnsupportedVersionSession,
 } from './__tests__/recording-file-fixtures.js';
+import { collectBootRows } from './resumeSession.test.helpers.js';
 
 const PROJECT_HASH = 'resume-unreadable-project';
 
@@ -108,7 +109,7 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
       sessionId: result.metadata.sessionId,
       provider: result.metadata.provider,
       model: result.metadata.model,
-      historyLength: result.history.length,
+      historyLength: (await collectBootRows(result.boot.streamRows())).length,
     }).toStrictEqual({
       sessionId: 'legacy-explicit-0001',
       provider: 'claudecode',

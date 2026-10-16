@@ -1,4 +1,7 @@
-import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
+import {
+  captureResponsesTestRequest,
+  executeResponsesTestRequest,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,10 +45,9 @@ import type {
   WebSocketTransport,
 } from '../openAIResponsesWebSocketTransport.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import {
   CODEX_BASE_URL,
   TEST_RUNTIME_ID,
@@ -74,461 +76,27 @@ function isCompletionContent(content: IContent): boolean {
   return content.metadata !== undefined && content.blocks.length === 0;
 }
 
-describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134', () => {
-  describe('Fix 3 — compression/density strips responsesStored', () => {
-    it('invalidateResponsesStatefulChain strips responsesStored from AI entries', async () => {
-      const { invalidateResponsesStatefulChain } = await import(
-        '@vybestack/llxprt-code-core/services/history/IContent.js'
-      );
-      const history: IContent[] = [
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'a1' }],
-          metadata: { id: 'resp_1', responsesStored: true },
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'h1' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'a2' }],
-          metadata: { id: 'resp_2', responsesStored: true },
-        },
-      ];
-      const result = invalidateResponsesStatefulChain(history);
-      expect(result[0].metadata?.responsesStored).toBeUndefined();
-      expect(result[0].metadata?.id).toBe('resp_1');
-      expect(result[1].metadata?.responsesStored).toBeUndefined();
-      expect(result[2].metadata?.responsesStored).toBeUndefined();
-      expect(result[2].metadata?.id).toBe('resp_2');
-    });
+registerCodexRemediationCase1();
+registerCodexRemediationCase2();
+registerCodexRemediationCase3();
+registerCodexRemediationCase4();
+registerCodexRemediationCase5();
+registerCodexRemediationCase6();
+registerCodexRemediationCase7();
+registerCodexRemediationCase8();
+registerCodexRemediationCase9();
 
-    it('a compressed history (responsesStored stripped) sends full history with no parent', async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        // Simulate a post-compression history where responsesStored was stripped.
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'old q' }] },
-          {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: '<state_snapshot>summary</state_snapshot>',
-              },
-            ],
-            metadata: { id: 'resp_old', isSummary: true },
-          },
-          { speaker: 'human', blocks: [{ type: 'text', text: 'new q' }] },
-        ];
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        expect(sent['previous_response_id']).toBeUndefined();
-        expect(sent['store']).toBe(false);
-        const users = userTextsOf(sent['input']);
-        expect(users).toContain('new q');
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Fix 4 — full history AND previous_response_id cannot be sent together', () => {
-    it('a user-supplied previous_response_id is cleared on the non-stateful path', async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        // No stored parent → non-stateful path. User set previous_response_id
-        // via /set modelparam.
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'a1' }],
-            metadata: { id: 'resp_1' },
-          },
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
-        ];
-        const ephemerals: Record<string, unknown> = {
-          previous_response_id: 'resp_user_supplied',
-        };
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents, ephemerals),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        // No stored parent → no previous_response_id should be sent, even
-        // though the user supplied one.
-        expect(sent['previous_response_id']).toBeUndefined();
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Fix 7 — empty-remainder still marks the turn chainable', () => {
-    it('a parent with no following content still yields a chainable turn', async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        // Parent is the LAST entry — trimmed content is empty.
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'a1' }],
-            metadata: {
-              id: 'resp_last',
-              responsesStored: true,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-        ];
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        // store must be true (enabled: true) even though there is no parent id
-        // and full history is sent.
-        expect(sent['store']).toBe(false);
-        expect(sent['previous_response_id']).toBeUndefined();
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Fix 8 — responses-stateful normalization', () => {
-    it("responses-stateful: 'false' string opts Codex out", async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'a1' }],
-            metadata: {
-              id: 'resp_1',
-              responsesStored: true,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
-        ];
-        const ephemerals: Record<string, unknown> = {
-          'responses-stateful': 'false',
-        };
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents, ephemerals),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        expect(sent['previous_response_id']).toBeUndefined();
-        expect(sent['store']).toBe(false);
-        const users = userTextsOf(sent['input']);
-        expect(users).toContain('q1');
-      } finally {
-        transport.close();
-      }
-    });
-
-    it("responses-stateful: 'true' string keeps statefulness on", async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'a1' }],
-            metadata: {
-              id: 'resp_1',
-              responsesStored: true,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
-        ];
-        const ephemerals: Record<string, unknown> = {
-          'responses-stateful': 'true',
-        };
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents, ephemerals),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        expect(sent['previous_response_id']).toBe('resp_1');
-        expect(sent['store']).toBe(false);
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Negative case — statefulness disabled yields responsesStored === false', () => {
-    it('store=false produces responsesStored === false on completion metadata', async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-        ];
-        const messages = await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents, { 'responses-stateful': false }),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-        const meta = metadataOf(messages);
-        expect(meta).toBeDefined();
-        expect(meta!.responsesStored).not.toBe(true);
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Tool-call integrity under trimming', () => {
-    it('a function_call_output whose function_call was trimmed away survives', async () => {
-      const harness = new SocketHarness([completingScript('ok')]);
-      const transport = createCodexResponsesWebSocketTransport({
-        openSocket: harness.openSocket,
-      });
-      try {
-        // The function_call lives in the parent turn (trimmed away), but the
-        // function_call_output is in the post-parent turn. With
-        // serverSideParentActive the orphan guard is suppressed.
-        const contents: IContent[] = [
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-          {
-            speaker: 'ai',
-            blocks: [
-              { type: 'text', text: 'a1' },
-              {
-                type: 'tool_call',
-                id: 'call_trimmed',
-                name: 'read_file',
-                parameters: { absolute_path: '/tmp' },
-              },
-            ],
-            metadata: {
-              id: 'resp_parent',
-              responsesStored: true,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-          {
-            speaker: 'tool',
-            blocks: [
-              {
-                type: 'tool_response',
-                callId: 'call_trimmed',
-                toolName: 'read_file',
-                result: 'file contents',
-              },
-            ],
-          },
-          { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
-        ];
-        await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(contents),
-              buildDeps({ getWebSocketTransport: () => transport }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport }),
-          ),
-        );
-
-        const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
-          string,
-          unknown
-        >;
-        expect(sent['previous_response_id']).toBe('resp_parent');
-        const input = sent['input'] as Array<{
-          type?: string;
-          call_id?: string;
-        }>;
-        const hasToolOutput = input.some(isTrimmedToolOutput);
-        expect(hasToolOutput).toBe(true);
-        // The function_call itself should NOT be in the trimmed input.
-        const hasToolCall = input.some(isTrimmedToolCall);
-        expect(hasToolCall).toBe(false);
-      } finally {
-        transport.close();
-      }
-    });
-  });
-
-  describe('Turn-1 → Turn-2 round trip (real SSE metadata)', () => {
-    /**
-     * The most important test: drives turn 1 through a REAL SSE byte stream
-     * (completingScript harness), COLLECTS the yielded IContents, feeds them
-     * verbatim as turn 2's history, and asserts turn 2 carries
-     * previous_response_id equal to the id turn 1 actually emitted — and that
-     * turn 1's user text is absent from turn 2's input.
-     */
-    it('chains turn 2 off turn 1’s actual completion id', async () => {
-      // Use a real WebSocket transport with the fake-socket harness so the
-      // completion metadata is derived from a real SSE stream through
-      // parseResponsesStream.
-      const harness1 = new SocketHarness([completingScript('turn 1 answer')]);
-      const transport1 = createCodexResponsesWebSocketTransport({
-        openSocket: harness1.openSocket,
-      });
-
-      try {
-        // Turn 1: no parent.
-        const turn1Contents: IContent[] = [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'turn 1 question' }],
-          },
-        ];
-        const turn1Output = await drainHarness(
-          executeOpenAIResponsesRequest(
-            captureResponsesTestRequest(
-              buildOptions(turn1Contents),
-              buildDeps({ getWebSocketTransport: () => transport1 }),
-            ),
-            buildDeps({ getWebSocketTransport: () => transport1 }),
-          ),
-        );
-
-        // Find the completion metadata IContent (blocks: [], has metadata.id).
-        const completion = turn1Output.find(isCompletionContent);
-        expect(completion).toBeDefined();
-        const completionId = completion!.metadata!.id;
-        expect(completionId).toBe('response');
-        expect(completion!.metadata!.responsesStored).toBe(true);
-
-        // Turn 2: feed turn 1's output verbatim as history.
-        // The AI text IContent does NOT carry metadata (it's a delta), so we
-        // need to use the completion IContent as the parent. Build the history
-        // the way ConversationManager would: human + AI text + completion meta.
-        // We simulate by taking the text from turn1Output and the metadata
-        // from the completion.
-        const aiText = turn1Output
-          .flatMap((c) => c.blocks)
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { text: string }).text)
-          .join('');
-        const turn2Contents: IContent[] = [
-          ...turn1Contents,
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: aiText }],
-            metadata: {
-              ...completion!.metadata,
-              providerBaseURL: CODEX_BASE_URL,
-            },
-          },
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'turn 2 question' }],
-          },
-        ];
-
-        const harness2 = new SocketHarness([completingScript('turn 2 answer')]);
-        const transport2 = createCodexResponsesWebSocketTransport({
-          openSocket: harness2.openSocket,
-        });
-        try {
-          await drainHarness(
-            executeOpenAIResponsesRequest(
-              captureResponsesTestRequest(
-                buildOptions(turn2Contents),
-                buildDeps({ getWebSocketTransport: () => transport2 }),
-              ),
-              buildDeps({ getWebSocketTransport: () => transport2 }),
-            ),
-          );
-
-          const sent = JSON.parse(harness2.sockets[0].sent[0]) as Record<
-            string,
-            unknown
-          >;
-          expect(sent['previous_response_id']).toBe(completionId);
-          expect(sent['store']).toBe(false);
-          const users = userTextsOf(sent['input']);
-          expect(users).not.toContain('turn 1 question');
-          expect(users).toContain('turn 2 question');
-        } finally {
-          transport2.close();
-        }
-      } finally {
-        transport1.close();
-      }
-    });
-  });
-});
+async function sentRequestOf(
+  request: OpenAIResponsesRequest,
+  options: StreamResponseOptions,
+): Promise<OpenAIResponsesRequest> {
+  if (options.requestFrameBytes === undefined) return structuredClone(request);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of options.requestFrameBytes()) chunks.push(chunk);
+  return JSON.parse(
+    new TextDecoder().decode(Buffer.concat(chunks)),
+  ) as OpenAIResponsesRequest;
+}
 
 /**
  * Wrapper to satisfy the RecordingTransport pattern used by the existing test
@@ -543,7 +111,9 @@ class RecordingTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    this.sentRequests.push(request);
+    // A disk-backed request carries its content as frame bytes; record what
+    // the socket would send.
+    this.sentRequests.push(await sentRequestOf(request, options));
     this.lastOptions = options;
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     yield {
@@ -580,55 +150,569 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
   }
 }
 
-describe('OpenAIResponsesProvider Codex stateful provider-level remediation @issue:3134', () => {
-  it('responses-stateful: false as the Codex opt-out sends full history with store=false', async () => {
-    const provider = new TestableCodexProvider(buildCodexOAuthManager());
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+registerCodexRemediationCase10();
 
-    const contents: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
-      {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'a1' }],
-        metadata: {
-          id: 'resp_1',
-          responsesStored: true,
-          providerBaseURL: CODEX_BASE_URL,
-        },
-      },
-      { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
-    ];
-
-    const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      runtimeId: TEST_RUNTIME_ID,
-      config: createRuntimeConfigStub(settings),
+function registerCodexRemediationCase1(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [1]', () => {
+    describe('Fix 3 — compression/density strips responsesStored', () => {
+      it('invalidateResponsesStatefulChain strips responsesStored from AI entries', async () => {
+        const { invalidateResponsesStatefulChain } = await import(
+          '@vybestack/llxprt-code-core/services/history/IContent.js'
+        );
+        const history: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'a1' }],
+            metadata: { id: 'resp_1', responsesStored: true },
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'h1' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'a2' }],
+            metadata: { id: 'resp_2', responsesStored: true },
+          },
+        ];
+        const result = invalidateResponsesStatefulChain(history);
+        expect(result[0].metadata?.responsesStored).toBeUndefined();
+        expect(result[0].metadata?.id).toBe('resp_1');
+        expect(result[1].metadata?.responsesStored).toBeUndefined();
+        expect(result[2].metadata?.responsesStored).toBeUndefined();
+        expect(result[2].metadata?.id).toBe('resp_2');
+      });
     });
-    const invocation = createRuntimeInvocationContext({
-      runtimeId: runtime.runtimeId,
-      runtimeMetadata: runtime.metadata,
-
-      providerName: provider.name,
-      ephemeralsSnapshot: { 'responses-stateful': false },
-    });
-    const options = createProviderCallOptions({
-      providerName: provider.name,
-      settings,
-      config: createRuntimeConfigStub(settings),
-      runtime,
-      invocation,
-      contents,
-      ephemerals: { 'responses-stateful': false },
-    });
-
-    for await (const _c of provider.generateChatCompletion(options)) {
-      // drain
-    }
-
-    const sent = provider.recordingTransport
-      .sentRequests[0] as unknown as Record<string, unknown>;
-    expect(sent['previous_response_id']).toBeUndefined();
-    expect(sent['store']).toBe(false);
   });
-});
+}
+
+function registerCodexRemediationCase2(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [2]', () => {
+    describe('Fix 3 — compression/density strips responsesStored', () => {
+      it('a compressed history (responsesStored stripped) sends full history with no parent', async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          // Simulate a post-compression history where responsesStored was stripped.
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'old q' }] },
+            {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: '<state_snapshot>summary</state_snapshot>',
+                },
+              ],
+              metadata: { id: 'resp_old', isSummary: true },
+            },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'new q' }] },
+          ];
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          expect(sent['previous_response_id']).toBeUndefined();
+          expect(sent['store']).toBe(false);
+          const users = userTextsOf(sent['input']);
+          expect(users).toContain('new q');
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase3(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [3]', () => {
+    describe('Fix 4 — full history AND previous_response_id cannot be sent together', () => {
+      it('a user-supplied previous_response_id is cleared on the non-stateful path', async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          // No stored parent → non-stateful path. User set previous_response_id
+          // via /set modelparam.
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'a1' }],
+              metadata: { id: 'resp_1' },
+            },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+          ];
+          const ephemerals: Record<string, unknown> = {
+            previous_response_id: 'resp_user_supplied',
+          };
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          // No stored parent → no previous_response_id should be sent, even
+          // though the user supplied one.
+          expect(sent['previous_response_id']).toBeUndefined();
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase4(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [4]', () => {
+    describe('Fix 7 — empty-remainder still marks the turn chainable', () => {
+      it('a parent with no following content still yields a chainable turn', async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          // Parent is the LAST entry — trimmed content is empty.
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'a1' }],
+              metadata: {
+                id: 'resp_last',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+          ];
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          // store must be true (enabled: true) even though there is no parent id
+          // and full history is sent.
+          expect(sent['store']).toBe(false);
+          expect(sent['previous_response_id']).toBeUndefined();
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase5(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [5]', () => {
+    describe('Fix 8 — responses-stateful normalization', () => {
+      it("responses-stateful: 'false' string opts Codex out", async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'a1' }],
+              metadata: {
+                id: 'resp_1',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+          ];
+          const ephemerals: Record<string, unknown> = {
+            'responses-stateful': 'false',
+          };
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          expect(sent['previous_response_id']).toBeUndefined();
+          expect(sent['store']).toBe(false);
+          const users = userTextsOf(sent['input']);
+          expect(users).toContain('q1');
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase6(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [6]', () => {
+    describe('Fix 8 — responses-stateful normalization', () => {
+      it("responses-stateful: 'true' string keeps statefulness on", async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'a1' }],
+              metadata: {
+                id: 'resp_1',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+          ];
+          const ephemerals: Record<string, unknown> = {
+            'responses-stateful': 'true',
+          };
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          expect(sent['previous_response_id']).toBe('resp_1');
+          expect(sent['store']).toBe(false);
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase7(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [7]', () => {
+    describe('Negative case — statefulness disabled yields responsesStored === false', () => {
+      it('store=false produces responsesStored === false on completion metadata', async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+          ];
+          const messages = await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents, { 'responses-stateful': false }),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+          const meta = metadataOf(messages);
+          expect(meta).toBeDefined();
+          expect(meta!.responsesStored).not.toBe(true);
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase8(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [8]', () => {
+    describe('Tool-call integrity under trimming', () => {
+      it('a function_call_output whose function_call was trimmed away survives', async () => {
+        const harness = new SocketHarness([completingScript('ok')]);
+        const transport = createCodexResponsesWebSocketTransport({
+          openSocket: harness.openSocket,
+        });
+        try {
+          // The function_call lives in the parent turn (trimmed away), but the
+          // function_call_output is in the post-parent turn. With
+          // serverSideParentActive the orphan guard is suppressed.
+          const contents: IContent[] = [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+            {
+              speaker: 'ai',
+              blocks: [
+                { type: 'text', text: 'a1' },
+                {
+                  type: 'tool_call',
+                  id: 'call_trimmed',
+                  name: 'read_file',
+                  parameters: { absolute_path: '/tmp' },
+                },
+              ],
+              metadata: {
+                id: 'resp_parent',
+                responsesStored: true,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            {
+              speaker: 'tool',
+              blocks: [
+                {
+                  type: 'tool_response',
+                  callId: 'call_trimmed',
+                  toolName: 'read_file',
+                  result: 'file contents',
+                },
+              ],
+            },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+          ];
+          await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
+          );
+
+          const sent = JSON.parse(harness.sockets[0].sent[0]) as Record<
+            string,
+            unknown
+          >;
+          expect(sent['previous_response_id']).toBe('resp_parent');
+          const input = sent['input'] as Array<{
+            type?: string;
+            call_id?: string;
+          }>;
+          const hasToolOutput = input.some(isTrimmedToolOutput);
+          expect(hasToolOutput).toBe(true);
+          // The function_call itself should NOT be in the trimmed input.
+          const hasToolCall = input.some(isTrimmedToolCall);
+          expect(hasToolCall).toBe(false);
+        } finally {
+          transport.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase9(): void {
+  describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request invariants and end-to-end chaining @issue:3134 [9]', () => {
+    describe('Turn-1 → Turn-2 round trip (real SSE metadata)', () => {
+      /**
+       * The most important test: drives turn 1 through a REAL SSE byte stream
+       * (completingScript harness), COLLECTS the yielded IContents, feeds them
+       * verbatim as turn 2's history, and asserts turn 2 carries
+       * previous_response_id equal to the id turn 1 actually emitted — and that
+       * turn 1's user text is absent from turn 2's input.
+       */
+      it('chains turn 2 off turn 1’s actual completion id', async () => {
+        // Use a real WebSocket transport with the fake-socket harness so the
+        // completion metadata is derived from a real SSE stream through
+        // parseResponsesStream.
+        const harness1 = new SocketHarness([completingScript('turn 1 answer')]);
+        const transport1 = createCodexResponsesWebSocketTransport({
+          openSocket: harness1.openSocket,
+        });
+
+        try {
+          // Turn 1: no parent.
+          const turn1Contents: IContent[] = [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'turn 1 question' }],
+            },
+          ];
+          const turn1Output = await drainHarness(
+            executeResponsesTestRequest(
+              captureResponsesTestRequest(
+                buildOptions(turn1Contents),
+                buildDeps({ getWebSocketTransport: () => transport1 }),
+              ),
+              buildDeps({ getWebSocketTransport: () => transport1 }),
+            ),
+          );
+
+          // Find the completion metadata IContent (blocks: [], has metadata.id).
+          const completion = turn1Output.find(isCompletionContent);
+          expect(completion).toBeDefined();
+          const completionId = completion!.metadata!.id;
+          expect(completionId).toBe('response');
+          expect(completion!.metadata!.responsesStored).toBe(true);
+
+          // Turn 2: feed turn 1's output verbatim as history.
+          // The AI text IContent does NOT carry metadata (it's a delta), so we
+          // need to use the completion IContent as the parent. Build the history
+          // the way ConversationManager would: human + AI text + completion meta.
+          // We simulate by taking the text from turn1Output and the metadata
+          // from the completion.
+          const aiText = turn1Output
+            .flatMap((c) => c.blocks)
+            .filter((b) => b.type === 'text')
+            .map((b) => (b as { text: string }).text)
+            .join('');
+          const turn2Contents: IContent[] = [
+            ...turn1Contents,
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: aiText }],
+              metadata: {
+                ...completion!.metadata,
+                providerBaseURL: CODEX_BASE_URL,
+              },
+            },
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'turn 2 question' }],
+            },
+          ];
+
+          const harness2 = new SocketHarness([
+            completingScript('turn 2 answer'),
+          ]);
+          const transport2 = createCodexResponsesWebSocketTransport({
+            openSocket: harness2.openSocket,
+          });
+          try {
+            await drainHarness(
+              executeResponsesTestRequest(
+                captureResponsesTestRequest(
+                  buildOptions(turn2Contents),
+                  buildDeps({ getWebSocketTransport: () => transport2 }),
+                ),
+                buildDeps({ getWebSocketTransport: () => transport2 }),
+              ),
+            );
+
+            const sent = JSON.parse(harness2.sockets[0].sent[0]) as Record<
+              string,
+              unknown
+            >;
+            expect(sent['previous_response_id']).toBe(completionId);
+            expect(sent['store']).toBe(false);
+            const users = userTextsOf(sent['input']);
+            expect(users).not.toContain('turn 1 question');
+            expect(users).toContain('turn 2 question');
+          } finally {
+            transport2.close();
+          }
+        } finally {
+          transport1.close();
+        }
+      });
+    });
+  });
+}
+
+function registerCodexRemediationCase10(): void {
+  describe('OpenAIResponsesProvider Codex stateful provider-level remediation @issue:3134 [10]', () => {
+    it('responses-stateful: false as the Codex opt-out sends full history with store=false', async () => {
+      const provider = new TestableCodexProvider(buildCodexOAuthManager());
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+      const contents: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'a1' }],
+          metadata: {
+            id: 'resp_1',
+            responsesStored: true,
+            providerBaseURL: CODEX_BASE_URL,
+          },
+        },
+        { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
+      ];
+
+      const runtime = createProviderRuntimeContext({
+        settingsService: settings,
+        runtimeId: TEST_RUNTIME_ID,
+        config: createRuntimeConfigStub(settings),
+      });
+      const invocation = createRuntimeInvocationContext({
+        runtimeId: runtime.runtimeId,
+        runtimeMetadata: runtime.metadata,
+
+        providerName: provider.name,
+        ephemeralsSnapshot: { 'responses-stateful': false },
+      });
+      let pulled = 0;
+      const source = (async function* (): AsyncIterableIterator<IContent> {
+        for (const row of contents) {
+          pulled += 1;
+          yield row;
+        }
+      })();
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        config: createRuntimeConfigStub(settings),
+        runtime,
+        invocation,
+        contents: source,
+        ephemerals: { 'responses-stateful': false },
+      });
+      const stream = provider.generateChatCompletion(options);
+      expect(pulled).toBe(0);
+
+      for await (const _c of stream) {
+        // drain
+      }
+
+      const sent = provider.recordingTransport
+        .sentRequests[0] as unknown as Record<string, unknown>;
+      expect(sent['previous_response_id']).toBeUndefined();
+      expect(sent['store']).toBe(false);
+      expect(JSON.stringify(sent['input'])).toContain('a1');
+      expect({ users: userTextsOf(sent['input']), pulled }).toStrictEqual({
+        users: ['q1', 'q2'],
+        pulled: contents.length,
+      });
+    });
+  });
+}

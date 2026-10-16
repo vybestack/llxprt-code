@@ -38,6 +38,12 @@ import {
   BeforeToolSelectionHookOutput,
 } from './types.js';
 import type { HookLLMRequest, HookLLMResponse } from './hookTranslator.js';
+import { MissingSnapshotHookCallbackError } from './hookSnapshotAggregator.js';
+import type {
+  HookModelSnapshotRequest,
+  AggregatedHookSnapshotResult,
+  HookModelSnapshotCallbacks,
+} from './hookSnapshotAggregator.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
 
@@ -54,7 +60,7 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
  * @requirement:HOOK-008 - First hook event fires initialize() before delegating to event handler
  * @requirement:HOOK-142 - Importable from packages/core/src/hooks/hookSystem.ts
  */
-export class HookSystem {
+export class HookSystem implements HookModelSnapshotCallbacks {
   private readonly session: HookSessionRuntime;
   private readonly registry: HookRegistry;
   private readonly planner: HookPlanner;
@@ -275,6 +281,38 @@ export class HookSystem {
    */
   getAllHooks(): HookRegistryEntry[] {
     return this.registry.getAllHooks();
+  }
+
+  async fireBeforeModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    signal?: AbortSignal,
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookSnapshotResult> {
+    if (this.fireBeforeModelEvent !== HookSystem.prototype.fireBeforeModelEvent)
+      throw new MissingSnapshotHookCallbackError(
+        'fireBeforeModelSnapshotEvent',
+      );
+    return this.getEventHandler().fireBeforeModelSnapshotEvent(
+      request,
+      signal,
+      owner,
+    );
+  }
+
+  async fireAfterModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    response: Omit<HookLLMResponse, 'version'>,
+    signal?: AbortSignal,
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookSnapshotResult> {
+    if (this.fireAfterModelEvent !== HookSystem.prototype.fireAfterModelEvent)
+      throw new MissingSnapshotHookCallbackError('fireAfterModelSnapshotEvent');
+    return this.getEventHandler().fireAfterModelSnapshotEvent(
+      request,
+      response,
+      signal,
+      owner,
+    );
   }
 
   // --- Convenience wrappers delegating to HookEventHandler ---
@@ -529,12 +567,16 @@ export class HookSystem {
     this.unsubscribeTrustPolicy();
     this.unsubscribeTrustTransition();
     const accepted = [...this.accepted];
-    this.closing = this.joinDisposal(accepted);
+    // The handler's lifetime must end synchronously: open final-output readers
+    // and their scratch are bound to it and may not outlive system disposal.
+    const handlerDisposal = Promise.allSettled([this.eventHandler?.dispose()]);
+    this.closing = this.joinDisposal(accepted, handlerDisposal);
     return this.closing;
   }
 
   private async joinDisposal(
     accepted: ReadonlyArray<Promise<unknown>>,
+    handlerDisposal: Promise<Array<PromiseSettledResult<void | undefined>>>,
   ): Promise<void> {
     const results = await Promise.allSettled([
       ...accepted,
@@ -542,7 +584,7 @@ export class HookSystem {
         ? []
         : [this.initializationPromise]),
     ]);
-    const handler = await Promise.allSettled([this.eventHandler?.dispose()]);
+    const handler = await handlerDisposal;
     this.eventHandler = null;
     const failures = [...results, ...handler].flatMap((result) =>
       result.status === 'rejected' &&

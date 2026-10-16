@@ -20,7 +20,7 @@ export interface DiagnosticSanitizationOptions {
   >;
 }
 
-interface MediaDiagnostic {
+export interface MediaDiagnostic {
   readonly contentId?: string;
   readonly byteCount?: number;
   readonly mimeType?: string;
@@ -227,7 +227,7 @@ function inlineDataMediaDiagnostic(
   );
 }
 
-function mediaDiagnostic(
+export function mediaDiagnostic(
   value: Readonly<Record<string, unknown>>,
   defaultMode: 'full' | 'delta',
 ): MediaDiagnostic | undefined {
@@ -247,7 +247,7 @@ const SENSITIVE_DIAGNOSTIC_SUFFIXES = [
   'token',
 ] as const;
 
-function shouldOmitKey(key: string): boolean {
+export function shouldOmitKey(key: string): boolean {
   const normalized = key.replace(/[-_\s]/g, '').toLowerCase();
   return (
     OMITTED_DIAGNOSTIC_KEYS.has(normalized) ||

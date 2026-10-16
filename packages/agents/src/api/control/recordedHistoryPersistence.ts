@@ -64,28 +64,19 @@ export class AgentSessionPersistence {
     this.journals.clear();
   }
 }
+import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-export function seedOwnerRecording(
-  recording: SessionRecordingService,
-  history: readonly IContent[],
-  historyService: HistoryService | null,
-  owner: object,
-): void {
-  for (const content of history) {
-    const origin = historyService?.getContentOrigin(content);
-    if (origin === undefined || origin === owner)
-      recording.recordContent(content);
-  }
-}
-
 export async function persistSemanticMediaPurge(
   recording: SessionRecordingService,
-  history: readonly IContent[],
+  candidate: SemanticPurgeRowSource,
   frontier: SemanticMediaPurgeFrontier,
 ): Promise<void> {
-  recording.recordSemanticMediaPurge(history, frontier);
+  await recording.recordSemanticMediaPurgeRows(
+    candidate.streamRows(),
+    frontier,
+    { requireLiveFold: true },
+  );
   await recording.flush();
   if (!recording.isActive()) {
     throw new Error('Semantic media purge recording did not remain active');

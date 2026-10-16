@@ -46,16 +46,25 @@ function restorePatterns(wire: unknown, source: unknown): unknown {
   };
 }
 
+type PatternFetch = NonNullable<GoogleGenerativeAIProviderSettings['fetch']>;
+
 export function createPatternPreservingFetch(
   tools: LanguageModelV4CallOptions['tools'],
-): NonNullable<GoogleGenerativeAIProviderSettings['fetch']> {
+  onRequestBytes?: (bytes: number) => void,
+): PatternFetch {
   const schemas = new Map(
     tools?.flatMap((tool) =>
       tool.type === 'function' ? [[tool.name, tool.inputSchema] as const] : [],
     ),
   );
-  return async (input, init): Promise<Response> => {
+  const patternFetch = async (
+    input: Parameters<PatternFetch>[0],
+    init?: Parameters<PatternFetch>[1],
+  ): Promise<Response> => {
     if (schemas.size === 0) {
+      if (typeof init?.body === 'string') {
+        onRequestBytes?.(Buffer.byteLength(init.body, 'utf8'));
+      }
       return globalThis.fetch(input, init);
     }
     if (typeof init?.body !== 'string') {
@@ -89,9 +98,19 @@ export function createPatternPreservingFetch(
         }),
       };
     });
-    return globalThis.fetch(input, {
-      ...init,
-      body: JSON.stringify({ ...body, tools: projected }),
-    });
+    const projectedBody = JSON.stringify({ ...body, tools: projected });
+    onRequestBytes?.(Buffer.byteLength(projectedBody, 'utf8'));
+    return globalThis.fetch(input, { ...init, body: projectedBody });
   };
+  // `preconnect` is a Bun-only member of `fetch`. The build tsconfig does not
+  // see globalThis.fetch with that member even though the AI SDK's fetch type
+  // requires it, so forward by runtime lookup instead of by static type.
+  return Object.assign(patternFetch, {
+    preconnect: (url: string | URL) => {
+      const preconnect: unknown = Reflect.get(globalThis.fetch, 'preconnect');
+      if (typeof preconnect === 'function') {
+        Reflect.apply(preconnect, globalThis.fetch, [url]);
+      }
+    },
+  });
 }

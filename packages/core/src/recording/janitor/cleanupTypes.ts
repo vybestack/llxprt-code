@@ -67,8 +67,9 @@ export interface SessionCleanupParams {
   readonly currentSessionId?: string;
   /** Fully resolved retention configuration. */
   readonly config: ResolvedRetentionConfig;
-  /** In-memory history owned by the current process, when available. */
-  readonly activeHistory?: readonly IContent[];
+  /** Cold history source. Consumption completes before media reclamation. */
+  readonly activeHistory?: Iterable<IContent> | AsyncIterable<IContent>;
+  readonly signal?: AbortSignal;
   /** When true, suppress debug logging. */
   readonly quiet?: boolean;
 }

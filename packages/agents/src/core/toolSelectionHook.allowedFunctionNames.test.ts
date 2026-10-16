@@ -12,7 +12,7 @@ import type {
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
-import { StreamProcessor } from './StreamProcessor.js';
+import { applyToolSelectionHook } from './streamRequestHelpers.js';
 import { TurnProcessor } from './TurnProcessor.js';
 
 type V2ToolSelectionRequest = {
@@ -69,10 +69,7 @@ function createTools(): ToolDeclaration[] {
 /** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
 function makeVariant(
   name: string,
-  ProcessorClass:
-    | typeof DirectMessageProcessor
-    | typeof StreamProcessor
-    | typeof TurnProcessor,
+  ProcessorClass: typeof DirectMessageProcessor | typeof TurnProcessor,
 ): ProcessorVariant {
   return {
     name,
@@ -102,9 +99,29 @@ const directVariant = makeVariant(
 
 const turnVariant = makeVariant('TurnProcessor', TurnProcessor);
 
+/**
+ * The streaming send selects tools through the shared helper that its source
+ * request calls directly; there is no processor method to stub.
+ */
+const streamVariant: ProcessorVariant = {
+  name: 'StreamProcessor',
+  applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
+    const firedRequest: { request?: V2ToolSelectionRequest } = {};
+    const result = await applyToolSelectionHook(
+      toolsFromConfig,
+      STUB_MODEL,
+      createHookExecution(toolChoice, firedRequest),
+    );
+    return {
+      tools: result.tools ?? [],
+      firedRequest: firedRequest.request,
+    };
+  },
+};
+
 const variants: ProcessorVariant[] = [
   directVariant,
-  makeVariant('StreamProcessor', StreamProcessor),
+  streamVariant,
   turnVariant,
 ];
 

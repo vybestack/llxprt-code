@@ -9,6 +9,11 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js"
     },
+    "./fetch-test-helpers.js": {
+      "types": "./dist/src/fetch-test-helpers.d.ts",
+      "bun": "./src/fetch-test-helpers.ts",
+      "import": "./dist/src/fetch-test-helpers.js"
+    },
     "./core/config.js": {
       "types": "./dist/src/core/config.d.ts",
       "bun": "./src/core/config.ts",
@@ -53,6 +58,46 @@
       "types": "./dist/src/core/tools.d.ts",
       "bun": "./src/core/tools.ts",
       "import": "./dist/src/core/tools.js"
+    },
+    "./core/history-suffix-test-helpers.js": {
+      "types": "./dist/src/core/history-suffix-test-helpers.d.ts",
+      "bun": "./src/core/history-suffix-test-helpers.ts",
+      "import": "./dist/src/core/history-suffix-test-helpers.js"
+    },
+    "./core/collect-raw-history.js": {
+      "types": "./dist/src/core/collect-raw-history.d.ts",
+      "bun": "./src/core/collect-raw-history.ts",
+      "import": "./dist/src/core/collect-raw-history.js"
+    },
+    "./core/collect-rows-for-assertions.js": {
+      "types": "./dist/src/core/collect-rows-for-assertions.d.ts",
+      "bun": "./src/core/collect-rows-for-assertions.ts",
+      "import": "./dist/src/core/collect-rows-for-assertions.js"
+    },
+    "./core/curated-history-fixture.js": {
+      "types": "./dist/src/core/curated-history-fixture.d.ts",
+      "bun": "./src/core/curated-history-fixture.ts",
+      "import": "./dist/src/core/curated-history-fixture.js"
+    },
+    "./core/history-materialization-test-guard.js": {
+      "types": "./dist/src/core/history-materialization-test-guard.d.ts",
+      "bun": "./src/core/history-materialization-test-guard.ts",
+      "import": "./dist/src/core/history-materialization-test-guard.js"
+    },
+    "./core/retained-growth.js": {
+      "types": "./dist/src/core/retained-growth.d.ts",
+      "bun": "./src/core/retained-growth.ts",
+      "import": "./dist/src/core/retained-growth.js"
+    },
+    "./core/settled-heap.js": {
+      "types": "./dist/src/core/settled-heap.d.ts",
+      "bun": "./src/core/settled-heap.ts",
+      "import": "./dist/src/core/settled-heap.js"
+    },
+    "./core/synchronous-history-test-observation.js": {
+      "types": "./dist/src/core/synchronous-history-test-observation.d.ts",
+      "bun": "./src/core/synchronous-history-test-observation.ts",
+      "import": "./dist/src/core/synchronous-history-test-observation.js"
     }
   },
   "license": "Apache-2.0",

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export { dumpRequestContextStream } from './dumpRequestContextStream.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -150,6 +151,17 @@ export function shouldDump(
   }
 
   return isError;
+}
+
+/**
+ * Whether `dumpcontext` writes a request dump on success or on failure, so a
+ * request that is spooled has to keep a dump form of its body.
+ */
+export function wantsRequestDump(mode: unknown): boolean {
+  return (
+    shouldDump(mode as DumpMode | undefined, false) ||
+    shouldDump(mode as DumpMode | undefined, true)
+  );
 }
 
 export interface DumpRequestResult {

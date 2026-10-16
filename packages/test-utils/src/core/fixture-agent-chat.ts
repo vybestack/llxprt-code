@@ -16,7 +16,11 @@ export function createTestAgentChat(): AgentChatContract {
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => [],
+    getHistory: () => emptyChatStream(),
+    async *streamHistory(signal) {
+      signal?.throwIfAborted();
+      yield* [];
+    },
     setHistory: async () => {},
     clearHistory: () => {},
     getHistoryService: () => null,

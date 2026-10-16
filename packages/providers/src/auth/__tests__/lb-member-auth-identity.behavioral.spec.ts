@@ -45,6 +45,7 @@ import {
   createTestProvider,
 } from './behavioral/test-utils.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { replayableContents } from '../../utils/collectContents.js';
 import {
   AuthPrecedenceResolver,
   type OAuthTokenRequestMetadata,
@@ -241,7 +242,7 @@ describe('load balancer member OAuth identity (#2643)', () => {
         },
         createProviderCallOptions({
           providerName: 'load-balancer',
-          contents: [],
+          contents: replayableContents([]),
           settings,
           config,
           runtime,
@@ -343,7 +344,7 @@ describe('load balancer member OAuth identity (#2643)', () => {
     };
 
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       metadata: {},
     };
 

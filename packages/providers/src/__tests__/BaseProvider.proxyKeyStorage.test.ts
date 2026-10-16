@@ -28,6 +28,7 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { CredentialProxyServer } from '../auth/proxy/credential-proxy-server.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { resetFactorySingletons } from '../auth/proxy/credential-store-factory.js';
 
 const userMessage = (text: string): IContent => ({
@@ -178,7 +179,7 @@ function buildChatOptions(settings: SettingsService) {
     config,
   });
   return {
-    contents: [userMessage('hi')],
+    contents: replayableContents([userMessage('hi')]),
     invocation: captureProviderInvocation(runtime, 'proxy-aware'),
   };
 }

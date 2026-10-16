@@ -16,6 +16,7 @@ function requirePaths(
 }
 import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 /**
  * @plan:ISSUE-3222
@@ -466,7 +467,10 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       releasePreparation.resolve();
       const agent = await observedAgent;
       try {
-        await agent.agentClient.startChat(await agent.agentClient.getHistory());
+        const priorHistory: IContent[] = [];
+        for await (const row of agent.agentClient.getHistory())
+          priorHistory.push(row);
+        await agent.agentClient.startChat(priorHistory);
         expect(built.providerManager.getTokenizerFactory?.()).toBe(factory);
 
         const turnEvents = await drain(agent.stream('hello'));

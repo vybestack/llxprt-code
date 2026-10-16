@@ -454,6 +454,21 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `1048576`
   - **Requires restart:** No
 
+- **`ui.scrollbackPagerEnabled`** (boolean):
+  - **Description:** Serve transcript history from the bounded scrollback pager over the session journal (alternate screen buffer). Read once at startup; a live toggle applies on restart.
+  - **Default:** `false`
+  - **Requires restart:** Yes
+
+- **`ui.scrollbackMarginViewports`** (number):
+  - **Description:** Scrollback pager residency margin, in viewports beyond the visible window, kept before off-screen rows are evicted. Read once at startup.
+  - **Default:** `2`
+  - **Requires restart:** Yes
+
+- **`ui.scrollbackByteFloorKiB`** (number):
+  - **Description:** Scrollback pager residency byte floor in KiB: off-screen eviction stops once resident rows shrink to this size. Read once at startup.
+  - **Default:** `256`
+  - **Requires restart:** Yes
+
 - **`ui.memoryImportFormat`** (string):
   - **Description:** Format for importing memory files (tree or flat).
   - **Default:** `"tree"`

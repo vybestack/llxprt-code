@@ -22,6 +22,7 @@
 //   - setModelParam precedence (line 757): overwrite semantics — a second
 //     setModelParam on the same key replaces the prior value.
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
@@ -79,12 +80,12 @@ describe('mutation P23.c — addDirectoryContext delegation (REQ-002)', () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       await drain(agent.stream('a turn'));
-      const before = (await agent.getHistory()).length;
+      const before = (await collectAgentHistory(agent)).length;
       // The real method delegates to client.addDirectoryContext which injects
       // directory context into the system prompt, growing the history. The
       // BlockStatement {} mutant makes this a no-op → history stays the same.
       await agent.addDirectoryContext();
-      const after = (await agent.getHistory()).length;
+      const after = (await collectAgentHistory(agent)).length;
       expect(after).toBeGreaterThan(before);
     } finally {
       await cleanup();

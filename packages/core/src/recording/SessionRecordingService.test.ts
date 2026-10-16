@@ -26,6 +26,7 @@
  * the Phase 03 stub — that is correct TDD.
  */
 
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -644,8 +645,7 @@ describe('SessionRecordingService @plan:PLAN-20260211-SESSIONRECORDING.P04', () 
       // The record is still pending, but must not pin the payload.
       expect(service.getPendingRecordCount()).toBeGreaterThan(0);
       expect(service.getPendingByteCount()).toBeGreaterThan(0);
-      Bun.gc(true);
-      expect(ref.deref()).toBeUndefined();
+      expect(await collectedWithin(ref)).toBe(true);
 
       // The serialized record still drains to disk intact.
       service.recordContent(makeContent('trigger'));

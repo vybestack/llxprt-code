@@ -30,7 +30,8 @@ describe('restoreCommand', () => {
   let mockContext: CommandContext;
   let mockConfig: Config;
   let mockGitService: GitService;
-  let mockSetHistory: ReturnType<typeof vi.fn>;
+  let mockSetHistoryFromSource: ReturnType<typeof vi.fn>;
+  let restoredRows: unknown[];
   let testRootDir: string;
   let agentTempDir: string;
   let checkpointsDir: string;
@@ -45,8 +46,13 @@ describe('restoreCommand', () => {
     // Some tests might remove it to test error paths.
     await fs.mkdir(checkpointsDir, { recursive: true });
 
-    mockSetHistory = vi.fn().mockResolvedValue(undefined);
+    restoredRows = [];
+    mockSetHistoryFromSource = vi.fn(async (source: AsyncIterable<unknown>) => {
+      for await (const row of source) restoredRows.push(row);
+    });
     mockGitService = {
+      createFileSnapshot: vi.fn().mockResolvedValue('project-before-restore'),
+      getCurrentCommitHash: vi.fn().mockResolvedValue('head'),
       restoreProjectFromSnapshot: vi.fn().mockResolvedValue(undefined),
     } as unknown as GitService;
 
@@ -60,7 +66,9 @@ describe('restoreCommand', () => {
     mockContext = createMockCommandContext({
       services: {
         config: mockConfig,
-        agent: { setHistory: mockSetHistory },
+        agent: {
+          agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+        },
         git: mockGitService,
       },
     });
@@ -100,7 +108,9 @@ describe('restoreCommand', () => {
             ...composeFixtureRuntime(mockConfig),
             projectCheckpointsDir: '',
           },
-          agent: { setHistory: mockSetHistory },
+          agent: {
+            agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+          },
           git: mockGitService,
         },
       });
@@ -178,7 +188,9 @@ describe('restoreCommand', () => {
     it('should restore a tool call and project state', async () => {
       const toolCallData = {
         history: [{ type: 'user', text: 'do a thing' }],
-        clientHistory: [{ role: 'user', parts: [{ text: 'do a thing' }] }],
+        clientHistory: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'do a thing' }] },
+        ],
         commitHash: 'abcdef123',
         toolCall: { name: 'run_shell_command', args: { command: 'ls' } },
       };
@@ -198,7 +210,7 @@ describe('restoreCommand', () => {
       expect(mockContext.ui.loadHistory).toHaveBeenCalledWith(
         toolCallData.history,
       );
-      expect(mockSetHistory).toHaveBeenCalledWith(toolCallData.clientHistory);
+      expect(restoredRows).toStrictEqual(toolCallData.clientHistory);
       expect(mockGitService.restoreProjectFromSnapshot).toHaveBeenCalledWith(
         toolCallData.commitHash,
       );
@@ -231,7 +243,7 @@ describe('restoreCommand', () => {
       });
 
       expect(mockContext.ui.loadHistory).not.toHaveBeenCalled();
-      expect(mockSetHistory).not.toHaveBeenCalled();
+      expect(mockSetHistoryFromSource).not.toHaveBeenCalled();
       expect(mockGitService.restoreProjectFromSnapshot).not.toHaveBeenCalled();
     });
   });
@@ -281,7 +293,9 @@ describe('restoreCommand', () => {
             ...composeFixtureRuntime(mockConfig),
             projectCheckpointsDir: '',
           },
-          agent: { setHistory: mockSetHistory },
+          agent: {
+            agentClient: { setHistoryFromSource: mockSetHistoryFromSource },
+          },
           git: mockGitService,
         },
       });

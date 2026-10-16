@@ -5,7 +5,6 @@
  */
 
 import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
   ModelStreamChunk,
@@ -25,15 +24,13 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
-import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
-import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
+import { recordSourceSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
@@ -48,17 +45,12 @@ import {
   StreamTimingTracker,
 } from './streamTelemetryLogger.js';
 import {
-  applyToolSelectionHook,
-  buildRequestContentsResult,
   contentForTelemetryPreservingUsage,
-  selectRequestTools,
-  prepareRequestPayload,
-  buildRuntimeContext,
-  logOutgoingRequest,
-  type ToolSelectionHookResult,
+  extractSystemInstructionText,
+  turnSystemInstruction,
   type PreparedRequest,
 } from './streamRequestHelpers.js';
-import { fireBeforeModelHook } from './beforeModelHookFire.js';
+import { buildAndSendStreamRequest } from './streamprocessor-request.js';
 import { trackPromptTokens } from './streamResponseHelpers.js';
 import {
   afterModelModifiedToChunk,
@@ -67,7 +59,6 @@ import {
 import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
-import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
 import { buildStreamChatOptions } from './streamChatOptions.js';
@@ -81,6 +72,10 @@ import {
   failStreamProcessing,
   finalizeStreamResponse,
 } from './streamResponseFinalizer.js';
+import {
+  fireSourceAfterModelHook,
+  type SourceAfterModelRequest,
+} from './source-after-model-hook.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -325,15 +320,6 @@ export class StreamProcessor {
     });
   }
 
-  private _selectHookRequestTools(
-    params: SendMessageParams,
-  ): ReturnType<StreamProcessor['_applyToolSelectionHook']> {
-    return this._applyToolSelectionHook(
-      this._selectRequestTools(params),
-      params.hookOwner ?? params.recordingExecution?.hookOwner,
-    );
-  }
-
   private _bindProviderMediaAndFiles(
     provider: IProvider,
     runtimeContext: ProviderRequestCollaborators,
@@ -356,188 +342,96 @@ export class StreamProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     assertAdmittedRoute(params.modelParameters?.route);
-    const { contents: requestContents, pending: pendingUserIContents } =
-      this._buildRequestContents(userContent, semanticMediaPurge);
-
-    const toolSelection = await this._selectHookRequestTools(params);
-    const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, toolSelection, params);
-
-    provider = this._bindProviderMediaAndFiles(provider, runtimeContext);
-
-    try {
-      const { contents: finalContents, pendingContents } =
-        await fireBeforeModelHook({
-          owner: params.hookOwner ?? params.recordingExecution?.hookOwner,
-          requestContents: requestPayload.contents,
-          pendingUserIContents,
-          tools: toolSelection.tools ?? [],
-          hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
-          model: this.runtimeContext.state.model,
-          log: (msg) => this.logger.debug(() => msg),
-        });
-
-      const streamPreparation = await prepareStreamEnvelope(
+    return buildAndSendStreamRequest({
+      runtime: this.runtimeContext,
+      compression: this.compressionHandler,
+      history: this.historyService,
+      params,
+      promptId,
+      userContent,
+      provider: this._bindProviderMediaAndFiles(
         provider,
-        finalContents,
-        pendingContents,
-        (contents) =>
-          buildStreamChatOptions(
-            this.runtimeContext.prepareProviderInvocation,
-            provider.name,
-            promptId,
-            { contents, tools: toolSelection.tools },
-            runtimeContext.metadata,
-            baseRuntimeContext,
+        this.providerRuntimeBuilder('StreamProcessor.bindProvider', {}),
+      ),
+      semanticMediaPurge,
+      fallbackTools: this.generationConfig.tools,
+      buildRuntime: (extras) =>
+        this.providerRuntimeBuilder('StreamProcessor.generateRequest', extras),
+      buildOptions: (contents, tools, runtime, base) =>
+        this._buildStreamChatOptions(
+          promptId,
+          { contents, tools },
+          runtime,
+          base,
+          params,
+          provider.name,
+        ),
+      consumeSource: (stream, startTime, allowedTools, afterModel) =>
+        this._consumeFirstChunkAndReturn(
+          stream,
+          undefined,
+          promptId,
+          startTime,
+          allowedTools,
+          this.currentRawTokenDeltaBridge,
+          afterModel,
+          params.hookOwner ?? params.recordingExecution?.hookOwner,
+        ),
+      setEstimate: (estimate) => {
+        this.currentPromptEnvelopeEstimate = estimate;
+      },
+      recordSourceSeam: (prepared, tools, signal) =>
+        recordSourceSendSeamTelemetry({
+          usageLogger: this.compressionHandler.tokenUsageLogger,
+          promptId,
+          estimate: prepared.estimate,
+          runtimeState: this.runtimeContext.state,
+          historyService: this.historyService,
+          requestRows: prepared.source,
+          tools,
+          systemInstruction: turnSystemInstruction(
             params,
             this.generationConfig,
-            this.currentRawTokenDeltaBridge,
           ),
-        this.compressionHandler,
-        promptId,
-        params.recordingExecution,
-        params.modelParameters,
-        this.runtimeContext.promptEstimator,
-      );
-
-      logOutgoingRequest(
-        this.runtimeContext,
-        { ...requestPayload, contents: streamPreparation.contents },
-        this.runtimeContext.state.model,
-        promptId,
-      );
-
-      const stream = await this._sendProviderRequest(
-        provider,
-        { ...requestPayload, contents: streamPreparation.contents },
-        runtimeContext,
-        baseRuntimeContext,
-        params,
-        promptId,
-        toolSelection.allowedFunctionNames,
-        streamPreparation.prepared,
-      );
-      return withCompressionCallbackCleanup(
-        stream,
-        provider,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
-    } catch (error) {
-      this.compressionHandler.clearProviderCompressionCallback(provider);
-      throw error;
-    }
-  }
-  private _prepareRequestPayload(
-    requestContents: IContent[],
-    toolSelection: ToolSelectionHookResult,
-    params: SendMessageParams,
-  ): {
-    requestPayload: PreparedRequest['requestPayload'];
-    baseRuntimeContext: ProviderRequestCollaborators;
-    runtimeContext: ProviderRequestCollaborators;
-  } {
-    const { requestPayload, baseRuntimeContext } = prepareRequestPayload({
-      requestContents,
-      tools: toolSelection.tools,
-      logger: this.logger,
-      providerRuntimeBuilder: (source, extras) =>
-        this.providerRuntimeBuilder(source, {
-          ...extras,
-          conversationLogEmptyTools: toolSelection.conversationLogEmptyTools,
+          turnId: this.turnIdByPromptId.get(promptId) ?? null,
+          signal,
         }),
-      providerName:
-        params.modelParameters?.route?.provider.name ??
-        this.providerResolver('stream').name,
-      modelName:
-        params.modelParameters?.route?.model ?? this.runtimeContext.state.model,
-      baseUrl:
-        params.modelParameters?.route?.baseURL ??
-        this.runtimeContext.state.baseUrl,
+      log: (message) => this.logger.debug(() => message),
     });
-
-    const runtimeContext = buildRuntimeContext(baseRuntimeContext, params);
-
-    return { requestPayload, baseRuntimeContext, runtimeContext };
   }
 
-  // @plan:PLAN-20260617-COREAPI.P15
-  // @requirement:REQ-001
-  private async _sendProviderRequest(
-    provider: IProvider,
-    requestPayload: PreparedRequest['requestPayload'],
+  private _buildStreamChatOptions(
+    promptId: string,
+    requestPayload: {
+      contents: Iterable<IContent> | AsyncIterable<IContent>;
+      tools: PreparedRequest['requestPayload']['tools'];
+    },
     runtimeContext: ProviderRequestCollaborators,
     baseRuntimeContext: ProviderRequestCollaborators,
     params: SendMessageParams,
-    promptId: string,
-    hookRestrictedAllowedTools: string[] | undefined,
-    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
-  ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const startTime = Date.now();
-    try {
-      const chatOptions = buildStreamChatOptions(
-        this.runtimeContext.prepareProviderInvocation,
-        provider.name,
-        promptId,
-        requestPayload,
-        runtimeContext.metadata,
-        baseRuntimeContext,
-        params,
-        this.generationConfig,
-        this.currentRawTokenDeltaBridge,
-      );
-      const prepared =
-        preparedAtEnforcement ??
-        (await prepareAtSendSeam(
-          provider,
-          chatOptions,
-          this.runtimeContext.promptEstimator,
-        ));
-      this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordSendSeamTelemetry({
-        usageLogger: this.compressionHandler.tokenUsageLogger,
-        promptId,
-        estimate: prepared.estimate,
-        runtimeState: this.runtimeContext.state,
-        historyService: this.historyService,
-        requestContents: requestPayload.contents,
-        tools: requestPayload.tools,
-        systemInstruction: this.generationConfig.systemInstruction,
-        turnId: this.turnIdByPromptId.get(promptId) ?? null,
-      });
-
-      assertAdmittedRoute(params.modelParameters?.route);
-      const streamResponse = provider.generateChatCompletion({
-        ...prepared.options,
-        requestDiagnostics: this.runtimeContext.requestDiagnostics,
-      });
-      // Captured explicitly (not read inside the generator below): a later
-      // attempt replaces the instance field, and the explicit parameter is
-      // what keeps this attempt's stream wired to this attempt's tracker.
-      const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
-
-      return await this._consumeFirstChunkAndReturn(
-        streamResponse,
-        requestPayload,
-        promptId,
-        startTime,
-        hookRestrictedAllowedTools,
-        rawTokenDeltaBridge,
-        params.hookOwner ?? params.recordingExecution?.hookOwner,
-      );
-    } catch (error) {
-      const durationMs = Date.now() - startTime;
-      logApiError(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
-        promptId,
-        durationMs,
-        error,
-      );
-      this.currentPromptEnvelopeEstimate = null;
-      throw error;
-    }
+    providerName: string,
+  ): GenerateChatOptions {
+    // The shared builder owns invocation, route, retry wiring and the fresh
+    // pass per consumer; the source route resolves the system prompt for this
+    // turn (not the session default).
+    const options = buildStreamChatOptions(
+      this.runtimeContext.prepareProviderInvocation,
+      providerName,
+      promptId,
+      requestPayload,
+      runtimeContext.metadata,
+      baseRuntimeContext,
+      params,
+      this.generationConfig,
+      this.currentRawTokenDeltaBridge,
+    );
+    return {
+      ...options,
+      systemInstruction: extractSystemInstructionText(
+        turnSystemInstruction(params, this.generationConfig),
+      ),
+      requestDiagnostics: this.runtimeContext.requestDiagnostics,
+    };
   }
 
   /**
@@ -545,11 +439,12 @@ export class StreamProcessor {
    */
   private async _consumeFirstChunkAndReturn(
     streamResponse: AsyncIterable<IContent>,
-    requestPayload: PreparedRequest['requestPayload'],
+    requestPayload: PreparedRequest['requestPayload'] | undefined,
     promptId: string,
     startTime: number,
     hookRestrictedAllowedTools: string[] | undefined,
     rawTokenDeltaBridge: RawTokenDeltaBridge | null,
+    sourceRequest?: SourceAfterModelRequest,
     owner?: HookExecutionOwner,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const convertedStream = this._convertIContentStream(
@@ -558,6 +453,7 @@ export class StreamProcessor {
       { promptId, startTime, attemptIndex: this.currentAttemptIndex },
       hookRestrictedAllowedTools,
       rawTokenDeltaBridge,
+      sourceRequest,
       owner,
     );
 
@@ -571,37 +467,6 @@ export class StreamProcessor {
 
     return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
-  private _selectRequestTools(
-    params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
-  }
-
-  private async _applyToolSelectionHook(
-    tools: AgentClientGenerateConfig['tools'],
-    owner?: HookExecutionOwner,
-  ): Promise<ToolSelectionHookResult> {
-    return applyToolSelectionHook(
-      tools,
-      this.runtimeContext.state.model,
-      owner,
-    );
-  }
-
-  private _buildRequestContents(
-    userContent: IContent | IContent[],
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
-    return buildRequestContentsResult(
-      userContent,
-      this.historyService,
-      semanticMediaPurge?.requestHistory,
-    );
-  }
-
   private async _handleBucketFailover(
     signal: AbortSignal | undefined,
   ): Promise<boolean | null> {
@@ -641,6 +506,7 @@ export class StreamProcessor {
     },
     hookRestrictedAllowedTools?: string[],
     rawTokenDeltaBridge?: RawTokenDeltaBridge | null,
+    sourceRequest?: SourceAfterModelRequest,
     owner?: HookExecutionOwner,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
@@ -673,6 +539,7 @@ export class StreamProcessor {
             requestPayload,
             chunk,
             hookRestrictedAllowedTools,
+            sourceRequest,
             owner,
           )) ?? chunk;
         lastIContent = contentForTelemetryPreservingUsage(
@@ -721,9 +588,12 @@ export class StreamProcessor {
     requestPayload: PreparedRequest['requestPayload'] | undefined,
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
+    sourceRequest: SourceAfterModelRequest | undefined,
     owner?: HookExecutionOwner,
   ): Promise<ModelStreamChunk | undefined> {
-    if (owner?.afterModel === undefined) return undefined;
+    if (owner === undefined) return undefined;
+    if (requestPayload !== undefined && owner.afterModel === undefined)
+      return undefined;
 
     // Build the hook-visible IContent with restricted tool blocks filtered.
     const filteredBlocks = filterHookRestrictedBlocks(
@@ -732,32 +602,43 @@ export class StreamProcessor {
     );
     const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
 
-    const afterModelResult = await owner.afterModel(
-      {
-        model: this.runtimeContext.state.model,
-        contents: requestPayload?.contents ?? [],
-        ...(requestPayload?.tools !== undefined &&
-        (requestPayload.tools.length > 0 ||
-          hookRestrictedAllowedTools === undefined)
-          ? {
-              tools: requestPayload.tools,
-            }
-          : {}),
-      },
-      {
-        content: hookIContent,
-        // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
-        // already lifted them onto the chunk when the provider emitted them.
-        ...(chunk.finishReason !== undefined
-          ? { finishReason: chunk.finishReason }
-          : {}),
-        ...(chunk.rawStopReason !== undefined
-          ? { rawStopReason: chunk.rawStopReason }
-          : {}),
-        ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
-      },
-      owner.signal,
-    );
+    const response = {
+      content: hookIContent,
+      // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
+      // already lifted them onto the chunk when the provider emitted them.
+      ...(chunk.finishReason !== undefined
+        ? { finishReason: chunk.finishReason }
+        : {}),
+      ...(chunk.rawStopReason !== undefined
+        ? { rawStopReason: chunk.rawStopReason }
+        : {}),
+      ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
+    };
+    const requestTools = requestPayload?.tools ?? sourceRequest?.tools;
+    // A restricted selection that emptied the tool list is hidden from hooks.
+    const omitTools =
+      requestTools === undefined ||
+      (requestTools.length === 0 && hookRestrictedAllowedTools !== undefined);
+    const model = this.runtimeContext.state.model;
+    const afterModelResult =
+      requestPayload !== undefined
+        ? await owner.afterModel?.(
+            {
+              model,
+              contents: requestPayload.contents,
+              ...(omitTools ? {} : { tools: requestTools }),
+            },
+            response,
+            owner.signal,
+          )
+        : await fireSourceAfterModelHook({
+            owner,
+            request: sourceRequest,
+            model,
+            response,
+            omitTools,
+            log: (message) => this.logger.debug(() => message),
+          });
 
     if (afterModelResult?.shouldStopExecution() === true) {
       throw new AgentExecutionStoppedError(

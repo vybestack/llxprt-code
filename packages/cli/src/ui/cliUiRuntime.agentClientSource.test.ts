@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
@@ -169,7 +171,7 @@ describe('UI session client ownership', () => {
       const current = ui.agentClientSource.getAgentClient();
       expect(current).not.toBe(previous);
       expect(
-        (await agent.getHistory()).filter(
+        (await agent.session.getHistory()).filter(
           (content) => content.speaker === 'human',
         ),
       ).toHaveLength(1);
@@ -182,11 +184,11 @@ describe('UI session client ownership', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'borrowed caller survives' }],
       });
-      expect(
-        (await previous.getHistory()).filter(
-          (content) => content.speaker === 'human',
-        ),
-      ).toHaveLength(2);
+      await withRows(previous.getHistory(), (rows) => {
+        expect(
+          rows.filter((content) => content.speaker === 'human'),
+        ).toHaveLength(2);
+      });
     } finally {
       await agent.dispose();
       await fixture.cleanup();
@@ -212,9 +214,9 @@ describe('UI session client ownership', () => {
       expect(detached?.mediaStore).toBe(agent.agentClient.mediaStore);
       expect(detached?.hasChatInitialized()).toBe(false);
       await detached?.dispose();
-      expect(
-        agent.agentClient.getHistoryService()?.getRawHistory(),
-      ).toHaveLength(0);
+      const history = agent.agentClient.getHistoryService();
+      if (history === null) throw new Error('Missing primary history service');
+      expect(await collectRawHistory(history)).toHaveLength(0);
     } finally {
       await fixture.cleanup();
     }

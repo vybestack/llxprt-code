@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   fetchCodexUsage,
@@ -11,18 +12,36 @@ import {
   formatCodexUsage,
 } from './codexUsageInfo.js';
 
-describe('codexUsageInfo', () => {
+let fetchMock: ReturnType<typeof vi.fn>;
+function setupCodexUsageInfoFetchCodexUsageBeforeEach(): void {
+  fetchMock = vi.fn();
+  global.fetch = withFetchPreconnect(fetchMock);
+}
+
+function setupCodexUsageInfoFetchCodexUsageAfterEach(): void {
+  vi.restoreAllMocks();
+}
+
+function setupCodexUsageInfoFormatCodexRateLimitWindowBeforeEach(): void {
+  vi.useFakeTimers({ now: new Date('2025-02-05T10:00:00Z') });
+}
+
+function setupCodexUsageInfoFormatCodexRateLimitWindowAfterEach(): void {
+  vi.useRealTimers();
+}
+
+function setupCodexUsageInfoFormatCodexUsageBeforeEach(): void {
+  vi.useFakeTimers({ now: new Date('2025-02-05T10:00:00Z') });
+}
+
+function setupCodexUsageInfoFormatCodexUsageAfterEach(): void {
+  vi.useRealTimers();
+}
+
+describe('codexUsageInfo / credential validation and usage requests', () => {
   describe('fetchCodexUsage', () => {
-    let fetchMock: ReturnType<typeof vi.fn>;
-
-    beforeEach(() => {
-      fetchMock = vi.fn();
-      global.fetch = fetchMock;
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should return null for empty access token', async () => {
       const result = await fetchCodexUsage('', 'account123');
@@ -94,6 +113,13 @@ describe('codexUsageInfo', () => {
       const result = await fetchCodexUsage('token123', 'account123');
       expect(result).toBeNull();
     });
+  });
+});
+
+describe('codexUsageInfo / HTTP errors and nullable responses', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
@@ -167,6 +193,13 @@ describe('codexUsageInfo', () => {
       const result = await fetchCodexUsage('token123', 'account123');
       expect(result).toStrictEqual(mockResponse);
     });
+  });
+});
+
+describe('codexUsageInfo / credit and primary-window responses', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should handle response with only primary window', async () => {
       const mockResponse = {
@@ -224,6 +257,13 @@ describe('codexUsageInfo', () => {
       expect(result).toStrictEqual(mockResponse);
       expect(result?.plan_type).toBe('premium_plus');
     });
+  });
+});
+
+describe('codexUsageInfo / unknown plans', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should accept overage used_percent values above 100', async () => {
       const mockResponse = {
@@ -256,6 +296,13 @@ describe('codexUsageInfo', () => {
       expect(result).toStrictEqual(mockResponse);
       expect(result?.rate_limit?.primary_window?.used_percent).toBe(123);
     });
+  });
+});
+
+describe('codexUsageInfo / overage windows and custom endpoints', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should use ChatGPT wham usage endpoint when base URL includes /backend-api', async () => {
       const mockResponse = {
@@ -330,6 +377,13 @@ describe('codexUsageInfo', () => {
       expect(secondArg.signal).toBeDefined();
       expect(secondArg.signal).toBeInstanceOf(AbortSignal);
     });
+  });
+});
+
+describe('codexUsageInfo / request timeout signals', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should fall back to default Codex usage endpoint when custom base URL endpoint fails', async () => {
       const mockResponse = {
@@ -397,6 +451,13 @@ describe('codexUsageInfo', () => {
       );
       expect(result).toStrictEqual(mockResponse);
     });
+  });
+});
+
+describe('codexUsageInfo / endpoint fallback', () => {
+  describe('fetchCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFetchCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFetchCodexUsageAfterEach);
 
     it('should derive backend-api root when base URL includes /backend-api/codex segment', async () => {
       const mockResponse = {
@@ -445,15 +506,12 @@ describe('codexUsageInfo', () => {
       expect(result).toStrictEqual(mockResponse);
     });
   });
+});
 
+describe('codexUsageInfo / backend-api root selection', () => {
   describe('formatCodexRateLimitWindow', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ now: new Date('2025-02-05T10:00:00Z') });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    beforeEach(setupCodexUsageInfoFormatCodexRateLimitWindowBeforeEach);
+    afterEach(setupCodexUsageInfoFormatCodexRateLimitWindowAfterEach);
 
     it('should format window with hours until reset', () => {
       const window = {
@@ -500,15 +558,12 @@ describe('codexUsageInfo', () => {
       expect(result).toBeNull();
     });
   });
+});
 
+describe('codexUsageInfo / rate-limit window formatting', () => {
   describe('formatCodexUsage', () => {
-    beforeEach(() => {
-      vi.useFakeTimers({ now: new Date('2025-02-05T10:00:00Z') });
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
+    beforeEach(setupCodexUsageInfoFormatCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFormatCodexUsageAfterEach);
 
     it('should format all available data', () => {
       const usage = {
@@ -580,6 +635,13 @@ describe('codexUsageInfo', () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('  Credits: Unlimited');
     });
+  });
+});
+
+describe('codexUsageInfo / usage formatting and unlimited credits', () => {
+  describe('formatCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFormatCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFormatCodexUsageAfterEach);
 
     it('should show Credits: None when has_credits is false', () => {
       const usage = {
@@ -648,6 +710,13 @@ describe('codexUsageInfo', () => {
       expect(result[0]).toContain('5-hour limit');
       expect(result[0]).toContain('30%');
     });
+  });
+});
+
+describe('codexUsageInfo / credit balances and partial usage', () => {
+  describe('formatCodexUsage', () => {
+    beforeEach(setupCodexUsageInfoFormatCodexUsageBeforeEach);
+    afterEach(setupCodexUsageInfoFormatCodexUsageAfterEach);
 
     it('should show Credits: None when balance is null and has_credits is false', () => {
       const usage = {

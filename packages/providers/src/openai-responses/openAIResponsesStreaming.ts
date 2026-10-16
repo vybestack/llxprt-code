@@ -32,11 +32,16 @@ import {
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
+import { reportRequestSize } from '../logging/requestSizeReport.js';
 
 export async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
+  reportRequestSize(
+    params.normalizedOptions.metadata,
+    await params.streamRequestBodyLength(),
+  );
   const transport = deps.getWebSocketTransport?.();
   if (params.isCodex && transport !== undefined) {
     yield* streamOverWebSocketWithRenewal(params, deps, transport);
@@ -92,10 +97,14 @@ async function* streamOverWebSocketWithRenewal(
     const rebuilt = await params.rebuildStateless();
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
+      const { requestFrameBytes: _stale, ...baseOptions } = streamOptions;
       yield* streamOverWebSocketOrFallback(
         transport,
         rebuilt.request,
-        streamOptions,
+        {
+          ...baseOptions,
+          requestFrameBytes: rebuilt.streamWebSocketFrame,
+        },
         () => streamOverHttp(rebuilt, deps),
         deps.onWebSocketFallback,
         deps.logger,
@@ -122,6 +131,7 @@ async function buildWebSocketStreamOptions(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+    requestFrameBytes: params.streamWebSocketFrame,
   };
 }
 

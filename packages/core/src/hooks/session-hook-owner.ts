@@ -10,7 +10,7 @@ import type {
   HookSessionRuntime,
 } from './hook-configuration.js';
 import type { HookExecutionOwner } from './hookEventHandler.js';
-import type { SessionEndReason } from './types.js';
+import { HookEventName, type SessionEndReason } from './types.js';
 import type { AggregatedHookResult } from './hookAggregator.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
@@ -20,6 +20,11 @@ export interface HookStatus {
   readonly enabled: boolean;
   readonly source: string;
 }
+
+type ExecutionIdentity = Pick<
+  HookExecutionOwner,
+  'sessionId' | 'transcriptPath' | 'signal'
+>;
 
 export class SessionHookOwner {
   private system: HookSystem | undefined;
@@ -63,12 +68,7 @@ export class SessionHookOwner {
     );
   }
 
-  execution(
-    identity: Pick<
-      HookExecutionOwner,
-      'sessionId' | 'transcriptPath' | 'signal'
-    >,
-  ): HookExecutionOwner {
+  execution(identity: ExecutionIdentity): HookExecutionOwner {
     return {
       ...identity,
       signal: AbortSignal.any([
@@ -91,6 +91,7 @@ export class SessionHookOwner {
         this.run(identity, signal, (system, owner) =>
           system.fireAfterModelEvent(request, response, owner),
         ),
+      ...this.snapshotExecution(identity),
       beforeToolSelection: (request, signal) =>
         this.run(identity, signal, (system, owner) =>
           system.fireBeforeToolSelectionEvent(request, owner),
@@ -121,6 +122,32 @@ export class SessionHookOwner {
       notification: (type, message, details, signal) =>
         this.run(identity, signal, (system, owner) =>
           system.fireNotificationEvent(type, message, details, owner),
+        ),
+    };
+  }
+
+  private snapshotExecution(
+    identity: ExecutionIdentity,
+  ): Pick<HookExecutionOwner, 'beforeModelSnapshot' | 'afterModelSnapshot'> {
+    return {
+      beforeModelSnapshot: (request, signal) =>
+        this.run(identity, signal, (system, owner) =>
+          system.getRegistry().getHooksForEvent(HookEventName.BeforeModel)
+            .length === 0
+            ? Promise.resolve(undefined)
+            : system.fireBeforeModelSnapshotEvent(request, owner.signal, owner),
+        ),
+      afterModelSnapshot: (request, response, signal) =>
+        this.run(identity, signal, (system, owner) =>
+          system.getRegistry().getHooksForEvent(HookEventName.AfterModel)
+            .length === 0
+            ? Promise.resolve(undefined)
+            : system.fireAfterModelSnapshotEvent(
+                request,
+                response,
+                owner.signal,
+                owner,
+              ),
         ),
     };
   }

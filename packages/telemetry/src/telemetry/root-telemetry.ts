@@ -23,7 +23,6 @@ import {
 } from '@opentelemetry/sdk-trace-node';
 import {
   LoggerProvider,
-  SimpleLogRecordProcessor,
   type LogRecordExporter,
   ConsoleLogRecordExporter,
 } from '@opentelemetry/sdk-logs';
@@ -38,6 +37,10 @@ import {
   FileMetricExporter,
   FileSpanExporter,
 } from './file-exporters.js';
+import { AcknowledgedLogExporter } from './artifact-exporter.js';
+import { AcknowledgedLogPublisher } from './acknowledged-log-publisher.js';
+import { CorrelatedLogRecordProcessor } from './correlated-log-processor.js';
+import { TerminalPublication } from './terminal-publication.js';
 import {
   METRIC_FILE_OPERATION_COUNT,
   METRIC_API_REQUEST_COUNT,
@@ -110,6 +113,7 @@ interface Providers {
   readonly tracer: NodeTracerProvider;
   readonly logger: LoggerProvider;
   readonly meter: MeterProvider;
+  readonly publisher: AcknowledgedLogPublisher;
   readonly takeFailures: () => Error[];
   readonly joinAccepted: () => Promise<void>;
 }
@@ -126,8 +130,13 @@ async function createProviders(
   options: RootTelemetryOptions,
   selected: RootTelemetryTransports,
 ): Promise<Providers> {
-  const { transports, takeFailures, joinAccepted } =
-    trackTransportOutcomes(selected);
+  // The acknowledging exporter wraps the selected transport itself so its
+  // schema support is visible, and failures are tracked outside it.
+  const artifactExporter = new AcknowledgedLogExporter(selected.logger);
+  const { transports, takeFailures, joinAccepted } = trackTransportOutcomes({
+    ...selected,
+    logger: artifactExporter,
+  });
   const resource = resourceFromAttributes({
     'service.name': SERVICE_NAME,
     'service.version': process.version,
@@ -146,7 +155,7 @@ async function createProviders(
     release.set('tracer', () => tracer.shutdown());
     const logger = new LoggerProvider({
       resource,
-      processors: [new SimpleLogRecordProcessor(transports.logger)],
+      processors: [new CorrelatedLogRecordProcessor(transports.logger)],
     });
     release.set('logger', () => logger.shutdown());
     const meter = new MeterProvider({
@@ -159,7 +168,12 @@ async function createProviders(
         }),
       ],
     });
-    return { tracer, logger, meter, takeFailures, joinAccepted };
+    const publisher = new AcknowledgedLogPublisher(
+      logger,
+      artifactExporter,
+      options.sessionId,
+    );
+    return { tracer, logger, meter, publisher, takeFailures, joinAccepted };
   } catch (primary) {
     const releases = await Promise.allSettled(
       [...release.values()].map((close) => Promise.resolve().then(close)),
@@ -352,9 +366,13 @@ export class RootTelemetry {
   private transition: Promise<void> = Promise.resolve();
   private readAdmission = (): boolean => this.accepting;
 
+  private terminal: TerminalPublication | undefined;
+
   readonly events: TelemetryEventOperations = {
     record: (collect) => {
-      if (this.accepting) this.requireLifetime().events.record(collect);
+      if (!this.accepting) return;
+      if (this.terminal !== undefined) this.terminal.addRecord(collect());
+      else this.requireLifetime().events.record(collect);
     },
   };
   readonly spans: TelemetrySpanOperations = {
@@ -364,37 +382,18 @@ export class RootTelemetry {
         : { setAttribute: () => undefined, end: () => undefined },
   };
   readonly measurements: TelemetryMeasurementOperations = {
-    fileOperation: (attributes) => {
-      if (this.accepting)
-        this.requireLifetime().measurements.fileOperation(attributes);
-    },
-    tokenUsage: (model, count, type, attributes) => {
-      if (this.accepting)
-        this.requireLifetime().measurements.tokenUsage(
-          model,
-          count,
-          type,
-          attributes,
-        );
-    },
-    modelResponse: (model, durationMs, statusCode, extraAttributes) => {
-      if (this.accepting)
-        this.requireLifetime().measurements.modelResponse(
-          model,
-          durationMs,
-          statusCode,
-          extraAttributes,
-        );
-    },
-    toolCall: (functionName, durationMs, success, extraAttributes) => {
-      if (this.accepting)
-        this.requireLifetime().measurements.toolCall(
-          functionName,
-          durationMs,
-          success,
-          extraAttributes,
-        );
-    },
+    fileOperation: (attributes) =>
+      this.measure((m) => m.fileOperation(attributes)),
+    tokenUsage: (model, count, type, attributes) =>
+      this.measure((m) => m.tokenUsage(model, count, type, attributes)),
+    modelResponse: (model, durationMs, statusCode, extraAttributes) =>
+      this.measure((m) =>
+        m.modelResponse(model, durationMs, statusCode, extraAttributes),
+      ),
+    toolCall: (functionName, durationMs, success, extraAttributes) =>
+      this.measure((m) =>
+        m.toolCall(functionName, durationMs, success, extraAttributes),
+      ),
   };
 
   private constructor(
@@ -488,10 +487,96 @@ export class RootTelemetry {
     };
   }
 
+  private measure(
+    record: (measurements: TelemetryMeasurementOperations) => void,
+  ): void {
+    if (!this.accepting) return;
+    const { measurements } = this.requireLifetime();
+    if (this.terminal !== undefined)
+      this.terminal.effects.push(() => record(measurements));
+    else record(measurements);
+  }
+
+  /**
+   * Runs a local side effect now, or after acknowledgement while a terminal
+   * publication is being built by {@link acknowledgeTerminal}.
+   */
+  runAfterTerminalAcknowledgement(effect: () => void): void {
+    if (this.terminal !== undefined) this.terminal.effects.push(effect);
+    else effect();
+  }
+
+  /**
+   * Whether this root is exporting through a log exporter that can carry
+   * request artifact schema 4 (the console exporter cannot). Callers that
+   * would otherwise ask for body artifacts check this first.
+   */
+  supportsRequestArtifacts(): boolean {
+    return (
+      this.accepting &&
+      this.requireLifetime().providers.publisher.supportsArtifacts()
+    );
+  }
+
+  /** Throws unless this root is exporting and its log exporter supports request artifact schema 4. */
+  assertRequestArtifactExporter(): void {
+    if (!this.accepting)
+      throw new Error(
+        'Request artifact logging requires an active telemetry SDK',
+      );
+    this.requireLifetime().providers.publisher.assertSupport();
+  }
+
+  /** Resolves once the exporter has acknowledged the record; rejects on export failure, abort or missing ACK. */
+  async publishAcknowledged(
+    record: LogRecord,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    this.assertRequestArtifactExporter();
+    await this.requireLifetime().providers.publisher.publish(record, signal);
+  }
+
+  /**
+   * Captures the (at most two) log records that `build` emits, publishes them
+   * with acknowledgement, and returns the deferred metric and aggregation
+   * effects for the caller to run once it accepts the publication.
+   */
+  async acknowledgeTerminal(
+    build: () => void,
+    signal?: AbortSignal,
+  ): Promise<() => void> {
+    this.assertRequestArtifactExporter();
+    const publication = new TerminalPublication();
+    const previous = this.terminal;
+    this.terminal = publication;
+    try {
+      build();
+    } finally {
+      this.terminal = previous;
+    }
+    for (const record of publication.records)
+      await this.publishAcknowledged(record, signal);
+    publication.records.length = 0;
+    return (): void => {
+      for (const effect of publication.effects.splice(0)) effect();
+    };
+  }
+
   private requireLifetime(): ProviderLifetime {
     if (this.lifetime === undefined)
       throw new Error('Accepting telemetry has no SDK lifetime');
     return this.lifetime;
+  }
+
+  /**
+   * Flushes queued log records without joining other in-flight exports, so a
+   * best-effort publication never waits behind a withheld strict
+   * acknowledgement. Export failures stay queued for the next {@link flush}.
+   */
+  flushLogRecords(): Promise<void> {
+    if (this.lifetime === undefined)
+      return this.pendingRetirement ?? Promise.resolve();
+    return this.lifetime.providers.logger.forceFlush();
   }
 
   flush(): Promise<void> {

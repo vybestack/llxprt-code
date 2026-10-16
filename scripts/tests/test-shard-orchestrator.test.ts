@@ -327,6 +327,37 @@ describe('orchestrateTests (--shard)', () => {
     );
   });
 
+  it('forwards the CI partition to each root as a flag and hides it from the child environment', () => {
+    const calls: Array<{ command: string; env?: NodeJS.ProcessEnv }> = [];
+    const runner: CommandRunner = (command, _cwd, env) => {
+      calls.push({ command, env });
+      return { success: true, exitCode: 0 };
+    };
+    const previous = process.env.LLXPRT_CLI_TEST_PARTITION;
+    process.env.LLXPRT_CLI_TEST_PARTITION = '2of3';
+    try {
+      orchestrateTests(
+        createScriptsShardFixture(),
+        { ...parseArgs(['--shard', 'scripts']) },
+        runner,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.LLXPRT_CLI_TEST_PARTITION;
+      else process.env.LLXPRT_CLI_TEST_PARTITION = previous;
+    }
+
+    const rootCalls = calls.filter((c) =>
+      c.command.includes('run_bun_tests.ts --root '),
+    );
+    expect(rootCalls.map((c) => c.command)).toEqual(
+      SCRIPTS_SHARD_ROOTS.map((root) => scriptsRootCommand(root, '2of3')),
+    );
+    for (const call of rootCalls) {
+      expect(call.env).toBeDefined();
+      expect(call.env?.LLXPRT_CLI_TEST_PARTITION).toBeUndefined();
+    }
+  });
+
   it('skips the remaining scripts roots when an earlier root fails', () => {
     const commands: Array<{ command: string; cwd: string }> = [];
     const [firstRoot, ...remainingRoots] = SCRIPTS_SHARD_ROOTS;

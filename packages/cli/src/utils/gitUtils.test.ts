@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   vi,
@@ -147,18 +148,20 @@ describe('getLatestRelease', () => {
   });
 
   it('throws an error if the fetch fails', async () => {
-    global.fetch = vi.fn(() => Promise.reject('nope'));
+    global.fetch = withFetchPreconnect(vi.fn(() => Promise.reject('nope')));
     await expect(getLatestGitHubRelease()).rejects.toThrowError(
       /Unable to determine the latest/,
     );
   });
 
   it('throws an error if the fetch does not return a json body', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ foo: 'bar' }),
-      } as Response),
+    global.fetch = withFetchPreconnect(
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ foo: 'bar' }),
+        } as Response),
+      ),
     );
     await expect(getLatestGitHubRelease()).rejects.toThrowError(
       /Unable to determine the latest/,
@@ -166,11 +169,13 @@ describe('getLatestRelease', () => {
   });
 
   it('returns the release version', async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ tag_name: 'v1.2.3' }),
-      } as Response),
+    global.fetch = withFetchPreconnect(
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ tag_name: 'v1.2.3' }),
+        } as Response),
+      ),
     );
     await expect(getLatestGitHubRelease()).resolves.toBe('v1.2.3');
   });

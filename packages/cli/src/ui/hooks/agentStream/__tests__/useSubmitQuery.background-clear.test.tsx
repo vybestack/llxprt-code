@@ -181,7 +181,7 @@ describe('background notification queue ownership', () => {
         expect(owner.getPendingNotifications()).toStrictEqual([]),
       );
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await agent.session.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();
@@ -260,7 +260,7 @@ describe('background notification queue ownership', () => {
         expect(owner.getPendingNotifications()).toStrictEqual([]),
       );
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await agent.session.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();

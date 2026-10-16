@@ -26,7 +26,7 @@
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { PromptPolicy } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -180,7 +180,7 @@ export async function buildCompressionSystemInstruction(
  * prompt cannot silently apply to only two of the three paths.
  */
 export async function buildCompressionChatOptions(params: {
-  contents: IContent[];
+  requestRows: ProviderRequestSelection;
   providerRuntime: ProviderRequestCollaborators;
   resolvedConfig: Config | undefined;
   fallbackConfig: Config | undefined;
@@ -215,7 +215,14 @@ export async function buildCompressionChatOptions(params: {
   if (params.invocation === undefined)
     throw new Error('Compression requires a prepared provider invocation');
   return {
-    contents: params.contents,
+    // The request is the neutral selection (issue #854); `contents` is its
+    // repeatable reader view so estimation and transport each get a fresh pass.
+    contents: {
+      [Symbol.asyncIterator]: () =>
+        params.requestRows.openReader(params.invocation?.signal),
+    },
+    requestRows: params.requestRows,
+    contentCount: params.requestRows.count,
     modelParameters: params.modelParameters,
     tools: undefined,
     invocation: params.invocation,

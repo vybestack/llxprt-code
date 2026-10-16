@@ -1,0 +1,96 @@
+{
+  "group": "keys",
+  "description": "Today's output for the named counterexamples of the #854 design, phase 0. Regenerate only deliberately with FROZEN_WIRE_CORPUS_UPDATE=1; never in CI.",
+  "cases": {
+    "images: an AI call without an image and a tool result with one, under a smaller budget": {
+      "anthropic-cache-off/raw": [
+        {
+          "length": 490,
+          "sha256": "a5a0183f8fd717da496000957a927df29f17978821c88c30e104ad0294cc7edb",
+          "member": 358,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"read_file\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\\nresult X\"},{\"type\":\"text\",\"text\":\"and now?\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 490,
+          "sha256": "a5a0183f8fd717da496000957a927df29f17978821c88c30e104ad0294cc7edb",
+          "member": 358,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"read_file\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\\nresult X\"},{\"type\":\"text\",\"text\":\"and now?\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    },
+    "images: the same rows without an image budget": {
+      "anthropic-cache-off/raw": [
+        {
+          "length": 538,
+          "sha256": "e1933d1d01edd300ebe36a18d57432ce867c150bfb14662d700b07b7c3ab2e7e",
+          "member": 406,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"read_file\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":[{\"type\":\"text\",\"text\":\"result X\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAEAAAABAA\"}}]},{\"type\":\"text\",\"text\":\"and now?\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "anthropic-cache-off/normalized": [
+        {
+          "length": 538,
+          "sha256": "e1933d1d01edd300ebe36a18d57432ce867c150bfb14662d700b07b7c3ab2e7e",
+          "member": 406,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"read_file\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":[{\"type\":\"text\",\"text\":\"result X\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAEAAAABAA\"}}]},{\"type\":\"text\",\"text\":\"and now?\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    },
+    "keys: two models of one class": {
+      "claude-sonnet-4": [
+        {
+          "length": 342,
+          "sha256": "4a6a02e715d4087fae69894a78dd2d02a4c1f029d8c25e370c2a8a9651c1b3d3",
+          "member": 187,
+          "body": "{\"model\":\"claude-sonnet-4\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"reason\",\"signature\":\"sig\"},{\"type\":\"text\",\"text\":\"answer\"}]},{\"role\":\"user\",\"content\":\"next\"}],\"max_tokens\":64000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":10000}}"
+        }
+      ],
+      "claude-sonnet-4-5": [
+        {
+          "length": 261,
+          "sha256": "c11dffea6b2552f8518534430c582ab0e8314200c18167b005045ddf539d5a85",
+          "member": 104,
+          "body": "{\"model\":\"claude-sonnet-4-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":\"answer\"},{\"role\":\"user\",\"content\":\"next\"}],\"max_tokens\":64000,\"stream\":false,\"system\":\"test system prompt\",\"thinking\":{\"type\":\"enabled\",\"budget_tokens\":10000}}"
+        }
+      ]
+    },
+    "keys: two endpoints with the same media capabilities": {
+      "https://api.openai.test/v1": [
+        {
+          "length": 320,
+          "sha256": "4129b8c9e07f756552433298726708cbe75b6b20c8b100c908280b177dce116b",
+          "member": 275,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"look\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.com/a.png\"}}]}],\"stream\":false}"
+        }
+      ],
+      "https://other.openai.test/v1": [
+        {
+          "length": 320,
+          "sha256": "4129b8c9e07f756552433298726708cbe75b6b20c8b100c908280b177dce116b",
+          "member": 275,
+          "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"look\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAK\"}},{\"type\":\"image_url\",\"image_url\":{\"url\":\"https://example.com/a.png\"}}]}],\"stream\":false}"
+        }
+      ]
+    },
+    "keys: the OAuth tool-name transform": {
+      "oauth": [
+        {
+          "length": 961,
+          "sha256": "a1541784d19fcde5a685752bab36b61afa6c0c9b16cd671edec1f129bf771412",
+          "member": 567,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"<system>\\nBe brief.\\n</system>\\n\\nUser provided conversation begins here:\"},{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"search\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":\"result X\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Y\",\"name\":\"oauth_search\",\"input\":{\"id\":\"Y\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_Y\",\"content\":\"result Y\"},{\"type\":\"text\",\"text\":\"next\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"You are Claude Code, Anthropic's official CLI for Claude.\",\"tools\":[{\"name\":\"llxprt_read_file\",\"description\":\"\",\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"llxprt_search\",\"description\":\"\",\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}],\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ],
+      "api key": [
+        {
+          "length": 797,
+          "sha256": "fa1358bfc6e0cafe0ff3203b4e61a5fc88d4aea0704f2cab9ef2fee22a57f879",
+          "member": 465,
+          "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"q\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_X\",\"name\":\"search\",\"input\":{\"id\":\"X\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_X\",\"content\":\"result X\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_Y\",\"name\":\"oauth_search\",\"input\":{\"id\":\"Y\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_Y\",\"content\":\"result Y\"},{\"type\":\"text\",\"text\":\"next\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":\"Be brief.\",\"tools\":[{\"name\":\"read_file\",\"description\":\"\",\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}},{\"name\":\"search\",\"description\":\"\",\"input_schema\":{\"type\":\"object\",\"properties\":{},\"required\":[]}}],\"thinking\":{\"type\":\"disabled\"}}"
+        }
+      ]
+    }
+  }
+}

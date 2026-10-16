@@ -4,19 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
+import React, { useEffect, useRef, useState } from 'react';
+import type {
+  ContextRange,
+  MessageBus,
+  RecordingIntegration,
+} from '@vybestack/llxprt-code-core';
 import { Box, type DOMElement, Static, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
+import { Colors, SemanticColors } from '../colors.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
 import { useStoreSelector } from '../stores/useStoreSelector.js';
+import type {
+  ScrollbackPagerStore,
+  ScrollbackViewportReporter,
+} from '../stores/turn/scrollbackPager.js';
+import { ScrollbackViewport } from '../components/ScrollbackViewport.js';
+import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
-import { SemanticColors } from '../colors.js';
 import { ScrollableList } from '../components/shared/ScrollableList.js';
 import { SCROLL_TO_ITEM_END } from '../components/shared/VirtualizedList.js';
 import {
@@ -39,6 +49,16 @@ import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
+/**
+ * P02e: pager store paired with the reporter the viewport component shares
+ * with it; present only when the boot-time scrollback flag was on and the
+ * session journal resolved.
+ */
+export interface ScrollbackPagerLayoutBinding {
+  readonly store: ScrollbackPagerStore;
+  readonly viewport: ScrollbackViewportReporter;
+}
+
 export interface DefaultAppLayoutProps {
   runtimeMessageBus?: MessageBus;
   uiRuntime: UiRuntime;
@@ -52,6 +72,8 @@ export interface DefaultAppLayoutProps {
   pendingHistoryItemRef: React.RefObject<DOMElement | null>;
   contextFileNames: string[];
   updateInfo: UpdateObject | null;
+  scrollbackPager?: ScrollbackPagerLayoutBinding | null;
+  scrollbackRestartNotice?: string | null;
 }
 
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
@@ -191,12 +213,17 @@ function TranscriptRegion(props: DefaultAppLayoutProps) {
   );
   const staticKey = useStoreSelector(store, (s) => s.staticKey);
   return (
-    <TranscriptViewport
-      {...props}
-      history={history}
-      pendingHistoryItems={pendingHistoryItems}
-      staticKey={staticKey}
-    />
+    <>
+      {props.scrollbackRestartNotice ? (
+        <Text color={Colors.DimComment}>{props.scrollbackRestartNotice}</Text>
+      ) : null}
+      <TranscriptViewport
+        {...props}
+        history={history}
+        pendingHistoryItems={pendingHistoryItems}
+        staticKey={staticKey}
+      />
+    </>
   );
 }
 
@@ -270,6 +297,96 @@ function AlternateTranscript(props: TranscriptProps) {
   return <TranscriptScroll data={content.listItems} />;
 }
 
+type HistoryServiceHandle = Parameters<
+  RecordingIntegration['subscribeToJournal']
+>[0];
+
+function getInitializedHistoryService(
+  uiRuntime: UiRuntime,
+): HistoryServiceHandle | null {
+  const agentClient = uiRuntime.agentClientSource.getAgentClient();
+  if (agentClient.hasChatInitialized() !== true) {
+    return null;
+  }
+  return agentClient.getHistoryService() ?? null;
+}
+
+/**
+ * Latest context boundary snapshot (#854), or null until a HistoryService
+ * exists. Mirrors the service-swap subscription pattern in
+ * useTokenMetricsTracking: a poll watches for the initialized service,
+ * subscribes to contextRangeChanged, and reads the current range on swap.
+ */
+function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
+  const [range, setRange] = useState<ContextRange | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const serviceRef = useRef<HistoryServiceHandle | null>(null);
+
+  useEffect(() => {
+    let intervalCleared = false;
+    const checkInterval = setInterval(() => {
+      if (intervalCleared) return;
+      const historyService = getInitializedHistoryService(uiRuntime);
+      if (historyService === serviceRef.current) return;
+      if (cleanupRef.current !== null) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      serviceRef.current = historyService;
+      if (historyService === null) {
+        setRange(null);
+        return;
+      }
+      const handleRangeChanged = (snapshot: ContextRange): void => {
+        setRange(snapshot);
+      };
+      historyService.on('contextRangeChanged', handleRangeChanged);
+      setRange(historyService.getContextRange());
+      cleanupRef.current = () => {
+        historyService.off('contextRangeChanged', handleRangeChanged);
+      };
+    }, 100);
+    return () => {
+      clearInterval(checkInterval);
+      intervalCleared = true;
+      if (cleanupRef.current !== null) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      serviceRef.current = null;
+    };
+  }, [uiRuntime]);
+
+  return range;
+}
+
+function PagerTranscript({
+  pager,
+  uiRuntime,
+  slashCommandRuntime,
+}: {
+  pager: ScrollbackPagerLayoutBinding;
+  uiRuntime: UiRuntime;
+  slashCommandRuntime: SlashCommandRuntime;
+}) {
+  const { store } = useTerminalStore();
+  const availableHeight = useStoreSelector(
+    store,
+    (s) => s.availableTerminalHeight,
+  );
+  const contextRange = useContextRangeSnapshot(uiRuntime);
+  return (
+    <ScrollbackViewport
+      store={pager.store}
+      viewport={pager.viewport}
+      viewportLines={Math.max(1, availableHeight)}
+      pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
+      range={contextRange ?? undefined}
+      config={slashCommandRuntime}
+    />
+  );
+}
+
 function TranscriptViewport(props: TranscriptProps) {
   const {
     mainAreaWidth,
@@ -291,7 +408,17 @@ function TranscriptViewport(props: TranscriptProps) {
     activeShellPtyId,
     embeddedShellFocused,
   );
-  if (usesAlternateBuffer(props)) return <AlternateTranscript {...props} />;
+  if (usesAlternateBuffer(props)) {
+    return props.scrollbackPager ? (
+      <PagerTranscript
+        pager={props.scrollbackPager}
+        uiRuntime={props.uiRuntime}
+        slashCommandRuntime={props.slashCommandRuntime}
+      />
+    ) : (
+      <AlternateTranscript {...props} />
+    );
+  }
   return (
     <>
       <StandardStatic {...props} />

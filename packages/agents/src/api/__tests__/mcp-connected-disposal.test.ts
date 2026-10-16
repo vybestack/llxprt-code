@@ -12,6 +12,7 @@ import { get } from 'node:http';
 import { buildAgent } from './helpers/agentHarness.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { fromConfig } from '../fromConfig.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -82,11 +83,13 @@ describe('connected MCP disposal', () => {
       readiness.push(event);
     }
     expect(readiness).toStrictEqual([{ type: 'done', reason: 'aborted' }]);
-    const network = spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      entered.release();
-      await released.promise;
-      return new Response(null, { status: 401 });
-    });
+    const network = spyOn(globalThis, 'fetch').mockImplementation(
+      withFetchPreconnect(async () => {
+        entered.release();
+        await released.promise;
+        return new Response(null, { status: 401 });
+      }),
+    );
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {

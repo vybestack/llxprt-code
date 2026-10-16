@@ -22,7 +22,11 @@ import {
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  bindChatHistoryTail,
+  createClientIdeFixture,
+} from './__tests__/client-ide-fixture.js';
 import {
   setupAgentClient,
   type MockResponseShape,
@@ -253,6 +257,10 @@ describe('Agent Client (client.ts)', () => {
           getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
           getContextLimit: vi.fn().mockReturnValue(1000000),
         };
+        bindChatHistoryTail(
+          mockChat,
+          () => mockChat.getHistory!() as unknown as IContent[],
+        );
         client['chat'] = mockChat as ChatSession;
 
         // Override the client.getHistory mock to return non-empty history for delta tests

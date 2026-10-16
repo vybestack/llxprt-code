@@ -15,7 +15,7 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  * synthesize-and-resolve route, not a native tool_call chunk.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'bun:test';
+import { afterAll, describe, expect, it, vi, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -135,6 +135,10 @@ async function runDirectNonInteractive(
 }
 
 describe('issue 3540 textual Hermes emitter rejection', () => {
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);

@@ -203,9 +203,24 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./services/history/provider-normalization-disk.js": {
+      "types": "./dist/src/services/history/provider-normalization-disk.d.ts",
+      "bun": "./src/services/history/provider-normalization-disk.ts",
+      "import": "./dist/src/services/history/provider-normalization-disk.js"
+    },
+    "./services/history/provider-request-snapshot.js": {
+      "types": "./dist/src/services/history/provider-request-snapshot.d.ts",
+      "bun": "./src/services/history/provider-request-snapshot.ts",
+      "import": "./dist/src/services/history/provider-request-snapshot.js"
+    },
     "./services/history/semantic-media-purge.js": {
       "bun": "./src/services/history/semantic-media-purge.ts",
       "import": "./dist/src/services/history/semantic-media-purge.js"
+    },
+    "./services/history/semantic-purge-stream.js": {
+      "types": "./dist/src/services/history/semantic-purge-stream.d.ts",
+      "bun": "./src/services/history/semantic-purge-stream.ts",
+      "import": "./dist/src/services/history/semantic-purge-stream.js"
     },
     "./services/history/provider-file-binding.js": {
       "types": "./dist/src/services/history/provider-file-binding.d.ts",
@@ -217,9 +232,34 @@
       "bun": "./src/services/history/historyCloneUtils.ts",
       "import": "./dist/src/services/history/historyCloneUtils.js"
     },
+    "./services/history/historyDensityRows.js": {
+      "types": "./dist/src/services/history/historyDensityRows.d.ts",
+      "bun": "./src/services/history/historyDensityRows.ts",
+      "import": "./dist/src/services/history/historyDensityRows.js"
+    },
+    "./services/history/attachHistoryJournal.js": {
+      "types": "./dist/src/services/history/attachHistoryJournal.d.ts",
+      "bun": "./src/services/history/attachHistoryJournal.ts",
+      "import": "./dist/src/services/history/attachHistoryJournal.js"
+    },
     "./llm-types/index.js": {
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
+    },
+    "./llm-types/toolDeclaration.js": {
+      "types": "./dist/src/llm-types/toolDeclaration.d.ts",
+      "bun": "./src/llm-types/toolDeclaration.ts",
+      "import": "./dist/src/llm-types/toolDeclaration.js"
+    },
+    "./recording/childJournal.js": {
+      "types": "./dist/src/recording/childJournal.d.ts",
+      "bun": "./src/recording/childJournal.ts",
+      "import": "./dist/src/recording/childJournal.js"
+    },
+    "./recording/childSessionIds.js": {
+      "types": "./dist/src/recording/childSessionIds.d.ts",
+      "bun": "./src/recording/childSessionIds.ts",
+      "import": "./dist/src/recording/childSessionIds.js"
     },
     "./llm-types/modelEnvelope.js": {
       "bun": "./src/llm-types/modelEnvelope.ts",
@@ -280,6 +320,11 @@
       "bun": "./src/storage/request-media-resolver.ts",
       "import": "./dist/src/storage/request-media-resolver.js"
     },
+    "./storage/scratch-root.js": {
+      "types": "./dist/src/storage/scratch-root.d.ts",
+      "bun": "./src/storage/scratch-root.ts",
+      "import": "./dist/src/storage/scratch-root.js"
+    },
     "./storage/secure-store.js": {
       "types": "./dist/src/storage/secure-store.d.ts",
       "bun": "./src/storage/secure-store.ts",
@@ -324,10 +369,6 @@
     "./telemetry/file-exporters.js": {
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
-    },
-    "./test-utils/ephemeral-default-ownership.js": {
-      "types": "./src/config/ephemeralDefaultOwnership.ts",
-      "bun": "./src/config/ephemeralDefaultOwnership.ts"
     },
     "./utils/summarizer.js": {
       "bun": "./src/utils/summarizer.ts",
@@ -677,6 +718,151 @@
     "./utils/tool-utils.js": {
       "bun": "./src/utils/tool-utils.ts",
       "import": "./dist/src/utils/tool-utils.js"
+    },
+    "./recording/journalCounters.js": {
+      "types": "./dist/src/recording/journalCounters.d.ts",
+      "bun": "./src/recording/journalCounters.ts",
+      "import": "./dist/src/recording/journalCounters.js"
+    },
+    "./recording/rowOwnership.js": {
+      "types": "./dist/src/recording/rowOwnership.d.ts",
+      "bun": "./src/recording/rowOwnership.ts",
+      "import": "./dist/src/recording/rowOwnership.js"
+    },
+    "./recording/journalResolver.js": {
+      "types": "./dist/src/recording/journalResolver.d.ts",
+      "bun": "./src/recording/journalResolver.ts",
+      "import": "./dist/src/recording/journalResolver.js"
+    },
+    "./services/history/historyCuration.js": {
+      "types": "./dist/src/services/history/historyCuration.d.ts",
+      "bun": "./src/services/history/historyCuration.ts",
+      "import": "./dist/src/services/history/historyCuration.js"
+    },
+    "./services/history/historyJournalStore.js": {
+      "types": "./dist/src/services/history/historyJournalStore.d.ts",
+      "bun": "./src/services/history/historyJournalStore.ts",
+      "import": "./dist/src/services/history/historyJournalStore.js"
+    },
+    "./storage/history-media-ownership.js": {
+      "types": "./dist/src/storage/history-media-ownership.d.ts",
+      "bun": "./src/storage/history-media-ownership.ts",
+      "import": "./dist/src/storage/history-media-ownership.js"
+    },
+    "./storage/SessionPersistenceService.js": {
+      "types": "./dist/src/storage/SessionPersistenceService.d.ts",
+      "bun": "./src/storage/SessionPersistenceService.ts",
+      "import": "./dist/src/storage/SessionPersistenceService.js"
+    },
+    "./services/history/detachedHistoryJournal.js": {
+      "types": "./dist/src/services/history/detachedHistoryJournal.d.ts",
+      "bun": "./src/services/history/detachedHistoryJournal.ts",
+      "import": "./dist/src/services/history/detachedHistoryJournal.js"
+    },
+    "./services/history/compression-span-index.js": {
+      "types": "./dist/src/services/history/compression-span-index.d.ts",
+      "bun": "./src/services/history/compression-span-index.ts",
+      "import": "./dist/src/services/history/compression-span-index.js"
+    },
+    "./services/history/historyMutationOwnership.js": {
+      "types": "./dist/src/services/history/historyMutationOwnership.d.ts",
+      "bun": "./src/services/history/historyMutationOwnership.ts",
+      "import": "./dist/src/services/history/historyMutationOwnership.js"
+    },
+    "./services/history/historyBatchContracts.js": {
+      "types": "./dist/src/services/history/historyBatchContracts.d.ts",
+      "bun": "./src/services/history/historyBatchContracts.ts",
+      "import": "./dist/src/services/history/historyBatchContracts.js"
+    },
+    "./storage/history-media-index.js": {
+      "types": "./dist/src/storage/history-media-index.d.ts",
+      "bun": "./src/storage/history-media-index.ts",
+      "import": "./dist/src/storage/history-media-index.js"
+    },
+    "./storage/media-reference-lifecycle.js": {
+      "types": "./dist/src/storage/media-reference-lifecycle.d.ts",
+      "bun": "./src/storage/media-reference-lifecycle.ts",
+      "import": "./dist/src/storage/media-reference-lifecycle.js"
+    },
+    "./hooks/hookModelInputStream.js": {
+      "types": "./dist/src/hooks/hookModelInputStream.d.ts",
+      "bun": "./src/hooks/hookModelInputStream.ts",
+      "import": "./dist/src/hooks/hookModelInputStream.js"
+    },
+    "./hooks/hookOutputSnapshot.js": {
+      "types": "./dist/src/hooks/hookOutputSnapshot.d.ts",
+      "bun": "./src/hooks/hookOutputSnapshot.ts",
+      "import": "./dist/src/hooks/hookOutputSnapshot.js"
+    },
+    "./hooks/hookSnapshotAggregator.js": {
+      "types": "./dist/src/hooks/hookSnapshotAggregator.d.ts",
+      "bun": "./src/hooks/hookSnapshotAggregator.ts",
+      "import": "./dist/src/hooks/hookSnapshotAggregator.js"
+    },
+    "./hooks/hookSystem.js": {
+      "types": "./dist/src/hooks/hookSystem.d.ts",
+      "bun": "./src/hooks/hookSystem.ts",
+      "import": "./dist/src/hooks/hookSystem.js"
+    },
+    "./services/history/detachedHistoryAPI.js": {
+      "types": "./dist/src/services/history/detachedHistoryAPI.d.ts",
+      "bun": "./src/services/history/detachedHistoryAPI.ts",
+      "import": "./dist/src/services/history/detachedHistoryAPI.js"
+    },
+    "./services/history/historyDiskDensity.js": {
+      "types": "./dist/src/services/history/historyDiskDensity.d.ts",
+      "bun": "./src/services/history/historyDiskDensity.ts",
+      "import": "./dist/src/services/history/historyDiskDensity.js"
+    },
+    "./services/history/historyDumpSnapshot.js": {
+      "types": "./dist/src/services/history/historyDumpSnapshot.d.ts",
+      "bun": "./src/services/history/historyDumpSnapshot.ts",
+      "import": "./dist/src/services/history/historyDumpSnapshot.js"
+    },
+    "./services/history/historyJournalGuards.js": {
+      "types": "./dist/src/services/history/historyJournalGuards.d.ts",
+      "bun": "./src/services/history/historyJournalGuards.ts",
+      "import": "./dist/src/services/history/historyJournalGuards.js"
+    },
+    "./services/history/historyMutationSnapshot.js": {
+      "types": "./dist/src/services/history/historyMutationSnapshot.d.ts",
+      "bun": "./src/services/history/historyMutationSnapshot.ts",
+      "import": "./dist/src/services/history/historyMutationSnapshot.js"
+    },
+    "./services/history/provider-curated-stream.js": {
+      "types": "./dist/src/services/history/provider-curated-stream.d.ts",
+      "bun": "./src/services/history/provider-curated-stream.ts",
+      "import": "./dist/src/services/history/provider-curated-stream.js"
+    },
+    "./services/history/provider-normalization-storage.js": {
+      "types": "./dist/src/services/history/provider-normalization-storage.d.ts",
+      "bun": "./src/services/history/provider-normalization-storage.ts",
+      "import": "./dist/src/services/history/provider-normalization-storage.js"
+    },
+    "./services/history/semantic-purge-disk-rows.js": {
+      "types": "./dist/src/services/history/semantic-purge-disk-rows.d.ts",
+      "bun": "./src/services/history/semantic-purge-disk-rows.ts",
+      "import": "./dist/src/services/history/semantic-purge-disk-rows.js"
+    },
+    "./session/sessionExecutionServices.js": {
+      "types": "./dist/src/session/sessionExecutionServices.d.ts",
+      "bun": "./src/session/sessionExecutionServices.ts",
+      "import": "./dist/src/session/sessionExecutionServices.js"
+    },
+    "./session/sessionSchedulerRegistry.js": {
+      "types": "./dist/src/session/sessionSchedulerRegistry.d.ts",
+      "bun": "./src/session/sessionSchedulerRegistry.ts",
+      "import": "./dist/src/session/sessionSchedulerRegistry.js"
+    },
+    "./skills/skillLoader.js": {
+      "types": "./dist/src/skills/skillLoader.d.ts",
+      "bun": "./src/skills/skillLoader.ts",
+      "import": "./dist/src/skills/skillLoader.js"
+    },
+    "./utils/output-format.js": {
+      "types": "./dist/src/utils/output-format.d.ts",
+      "bun": "./src/utils/output-format.ts",
+      "import": "./dist/src/utils/output-format.js"
     },
     "./runtime/bindProviderMedia.js": {
       "types": "./dist/src/runtime/bindProviderMedia.d.ts",

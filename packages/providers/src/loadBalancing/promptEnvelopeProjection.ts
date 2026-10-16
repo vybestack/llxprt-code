@@ -130,44 +130,69 @@ function selectEligibleFailoverMember(
 }
 
 /**
- * Wrap a delegate projection as an estimate-only projection (issue #3507):
- * the estimation fields are inert snapshots, so the delegate's
- * request-scoped resources are released eagerly within the call and the
- * wrapper carries a fresh frozen transport token instead of the delegate's
- * reservation (the send-time guard overwrites
- * `promptEnvelopeTransportToken` with its own projection, so forwarding the
- * delegate token would leak its media reservation on successful sends).
- * A failing release propagates: resource-accounting bugs fail fast.
+ * Peek leases still owned by an unsent estimate-only projection, keyed by the
+ * projection's own transport token. The load balancer's send path takes the
+ * token off its incoming options and discharges the lease through
+ * {@link releaseEstimateOnlyPromptEnvelope}.
  */
-export async function toEstimateOnlyPromptEnvelopeProjection(
+const peekLeasesByToken = new WeakMap<object, () => Promise<void>>();
+
+/**
+ * Wrap a delegate projection as an estimate-only projection (issue #3507).
+ *
+ * The wrapper keeps the delegate's request-scoped resources alive: the
+ * estimation fields read through to the delegate projection, so a
+ * source-backed projection or an on-demand SDK body stays readable until the
+ * peek owner releases it (issue #854). Copying those references and
+ * releasing first would hand callers a disposed projection. The wrapper
+ * carries a fresh frozen transport token instead of the delegate's
+ * reservation, and `releaseIfUnsent` discharges the delegate lease exactly
+ * once. A successful send never calls it, so the token is also registered
+ * for {@link releaseEstimateOnlyPromptEnvelope}. A failing release
+ * propagates: resource-accounting bugs fail fast.
+ */
+export function toEstimateOnlyPromptEnvelopeProjection(
   delegateProjection: PromptEnvelopeProjection,
-): Promise<PromptEnvelopeProjection> {
-  // Copy every estimation field before awaiting the release: once the
-  // delegate's request-scoped resources are discharged, no field of the
-  // delegate projection may be read. Destructuring first makes that
-  // ordering structural.
-  const {
-    model,
-    protocol,
-    method,
-    projectionRevision,
-    unsupportedMedia,
-    accounting,
-    finalizedProjection,
-    legacyEstimate,
-  } = delegateProjection;
-  await delegateProjection.releaseIfUnsent?.();
-  return {
-    model,
-    protocol,
-    method,
-    projectionRevision,
-    unsupportedMedia,
-    ...(accounting === undefined ? {} : { accounting }),
-    finalizedProjection,
-    legacyEstimate,
-    transportToken: Object.freeze({}),
+): PromptEnvelopeProjection {
+  const transportToken = Object.freeze({});
+  let release: Promise<void> | undefined;
+  const releaseOnce = (): Promise<void> => {
+    release ??= Promise.resolve().then(() =>
+      delegateProjection.releaseIfUnsent?.(),
+    );
+    return release;
   };
+  peekLeasesByToken.set(transportToken, releaseOnce);
+  return Object.freeze({
+    model: delegateProjection.model,
+    protocol: delegateProjection.protocol,
+    method: delegateProjection.method,
+    projectionRevision: delegateProjection.projectionRevision,
+    unsupportedMedia: delegateProjection.unsupportedMedia,
+    ...(delegateProjection.accounting === undefined
+      ? {}
+      : { accounting: delegateProjection.accounting }),
+    // On-demand delegates build their graph per access; keep that laziness.
+    get finalizedProjection() {
+      return delegateProjection.finalizedProjection;
+    },
+    legacyEstimate: () => delegateProjection.legacyEstimate(),
+    transportToken,
+    releaseIfUnsent: releaseOnce,
+  });
+}
+
+/**
+ * Discharge the peek lease behind a transport token handed out by
+ * {@link toEstimateOnlyPromptEnvelopeProjection}. The load balancer re-projects
+ * the member it actually selects, so once its send starts the peek is spent.
+ * Tokens that are not peek tokens, and already released peeks, are no-ops.
+ */
+export async function releaseEstimateOnlyPromptEnvelope(
+  transportToken: object | undefined,
+): Promise<void> {
+  if (transportToken === undefined) return;
+  await peekLeasesByToken.get(transportToken)?.();
 }
 
 /**

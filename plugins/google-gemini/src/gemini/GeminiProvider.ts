@@ -46,7 +46,8 @@ import {
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
 import { requireAssembledSystemInstruction } from '@vybestack/llxprt-code-providers/utils/systemPromptPlacement.js';
-import { buildGeminiDumpContents } from './geminiDumpConversion.js';
+import { buildGeminiDumpContentsStream } from './geminiDumpConversion.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   finishMediaRequest,
@@ -54,6 +55,10 @@ import {
   resolveRequestMedia,
   captureRequestMediaInput,
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
+import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import { reportRequestSize } from '@vybestack/llxprt-code-providers/logging/requestSizeReport.js';
+import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
 
 /**
  * Represents the default Gemini provider.
@@ -121,17 +126,24 @@ export class GeminiProvider extends BaseProvider {
    * dump from the runtime provider instance without the base package ever
    * importing plugin-owned code (#2763).
    */
-  buildContextDumpBody(
-    history: IContent[],
+  readonly contextDumpVersion = 2;
+
+  async buildContextDumpBody(
+    history: HistoryDumpSource,
     model?: string,
     config?: OutputLimitConfig,
-  ): Record<string, unknown> {
-    const contents = buildGeminiDumpContents(history, model, config);
+  ): Promise<Record<string, unknown>> {
+    const contents = buildGeminiDumpContentsStream(history, model, config);
     return model ? { model, contents } : { contents };
   }
 
   protected override supportsOAuth(): boolean {
     return false;
+  }
+
+  /** The transport reads `requestRows` itself (issue #854 WP09). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
   }
 
   private async determineBestAuth(): Promise<{
@@ -315,6 +327,7 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode,
     httpOptions: ReturnType<typeof this.createHttpOptions>,
     baseURL?: string,
+    onRequestBytes?: (bytes: number) => void,
   ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
     const settingsService = this.captureOwnerPolicy();
@@ -333,6 +346,7 @@ export class GeminiProvider extends BaseProvider {
       vertexai: isVertex,
       ...this.buildVertexAIOptions(isVertex, vertexConfig),
       httpOptions: baseURL ? { ...httpOptions, baseUrl: baseURL } : httpOptions,
+      ...(onRequestBytes === undefined ? {} : { onRequestBytes }),
     };
   }
 
@@ -344,16 +358,20 @@ export class GeminiProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const mediaRequest = await resolveRequestMedia(
-      captureRequestMediaInput(
-        options.metadata?.['logicalRequestId'],
-        options.invocation.runtimeId,
-        this.requestMediaBudgetBytes,
-        this.requestMediaResolver,
-      ),
-      options.contents,
-      options.invocation.signal,
+    const sourceRoute = readsRequestRowsAtTransport(options);
+    const mediaInput = captureRequestMediaInput(
+      options.metadata?.['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
     );
+    const mediaRequest = sourceRoute
+      ? await openTransportRowsMedia(options, mediaInput)
+      : await resolveRequestMedia(
+          mediaInput,
+          options.contents,
+          options.invocation.signal,
+        );
     const effectiveOptions = {
       ...options,
       contents: mediaRequest.withContents((contents) => contents),
@@ -368,6 +386,15 @@ export class GeminiProvider extends BaseProvider {
         () => this.getBaseURL(),
         this.getLogger(),
       );
+      if (sourceRoute) dropTransportRows(mediaRequest);
+      // The SDK `Content[]` is the one body this request needs; it is
+      // released once the call settles on any outcome (issue #854 WP09).
+      const sdkBody = acquireRequestScopedBody('gemini', {
+        contents: setup.contentsWithSignatures,
+      });
+      mediaRequest.registerCleanup(() => {
+        void sdkBody.release();
+      });
       const result = await this.executeGeneration(
         effectiveOptions,
         setup,
@@ -432,13 +459,16 @@ export class GeminiProvider extends BaseProvider {
       setup.shouldDumpError,
       setup.mapResponseToChunks,
       setup.reasoningConfig.includeInResponse,
-      () => this.createNonOAuthGenerator(setup),
+      () => this.createNonOAuthGenerator(setup, options.metadata),
       setup.baseURL,
       dumpHeaders,
     );
   }
 
-  private async createNonOAuthGenerator(setup: GeminiGenerationSetup): Promise<{
+  private async createNonOAuthGenerator(
+    setup: GeminiGenerationSetup,
+    metadata: Record<string, unknown> | undefined,
+  ): Promise<{
     generateContent: (
       params: GenerateContentParameters,
     ) => Promise<GenerateContentResponse>;
@@ -452,6 +482,7 @@ export class GeminiProvider extends BaseProvider {
         setup.authMode,
         setup.httpOptions,
         setup.baseURL,
+        (bytes) => reportRequestSize(metadata, bytes),
       ),
     );
     return client.models;

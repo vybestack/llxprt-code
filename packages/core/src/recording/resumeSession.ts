@@ -23,9 +23,10 @@
  * recording for a previously saved session.
  */
 
-import { type IContent } from '../services/history/IContent.js';
+import { stat, open, appendFile } from 'node:fs/promises';
+import { ResumeCursorBoot } from './resumeCursorBoot.js';
+export { ResumeCursorBoot } from './resumeCursorBoot.js';
 import {
-  type ReplayResult,
   type SessionMetadata,
   type SessionSummary,
   type UnreadableRecording,
@@ -37,12 +38,13 @@ import {
   SessionLockedError,
   type LockHandle,
 } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
+import { scanResumeMetadata } from './resumeMetadata.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
 import {
   describeUnreadableRecording,
   matchUnreadableRecordings,
 } from './unreadableRecordings.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
@@ -64,6 +66,8 @@ export interface ResumeRequest {
   workspaceDirs: string[];
   mediaStore?: LocalMediaStore;
   maxQueueBytes?: number;
+  /** Injectable read counters (issue #854 P05d); absent = uninstrumented. */
+  counters?: JournalReadCounters;
 }
 
 /**
@@ -74,7 +78,7 @@ export interface ResumeRequest {
  */
 export interface ResumeResult {
   ok: true;
-  history: IContent[];
+  boot: ResumeCursorBoot;
   metadata: SessionMetadata;
   recording: SessionRecordingService;
   lockHandle: LockHandle;
@@ -90,6 +94,14 @@ export interface ResumeError {
   /** Recordings in the project that could not be read and were passed over. */
   skippedRecordings?: readonly UnreadableRecording[];
 }
+
+/** A locked session whose boot failed; its lock is already released. */
+interface BootFailure {
+  ok: false;
+  reason: string;
+}
+
+type BootedSession = Omit<ResumeResult, 'skippedRecordings'>;
 
 type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
 
@@ -144,7 +156,11 @@ async function resolveAndLockSession(
 function initializeRecordingForResume(
   lockedSession: LockedSession,
   request: ResumeRequest,
-  replayResult: { metadata: SessionMetadata; lastSeq: number },
+  replayResult: {
+    metadata: SessionMetadata;
+    lastSeq: number;
+    unfinishedReplaceTxId?: string;
+  },
 ): SessionRecordingService {
   const recording = new SessionRecordingService({
     sessionId: replayResult.metadata.sessionId,
@@ -164,6 +180,7 @@ function initializeRecordingForResume(
     lockedSession.targetFilePath,
     replayResult.lastSeq,
     replayResult.metadata.title,
+    replayResult.unfinishedReplaceTxId,
   );
   recording.adoptLock(lockedSession.lockHandle);
 
@@ -189,66 +206,33 @@ function initializeRecordingForResume(
   return recording;
 }
 
-type ReplaySuccess = Extract<ReplayResult, { ok: true }>;
-type ReplayFailure = { ok: false; reason: string };
-
-function replayFailureError(failure: ReplayFailure): ResumeError {
+function replayFailureError(failure: BootFailure): ResumeError {
   return { ok: false, error: `Failed to replay session: ${failure.reason}` };
 }
 
 /**
- * Replay a locked session. A session that cannot be replayed releases its lock
- * before the failure is returned, so callers never inherit a lock on a session
- * they are not resuming.
+ * Bare continue: lock and boot the newest unlocked session that is readable.
+ * Candidates that fail to boot are skipped (their lock already released) and
+ * appended to `skipped`; if none is readable the newest candidate's failure is
+ * returned.
  */
-async function replayLockedSession(
-  lockedSession: LockedSession,
-  request: ResumeRequest,
-): Promise<ReplaySuccess | ReplayFailure> {
-  const replayResult = await replaySession(
-    lockedSession.targetFilePath,
-    request.projectHash,
-    { mediaStore: request.mediaStore },
-  );
-  if (!replayResult.ok) {
-    await lockedSession.lockHandle.release();
-    return { ok: false, reason: replayResult.error };
-  }
-  if (replayResult.sequenceCorrupt) {
-    await lockedSession.lockHandle.release();
-    return {
-      ok: false,
-      reason: 'recording has non-monotonic sequences',
-    };
-  }
-  return replayResult;
-}
-
-/**
- * Bare continue: lock and replay the newest unlocked session that is readable.
- * Candidates that fail replay are skipped (their lock already released) and
- * appended to `skipped`; if none is readable the newest candidate's replay
- * error is returned.
- */
-async function replayNewestReadableSession(
+async function bootNewestReadableSession(
   request: ResumeRequest,
   sessions: SessionSummary[],
   skipped: UnreadableRecording[],
-): Promise<
-  { lockedSession: LockedSession; replay: ReplaySuccess } | ResumeError
-> {
-  let firstFailure: ReplayFailure | null = null;
+): Promise<BootedSession | ResumeError> {
+  let firstFailure: BootFailure | null = null;
   for (const session of sessions) {
     const lockedSession = await tryLockSession(request.chatsDir, session);
     if (lockedSession === null) continue;
-    const replay = await replayLockedSession(lockedSession, request);
-    if (replay.ok) return { lockedSession, replay };
+    const booted = await bootLockedSession(lockedSession, request);
+    if (booted.ok) return booted;
     skipped.push({
       sessionId: session.sessionId,
       filePath: session.filePath,
-      reason: replay.reason,
+      reason: booted.reason,
     });
-    firstFailure ??= replay;
+    firstFailure ??= booted;
   }
   return firstFailure === null
     ? { ok: false, error: 'All sessions for this project are in use' }
@@ -267,10 +251,11 @@ function noReadableSessionsError(
 /**
  * Resume a previously recorded session.
  *
- * Discovers sessions, resolves the target, acquires a lock, replays the
- * event log to reconstruct history, and initializes recording for append.
- * Recordings that cannot be read never block the others; they are returned
- * in `skippedRecordings` on success and failure alike.
+ * Discovers sessions, resolves the target, acquires a lock, scans the journal
+ * metadata and opens a cursor boot (no rows are replayed into memory), and
+ * initializes recording for append. Recordings that cannot be read never block
+ * the others; they are returned in `skippedRecordings` on success and failure
+ * alike.
  *
  * @pseudocode resume-flow.md lines 50-124
  */
@@ -293,51 +278,89 @@ export async function resumeSession(
     };
   }
 
-  // Steps 2-4: Resolve, lock, and replay the session to resume
-  let lockedSession: LockedSession;
-  let replayResult: ReplaySuccess;
+  // Step 2: Resolve which session to resume
   if (request.continueRef === CONTINUE_LATEST) {
-    const newest = await replayNewestReadableSession(
-      request,
-      sessions,
-      skipped,
-    );
-    if ('error' in newest) return { ...newest, skippedRecordings: skipped };
-    ({ lockedSession, replay: replayResult } = newest);
-  } else {
-    const locked = await resolveAndLockSession(
-      request,
-      sessions,
-      unreadableRecordings,
-    );
-    if (!('targetFilePath' in locked)) {
-      return { ...locked, skippedRecordings: skipped };
-    }
-    const replay = await replayLockedSession(locked, request);
-    if (!replay.ok) {
-      return { ...replayFailureError(replay), skippedRecordings: skipped };
-    }
-    lockedSession = locked;
-    replayResult = replay;
+    const newest = await bootNewestReadableSession(request, sessions, skipped);
+    return { ...newest, skippedRecordings: skipped };
   }
-
-  // Steps 5-7: Initialize recording for append
-  const recording = initializeRecordingForResume(
-    lockedSession,
+  const locked = await resolveAndLockSession(
     request,
-    replayResult,
+    sessions,
+    unreadableRecordings,
   );
+  if (!('targetFilePath' in locked)) {
+    return { ...locked, skippedRecordings: skipped };
+  }
+  const booted = await bootLockedSession(locked, request);
+  return booted.ok
+    ? { ...booted, skippedRecordings: skipped }
+    : { ...replayFailureError(booted), skippedRecordings: skipped };
+}
 
-  // Step 8: Return result
-  return {
-    ok: true,
-    history: replayResult.history,
-    metadata: replayResult.metadata,
-    recording,
-    lockHandle: lockedSession.lockHandle,
-    warnings: replayResult.warnings,
-    skippedRecordings: skipped,
-  };
+async function bootLockedSession(
+  lockedSession: LockedSession,
+  request: ResumeRequest,
+): Promise<BootedSession | BootFailure> {
+  let boot: ResumeCursorBoot | undefined;
+  try {
+    const size = (await stat(lockedSession.targetFilePath)).size;
+    const { replay: replayResult, watermark: scannedWatermark } =
+      await scanResumeMetadata(
+        lockedSession.targetFilePath,
+        request.projectHash,
+        size,
+        request.counters,
+      );
+    if (!replayResult.ok) throw new Error(replayResult.error);
+    if (replayResult.sequenceCorrupt)
+      throw new Error('recording has non-monotonic sequences');
+    const watermark = await finishResumePrefix(
+      lockedSession.targetFilePath,
+      size,
+      scannedWatermark,
+    );
+    boot = await ResumeCursorBoot.open(
+      lockedSession.targetFilePath,
+      replayResult.lastSeq,
+      watermark,
+      request.counters,
+      request.mediaStore,
+    );
+    const ownedBoot = boot;
+    const lockHandle = {
+      ...lockedSession.lockHandle,
+      async release(): Promise<void> {
+        try {
+          await ownedBoot.close();
+        } finally {
+          await lockedSession.lockHandle.release();
+        }
+      },
+    };
+    const recording = initializeRecordingForResume(
+      { ...lockedSession, lockHandle },
+      request,
+      replayResult,
+    );
+    return {
+      ok: true,
+      boot,
+      metadata: replayResult.metadata,
+      recording,
+      lockHandle,
+      warnings: replayResult.warnings,
+    };
+  } catch (error) {
+    try {
+      await boot?.close();
+    } finally {
+      await lockedSession.lockHandle.release();
+    }
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
@@ -371,4 +394,22 @@ async function tryLockSession(
   return lockHandle === null
     ? null
     : { targetFilePath: session.filePath, lockHandle };
+}
+
+async function finishResumePrefix(
+  filePath: string,
+  size: number,
+  watermark: number,
+): Promise<number> {
+  if (size === 0) return watermark;
+  const handle = await open(filePath, 'r');
+  const last = Buffer.alloc(1);
+  try {
+    await handle.read(last, 0, 1, size - 1);
+  } finally {
+    await handle.close();
+  }
+  if (last[0] === 10) return watermark;
+  await appendFile(filePath, '\n');
+  return watermark === size ? watermark + 1 : watermark;
 }

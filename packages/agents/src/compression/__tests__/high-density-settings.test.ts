@@ -174,12 +174,6 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
     const strategy = getCompressionStrategy('high-density');
     expect(typeof strategy.optimize).toBe('function');
   });
-
-  /** @requirement REQ-HD-004.2 */
-  it('HighDensityStrategy from factory has compress method', () => {
-    const strategy = getCompressionStrategy('high-density');
-    expect(typeof strategy.compress).toBe('function');
-  });
 });
 
 // ---------------------------------------------------------------------------

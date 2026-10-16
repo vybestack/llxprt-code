@@ -6,7 +6,7 @@ import {
   type Config,
   type SessionRecordingService,
   type RecordingIntegration,
-  type IContent,
+  type ResumeCursorBoot,
   type LockHandle,
   type MessageBus,
   type TelemetrySettings,
@@ -311,7 +311,7 @@ function buildRenderElement(
   version: string,
   runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
-  resumedHistory: IContent[] | undefined,
+  resumedBoot: Pick<ResumeCursorBoot, 'streamRows'> | undefined,
   initialRecordingService: SessionRecordingService | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
@@ -351,11 +351,11 @@ function buildRenderElement(
             version={version}
             terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
             {...(recordingOwner === 'agent'
-              ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+              ? { recordingOwner, resumedBoot, suppressStartupWelcome }
               : {
                   recordingIntegration,
                   recordingOwner,
-                  resumedHistory,
+                  resumedBoot,
                   initialRecordingService,
                   initialLockHandle,
                   suppressStartupWelcome,
@@ -404,7 +404,7 @@ export interface OwnerInteractiveStartup {
   >;
   readonly recordingOwner: 'agent';
   readonly runtimeMessageBus?: MessageBus;
-  readonly resumedHistory?: IContent[];
+  readonly resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 }
 
@@ -424,7 +424,7 @@ export function startInteractiveUI(
   workspaceRoot: string,
   runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
   initialRecordingService?: SessionRecordingService,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
@@ -443,7 +443,7 @@ export async function startInteractiveUI(
   workspaceRoot: string,
   startup?: OwnerInteractiveStartup | MessageBus,
   recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
   initialRecordingService?: SessionRecordingService,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
@@ -501,7 +501,7 @@ export async function startInteractiveUI(
       runtimeSettings: selectedSettings,
       recordingOwner,
       recordingIntegration,
-      resumedHistory,
+      resumedBoot,
       initialRecordingService,
       initialLockHandle,
       suppressStartupWelcome,
@@ -606,7 +606,7 @@ export type CommitInteractiveStartupArgs = {
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
   readonly runtimeMessageBus?: MessageBus;
-  readonly resumedHistory?: IContent[];
+  readonly resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 } & (
   | {
@@ -729,7 +729,7 @@ export async function commitInteractiveStartup(
         args.version,
         args.runtimeMessageBus,
         args.recordingIntegration,
-        args.resumedHistory,
+        args.resumedBoot,
         args.initialRecordingService,
         args.initialLockHandle,
         args.suppressStartupWelcome,

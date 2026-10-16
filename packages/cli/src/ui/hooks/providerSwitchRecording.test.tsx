@@ -356,20 +356,13 @@ describe('provider changes made in dialogs reach the session recording (issue #3
   describe('when the session recording cannot accept the switch', () => {
     const FAILURE_TEXT = 'recording the switch in the session file failed';
 
-    beforeEach(async () => {
-      // A queue limit equal to the bytes already held makes the switch itself
-      // the thing that exceeds it.
-      const heldBytes = recording.getPendingByteCount();
-      await integration.dispose();
-      await recording.dispose();
-      config.setSessionRecordingQueueByteLimit(heldBytes);
-      recording = await buildNewRecordingService(
-        config,
-        PROJECT_HASH,
-        chatsDir,
-        sessionClientFor(root),
-      );
-      integration = new RecordingIntegration(recording);
+    beforeEach(() => {
+      // The recorder bounds its queue with backpressure rather than a thrown
+      // limit, so the failure it cannot accept is injected at the recorder the
+      // dialogs call. The failure text is what a recorder rejection carries.
+      vi.spyOn(integration, 'recordProviderSwitch').mockImplementation(() => {
+        throw new Error('Session recording queue byte limit exceeded');
+      });
     });
 
     it('keeps a model picker switch successful and reports the recording failure as an error item', async () => {

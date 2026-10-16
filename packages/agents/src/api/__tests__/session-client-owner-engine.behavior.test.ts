@@ -41,9 +41,9 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (await facades[1 - firstClosed].getHistory()).filter(
-            (item) => item.speaker === 'human',
-          ),
+          (
+            await Array.fromAsync(facades[1 - firstClosed].streamHistory())
+          ).filter((item) => item.speaker === 'human'),
         ).toHaveLength(1);
         await facades[1 - firstClosed].dispose();
         await built.mcp.refreshContext();
@@ -52,7 +52,7 @@ describe('Explicit session client lifetime', () => {
           blocks: [{ type: 'text', text: 'caller after both facades' }],
         });
         expect(
-          (await caller.getHistory()).filter(
+          (await Array.fromAsync(caller.getHistory())).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(2);
@@ -93,7 +93,9 @@ describe('Explicit session client lifetime', () => {
         },
       ]);
       expect(
-        (await facade.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(facade.streamHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       await facade.dispose();
       await built.mcp.refreshContext();
@@ -102,7 +104,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller survives failed sibling' }],
       });
       expect(
-        (await caller.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(caller.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
     } finally {
       await facade.dispose();
@@ -128,7 +132,9 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+          (await Array.fromAsync(agent.streamHistory())).filter(
+            (item) => item.speaker === 'human',
+          ),
         ).toHaveLength(1);
         await agent.dispose();
         expect(() => agent.agentClient).toThrow(/disposed/i);
@@ -175,7 +181,9 @@ describe('Explicit session client lifetime', () => {
       });
       expect(agent.agentClient).not.toBe(client);
       expect(
-        (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(agent.streamHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       expect(agent.providerManager.getActiveProviderName()).toBe(provider.name);
       await agent.dispose();
@@ -185,7 +193,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller after profile retirement' }],
       });
       expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(client.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
     } finally {
       await agent.dispose();
@@ -213,7 +223,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller after failed activation' }],
       });
       expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(client.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       expect(built.handle.providerManager.getActiveProviderName()).toBe('fake');
     } finally {
@@ -314,10 +326,12 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'right continues' }],
       });
       expect(
-        (await b.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(b.streamHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
       expect(
-        (await b.getHistory())
+        (await Array.fromAsync(b.streamHistory()))
           .flatMap((item) => item.blocks)
           .filter((block) => block.type === 'text')
           .map((block) => block.text),
@@ -350,7 +364,9 @@ describe('Explicit session client lifetime', () => {
       await agent.setModel('replacement-model');
       expect(agent.agentClient).not.toBe(client);
       expect(
-        (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(agent.streamHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       await agent.dispose();
       await built.mcp.refreshContext();
@@ -359,7 +375,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller retains original' }],
       });
       expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(client.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
       expect(await built.media.store.getStoredByteLength()).toBe(0);
     } finally {
@@ -447,7 +465,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller retains preflight session' }],
       });
       expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(client.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(1);
       expect(await built.media.store.getStoredByteLength()).toBe(0);
       expect(built.handle.providerManager.getActiveProviderName()).toBe('fake');
@@ -480,7 +500,9 @@ describe('Explicit session client lifetime', () => {
         blocks: [{ type: 'text', text: 'caller after MCP refresh' }],
       });
       expect(
-        (await client.getHistory()).filter((item) => item.speaker === 'human'),
+        (await Array.fromAsync(client.getHistory())).filter(
+          (item) => item.speaker === 'human',
+        ),
       ).toHaveLength(2);
     } finally {
       await built.cleanup();
@@ -508,7 +530,9 @@ describe('Explicit session client lifetime', () => {
           },
         ]);
         expect(
-          (await agent.getHistory()).filter((item) => item.speaker === 'human'),
+          (await Array.fromAsync(agent.streamHistory())).filter(
+            (item) => item.speaker === 'human',
+          ),
         ).toHaveLength(1);
       } finally {
         await agent.dispose();

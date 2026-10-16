@@ -22,13 +22,14 @@ import type {
 } from '../LoadBalancingProvider.js';
 import { isResolvedSubProfile } from '../LoadBalancingProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 export function normalizeLoadBalancerOptions(
   options: GenerateChatOptions,
 ): GenerateChatOptions {
   const runtimeOptions: Partial<GenerateChatOptions> = options;
   return runtimeOptions.contents === undefined
-    ? { ...options, contents: [] }
+    ? { ...options, contents: replayableContents([]) }
     : options;
 }
 

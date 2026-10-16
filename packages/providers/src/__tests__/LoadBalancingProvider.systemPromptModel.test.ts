@@ -35,24 +35,31 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
+
+import { trackedRequestRows } from './requestRowsTestSupport.js';
 
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
 function requireGenerateOptions(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
 ): GenerateChatOptions {
-  if (Array.isArray(options)) {
+  if (isAsyncIterableContents(options)) {
     throw new Error(
-      'legacy array overload of generateChatCompletion is not exercised by these tests',
+      'legacy positional overload of generateChatCompletion is not exercised by these tests',
     );
   }
   return options;
 }
 
 async function* generatePrimaryFailoverAttempt(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
   captured: GenerateChatOptions[],
   recordAttempt: () => number,
 ): AsyncGenerator<IContent> {
@@ -63,7 +70,7 @@ async function* generatePrimaryFailoverAttempt(
 }
 
 async function* generateCapturedSuccess(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
   captured: GenerateChatOptions[],
 ): AsyncGenerator<IContent> {
   captured.push(requireGenerateOptions(options));
@@ -71,7 +78,7 @@ async function* generateCapturedSuccess(
 }
 
 async function* generateRetriedPromptResponse(
-  options: GenerateChatOptions | IContent[],
+  options: GenerateChatOptions | AsyncIterable<IContent>,
   captured: GenerateChatOptions[],
   recordAttempt: () => number,
 ): AsyncGenerator<IContent> {
@@ -93,15 +100,16 @@ function resolvedModelOrDefault(options: GenerateChatOptions): string {
   return options.resolved?.model ?? 'model-a';
 }
 
-function estimateCompressedContents(
+async function estimateCompressedContents(
   options: GenerateChatOptions,
 ): Promise<number> {
-  const containsCompressedText = options.contents.some((content) =>
+  const contents = await collectContents(options.contents);
+  const containsCompressedText = contents.some((content) =>
     content.blocks.some(
       (block) => block.type === 'text' && block.text === 'compressed',
     ),
   );
-  return Promise.resolve(containsCompressedText ? 5 : 20);
+  return containsCompressedText ? 5 : 20;
 }
 
 function createResolvedSubProfile(
@@ -130,11 +138,11 @@ function createCapturingProvider(name: string): CapturingProvider {
     name,
     captured,
     async *generateChatCompletion(
-      options: GenerateChatOptions | IContent[],
+      options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
-      if (Array.isArray(options)) {
+      if (isAsyncIterableContents(options)) {
         throw new Error(
-          'legacy array overload of generateChatCompletion is not exercised by these tests',
+          'legacy positional overload of generateChatCompletion is not exercised by these tests',
         );
       }
       captured.push(options);
@@ -252,12 +260,12 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('first')],
+        contents: replayableContents([createTextContent('first')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
       await consume(lb, {
-        contents: [createTextContent('second')],
+        contents: replayableContents([createTextContent('second')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -312,12 +320,12 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('first')],
+        contents: replayableContents([createTextContent('first')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
       await consume(lb, {
-        contents: [createTextContent('second')],
+        contents: replayableContents([createTextContent('second')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -355,7 +363,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
 
       const primary: IProvider = {
         name: 'openai',
-        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) =>
           generatePrimaryFailoverAttempt(
             options,
             primaryCaptured,
@@ -366,8 +376,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       };
       const secondary: IProvider = {
         name: 'anthropic',
-        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
-          generateCapturedSuccess(options, secondaryCaptured),
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) => generateCapturedSuccess(options, secondaryCaptured),
         getModels: async () => [],
         getDefaultModel: () => 'model-b',
       };
@@ -404,7 +415,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -426,8 +437,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       let attempts = 0;
       const delegate: IProvider = {
         name: 'openai',
-        generateChatCompletion: (options: GenerateChatOptions | IContent[]) =>
-          generateRetriedPromptResponse(options, captured, () => ++attempts),
+        generateChatCompletion: (
+          options: GenerateChatOptions | AsyncIterable<IContent>,
+        ) => generateRetriedPromptResponse(options, captured, () => ++attempts),
         getModels: async () => [],
         getDefaultModel: () => 'model-a',
       };
@@ -463,7 +475,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -509,7 +521,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
           };
         },
         async *generateChatCompletion(
-          options: GenerateChatOptions | IContent[],
+          options: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
           const resolvedOptions = requireGenerateOptions(options);
           sentSystemInstructions.push(systemInstructionOrNone(resolvedOptions));
@@ -541,7 +553,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const { assembler } = trackingAssembler((_p, m) => `[model=${m}]`);
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -579,7 +591,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
 
       await expect(
         consume(lb, {
-          contents: [createTextContent('request')],
+          contents: replayableContents([createTextContent('request')]),
           systemInstruction: '[model=load-balancer]',
           systemPromptAssembler: assembler,
         }),
@@ -626,7 +638,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       let thrown: unknown;
       try {
         await consume(lb, {
-          contents: [createTextContent('request')],
+          contents: replayableContents([createTextContent('request')]),
           systemInstruction: '[model=load-balancer]',
           systemPromptAssembler: assembler,
         });
@@ -663,6 +675,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
           });
           projectionTokens.push(transportToken);
           projectedSystemInstructions.push(systemInstructionOrNone(options));
+          const estimate = await estimateCompressedContents(options);
           return {
             model: resolvedModelOrDefault(options),
             protocol: 'openai-responses',
@@ -675,11 +688,11 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
               protocol: 'test',
               promptText: 'proj',
             }),
-            legacyEstimate: () => estimateCompressedContents(options),
+            legacyEstimate: () => Promise.resolve(estimate),
           };
         },
         async *generateChatCompletion(
-          options: GenerateChatOptions | IContent[],
+          options: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncGenerator<IContent> {
           const resolvedOptions = requireGenerateOptions(options);
           sentSystemInstructions.push(systemInstructionOrNone(resolvedOptions));
@@ -708,12 +721,14 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         providerManager,
       );
-      lb.setCompressionCallback(async () => [createTextContent('compressed')]);
+      lb.setCompressionCallback(async () =>
+        trackedRequestRows([createTextContent('compressed')]),
+      );
 
       const { assembler } = trackingAssembler((_p, m) => `[model=${m}]`);
 
       await consume(lb, {
-        contents: [createTextContent('large request')],
+        contents: replayableContents([createTextContent('large request')]),
         systemInstruction: '[model=load-balancer]',
         systemPromptAssembler: assembler,
       });
@@ -757,7 +772,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemInstruction: 'CALLER_PROMPT',
       });
 
@@ -789,7 +804,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       );
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemPromptAssembler: assembler,
       });
 
@@ -822,7 +837,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
       const lb = new LoadBalancingProvider(lbConfig, providerManager);
 
       await consume(lb, {
-        contents: [createTextContent('request')],
+        contents: replayableContents([createTextContent('request')]),
         systemInstruction: 'CALLER_PROMPT',
         systemPromptAssembler: assembler,
       });

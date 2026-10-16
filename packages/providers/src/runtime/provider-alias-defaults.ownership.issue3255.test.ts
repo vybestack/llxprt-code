@@ -16,7 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { prepareRequest } from '../openai/OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from '../openai/__tests__/support/prepareRequestBody.js';
 
 const realProviderAliasesModule = {
   ...(await import('../composition/providerAliases.js')),

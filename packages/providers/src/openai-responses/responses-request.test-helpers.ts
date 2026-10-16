@@ -8,12 +8,17 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
+import {
+  executeOpenAIResponsesRequest,
+  type ResponsesExecutorDeps,
+} from './openAIResponsesExecutor.js';
 import {
   captureResponsesRequest,
   type ResponsesRequest,
 } from './responses-request.js';
+import { buildDiskTextResponsesContext } from './responses-disk-text-projection.js';
 
 export interface ResponsesTestDeps extends ResponsesExecutorDeps {
   readonly requestBaseURL: string;
@@ -21,16 +26,56 @@ export interface ResponsesTestDeps extends ResponsesExecutorDeps {
   readonly defaultModel: string;
 }
 
+/**
+ * The request the provider would capture, with the options' history offered as
+ * request rows. Responses sends always read rows, so a test that holds its
+ * history as an array hands it over this way.
+ */
 export function captureResponsesTestRequest(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesTestDeps,
 ): ResponsesRequest {
-  return captureResponsesRequest(
+  const request = captureResponsesRequest(
     options,
     deps.providerName,
     options.resolved.baseURL ?? deps.requestBaseURL,
     deps.requestHeaders,
     deps.defaultModel,
+  );
+  if (request.requestRows !== undefined) return request;
+  return Object.freeze({
+    ...request,
+    requestRows: copiedRows(request.contents),
+    contentCount: request.contents.length,
+  });
+}
+
+function copiedRows(rows: readonly IContent[]) {
+  return Object.freeze({
+    count: rows.length,
+    readAt: (index: number, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      return structuredClone(rows[index]);
+    },
+    openReader: (signal?: AbortSignal) =>
+      (async function* (): AsyncGenerator<IContent, void> {
+        for (const row of rows) {
+          signal?.throwIfAborted();
+          yield structuredClone(row);
+        }
+      })(),
+  });
+}
+
+/** Sends a captured test request the way the providers do: from its rows. */
+export async function* executeResponsesTestRequest(
+  request: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+): AsyncIterableIterator<IContent> {
+  yield* executeOpenAIResponsesRequest(
+    request,
+    deps,
+    await buildDiskTextResponsesContext(request, deps),
   );
 }
 

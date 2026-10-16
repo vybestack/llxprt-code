@@ -15,8 +15,10 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
+import { sourcePromptText } from './__tests__/support/source-prompt-text.js';
 
 function gate(): { promise: Promise<void>; open(): void } {
   let open = (): void => {};
@@ -87,6 +89,7 @@ describe('provider request ownership', () => {
           await resume.promise;
           return resolver.resolve(input);
         },
+        openReservations: (requestId) => resolver.openReservations(requestId),
       },
     });
     if (
@@ -181,15 +184,17 @@ describe('provider request ownership', () => {
         let transported = '';
         let headers = new Headers();
         let endpoint = '';
-        global.fetch = async (input, init): Promise<Response> => {
-          endpoint = String(input);
-          headers = new Headers(init?.headers);
-          transported = await new Response(init?.body).text();
-          return new Response(
-            'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
-            { headers: { 'content-type': 'text/event-stream' } },
-          );
-        };
+        global.fetch = withFetchPreconnect(
+          async (input, init): Promise<Response> => {
+            endpoint = String(input);
+            headers = new Headers(init?.headers);
+            transported = await new Response(init?.body).text();
+            return new Response(
+              'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
+              { headers: { 'content-type': 'text/event-stream' } },
+            );
+          },
+        );
         const running = drain(provider, options);
         await entered.promise;
         mutateOwner(settings, provider.name);
@@ -213,10 +218,11 @@ describe('provider request ownership', () => {
         mutateOwner(settings, provider.name);
         resume.open();
         const projection = await projecting;
-        expect(JSON.stringify(projection?.finalizedProjection)).toContain(
+        if (projection === undefined) throw new Error('Expected a projection');
+        expect(await sourcePromptText(projection)).toContain(
           'original tool payload',
         );
-        await projection?.releaseIfUnsent?.();
+        await projection.releaseIfUnsent?.();
         expect(resolver.accounting().activeRequestCount).toBe(0);
       });
 
@@ -228,13 +234,15 @@ describe('provider request ownership', () => {
         mutateOwner(settings, provider.name);
         resume.open();
         let transported = '';
-        global.fetch = async (_input, init): Promise<Response> => {
-          transported = await new Response(init?.body).text();
-          return new Response(
-            'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
-            { headers: { 'content-type': 'text/event-stream' } },
-          );
-        };
+        global.fetch = withFetchPreconnect(
+          async (_input, init): Promise<Response> => {
+            transported = await new Response(init?.body).text();
+            return new Response(
+              'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
+              { headers: { 'content-type': 'text/event-stream' } },
+            );
+          },
+        );
         await drain(provider, { ...options, invocation: undefined });
         expect(transported).not.toContain('original tool payload');
       });

@@ -296,7 +296,7 @@ describe('profile-commit-publication', () => {
       for await (const event of agent.stream('remember the prior conversation'))
         initialEvents.push(event);
       expect(initialEvents.some((event) => event.type === 'error')).toBe(false);
-      const priorHistory = await agent.getHistory();
+      const priorHistory = await Array.fromAsync(agent.streamHistory());
       expect(priorHistory.length).toBeGreaterThan(0);
       vi.useFakeTimers();
       for (const bucket of ['old', 'replacement']) {
@@ -347,7 +347,9 @@ describe('profile-commit-publication', () => {
       expect(profiles).toStrictEqual([]);
       expect(models).toStrictEqual([]);
       vi.useRealTimers();
-      expect(await agent.getHistory()).toStrictEqual(priorHistory);
+      expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(
+        priorHistory,
+      );
       const recoveredEvents = [];
       for await (const event of agent.stream('continue on the prior profile'))
         recoveredEvents.push(event);

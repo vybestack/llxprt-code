@@ -14,7 +14,20 @@ const fixturePaths = installTestWorkspacePaths({
 });
 
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { describe, it, expect, vi, type Mock } from 'bun:test';
+import { afterAll, describe, it, expect, vi, type Mock } from 'bun:test';
+
+const realChatSessionModule = { ...(await import('./chatSession.js')) };
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realProviderRuntimeContextModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js'
+  )),
+};
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
@@ -58,7 +71,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
-import { installChatSessionFactoryConfigFixture } from './chatSessionFactoryConfigFixture.js';
+import { installChatSessionFactoryConfigFixture } from './__tests__/support/chatSessionFactoryConfigFixture.js';
 
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
@@ -73,6 +86,19 @@ function makeConfig(): Config {
 }
 
 describe('createChatSession unbound recording path', () => {
+  afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
+    void vi.mock('./chatSession.js', () => realChatSessionModule);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
+      () => realProviderRuntimeContextModule,
+    );
+  });
+
   it('does not install a Config-backed transcript path on the shared chat', async () => {
     const installedProviders: Array<() => string | undefined> = [];
     const chatDouble = {

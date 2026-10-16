@@ -145,11 +145,14 @@ export async function estimateContentTokens(
   modelName: string,
   tokenizerProvider: TokenizerProvider,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
+  signal?.throwIfAborted();
   const tokenizer = tokenizerProvider.getTokenizerForModel(modelName);
   let totalTokens = 0;
 
   for (const block of content.blocks) {
+    signal?.throwIfAborted();
     if (block.type === 'media') {
       totalTokens += estimateMediaBlockImageTokens(
         block,
@@ -171,8 +174,9 @@ export async function estimateContentTokens(
       logger.debug('Error counting tokens for block, using fallback:', error);
       totalTokens += simpleTokenEstimateForText(blockText);
     }
+    signal?.throwIfAborted();
   }
-
+  signal?.throwIfAborted();
   return totalTokens;
 }
 
@@ -262,25 +266,26 @@ function stringifyToolResponseForTokens(
  * Estimate total tokens for hypothetical contents without mutating history.
  */
 export async function estimateTokensForContents(
-  contents: IContent[],
+  contents: Iterable<IContent> | AsyncIterable<IContent>,
   modelName: string | undefined,
   tokenizerProvider: TokenizerProvider,
   logger: DebugLogger,
+  signal?: AbortSignal,
 ): Promise<number> {
-  if (contents.length === 0) {
-    return 0;
-  }
-
+  signal?.throwIfAborted();
   let total = 0;
-  for (const content of contents) {
+  for await (const content of contents) {
+    signal?.throwIfAborted();
     const effectiveModel = resolveModelName(content.metadata?.model, modelName);
     total += await estimateContentTokens(
       content,
       effectiveModel,
       tokenizerProvider,
       logger,
+      signal,
     );
+    signal?.throwIfAborted();
   }
-
+  signal?.throwIfAborted();
   return total;
 }

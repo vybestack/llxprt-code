@@ -112,7 +112,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const _chunk of gen) {
@@ -140,7 +142,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Make a request
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const _chunk of gen) {
@@ -173,7 +177,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Make first request
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -184,7 +190,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Make second request
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -220,7 +228,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // First request - should succeed and establish high TPM
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -228,7 +238,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Second request - TPM is 1000, above threshold of 100
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -273,7 +285,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // First request - establishes TPM of 100 (single request)
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -285,7 +299,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Second request - TPM is now below threshold, should skip backend1
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -320,7 +336,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // First request
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -328,7 +346,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Second request - even with low TPM, should not failover without threshold
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume
@@ -351,7 +371,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
       });
 
       for await (const _chunk of gen) {
@@ -376,7 +398,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       // Make 3 requests in same minute
       for (let i = 0; i < 3; i++) {
         const gen = lb.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: `test${i}` }] },
+          ],
         });
         for await (const _chunk of gen) {
           // consume
@@ -402,7 +426,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Make request at minute 0
       const gen1 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test1' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test1' }] },
+        ],
       });
       for await (const _chunk of gen1) {
         // consume
@@ -413,7 +439,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       // Make request at minute 2
       const gen2 = lb.generateChatCompletion({
-        contents: [{ role: 'user', parts: [{ text: 'test2' }] }],
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test2' }] },
+        ],
       });
       for await (const _chunk of gen2) {
         // consume

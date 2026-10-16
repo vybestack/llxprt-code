@@ -16,6 +16,7 @@ import {
   SessionRecordingService,
   getProjectHash,
   type AgentClientContract,
+  type ResumeCursorBoot,
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -44,6 +45,15 @@ function recordingConfig(
     provider: 'test-provider',
     model: 'test-model',
   };
+}
+
+async function resumedRowCount(
+  entry: ResolvedRecording,
+): Promise<number | undefined> {
+  if (entry.resumedBoot === null) return undefined;
+  let count = 0;
+  for await (const _row of entry.resumedBoot.streamRows()) count += 1;
+  return count;
 }
 
 async function writeHealthySession(
@@ -138,15 +148,29 @@ class StartupConfig extends Config {
  */
 function sessionClientFor(root: string, restoreError?: Error) {
   const restored: unknown[][] = [];
+  // Resume restores through the history service's boot adoption: the fake
+  // reads the streamed rows and publishes only when the restore succeeds.
+  const historyService = {
+    adoptResumeBoot: async (
+      _recording: unknown,
+      boot: ResumeCursorBoot,
+      publish: () => void,
+    ) => {
+      const rows: unknown[] = [];
+      for await (const row of boot.streamRows()) rows.push(row);
+      restored.push(rows);
+      if (restoreError) throw restoreError;
+      publish();
+      return [];
+    },
+  };
+  const agentClient = {
+    hasChatInitialized: () => true,
+    getHistoryService: () => historyService,
+    resetChat: async () => {},
+  } as unknown as AgentClientContract;
   const client = {
-    getAgentClient: () =>
-      ({
-        restoreHistory: async (history: readonly unknown[]) => {
-          restored.push([...history]);
-          if (restoreError) throw restoreError;
-        },
-        resetChat: async () => {},
-      }) as unknown as AgentClientContract,
+    getAgentClient: () => agentClient,
     workspaceDirectories: () => [root],
   };
   return { client, restored };
@@ -264,7 +288,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     expect({
       header: { provider: header?.provider, model: header?.model },
       resumedSessionId: entry.resumedSessionId,
-      historyLength: entry.resumedHistory?.length,
+      historyLength: await resumedRowCount(entry),
       warnings,
     }).toStrictEqual({
       header: { provider: 'codex', model: 'gpt-6-luna' },
@@ -442,7 +466,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
 
     expect({
       resumedSessionId: entry.resumedSessionId,
-      resumedHistory: entry.resumedHistory,
+      resumedBoot: entry.resumedBoot,
       newSessionId: entry.recordingService.getSessionId(),
       warningCount: warnings.length,
       namesRef: warnings[0]?.includes('corrupt-0004'),
@@ -450,7 +474,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       namesReason: warnings[0]?.includes(CORRUPT_REASON),
     }).toStrictEqual({
       resumedSessionId: null,
-      resumedHistory: null,
+      resumedBoot: null,
       newSessionId: 'fresh-session',
       warningCount: 1,
       namesRef: true,

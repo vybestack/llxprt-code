@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { stat } from 'node:fs/promises';
 import {
-  replaySession,
+  scanResumeMetadata,
   type ReplayResult,
   type SessionSummary,
-  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { SessionInfo } from '../agent.js';
 
@@ -37,11 +37,12 @@ export function sessionInfoFromReplay(
 export async function readSessionInfo(
   summary: SessionSummary,
   projectHash: string,
-  mediaStore: LocalMediaStore,
 ): Promise<SessionInfo> {
-  const replay = await replaySession(summary.filePath, projectHash, {
-    mediaStore,
-  });
+  const { replay } = await scanResumeMetadata(
+    summary.filePath,
+    projectHash,
+    (await stat(summary.filePath)).size,
+  );
   if (!replay.ok) throw new Error(replay.error);
   return sessionInfoFromReplay(
     summary.sessionId,

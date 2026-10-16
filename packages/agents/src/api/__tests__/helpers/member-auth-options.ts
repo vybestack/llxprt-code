@@ -10,6 +10,7 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import { resolveMemberAuthentication } from '../../../../../providers/src/loadBalancing/memberAuthentication.js';
 import { buildRoundRobinResolvedOptions } from '../../../../../providers/src/loadBalancing/resolvedOptionsBuilder.js';
+import { replayableContents } from '../../../../../providers/src/utils/collectContents.js';
 
 export async function memberOptions(
   member: ResolvedSubProfile,
@@ -17,7 +18,7 @@ export async function memberOptions(
   const logger = new DebugLogger('profile-member-auth-test');
   return buildRoundRobinResolvedOptions(
     await resolveMemberAuthentication(member, logger),
-    { contents: [] },
+    { contents: replayableContents([]) },
     {
       lbProfileEphemeralSettings: undefined,
       lbProfileModelParams: undefined,

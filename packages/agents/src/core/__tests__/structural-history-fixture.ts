@@ -1,3 +1,4 @@
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { afterEach } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -71,7 +72,7 @@ export function humanText(text: string): IContent {
 }
 
 export function getRecordedHistoryText(history: HistoryService): string {
-  const all = history.getAll();
+  const all = testHistory(history);
   return all
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
@@ -83,8 +84,7 @@ export function getRecordedHistoryText(history: HistoryService): string {
 export function getRecordedThinkingBlocks(
   history: HistoryService,
 ): Array<{ thought: string; signature?: string }> {
-  return history
-    .getAll()
+  return testHistory(history)
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
     .filter((b) => b.type === 'thinking')

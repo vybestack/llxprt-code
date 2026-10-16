@@ -1,0 +1,121 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { IdFactQueries } from './idFactQueries.js';
+import type { IdOccurrence } from './idFactUpdate.js';
+import type { RowDraft } from './rowDraft.js';
+import type { RowEntry } from './rowEntry.js';
+import type { Version } from './version.js';
+
+/**
+ * The index-entry fields a fill sets for one row (design 4.6 and 8.2). A fill
+ * writes no row content: the fields come from the caller, who computed them
+ * for the active format slots.
+ */
+export interface EntryFill {
+  readonly label: bigint;
+  readonly tokens?: RowEntry['tokens'];
+  readonly media?: RowEntry['media'];
+  readonly stamp?: RowEntry['stamp'];
+  readonly summary?: RowEntry['summary'];
+  readonly lensRef?: RowEntry['lensRef'];
+}
+
+/** A row written for a label that is already live: a density replacement or a purged row. */
+export interface LabeledDraft {
+  readonly label: bigint;
+  readonly draft: RowDraft;
+}
+
+/** A new owner for the entry of one live row. */
+export interface OwnerChange {
+  readonly label: bigint;
+  readonly owner: number;
+}
+
+/** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
+export type VersionEdit =
+  /** Design 4.2: rows at the next labels, with their id facts. */
+  | { readonly kind: 'append'; readonly rows: readonly RowDraft[] }
+  /** Design 4.3: remove every live row with `label >= cutLabel`; `expectedRemoved` is checked. */
+  | {
+      readonly kind: 'pop';
+      readonly cutLabel: bigint;
+      readonly expectedRemoved: number;
+    }
+  /** Design 4.7: empty roots and a new lineage; `nextLabel` carries on. */
+  | { readonly kind: 'clear' }
+  /** Design 4.5: the roots of a saved version with the current state map; a new lineage. */
+  | { readonly kind: 'restore'; readonly saved: Version }
+  /** An entry of the unversioned state map (design 3.5). */
+  | {
+      readonly kind: 'setState';
+      readonly key: string;
+      readonly value: Uint8Array;
+    }
+  /**
+   * Design 4.4: every live row below `retainFromLabel` is replaced by the
+   * summary row, which takes the label just below the first retained row, or
+   * the next label when nothing is retained. `expectedReplaced` is checked.
+   */
+  | {
+      readonly kind: 'compress';
+      readonly summary: RowDraft;
+      readonly retainFromLabel: bigint;
+      readonly expectedReplaced: number;
+    }
+  /**
+   * Design 4.5: the whole history is replaced by the rows of a stream, written
+   * as they are produced. No other row edit may follow it in the group.
+   */
+  | {
+      readonly kind: 'replace';
+      readonly rows: Iterable<RowDraft> | AsyncIterable<RowDraft>;
+    }
+  /** Design 4.6: the replacements keep their labels, the removed labels are dropped. */
+  | {
+      readonly kind: 'density';
+      readonly replacements: readonly LabeledDraft[];
+      readonly removed: readonly bigint[];
+    }
+  /** Design 4.6: rows rewritten under their own labels. */
+  | { readonly kind: 'purge'; readonly rows: readonly LabeledDraft[] }
+  /** Design 4.6: a synthetic row at the midpoint after the live row `afterLabel` (0 for the start). */
+  | {
+      readonly kind: 'insert';
+      readonly afterLabel: bigint;
+      readonly draft: RowDraft;
+    }
+  /** Design 5.4: an entry replacement; the `ROW` record is not rewritten. */
+  | { readonly kind: 'owner'; readonly changes: readonly OwnerChange[] }
+  /** Design 4.6 and 8.2: entry fields for rows; the row set does not change. */
+  | { readonly kind: 'fill'; readonly fills: readonly EntryFill[] }
+  /** Design 4.9: a named checkpoint of the version the group builds on; a state-only group. */
+  | {
+      readonly kind: 'checkpoint';
+      readonly id: string;
+      readonly name: string;
+      readonly createdAtMs: number;
+    };
+
+/** A row as the occurrence planner sees it: its place, its speaker and its ids with their raw strings. */
+export interface PlannedRow {
+  readonly label: bigint;
+  readonly speaker: number;
+  readonly ids: ReadonlyArray<{
+    readonly rawId: string;
+    readonly kind: number;
+    readonly block: number;
+    readonly score: number;
+    readonly nameLen: number;
+  }>;
+}
+
+/**
+ * Decides where each id of a row is emitted in the normalized stream. That is
+ * the normalizer's business (design 6), so the journal takes it as a
+ * dependency and only records what it is given. It reads facts through
+ * `facts`, which see the writes of the group so far.
+ */
+export type OccurrencePlanner = (
+  row: PlannedRow,
+  facts: IdFactQueries,
+) => Promise<readonly IdOccurrence[]>;

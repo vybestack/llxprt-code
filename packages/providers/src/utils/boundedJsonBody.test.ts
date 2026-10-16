@@ -9,6 +9,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   BoundedJsonBody,
   DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+  jsonValueChunks,
   withBoundedJsonHttpBody,
 } from './boundedJsonBody.js';
 
@@ -320,5 +321,146 @@ describe('BoundedJsonBody', () => {
           maxEnvelopeBytes: 1024,
         }),
     ).toThrow(TypeError);
+  });
+});
+
+const everyControlCharacter = Array.from({ length: 0x20 }, (_, code) =>
+  String.fromCharCode(code),
+).join('');
+
+const chunkApiCases: ReadonlyArray<readonly [string, unknown]> = [
+  ['a lone high surrogate', { text: 'before \ud83d after' }],
+  ['a lone low surrogate', { text: 'before \ude00 after' }],
+  ['a valid surrogate pair', { text: 'pair \ud83d\ude00 end' }],
+  ['a lone surrogate at the end of a string', ['tail \ud800']],
+  ['U+2028 and U+2029', { text: 'line\u2028para\u2029end' }],
+  ['control characters and DEL', { text: `${everyControlCharacter}\u007f` }],
+  ['quotes and backslashes', { text: 'say "hi" \\ path\\to' }],
+  [
+    'integer-like keys among string keys',
+    { b: 1, 2: 'two', 1: 'one', a: 2, '-1': 3, '01': 4, 10: 'ten' },
+  ],
+  [
+    'undefined, function and symbol members',
+    {
+      kept: 1,
+      gone: undefined,
+      fn: () => 1,
+      sym: Symbol('s'),
+      nested: { gone: undefined, kept: 'x' },
+    },
+  ],
+  [
+    'undefined, function and symbol array elements',
+    [1, undefined, () => 1, Symbol('s'), 'x'],
+  ],
+  [
+    'a toJSON that returns undefined for a member',
+    { kept: 1, omitted: { toJSON: () => undefined } },
+  ],
+  ['non-finite numbers and negative zero', [Number.NaN, -0, 1e21, 0.1]],
+  ['boxed primitives', [new Number(3), new String('s'), new Boolean(false)]],
+  ['null, booleans and empty containers', [null, true, false, {}, []]],
+  ['a Date', { when: new Date(Date.UTC(2026, 0, 2, 3, 4, 5)) }],
+  ['a bare string', 'plain "string"'],
+  ['a bare number', 42],
+];
+
+async function streamFormBytes(
+  value: unknown,
+  maxChunkBytes: number,
+): Promise<Uint8Array> {
+  const body = new BoundedJsonBody(value, {
+    maxChunkBytes,
+    maxEnvelopeBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES * 4,
+  });
+  return readBody(body.createStream());
+}
+
+function drainChunks(chunks: Generator<Uint8Array, void, unknown>): {
+  readonly bytes: Uint8Array;
+  readonly largestChunk: number;
+} {
+  const kept: Uint8Array[] = [];
+  let largestChunk = 0;
+  for (const chunk of chunks) {
+    kept.push(chunk);
+    largestChunk = Math.max(largestChunk, chunk.byteLength);
+  }
+  return { bytes: new Uint8Array(Buffer.concat(kept)), largestChunk };
+}
+
+describe('jsonValueChunks', () => {
+  it.each(chunkApiCases)(
+    'yields the bytes of JSON.stringify and of the stream form for %s',
+    async (_name, value) => {
+      const expected = new TextEncoder().encode(JSON.stringify(value));
+      for (const maxChunkBytes of [5, 17, DEFAULT_STREAMING_JSON_CHUNK_BYTES]) {
+        const chunks = jsonValueChunks(value, { maxChunkBytes });
+        if (chunks === undefined) throw new Error('Expected serializable');
+
+        const drained = drainChunks(chunks);
+
+        expect(drained.bytes).toStrictEqual(expected);
+        expect(drained.largestChunk).toBeLessThanOrEqual(maxChunkBytes);
+        expect(await streamFormBytes(value, maxChunkBytes)).toStrictEqual(
+          expected,
+        );
+      }
+    },
+  );
+
+  it.each([
+    ['undefined', undefined],
+    ['a function', () => 1],
+    ['a symbol', Symbol('s')],
+    ['a toJSON returning undefined', { toJSON: () => undefined }],
+  ])('is undefined, like JSON.stringify, for %s', (_name, value) => {
+    expect(JSON.stringify(value)).toBeUndefined();
+    expect(jsonValueChunks(value)).toBeUndefined();
+  });
+
+  it('passes the member key to toJSON as JSON.stringify does', () => {
+    const value = { toJSON: (key: string) => `key:${key}` };
+    const expected = new TextEncoder().encode(
+      JSON.stringify({ member: value }),
+    );
+    const chunks = jsonValueChunks(value, { key: 'member' });
+    if (chunks === undefined) throw new Error('Expected serializable');
+
+    const text = new TextDecoder().decode(drainChunks(chunks).bytes);
+
+    expect(text).toBe('"key:member"');
+    expect(new TextDecoder().decode(expected)).toBe('{"member":"key:member"}');
+  });
+
+  it('hands out chunks that stay intact after later chunks are produced', () => {
+    const value = { text: 'abcdefghij'.repeat(50) };
+    const chunks = jsonValueChunks(value, { maxChunkBytes: 7 });
+    if (chunks === undefined) throw new Error('Expected serializable');
+    const first = chunks.next();
+    if (first.done === true) throw new Error('Expected a chunk');
+    const snapshot = Array.from(first.value);
+
+    drainChunks(chunks);
+
+    expect(Array.from(first.value)).toStrictEqual(snapshot);
+  });
+
+  it('rejects values JSON.stringify rejects', () => {
+    expect(() => jsonValueChunks({ big: 1n })).toThrow(
+      'Do not know how to serialize a BigInt',
+    );
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(() => jsonValueChunks(circular)).toThrow(
+      'Converting circular structure to JSON',
+    );
+  });
+
+  it('rejects a zero chunk limit', () => {
+    expect(() => jsonValueChunks({ a: 1 }, { maxChunkBytes: 0 })).toThrow(
+      'JSON streaming chunk limit is zero',
+    );
   });
 });
