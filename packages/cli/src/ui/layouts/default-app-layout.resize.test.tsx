@@ -174,12 +174,17 @@ async function withLayout(
   const pendingHistoryItemRef: { current: DOMElement | null } = {
     current: null,
   };
+  const uiRuntime = buildUiRuntimeFromSource(config, owner);
   const view = renderInAct(
     wrapWithProviders(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
           <DefaultAppLayout
-            uiRuntime={buildUiRuntimeFromSource(config, owner)}
+            screenReaderEnabled={uiRuntime.app.getScreenReader()}
+            disableLoadingPhrases={
+              uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+            }
+            debugMode={uiRuntime.app.getDebugMode()}
             slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
             settings={settings}
             startupWarnings={[]}

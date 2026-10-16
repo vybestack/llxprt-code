@@ -195,6 +195,10 @@ async function renderLayout({
         },
   );
 
+  const uiRuntime = buildUiRuntimeFromSource(
+    configSource as never,
+    await createUiSessionOwner(),
+  );
   const rendered = render(
     <SettingsProfileProvider store={createSettingsProfileStore()}>
       <VimModeProvider settings={settings}>
@@ -215,10 +219,11 @@ async function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
-              uiRuntime={buildUiRuntimeFromSource(
-                configSource as never,
-                await createUiSessionOwner(),
-              )}
+              screenReaderEnabled={uiRuntime.app.getScreenReader()}
+              disableLoadingPhrases={
+                uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+              }
+              debugMode={uiRuntime.app.getDebugMode()}
               slashCommandRuntime={buildSlashCommandRuntime(
                 configSource as never,
                 await createUiSessionOwner(),

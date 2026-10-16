@@ -53,8 +53,12 @@ export function ToolResultExpansionProvider({
   children: ReactNode;
 }): ReactNode {
   const turnStore = useTurnStore();
+  const currentPathReader = useRef(getTranscriptFilePath);
+  currentPathReader.current = getTranscriptFilePath;
   const storeRef = useRef<ToolResultExpansionStore | null>(null);
-  storeRef.current ??= createToolResultExpansionStore(getTranscriptFilePath);
+  storeRef.current ??= createToolResultExpansionStore(() =>
+    currentPathReader.current(),
+  );
   const expansion = storeRef.current;
 
   useHistoryAppendPurge(turnStore, expansion);

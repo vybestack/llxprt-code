@@ -233,9 +233,17 @@ async function renderDefaultAppLayout({
 }: RenderLayoutOptions = {}): Promise<ReturnType<typeof render>> {
   const config = createConfigStub() as never;
 
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    await createUiSessionOwner(),
+  );
   const inner = (
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(config, await createUiSessionOwner())}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
       slashCommandRuntime={buildSlashCommandRuntime(
         config,
         await createUiSessionOwner(),

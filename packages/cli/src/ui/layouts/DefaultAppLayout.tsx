@@ -35,13 +35,15 @@ import {
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
+import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
 export interface DefaultAppLayoutProps {
   runtimeMessageBus?: MessageBus;
-  uiRuntime: UiRuntime;
+  screenReaderEnabled: boolean;
+  disableLoadingPhrases: boolean;
+  debugMode: boolean;
   slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
@@ -57,7 +59,7 @@ export interface DefaultAppLayoutProps {
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
   return (
     props.settings.merged.ui.useAlternateBuffer === true &&
-    !props.uiRuntime.app.getScreenReader()
+    !props.screenReaderEnabled
   );
 }
 
