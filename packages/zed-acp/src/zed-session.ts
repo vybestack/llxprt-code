@@ -57,6 +57,7 @@ import {
 
 export class Session {
   private pendingPrompt: AbortController | null = null;
+  private closing: Promise<void> | undefined;
   private readonly logger = new DebugLogger('llxprt:zed-integration');
   private pathResolver: ZedPathResolver;
   private activeConfirmations = new Map<
@@ -447,8 +448,8 @@ export class Session {
       await readAgentHistoryForReplay(this.readHistory, this.id),
     );
   }
-  async dispose(): Promise<void> {
-    return disposeZedSession(
+  dispose(): Promise<void> {
+    this.closing ??= disposeZedSession(
       () => {
         this.stopTodoUpdates();
         this.stopConfigUpdates();
@@ -462,5 +463,6 @@ export class Session {
       },
       this.retireAgent,
     );
+    return this.closing;
   }
 }

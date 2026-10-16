@@ -174,7 +174,7 @@ export class ZedAgent {
         );
       } catch (error) {
         await agent.dispose().catch(() => undefined);
-        await terminals?.settleAll().catch(() => undefined);
+        await terminals?.dispose().catch(() => undefined);
         throw error;
       }
       return await this.publishNewSession(
@@ -391,7 +391,7 @@ export class ZedAgent {
       return { session, history };
     } catch (error) {
       await agent.dispose().catch(() => undefined);
-      await terminals?.settleAll().catch(() => undefined);
+      await terminals?.dispose().catch(() => undefined);
       this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
       throw toLoadRequestError(sessionId, error);
     }
@@ -437,7 +437,7 @@ export class ZedAgent {
       );
     } catch (primary) {
       try {
-        await terminals?.settleAll();
+        await terminals?.dispose();
       } catch (cleanup) {
         throw new AggregateError(
           [primary, cleanup],
