@@ -415,19 +415,22 @@ export class HistoryJournalStore implements HistoryStorePort {
   /** Reads the origin of every row of `previous` now, before the mutation admits anything. */
   captureCompensation(
     previous: HistoryMutationSnapshot,
-  ): HistoryCompensationMark {
-    this.withReadRows((cursor) => previous.captureOrigins(cursor));
-    return new SnapshotCompensationMark(this, previous);
-  }
-
-  compensate(
-    mark: HistoryCompensationMark,
     input: HistoryMutationInput,
     replacements: OpenReplaceTracker,
-  ): Promise<void> {
+  ): HistoryCompensationMark {
+    this.withReadRows((cursor) => previous.captureOrigins(cursor));
+    return new SnapshotCompensationMark(this, previous, input, replacements);
+  }
+
+  compensate(mark: HistoryCompensationMark): Promise<void> {
     if (!(mark instanceof SnapshotCompensationMark) || mark.store !== this)
       throw new Error('The compensation mark was not captured by this store');
-    return compensateMutation(this, mark.previous, input, replacements);
+    return compensateMutation(
+      this,
+      mark.previous,
+      mark.input,
+      mark.replacements,
+    );
   }
 
   captureDetached(

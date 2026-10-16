@@ -211,13 +211,11 @@ export interface HistoryStorePort {
    */
   captureCompensation(
     previous: HistoryMutationSnapshot,
-  ): HistoryCompensationMark;
-  /** Undoes the admitted prefix of a failed mutation published after `mark`. */
-  compensate(
-    mark: HistoryCompensationMark,
     input: HistoryMutationInput,
     replacements: OpenReplaceTracker,
-  ): Promise<void>;
+  ): HistoryCompensationMark;
+  /** Undoes the admitted prefix of a failed mutation published after `mark`. */
+  compensate(mark: HistoryCompensationMark): Promise<void>;
   /** Copies the current rows and their origins into `previous` once they are durable. */
   captureDetached(
     previous: DetachedHistoryJournal,

@@ -33,7 +33,11 @@ export class HistoryMutationPublication {
   ): void | Promise<void> {
     const streaming = input.streamPublication === true;
     // Before anything is admitted: compensation restores these origins.
-    this.compensation = this.journal.captureCompensation(previous);
+    this.compensation = this.journal.captureCompensation(
+      previous,
+      input,
+      this.replacements,
+    );
     this.origin =
       input.options.origin === undefined
         ? undefined

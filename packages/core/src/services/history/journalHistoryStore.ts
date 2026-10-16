@@ -19,6 +19,8 @@ import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
   HistoryClearRequest,
   HistoryJournalOp,
+  HistoryMutationMark,
+  HistoryPublicationScope,
   HistoryRepairRequest,
 } from './historyStorePort.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
@@ -31,7 +33,9 @@ import {
   encodeContentRow,
   UNOWNED_ROW,
 } from './journalRowCodec.js';
+import { captureDetachedRows } from './journalDetachedCapture.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
+import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import type { JournalSession } from './journalSession.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
@@ -45,11 +49,30 @@ export interface JournalRepair {
 /** Builds the edits of one queued operation against the version the previous operation published. */
 type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
 
-/** The drafts of `rows`, each encoded when the consumer asks for it. */
-function* encodedRows(rows: readonly IContent[]): Generator<RowDraft> {
-  for (const content of rows) {
+/**
+ * The drafts of `rows`, each encoded when the writer asks for it. The stream
+ * never checks a signal: a group that stops after its first byte poisons the
+ * writer, so a cancellation is acted on before the group and after its ack.
+ */
+async function* encodedRows(
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+): AsyncGenerator<RowDraft> {
+  for await (const content of rows) {
     yield encodeContentRow(content, { owner: UNOWNED_ROW });
   }
+}
+
+/** The builder of the single `replace` edit of `rows`. */
+function replaceEdits(
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
+): EditBuilder {
+  return () => Promise.resolve([{ kind: 'replace', rows: encodedRows(rows) }]);
+}
+
+/** What a compensation puts back: the version the queue had reached when the mark was captured. */
+export interface JournalCompensationMark {
+  readonly store: JournalHistoryStore;
+  readonly saved: Promise<VersionSnapshot>;
 }
 
 /** The first of the last `count` rows; a count that is not a positive number keeps the whole history. */
@@ -77,6 +100,9 @@ export class JournalHistoryStore {
   private failure: { readonly error: unknown } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
+  /** Groups accepted so far, acked or not; the mutation mark names this position. */
+  private admitted = 0;
+  private publicationDepth = 0;
 
   constructor(private readonly session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
@@ -199,14 +225,64 @@ export class JournalHistoryStore {
   replaceAll(rows: readonly IContent[]): void {
     this.assertUsable();
     const held = [...rows];
-    this.enqueue(held.length, () =>
-      Promise.resolve([
-        {
-          kind: 'replace',
-          rows: encodedRows(held),
-        },
-      ]),
-    );
+    this.enqueue(held.length, replaceEdits(held));
+  }
+
+  /**
+   * Replaces the history by the `count` rows `rows` yields, as one group
+   * whose rows are pulled by the writer one at a time (design 4.5). It
+   * resolves with the ack of the group's trailer and not before: that is the
+   * only point at which the replacement is durable. A cancellation is honoured
+   * before the group starts; once rows are being written the group runs to its
+   * trailer, and the caller compensates after the ack if it still must undo it.
+   */
+  async replaceFrom(
+    rows: Iterable<IContent> | AsyncIterable<IContent>,
+    count: number,
+    signal?: AbortSignal,
+  ): Promise<CommitAck> {
+    this.assertUsable();
+    signal?.throwIfAborted();
+    return this.requireAck(this.enqueueTurn(count, replaceEdits(rows)));
+  }
+
+  /** Brackets one logical publication. Fan-out holds are the work of S06; until then it only counts. */
+  openPublication(): HistoryPublicationScope {
+    this.publicationDepth++;
+    let closed = false;
+    return {
+      close: () => {
+        if (closed) return;
+        closed = true;
+        this.publicationDepth--;
+      },
+    };
+  }
+
+  /** Ordinals ordered rows of one publication for the token tickets, which this store does not have (G3). */
+  withPublicationOrdinals(action: () => Promise<void>): Promise<void> {
+    return action();
+  }
+
+  /**
+   * The rows of the writer envelope that are not acked. The callers track the
+   * owners of the operation they admit until its ack, and a queued group holds
+   * encoded drafts only, so there is nothing further to retain.
+   */
+  capturePublicationOwners(): Iterable<IContent> {
+    return [];
+  }
+
+  /** A version is the boundary of a mutation; there is no fold to adopt one into. */
+  adoptMutationBoundary(): void {}
+
+  /** Names the position after the last group accepted; a later group makes the mark stale. */
+  mutationMark(): HistoryMutationMark {
+    return { binding: this, lastSeq: this.admitted };
+  }
+
+  isCurrentMutationMark(mark: HistoryMutationMark): boolean {
+    return mark.binding === this && mark.lastSeq === this.admitted;
   }
 
   /** Resolves when every operation applied so far is acked; throws the first failure of the queue. */
@@ -255,8 +331,8 @@ export class JournalHistoryStore {
    * version the clear removes. It runs inside the service's mutation FIFO, so
    * no other operation is queued between the read and the rewind.
    *
-   * A rollback needs the removed version back, which is `restore(version)`
-   * (S05); until then a failing publish with rollback on says so.
+   * A failing publish with rollback on puts the removed version back with
+   * `restore(version)` (design 4.5) and then undoes the service's changes.
    */
   async clear(request: HistoryClearRequest): Promise<void> {
     await this.waitForDurable();
@@ -268,10 +344,14 @@ export class JournalHistoryStore {
       request.publish(spans);
     } catch (error) {
       if (!request.rollbackOnFailure) throw error;
+      const failures: unknown[] = [];
+      try {
+        await this.restoreTo(snapshot);
+      } catch (restoreError) {
+        failures.push(restoreError);
+      }
       request.restore();
-      throw historyMutationFailure(error, [
-        new Error('not implemented: S05 (restore the rows of a failed clear)'),
-      ]);
+      throw historyMutationFailure(error, failures);
     }
   }
 
@@ -306,8 +386,7 @@ export class JournalHistoryStore {
       snapshot,
       request.stamp,
     );
-    const saved = snapshot.version;
-    if (plan.inserts.length === 0 || saved === undefined) {
+    if (plan.inserts.length === 0 || snapshot.version === undefined) {
       return {
         inserted: plan.inserted,
         rollback: async () => {},
@@ -334,10 +413,7 @@ export class JournalHistoryStore {
             'Rows were written since the repair; it cannot be rolled back',
           );
         }
-        this.enqueue(rowsBefore, () =>
-          Promise.resolve([{ kind: 'restore', saved }]),
-        );
-        await this.waitForDurable();
+        await this.restoreTo(snapshot);
       },
       close: () => {},
     };
@@ -350,16 +426,53 @@ export class JournalHistoryStore {
     for await (const row of this.streamRows()) owner.adopt([row]);
   }
 
-  captureCompensation(): never {
-    throw new Error('not implemented: S05 (restore(version) compensation)');
+  /**
+   * Names the version the queue reaches with everything accepted so far, so a
+   * later {@link compensate} can put it back without a copy of any row.
+   */
+  captureCompensation(): JournalCompensationMark {
+    this.assertUsable();
+    return {
+      store: this,
+      saved: this.queue.then(() => this.session.store.snapshot()),
+    };
   }
 
-  compensate(): never {
-    throw new Error('not implemented: S05 (restore(version) compensation)');
+  /**
+   * Undoes everything admitted since `mark` with `restore(version)`. When no
+   * group was acked since, nothing is written. The store is at a known
+   * version afterwards, so a failure of the queue is cleared; if the restore
+   * itself fails the store keeps that failure.
+   */
+  async compensate(mark: JournalCompensationMark): Promise<void> {
+    if (mark.store !== this) {
+      throw new Error('The compensation mark was not captured by this store');
+    }
+    const saved = await mark.saved;
+    await this.queue;
+    const unchanged =
+      this.session.store.published?.commitSeq === saved.version?.commitSeq;
+    this.failure = undefined;
+    if (unchanged) {
+      this.tentativeRows = saved.rows;
+      return;
+    }
+    await this.restoreTo(saved);
   }
 
-  captureDetached(): never {
-    throw new Error('not implemented: S05 (detached publication)');
+  /** Copies the durable rows into `previous`, the candidate-side journal the detached API still reads. */
+  async captureDetached(
+    previous: DetachedHistoryJournal,
+    signal?: AbortSignal,
+    settleTokens?: () => Promise<void>,
+  ): Promise<void> {
+    await this.waitForDurable();
+    const snapshot = this.session.store.snapshot();
+    await captureDetachedRows(snapshot, previous, signal);
+    await settleTokens?.();
+    await this.waitForDurable();
+    this.assertSettled(snapshot, 'captured');
+    signal?.throwIfAborted();
   }
 
   /** Settles the queue, then closes the journal. */
@@ -489,12 +602,48 @@ export class JournalHistoryStore {
    * show the count that was promised.
    */
   private enqueue(rowsAfter: number, build: EditBuilder): void {
-    this.tentativeRows = rowsAfter;
-    this.queue = this.queue.then(() => this.runStep(rowsAfter, build));
+    void this.enqueueTurn(rowsAfter, build);
   }
 
-  private async runStep(rowsAfter: number, build: EditBuilder): Promise<void> {
-    if (this.failure !== undefined) return;
+  private enqueueTurn(
+    rowsAfter: number,
+    build: EditBuilder,
+  ): Promise<CommitAck | undefined> {
+    this.tentativeRows = rowsAfter;
+    this.admitted++;
+    const turn = this.queue.then(() => this.runStep(rowsAfter, build));
+    this.queue = turn.then(() => undefined);
+    return turn;
+  }
+
+  /** The ack of a queued group; a group the queue skipped or failed throws the failure that stopped it. */
+  private async requireAck(
+    turn: Promise<CommitAck | undefined>,
+  ): Promise<CommitAck> {
+    const ack = await turn;
+    if (ack === undefined) {
+      throw this.failure?.error ?? new Error('The group was not committed');
+    }
+    return ack;
+  }
+
+  /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
+  private async restoreTo(saved: VersionSnapshot): Promise<void> {
+    const version = saved.version;
+    const edit: VersionEdit =
+      version === undefined
+        ? { kind: 'clear' }
+        : { kind: 'restore', saved: version };
+    await this.requireAck(
+      this.enqueueTurn(saved.rows, () => Promise.resolve([edit])),
+    );
+  }
+
+  private async runStep(
+    rowsAfter: number,
+    build: EditBuilder,
+  ): Promise<CommitAck | undefined> {
+    if (this.failure !== undefined) return undefined;
     try {
       const edits = await build(this.session.store.snapshot());
       const group = await this.session.store.commitDetailed(edits);
@@ -504,8 +653,10 @@ export class JournalHistoryStore {
         );
       }
       this.ack = group.ack;
+      return group.ack;
     } catch (error) {
       this.failure = { error };
+      return undefined;
     }
   }
 

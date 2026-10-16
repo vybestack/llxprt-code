@@ -989,7 +989,6 @@ export abstract class HistoryServiceCore
       restorePendingChronologyFailure(previousHistory, failures);
       const compensated = await this.compensateAdmittedMutation(
         publication,
-        input,
         failures,
       );
       this.totalTokens = compensated
@@ -1013,17 +1012,12 @@ export abstract class HistoryServiceCore
    */
   private async compensateAdmittedMutation(
     publication: HistoryMutationPublication,
-    input: HistoryMutationInput,
     failures: unknown[],
   ): Promise<boolean> {
     if (publication.admittedCount === 0) return true;
     this.invalidatePendingSyncs();
     try {
-      await this.journal.compensate(
-        publication.compensationMark,
-        input,
-        publication.replacements,
-      );
+      await this.journal.compensate(publication.compensationMark);
       return true;
     } catch (compensationError: unknown) {
       failures.push(compensationError);

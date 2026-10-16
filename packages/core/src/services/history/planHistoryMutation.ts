@@ -112,6 +112,8 @@ export class SnapshotCompensationMark implements HistoryCompensationMark {
   constructor(
     readonly store: HistoryStorePort,
     readonly previous: HistoryMutationSnapshot,
+    readonly input: HistoryMutationInput,
+    readonly replacements: OpenReplaceTracker,
   ) {}
 }
 

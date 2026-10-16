@@ -97,42 +97,34 @@ describe('journal history store whole operations', () => {
     expect(await store.materialize()).toStrictEqual([]);
   });
 
-  it('clear that must roll back reports that the row restore is not implemented yet', async () => {
+  it('clear that must roll back puts the removed rows back with restore(version) and undoes the service', async () => {
     const store = await created('rollback.llxj');
     store.apply({ kind: 'content', content: row('human', 'one', 1) });
+    store.apply({ kind: 'content', content: row('ai', 'two', 2) });
+    await store.waitForDurable();
+    const failure = new Error('observer failed');
     let restored = 0;
 
-    const failure = await store
-      .clear({
+    await expect(
+      store.clear({
         spans: [],
         rollbackOnFailure: true,
         publish: () => {
-          throw new Error('observer failed');
+          throw failure;
         },
         restore: () => {
           restored++;
         },
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
+      }),
+    ).rejects.toBe(failure);
 
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors.map(String)).toStrictEqual([
-      'Error: observer failed',
-      'Error: not implemented: S05 (restore the rows of a failed clear)',
-    ]);
     expect(restored).toBe(1);
-  });
-
-  it.each([
-    ['captureCompensation', 'S05'],
-    ['compensate', 'S05'],
-    ['captureDetached', 'S05'],
-  ] as const)('%s names the slice that implements it', async (name, slice) => {
-    const store = await created(`${name}.llxj`);
-    const call = store[name] as unknown as (...args: unknown[]) => unknown;
-    expect(() => call.call(store)).toThrow(`not implemented: ${slice}`);
+    expect(store.getLength()).toBe(2);
+    expect(
+      (await store.materialize()).map((content) => content.blocks[0]),
+    ).toStrictEqual([
+      { type: 'text', text: 'one' },
+      { type: 'text', text: 'two' },
+    ]);
   });
 });
