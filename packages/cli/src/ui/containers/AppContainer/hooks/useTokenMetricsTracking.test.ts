@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { act } from 'react';
+import { act, useMemo } from 'react';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './historyTokenSubscriptions.js';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
@@ -138,7 +143,7 @@ describe('useTokenMetricsTracking', () => {
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
         metrics: metricSource,
-        uiRuntime: config as never,
+        ...useBindings(config),
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -179,7 +184,7 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         metrics: metricSource,
-        uiRuntime: config as never,
+        ...useBindings(config),
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -232,7 +237,7 @@ describe('useTokenMetricsTracking', () => {
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
         metrics: metricSource,
-        uiRuntime: config as never,
+        ...useBindings(config),
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -291,7 +296,7 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         metrics: metricSource,
-        uiRuntime: config as never,
+        ...useBindings(config),
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -335,7 +340,7 @@ describe('useTokenMetricsTracking', () => {
     renderHook(() =>
       useTokenMetricsTracking({
         metrics: metricSource,
-        uiRuntime: config as never,
+        ...useBindings(config),
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
@@ -375,7 +380,7 @@ describe('useTokenMetricsTracking', () => {
       ({ uiRuntime }) =>
         useTokenMetricsTracking({
           metrics: metricSource,
-          uiRuntime: uiRuntime as never,
+          ...useBindings(uiRuntime),
           recordingOwner: 'agent',
           updateHistoryTokenCount: (value) => {
             published.push(value);
@@ -404,3 +409,29 @@ describe('useTokenMetricsTracking', () => {
     );
   });
 });
+
+function useBindings(config: ConfigStub) {
+  const runtime: RuntimeApiStub = useRuntimeApiMock();
+  const logger = useMemo(() => new DebugLogger('tokens-test'), []);
+  const readHistory = useMemo(
+    () => () => {
+      const client = config.agentClientSource.getAgentClient();
+      return client?.hasChatInitialized() === true
+        ? (client.getHistoryService() ?? null)
+        : null;
+    },
+    [config],
+  );
+  return {
+    subscribeHistoryTokens: useMemo(
+      () => bindHistoryTokenSubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    subscribeRecordingHistory: useMemo(
+      () => bindRecordingHistorySubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    readProviderMetrics: runtime.getActiveProviderMetrics,
+    readSessionTokenUsage: runtime.getSessionTokenUsage,
+  };
+}
