@@ -91,21 +91,39 @@ export function registerQuotaCommand(
 }
 
 export function registerMcpCommand(context: CommandOwnerFixture): SlashCommand {
+  const agent = context.services.agent;
   return createMcpCommand(
     createMcpAuthCommand(
-      bindMcpAuthCommandOperations(
-        context.services.agent,
-        context.services.config,
-      ),
+      bindMcpAuthCommandOperations(agent, context.services.config),
       () => context.services.settings.merged.enableFuzzyFiltering ?? true,
       (...input) => context.ui.addItem(...input),
       () => context.ui.reloadCommands(),
     ),
     bindMcpCommand(
-      context.services.config,
-      context.services.agent,
+      context.services.config !== null,
+      agent === null
+        ? null
+        : {
+            listServers: () => agent.mcp.listServers(),
+            listBlockedServers: () => agent.mcp.listBlockedServers(),
+            discoveryState: () => agent.mcp.discoveryState(),
+            readDetails: () =>
+              agent.mcp.details({
+                includeTools: true,
+                includePrompts: true,
+                includeResources: true,
+              }),
+          },
       context.ui.addItem,
       context.ui.reloadCommands,
+      async () => {
+        if (agent === null) throw new Error('Session agent is unavailable');
+        await agent.mcp.reload();
+      },
+      async () => {
+        if (agent === null) throw new Error('Session agent is unavailable');
+        await agent.mcp.refresh();
+      },
     ),
   );
 }

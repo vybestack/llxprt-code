@@ -227,25 +227,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
       baseUrlSetting: unavailable,
       fetchQuotaLines: unavailable,
     }),
-    mcpCommand: createMcpCommand(
-      createMcpAuthCommand(
-        {
-          isConfigured: () => false,
-          configuredServers: () => [],
-          authenticationRequiredServers: async () => [],
-          authenticate: unavailable,
-        },
-        () => true,
-        unavailable,
-        unavailable,
-      ),
-      bindMcpCommand(
-        null,
-        null,
-        () => 0,
-        () => {},
-      ),
-    ),
+    mcpCommand: createUnconfiguredMcpCommand(unavailable),
     toolkeyCommand: createToolkeyCommand({
       getKey: unavailable,
       saveKey: unavailable,
@@ -569,4 +551,32 @@ function unconfiguredResourceCommands() {
       setPendingItem: () => {},
     }),
   };
+}
+
+function unavailableSessionAgent(): never {
+  throw new Error('Session agent is unavailable');
+}
+
+function createUnconfiguredMcpCommand(unavailable: () => never): SlashCommand {
+  return createMcpCommand(
+    createMcpAuthCommand(
+      {
+        isConfigured: () => false,
+        configuredServers: () => [],
+        authenticationRequiredServers: async () => [],
+        authenticate: unavailable,
+      },
+      () => true,
+      unavailable,
+      unavailable,
+    ),
+    bindMcpCommand(
+      false,
+      null,
+      () => 0,
+      () => {},
+      unavailableSessionAgent,
+      unavailableSessionAgent,
+    ),
+  );
 }

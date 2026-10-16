@@ -35,11 +35,27 @@ describe('registered MCP command owner', () => {
                 context.ui.reloadCommands,
               ),
               bindMcpCommand(
-                context.services.config,
-                owner,
+                context.services.config !== null,
+                {
+                  listServers: () => owner.mcp.listServers(),
+                  listBlockedServers: () => owner.mcp.listBlockedServers(),
+                  discoveryState: () => owner.mcp.discoveryState(),
+                  readDetails: () =>
+                    owner.mcp.details({
+                      includeTools: true,
+                      includePrompts: true,
+                      includeResources: true,
+                    }),
+                },
                 context.ui.addItem,
                 () => {
                   reloads++;
+                },
+                async () => {
+                  await owner.mcp.reload();
+                },
+                async () => {
+                  await owner.mcp.refresh();
                 },
               ),
             ),
