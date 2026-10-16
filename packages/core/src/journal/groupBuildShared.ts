@@ -2,6 +2,7 @@
 import type { Aggregate } from './aggregate.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { FactDeps, GroupFacts } from './groupFacts.js';
+import type { ReadGroup } from './idFactBatch.js';
 import type { GroupPlan } from './groupPlanTypes.js';
 import type { TrailerState } from './groupWriter.js';
 import type { IdKeyHasher } from './idKeys.js';
@@ -18,6 +19,8 @@ import type { slotKindsOf, Version } from './version.js';
 /** The seams a group is built with, all supplied by the store. */
 export interface BuildContext extends FactDeps {
   readonly access: RecordAccess | undefined;
+  /** Reads the file up to `writtenEnd`, which reaches records the current group has written and drained. */
+  readonly readGroup: ReadGroup;
   readonly published: Version | undefined;
   readonly hasher: IdKeyHasher;
   readonly metaCache: IdNodeCache;

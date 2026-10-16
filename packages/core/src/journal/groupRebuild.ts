@@ -57,8 +57,8 @@ export async function writeFresh(
 /**
  * The rows of the whole new history in label order, as one pass: each row is
  * read from the file or written to it, its facts are applied, and its entry
- * goes to the tree builder. Memory is the builders' depth and the facts of the
- * history, which a rebuild keeps until the trie is merged (design 4.6).
+ * goes to the tree builder. Memory is the builders' depth and one chunk of
+ * id facts, which the batch merges into the trie as it fills (design 4.6).
  */
 class RebuildPass {
   first: RowEntry | undefined;
@@ -211,7 +211,10 @@ export async function buildRebuilt(
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
   const metaReader = mapReader(ctx, 'meta');
-  const facts = await startFacts(ctx.access, NO_FACT_ROOTS, ctx, metaReader);
+  const facts = await startFacts(ctx.access, NO_FACT_ROOTS, ctx, metaReader, {
+    appender,
+    readGroup: ctx.readGroup,
+  });
   const chainBase = await ctx.chainFor(plan.parent);
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));

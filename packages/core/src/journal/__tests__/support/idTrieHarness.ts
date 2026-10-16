@@ -64,6 +64,10 @@ export class CountingAppender implements RecordAppender {
     this.records += 1;
     return this.inner.append(record);
   }
+
+  drain(): Promise<void> {
+    return this.inner.drain();
+  }
 }
 
 export interface GroupStats {
@@ -106,6 +110,14 @@ export class IdTrieFixture {
       countingReader(this.source, this.reads),
       this.trailer,
     );
+  }
+
+  /** Reads the file up to `writtenEnd`, which reaches records of a group that is still being written. */
+  accessTo(writtenEnd: number): RecordAccess {
+    return createRecordAccess(this.file, this.source, {
+      selfOffset: 0,
+      durableEnd: writtenEnd,
+    });
   }
 
   /** Runs `build` as one group and keeps the root it returns. */

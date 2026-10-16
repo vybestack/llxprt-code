@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import type { OccurrencePlanner, PlannedRow } from './groupEdits.js';
-import { IdFactBatch } from './idFactBatch.js';
+import { IdFactBatch, type BatchSpill } from './idFactBatch.js';
 import type { IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
@@ -96,6 +96,7 @@ export async function startFacts(
   roots: FactRoots,
   deps: FactDeps,
   metaReader: KeyedMapReader,
+  spill?: BatchSpill,
 ): Promise<GroupFacts> {
   const { idRoot, metaRoot } = roots;
   const stored = await metaReader.get(metaRoot, KIMI_EXCEPTION_KEY);
@@ -109,6 +110,7 @@ export async function startFacts(
       idRoot,
       deps.idDeps,
       baseExceptionCount,
+      spill,
     ),
     meta: new KeyedMapBatch(metaReader, metaRoot),
     baseExceptionCount,
@@ -167,16 +169,24 @@ export function finishFacts(facts: GroupFacts): GroupFacts {
 /**
  * Applies every row the group adds to the id facts and the meta map, in label
  * order: the kept rows first, read back from their headers and id pieces
- * (design 4.6), then the new rows from their drafts. Only reads happen here,
- * so a failure leaves the file untouched.
+ * (design 4.6), then the new rows from their drafts. Nothing is written unless
+ * the facts outgrow the batch cap, so a failure before that leaves the file
+ * untouched; past it the batch merges its chunks through `spill`.
  */
 export async function collectFacts(
   access: RecordAccess | undefined,
   plan: GroupPlan,
   deps: FactDeps,
   metaReader: KeyedMapReader,
+  spill: BatchSpill,
 ): Promise<GroupFacts> {
-  const facts = await startFacts(access, plan.base.roots, deps, metaReader);
+  const facts = await startFacts(
+    access,
+    plan.base.roots,
+    deps,
+    metaReader,
+    spill,
+  );
   const kept = existingEntries(access, plan.range);
   if (kept !== undefined && access !== undefined) {
     for await (const entry of kept) {

@@ -19,6 +19,11 @@ export interface RecordAppender {
   readonly nextOffset: number;
   /** Takes the record and returns the offset it starts at. */
   append(record: GroupRecord): Promise<number>;
+  /**
+   * Writes whatever is waiting, so the records appended so far can be read
+   * back from the file up to `nextOffset`.
+   */
+  drain(): Promise<void>;
 }
 
 /**

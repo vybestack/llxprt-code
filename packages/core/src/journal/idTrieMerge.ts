@@ -284,8 +284,9 @@ async function mergeInternal(
  * `root` as part of the current group, and returns the new root. A path copy
  * writes each node on a changed path once however many updates pass through
  * it, so a batch of updates costs the union of their paths and not the sum.
- * Nodes this call writes cannot be read until the group is flushed, so a group
- * merges once per trie. `root` 0 is the empty trie and needs no reader. A
+ * Nodes this call writes cannot be read until the appender is drained, so a
+ * caller that merges again in the same group drains between the merges and
+ * reads through an access that reaches the appender's `nextOffset`. `root` 0 is the empty trie and needs no reader. A
  * fact that is equal to the stored one writes nothing, and a merge that
  * changes nothing returns `root`.
  */

@@ -290,6 +290,11 @@ export class JournalStore {
   private buildContext(): BuildContext {
     return {
       access: this.access,
+      readGroup: (writtenEnd) =>
+        createRecordAccess(this.path, this.writer.reader, {
+          selfOffset: this.currentVersion?.selfOffset ?? 0,
+          durableEnd: writtenEnd,
+        }),
       published: this.currentVersion,
       hasher: this.deps.idDeps.hasher,
       idDeps: this.deps.idDeps,

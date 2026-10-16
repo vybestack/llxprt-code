@@ -118,7 +118,10 @@ export async function buildGroup(
     encodeRowDraft(label, draft),
   );
   const facts = pending
-    ? await collectFacts(ctx.access, plan, ctx, mapReader(ctx, 'meta'))
+    ? await collectFacts(ctx.access, plan, ctx, mapReader(ctx, 'meta'), {
+        appender,
+        readGroup: ctx.readGroup,
+      })
     : undefined;
   const chainBase = await ctx.chainFor(plan.parent);
   const written = await writeRows(appender, encoded);

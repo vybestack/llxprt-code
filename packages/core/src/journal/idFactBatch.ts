@@ -35,14 +35,53 @@ import {
   type NormalizedFamily,
   type OccurrenceKind,
 } from './idKeys.js';
-import { bulkBuildIdTrie, mergeIdTrie } from './idTrieMerge.js';
+import { BoundedIdNodeCache } from './idTrieCache.js';
+import { mergeIdTrie } from './idTrieMerge.js';
 import { compareIdHashes, type IdEntry } from './idTrieNode.js';
-import type { IdTrieReader } from './idTrieReader.js';
+import { IdTrieReader } from './idTrieReader.js';
+import type { RecordAccess } from './recordAccess.js';
 
 const FAMILIES: readonly NormalizedFamily[] = [ID_NS.openai, ID_NS.anthropic];
 
 function pendingKey(hash: Uint8Array): string {
   return Buffer.from(hash).toString('hex');
+}
+
+/**
+ * What the pending writes of a batch may charge before they are merged into
+ * the trie: 64 KiB. It bounds the heap one rebuild holds for id facts, so it
+ * sits well inside the 1 MiB memory proof bound together with the group
+ * appender's 256 KiB batch and the node caches.
+ */
+export const ID_BATCH_CAP_BYTES = 64 * 1024;
+/**
+ * What one pending write costs beyond its hash and value: the two typed
+ * arrays, the entry object, the hex key and the map slot. Measured at about
+ * 500 bytes per write on a 24-byte payload (3.5 KB per id, seven writes per
+ * id), so the cap counts the heap and not just the payload.
+ */
+export const ID_BATCH_ENTRY_OVERHEAD_BYTES = 480;
+
+function chargeOf(entry: IdEntry): number {
+  return entry.hash.length + entry.value.length + ID_BATCH_ENTRY_OVERHEAD_BYTES;
+}
+
+/** Reads of a file the current group has partly written. */
+export type ReadGroup = (writtenEnd: number) => RecordAccess;
+
+/**
+ * Where a rebuild group lets a batch merge its writes before `commit`: into
+ * the group's own trie, through the group's appender.
+ */
+export interface SpillOptions {
+  /** Reads back nodes the group has appended, up to `writtenEnd`. */
+  readonly readGroup: ReadGroup;
+  /** Pending writes that charge more than this are merged. */
+  readonly capBytes?: number;
+}
+
+export interface BatchSpill extends SpillOptions {
+  readonly appender: RecordAppender;
 }
 
 /** What a commit group leaves behind for the trailer and the meta map. */
@@ -55,21 +94,31 @@ export interface FactCommit {
 /**
  * The id trie as one commit group sees it: the committed trie at `root` with
  * this group's writes laid over it. Every read goes through the overlay, so a
- * later block of the group sees an earlier one; nothing reaches the file until
- * `commit`, which merges the writes in one path-copying pass and so writes each
- * node on a changed path once.
+ * later block of the group sees an earlier one. A batch without a `spill`
+ * writes nothing until `commit`, which merges the writes in one path-copying
+ * pass and so writes each node on a changed path once. A batch with one merges
+ * the writes into the group's trie whenever they charge more than the cap, so
+ * a rebuild holds one chunk of facts and not the facts of its whole history;
+ * the nodes a later chunk supersedes stay in the file as garbage for
+ * compaction.
  */
 export class IdFactBatch {
   private readonly pending = new Map<string, IdEntry>();
+  private pendingBytes = 0;
   private exceptions: number;
+  /** The trie the pending writes lie over: the committed one until a chunk is merged. */
+  private workingRoot: number;
+  private workingReader: IdTrieReader | undefined;
+  private readonly readback = new BoundedIdNodeCache();
   /** Reads through the pending writes. */
   readonly queries: IdFactQueries;
 
   constructor(
-    private readonly reader: IdTrieReader | undefined,
-    private readonly root: number,
+    reader: IdTrieReader | undefined,
+    root: number,
     private readonly deps: IdFactDeps,
     exceptionCount: number,
+    private readonly spill?: BatchSpill,
   ) {
     if (root !== 0 && reader === undefined) {
       throw new JournalFormatError(
@@ -77,11 +126,13 @@ export class IdFactBatch {
       );
     }
     this.exceptions = exceptionCount;
+    this.workingRoot = root;
+    this.workingReader = reader;
     const committed: IdEntryView = {
       get: (hash) =>
-        reader === undefined
+        this.workingReader === undefined
           ? Promise.resolve(undefined)
-          : reader.lookup(root, hash),
+          : this.workingReader.lookup(this.workingRoot, hash),
     };
     this.queries = new IdFactQueries(
       {
@@ -106,7 +157,38 @@ export class IdFactBatch {
 
   private put(namespace: number, key: Uint8Array, value: Uint8Array): void {
     const hash = this.deps.hasher(namespace, key);
-    this.pending.set(pendingKey(hash), { hash, value });
+    const entry = { hash, value };
+    const id = pendingKey(hash);
+    const replaced = this.pending.get(id);
+    if (replaced !== undefined) this.pendingBytes -= chargeOf(replaced);
+    this.pending.set(id, entry);
+    this.pendingBytes += chargeOf(entry);
+  }
+
+  /**
+   * Merges the pending writes into the group's trie once they charge more than
+   * the cap. It runs between the blocks of a group and not inside `put`, so a
+   * block's writes are never split across chunks and `put` stays synchronous.
+   */
+  private async spillWhenFull(): Promise<void> {
+    const { spill } = this;
+    if (spill === undefined) return;
+    if (this.pendingBytes <= (spill.capBytes ?? ID_BATCH_CAP_BYTES)) return;
+    const { appender } = spill;
+    this.workingRoot = await mergeIdTrie(
+      appender,
+      this.workingReader,
+      this.workingRoot,
+      this.sortedUpdates(),
+    );
+    // The nodes just appended are read by the next lookup and the next merge.
+    await appender.drain();
+    this.workingReader = new IdTrieReader(
+      spill.readGroup(appender.nextOffset),
+      this.readback,
+    );
+    this.pending.clear();
+    this.pendingBytes = 0;
   }
 
   /**
@@ -136,6 +218,7 @@ export class IdFactBatch {
     if (!wasException && isKimiException(occ.rawId, after)) {
       this.addException(occ.rawId);
     }
+    await this.spillWhenFull();
   }
 
   private async appendToList(
@@ -193,6 +276,7 @@ export class IdFactBatch {
       fact0Key(rawId),
       encodeIdFact({ ...fact, mappedRef: valueOffset }),
     );
+    await this.spillWhenFull();
   }
 
   /** Namespace 6: the record at `oldOffset` in the file being replaced is at `newOffset` here. */
@@ -211,12 +295,12 @@ export class IdFactBatch {
     );
   }
 
-  /** Merges the group's writes into the trie as part of the current group. */
+  /** Merges the writes still pending into the trie as part of the current group. */
   async commit(appender: RecordAppender): Promise<FactCommit> {
     const root = await mergeIdTrie(
       appender,
-      this.reader,
-      this.root,
+      this.workingReader,
+      this.workingRoot,
       this.sortedUpdates(),
     );
     return { root, exceptionCount: this.exceptions };
@@ -226,18 +310,23 @@ export class IdFactBatch {
 /**
  * The trie of a whole history built from nothing, for a rebuild: the update
  * rule is applied to every block in position order, so the facts are the ones
- * an incremental append of the same blocks gives, and the sorted facts go to
- * the bulk builder. The facts of one history wait in memory here; a rebuild of
- * a history too large for that feeds `bulkBuildIdTrie` from an external sort
- * of the same entries.
+ * an incremental append of the same blocks gives. With `spill` the facts are
+ * merged into the trie in chunks as they accumulate, so a history of any
+ * length holds one chunk; without it they all wait for a single bulk build.
  */
 export async function bulkBuildFacts(
   appender: RecordAppender,
   occurrences: Iterable<IdOccurrence>,
   deps: IdFactDeps,
+  spill?: SpillOptions,
 ): Promise<FactCommit> {
-  const batch = new IdFactBatch(undefined, 0, deps, 0);
+  const batch = new IdFactBatch(
+    undefined,
+    0,
+    deps,
+    0,
+    spill === undefined ? undefined : { ...spill, appender },
+  );
   for (const occ of occurrences) await batch.apply(occ);
-  const root = await bulkBuildIdTrie(appender, batch.sortedUpdates());
-  return { root, exceptionCount: batch.exceptionCount };
+  return batch.commit(appender);
 }

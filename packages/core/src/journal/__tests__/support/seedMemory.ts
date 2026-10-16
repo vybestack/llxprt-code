@@ -12,18 +12,24 @@ export const SEED_ROWS = 100_000;
 export const OWNER_COUNT = 5;
 export const MIRROR_OWNER = 2;
 /**
- * The seed rows carry no call ids. A group that rebuilds the history holds the
- * id facts of every id in memory until the trie is merged (design 4.6; about
- * 3.5 KB per id was measured), so ids would measure that known limit instead
- * of the row copy. The limit is recorded in tmp/854-notes/p3/STATUS.md.
+ * A tool-heavy history: every twentieth row calls an id and the row ten after it
+ * answers it. Both rows have the same owner, so the mirror of owner 2 copies
+ * both and the seed rebuilds the id facts of 5,000 ids.
  */
+const ID_PERIOD = 20;
+const RESPONSE_OFFSET = 10;
 const SAMPLES = 4;
 
 function* baseDrafts(): Generator<RowDraft> {
   for (let index = 0; index < SEED_ROWS; index++) {
+    const pair = Math.floor(index / ID_PERIOD);
+    const slot = index % ID_PERIOD;
     yield draftRow({
       owner: index % OWNER_COUNT,
       text: `base ${index}`,
+      calls: slot === 0 ? [`call_${pair}_abcdefghijklmnop`] : [],
+      responses:
+        slot === RESPONSE_OFFSET ? [`call_${pair}_abcdefghijklmnop`] : [],
     });
   }
 }

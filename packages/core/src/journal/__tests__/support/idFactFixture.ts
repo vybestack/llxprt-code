@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { IdFactBatch, bulkBuildFacts } from '../../idFactBatch.js';
+import {
+  IdFactBatch,
+  bulkBuildFacts,
+  type SpillOptions,
+} from '../../idFactBatch.js';
 import type { IdOccurrence } from '../../idFactUpdate.js';
 import { ID_NS, sha256KeyHash, type IdKeyHasher } from '../../idKeys.js';
 import { BoundedIdNodeCache, type IdNodeCache } from '../../idTrieCache.js';
@@ -42,14 +46,31 @@ export class FactFixture {
     readonly trie: IdTrieFixture,
     readonly deps: IdFactDeps,
     readonly cache: IdNodeCache,
+    /** When set, every batch of the fixture merges its writes in chunks charging more than this. */
+    private readonly capBytes: number | undefined,
   ) {}
 
   static async create(
     file: string,
     deps: IdFactDeps = realDeps(),
     cache: IdNodeCache = new BoundedIdNodeCache(),
+    capBytes?: number,
   ): Promise<FactFixture> {
-    return new FactFixture(await IdTrieFixture.create(file), deps, cache);
+    return new FactFixture(
+      await IdTrieFixture.create(file),
+      deps,
+      cache,
+      capBytes,
+    );
+  }
+
+  private spillOptions(): SpillOptions | undefined {
+    return this.capBytes === undefined
+      ? undefined
+      : {
+          readGroup: (writtenEnd) => this.trie.accessTo(writtenEnd),
+          capBytes: this.capBytes,
+        };
   }
 
   get root(): number {
@@ -62,11 +83,13 @@ export class FactFixture {
     extra?: (batch: IdFactBatch) => Promise<void>,
   ): Promise<GroupStats> {
     return this.trie.commit(async (appender) => {
+      const options = this.spillOptions();
       const batch = new IdFactBatch(
         this.trie.root === 0 ? undefined : this.trie.reader(this.cache),
         this.trie.root,
         this.deps,
         this.exceptionCount,
+        options === undefined ? undefined : { ...options, appender },
       );
       for (const occ of occurrences) await batch.apply(occ);
       if (extra !== undefined) await extra(batch);
@@ -79,7 +102,12 @@ export class FactFixture {
   /** The whole history as one rebuild group from nothing. */
   bulk(occurrences: Iterable<IdOccurrence>): Promise<GroupStats> {
     return this.trie.commit(async (appender) => {
-      const result = await bulkBuildFacts(appender, occurrences, this.deps);
+      const result = await bulkBuildFacts(
+        appender,
+        occurrences,
+        this.deps,
+        this.spillOptions(),
+      );
       this.exceptionCount = result.exceptionCount;
       return result.root;
     });
