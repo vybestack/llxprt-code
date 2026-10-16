@@ -1,14 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { OccurrencePlanner } from '../../groupEdits.js';
 import { encodeIdFact } from '../../idFactCodec.js';
-import type { IdOccurrence } from '../../idFactUpdate.js';
-import { OCCURRENCE_KIND } from '../../idKeys.js';
 import { sha256KeyHash } from '../../idKeys.js';
 import type {
   JournalStore,
   JournalStoreDependencies,
 } from '../../journalStore.js';
 import { LABEL_STEP, FIRST_NEXT_LABEL } from '../../labels.js';
+import { planOwnRowOccurrences } from '../../ownRowPlanner.js';
 import type { RowDraft } from '../../rowDraft.js';
 import {
   CHRONOLOGY_SEQ_NONE,
@@ -21,31 +19,7 @@ import { testJournalSeams, type TestJournalSeams } from './journalFixtures.js';
 import { testAlgebra } from './rowTreeFixtures.js';
 import type { IdNodeCache } from '../../idTrieCache.js';
 
-/**
- * Stands in for the normalizer of phase 5: every id sits at its own row,
- * part 0 and unit 0, in a unit of the row's speaker. The journal only records
- * what the planner gives it.
- */
-export const plainPlanner: OccurrencePlanner = (row) => {
-  const occurrences: IdOccurrence[] = row.ids.map((id) => ({
-    rawId: id.rawId,
-    kind:
-      id.kind === ROW_ID_KIND.call
-        ? OCCURRENCE_KIND.call
-        : OCCURRENCE_KIND.response,
-    at: { label: row.label, part: 0, block: id.block },
-    partSpeaker: row.speaker,
-    unit: {
-      position: { label: row.label, part: 0, unit: 0 },
-      speaker: row.speaker,
-      leadingTool: false,
-    },
-    score: id.score,
-    nameLen: id.nameLen,
-    reconstructed: false,
-  }));
-  return Promise.resolve(occurrences);
-};
+export const plainPlanner = planOwnRowOccurrences;
 
 export interface StoreFixtureOptions {
   readonly seams?: TestJournalSeams;
