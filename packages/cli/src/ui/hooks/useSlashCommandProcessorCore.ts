@@ -1,3 +1,10 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useCommandView } from './useCommandView.js';
 import {
   useOwnedChatOperations,
   useRawChatOperations,
@@ -6,11 +13,6 @@ import {
   useChatProjectHash,
 } from './useChatOperations.js';
 import { useContinueCommand } from './useContinueCommand.js';
-/**
- * @license
- * Copyright 2025 Google LLC
- * SPDX-License-Identifier: Apache-2.0
- */
 
 import { createWorkspaceCommandOwners } from './workspaceCommandOwners.js';
 
@@ -34,6 +36,15 @@ import { useHostCommands } from './useHostCommands.js';
 import { useResourceCommands } from './useResourceCommands.js';
 import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
+import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
+import type { DumpcontextOwnerBindings } from '../commands/dumpcontextCommandHost.js';
+import type { DiagnosticsCommandReads } from '../commands/diagnosticsCommand.js';
+import { bindDumpcontextCommand } from '../commands/dumpcontextCommandHost.js';
+import { bindRestoreCommand } from '../commands/restoreCommandHost.js';
+import {
+  bindCopyCommandHistoryRead,
+  bindCopyCommandClipboard,
+} from '../commands/copyCommandHost.js';
 import { bindAboutDetails } from '../commands/aboutCommandHost.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
@@ -41,7 +52,7 @@ import { useSetCommand } from './useSetCommand.js';
 import { useCredentialCommands } from './useCredentialCommands.js';
 import { useChatCommand } from './useChatCommand.js';
 import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
 import { useAutoPromptOperation } from './useAutoPromptOperation.js';
@@ -64,10 +75,7 @@ import type {
 import type { LoadedSettings } from '../../config/settings.js';
 import type { SlashCommand } from '../commands/types.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
-import {
-  processSlashCommand,
-  type SlashCommandHandlerDeps,
-} from './slashCommandHandlers.js';
+import { type SlashCommandHandlerDeps } from './slashCommandHandlers.js';
 import {
   confirmationLogger,
   slashCommandLogger,
@@ -76,7 +84,7 @@ import {
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import {
   loadBuiltinSlashCommands,
-  useCommandContext,
+  type useCommandContext,
   useCommandReload,
   type usePendingHistory,
 } from './slashCommandProcessorSupport.js';
@@ -123,7 +131,7 @@ export interface UseSlashCommandProcessorCoreArgs {
   recordingSwapCallbacks?: RecordingSwapCallbacks;
 }
 
-interface SlashCommandProcessorState {
+export interface SlashCommandProcessorState {
   builtins: BuiltinCommandOwners;
   commands: readonly SlashCommand[] | undefined;
   setCommands: (commands: readonly SlashCommand[]) => void;
@@ -529,19 +537,28 @@ function useRegisteredCommands(
   return useBoundRegistry(builtins, config, reloadCommandsRef);
 }
 
-function useCommandHandler(
-  deps: SlashCommandHandlerDeps,
-): SlashCommandProcessorCoreResult['handleSlashCommand'] {
-  return useCallback((...input) => processSlashCommand(deps, ...input), [deps]);
-}
-
 function useAboutDetails(
   api: ReturnType<typeof useRuntimeApi>,
   config: CliUiRuntime | null,
   settings: LoadedSettings,
 ) {
   return useMemo(
-    () => bindAboutDetails(api, config, settings),
+    () =>
+      bindAboutDetails(
+        api.getRuntimeDiagnosticsSnapshot.bind(api),
+        api.getActiveProviderName.bind(api),
+        api.getActiveProviderDetails.bind(api),
+        api.getEphemeralSetting.bind(api),
+        () => config?.getModel(),
+        (key) => config?.getEphemeralSetting(key),
+        () => config?.getProvider(),
+        () =>
+          config?.getIdeMode() === true
+            ? (config.getIdeClient()?.getDetectedIdeDisplayName() ?? '')
+            : '',
+        api.providerStatus.bind(api),
+        settings.getProviderKeyfile.bind(settings),
+      ),
     [api, config, settings],
   );
 }
@@ -560,12 +577,13 @@ export function useSlashCommandProcessorCore(
     agent,
     config,
     settings,
-    recordingIntegration,
-    recordingOwner,
+    recordingIntegration: _recordingIntegration,
+    recordingOwner: _recordingOwner,
     recordingSwapCallbacks: _recordingSwapCallbacks,
     ...invocation
   } = args;
   const api = useRuntimeApi();
+  const oauth = useOAuthControl();
   const { cancellation, pending, session } = useCommandRuntimeState(
     args.addItem,
   );
@@ -586,33 +604,12 @@ export function useSlashCommandProcessorCore(
     args.actions.toggleDebugProfiler,
   );
 
-  const { reloadCommandsRef, reloadRegisteredCommands } =
-    useRegisteredCommandReload();
-  const providerCommands = useCredentialCommands(
-    agent,
-    settings,
-    config,
-    recordingIntegration,
-    recordingOwner,
-    invocation.addItem,
-    reloadRegisteredCommands,
-    useProviderAliasRefresh(),
-  );
-  const state = useRegisteredCommands(
+  const state = useProcessorRegistration(
     args,
+    api,
+    oauth,
     presentationCommands,
-    useHistoryCommandOwners(
-      args.agent,
-      args.config,
-      api,
-      args.settings,
-      useOAuthControl(),
-      args.loadHistory,
-      args.addItem,
-    ),
-    providerCommands,
     pending.setPendingItem,
-    reloadCommandsRef,
   );
   useCommandReload(
     state.builtins,
@@ -643,71 +640,6 @@ function missingSession(): never {
   throw new Error('Session agent is unavailable');
 }
 
-function useInvocationContext(
-  input: Pick<
-    UseSlashCommandProcessorCoreArgs,
-    | 'addItem'
-    | 'clearItems'
-    | 'loadHistory'
-    | 'refreshStatic'
-    | 'toggleVimEnabled'
-    | 'setLlxprtMdFileCount'
-    | 'actions'
-    | 'extensionsUpdateState'
-    | 'todoContext'
-  >,
-  alternateBuffer: boolean,
-  state: SlashCommandProcessorState,
-  pending: ReturnType<typeof usePendingHistory>,
-  session: ReturnType<typeof useCommandRuntimeState>['session'],
-) {
-  return useCommandContext({
-    addItem: input.addItem,
-    clearItems: input.clearItems,
-    loadHistory: input.loadHistory,
-    refreshStatic: input.refreshStatic,
-    toggleVimEnabled: input.toggleVimEnabled,
-    setLlxprtMdFileCount: input.setLlxprtMdFileCount,
-    actions: input.actions,
-    alternateBuffer,
-    ...pending,
-    sessionShellAllowlist: state.sessionShellAllowlist,
-    localIsProcessing: state.localIsProcessing,
-    reloadCommands: state.reloadCommands,
-    extensionsUpdateState: input.extensionsUpdateState,
-    todoContext: input.todoContext,
-    stats: session,
-  });
-}
-
-function useCommandView(
-  invocation: Parameters<typeof useInvocationContext>[0],
-  alternateBuffer: boolean,
-  state: SlashCommandProcessorState,
-  pending: ReturnType<typeof usePendingHistory>,
-  session: ReturnType<typeof useCommandRuntimeState>['session'],
-  cancellation: SlashCommandCancellation,
-  createHandlers: (
-    context: ReturnType<typeof useCommandContext>,
-  ) => SlashCommandHandlerDeps,
-): SlashCommandProcessorCoreResult {
-  const commandContext = useInvocationContext(
-    invocation,
-    alternateBuffer,
-    state,
-    pending,
-    session,
-  );
-  const handleSlashCommand = useCommandHandler(createHandlers(commandContext));
-  return {
-    handleSlashCommand,
-    slashCommands: state.commands,
-    pendingHistoryItems: pending.pendingHistoryItems,
-    commandContext,
-    cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
-  };
-}
-
 function readNull(): null {
   return null;
 }
@@ -732,4 +664,143 @@ function useSubagentProfileCatalog(
 
 function readNoConfig(): undefined {
   return undefined;
+}
+
+function useHistoryRegistration(
+  diagnostics: DiagnosticsCommandReads,
+  config: CliUiRuntime | null,
+  settings: LoadedSettings,
+  loadHistory: UseHistoryManagerReturn['loadHistory'],
+  addItem: UseHistoryManagerReturn['addItem'],
+  compress: Agent['compress'] | null,
+  readRawHistory: Parameters<typeof useHistoryCommandOwners>[3],
+  hasChatInitialized: () => boolean,
+  readHistory: Parameters<typeof bindCopyCommandHistoryRead>[1],
+  setHistory: Agent['setHistory'],
+  readSetting: ReturnType<typeof useRuntimeApi>['getSessionSetting'],
+  writeSetting: ReturnType<typeof useRuntimeApi>['setSessionSetting'],
+  readDumpHistory: DumpcontextOwnerBindings['readHistory'],
+  readDumpProvider: DumpcontextOwnerBindings['readProvider'],
+) {
+  const dumpcontext = useMemo(
+    () =>
+      bindDumpcontextCommand({
+        readMode: () => readSetting('dumpcontext'),
+        writeMode: (mode) => writeSetting('dumpcontext', mode),
+        readHistory: readDumpHistory,
+        readProvider: readDumpProvider,
+        readOutputSettings: () => config?.getEphemeralSettings() ?? {},
+        readRuntimeConfig: () => config,
+      }),
+    [readSetting, writeSetting, readDumpHistory, readDumpProvider, config],
+  );
+  return useHistoryCommandOwners(
+    diagnostics,
+    config?.getPerfSnapshotCapability?.() ?? null,
+    config ? join(config.getProjectTempDir(), 'token-usage') : undefined,
+    readRawHistory,
+    useMemo(
+      () => bindCopyCommandHistoryRead(hasChatInitialized, readHistory),
+      [hasChatInitialized, readHistory],
+    ),
+    useMemo(() => bindCopyCommandClipboard(), []),
+    compress,
+    dumpcontext,
+    useMemo(
+      () =>
+        bindRestoreCommand(
+          config,
+          setHistory,
+          config?.getCheckpointingEnabled() === true
+            ? config.checkpoints
+            : undefined,
+          () => settings.merged.enableFuzzyFiltering ?? true,
+          loadHistory,
+          addItem,
+        ),
+      [setHistory, config, settings, loadHistory, addItem],
+    ),
+  );
+}
+function missingHistoryTools(): never {
+  throw new Error('agent not available');
+}
+
+function useProcessorRegistration(
+  args: UseSlashCommandProcessorCoreArgs,
+  api: ReturnType<typeof useRuntimeApi>,
+  oauth: ReturnType<typeof useOAuthControl>,
+  presentationCommands: ReturnType<typeof usePresentationCommands>,
+  setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
+): SlashCommandProcessorState {
+  const { agent, config, settings, recordingIntegration, recordingOwner } =
+    args;
+  const { reloadCommandsRef, reloadRegisteredCommands } =
+    useRegisteredCommandReload();
+  const tools = agent?.tools;
+  const history = useMemo(
+    () => ({
+      compress: agent === null ? null : agent.compress.bind(agent),
+      readRaw: () =>
+        agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
+      isInitialized: () => agent?.agentClient.hasChatInitialized() ?? false,
+      read: () => agent?.getHistory() ?? Promise.resolve([]),
+      replace: async (items: Parameters<Agent['setHistory']>[0]) => {
+        if (agent === null) throw new Error('Session agent is unavailable');
+        await agent.setHistory(items);
+      },
+      dump: () => {
+        const service = agent?.agentClient.getHistoryService();
+        return service == null
+          ? null
+          : {
+              messages: service.getAll(),
+              chronology: service.getChronologyTrace(),
+            };
+      },
+    }),
+    [agent],
+  );
+  return useRegisteredCommands(
+    args,
+    presentationCommands,
+    useHistoryRegistration(
+      useMemo(
+        () =>
+          bindDiagnosticsReads(
+            config,
+            settings,
+            tools === undefined ? missingHistoryTools : () => tools.list(),
+            api,
+            oauth,
+          ),
+        [tools, config, settings, api, oauth],
+      ),
+      config,
+      settings,
+      args.loadHistory,
+      args.addItem,
+      history.compress,
+      history.readRaw,
+      history.isInitialized,
+      history.read,
+      history.replace,
+      useBound(api, api.getSessionSetting),
+      useBound(api, api.setSessionSetting),
+      history.dump,
+      useBound(api, api.getProviderDumpMetadata),
+    ),
+    useCredentialCommands(
+      agent,
+      settings,
+      config,
+      recordingIntegration,
+      recordingOwner,
+      args.addItem,
+      reloadRegisteredCommands,
+      useProviderAliasRefresh(),
+    ),
+    setPendingItem,
+    reloadCommandsRef,
+  );
 }

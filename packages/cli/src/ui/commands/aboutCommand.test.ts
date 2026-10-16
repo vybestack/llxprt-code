@@ -79,9 +79,22 @@ describe('aboutCommand', () => {
     );
     aboutCommand = createAboutCommand(
       bindAboutDetails(
-        mockContext.runtimeApi,
-        mockContext.services.config,
-        mockContext.services.settings,
+        () => mockContext.runtimeApi.getRuntimeDiagnosticsSnapshot(),
+        () => mockContext.runtimeApi.getActiveProviderName(),
+        () => mockContext.runtimeApi.getActiveProviderDetails(),
+        (key) => mockContext.runtimeApi.getEphemeralSetting(key),
+        () => mockContext.services.config?.getModel(),
+        (key) => mockContext.services.config?.getEphemeralSetting(key),
+        () => mockContext.services.config?.getProvider(),
+        () =>
+          mockContext.services.config?.getIdeMode() === true
+            ? (mockContext.services.config
+                .getIdeClient()
+                ?.getDetectedIdeDisplayName() ?? '')
+            : '',
+        () => mockContext.runtimeApi.providerStatus(),
+        (provider) =>
+          mockContext.services.settings.getProviderKeyfile(provider),
       ),
       mockContext.ui.addItem,
     );

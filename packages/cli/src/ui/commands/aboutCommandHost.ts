@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { LoadedSettings } from '../../config/settings.js';
 import type { AboutDetails } from './aboutCommand.js';
 
 function shouldRenderRuntimeModelLabel(
@@ -18,80 +16,81 @@ function shouldRenderRuntimeModelLabel(
   );
 }
 
-function getProviderDetailsFromRuntime(runtimeApi: RuntimeApi): {
-  modelVersion: string;
-  provider: string;
-  baseURL: string;
-} {
-  const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
+function readProviderDetails(
+  readSnapshot: RuntimeApi['getRuntimeDiagnosticsSnapshot'],
+  readActiveProvider: RuntimeApi['getActiveProviderName'],
+  readActiveDetails: RuntimeApi['getActiveProviderDetails'],
+  readSetting: RuntimeApi['getEphemeralSetting'],
+): { modelVersion: string; provider: string; baseURL: string } {
+  const snapshot = readSnapshot();
   const modelVersion = snapshot.modelName ?? 'Unknown';
   let provider = snapshot.providerName ?? 'Unknown';
   let baseURL = '';
-
-  const activeProviderName = runtimeApi.getActiveProviderName();
-  let resolvedModelVersion = modelVersion;
-  if (
-    shouldRenderRuntimeModelLabel(
-      activeProviderName,
-      snapshot.modelName,
-      provider,
-    )
-  ) {
-    resolvedModelVersion = `${activeProviderName}:${snapshot.modelName}`;
-  }
-
-  const details = runtimeApi.getActiveProviderDetails();
+  const activeProviderName = readActiveProvider();
+  const resolvedModelVersion = shouldRenderRuntimeModelLabel(
+    activeProviderName,
+    snapshot.modelName,
+    provider,
+  )
+    ? `${activeProviderName}:${snapshot.modelName}`
+    : modelVersion;
+  const details = readActiveDetails();
   if (details) {
     provider = details.name;
     baseURL = details.baseURL;
   }
-
   if (baseURL === '') {
-    const runtimeBaseUrl = runtimeApi.getEphemeralSetting('base-url');
-    if (typeof runtimeBaseUrl === 'string') {
-      baseURL = runtimeBaseUrl;
-    }
+    const value = readSetting('base-url');
+    if (typeof value === 'string') baseURL = value;
   }
-
   return { modelVersion: resolvedModelVersion, provider, baseURL };
 }
 
 export function bindAboutDetails(
-  api: RuntimeApi,
-  config: CliUiRuntime | null,
-  settings: LoadedSettings,
+  readSnapshot: RuntimeApi['getRuntimeDiagnosticsSnapshot'],
+  readActiveProvider: RuntimeApi['getActiveProviderName'],
+  readActiveDetails: RuntimeApi['getActiveProviderDetails'],
+  readRuntimeSetting: RuntimeApi['getEphemeralSetting'],
+  readConfiguredModel: () => string | undefined,
+  readConfiguredSetting: RuntimeApi['getEphemeralSetting'],
+  readConfiguredProvider: () => string | undefined,
+  readIdeClient: () => string,
+  readProviderStatus: RuntimeApi['providerStatus'],
+  readKeyfile: (provider: string) => string | undefined,
 ): () => Promise<AboutDetails> {
   return async () => {
     let modelVersion = 'Unknown';
     let provider = 'Unknown';
     let baseURL = '';
     try {
-      const details = getProviderDetailsFromRuntime(api);
+      const details = readProviderDetails(
+        readSnapshot,
+        readActiveProvider,
+        readActiveDetails,
+        readRuntimeSetting,
+      );
       modelVersion = details.modelVersion;
       provider = details.provider;
       baseURL = details.baseURL;
     } catch {
-      modelVersion = config?.getModel() ?? modelVersion;
+      modelVersion = readConfiguredModel() ?? modelVersion;
     }
     if (modelVersion === 'Unknown')
-      modelVersion = config?.getModel() ?? modelVersion;
+      modelVersion = readConfiguredModel() ?? modelVersion;
     if (baseURL === '') {
-      const value = config?.getEphemeralSetting('base-url');
+      const value = readConfiguredSetting('base-url');
       baseURL = typeof value === 'string' ? value : '';
     }
     if (provider === 'Unknown') {
-      const configured = config?.getProvider();
+      const configured = readConfiguredProvider();
       if (configured !== undefined && configured !== '') provider = configured;
     }
-    const ideClient =
-      config?.getIdeMode() === true
-        ? (config.getIdeClient()?.getDetectedIdeDisplayName() ?? '')
-        : '';
+    const ideClient = readIdeClient();
     let keyfile = '';
     try {
-      const providerName = api.providerStatus().providerName;
+      const providerName = readProviderStatus().providerName;
       if (providerName !== null && providerName !== '')
-        keyfile = settings.getProviderKeyfile(providerName) ?? '';
+        keyfile = readKeyfile(providerName) ?? '';
     } catch {
       // Ignore errors and leave defaults
     }
