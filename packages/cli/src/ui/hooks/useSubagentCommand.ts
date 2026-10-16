@@ -4,36 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useMemo } from 'react';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../../config/settings.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { SlashCommand } from '../commands/types.js';
 import { createSubagentCommand } from '../commands/subagentCommand.js';
-import {
-  bindSubagentCommand,
-  bindAutoPromptOperation,
-} from '../commands/subagentCommandHost.js';
-import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import { bindSubagentCommand } from '../commands/subagentCommandHost.js';
 
 export function useSubagentCommand(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
-  settings: LoadedSettings,
-  addItem: UseHistoryManagerReturn['addItem'],
+  reads: Parameters<typeof bindSubagentCommand>[0],
+  writes: Parameters<typeof bindSubagentCommand>[1],
+  listProfiles: Parameters<typeof bindSubagentCommand>[2],
+  isFuzzyEnabled: Parameters<typeof bindSubagentCommand>[3],
+  generatePrompt: Parameters<typeof bindSubagentCommand>[4],
+  isConfigured: boolean,
+  addItem: Parameters<typeof bindSubagentCommand>[6],
 ): SlashCommand {
   return useMemo(
     () =>
       createSubagentCommand(
         bindSubagentCommand(
-          agent?.workspace.subagentDefinitions,
-          agent?.workspace.subagentWrites,
-          async () => agent?.workspace.profileDefinitions.listProfiles() ?? [],
-          () => settings.merged.enableFuzzyFiltering !== false,
-          bindAutoPromptOperation(agent, config),
-          config !== null,
+          reads,
+          writes,
+          listProfiles,
+          isFuzzyEnabled,
+          generatePrompt,
+          isConfigured,
           addItem,
         ),
       ),
-    [agent, config, settings, addItem],
+    [
+      reads,
+      writes,
+      listProfiles,
+      isFuzzyEnabled,
+      generatePrompt,
+      isConfigured,
+      addItem,
+    ],
   );
 }

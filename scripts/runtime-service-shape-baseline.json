@@ -9,8 +9,8 @@
       "runtime-service-bag-parameter": 62
     },
     "cli": {
-      "runtime-service-bag-parameter": 86,
-      "runtime-service-bundle": 182
+      "runtime-service-bag-parameter": 85,
+      "runtime-service-bundle": 181
     },
     "core": {
       "runtime-service-bag-parameter": 0,

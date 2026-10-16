@@ -43,6 +43,7 @@ import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
 import { basename } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
+import { bindAutoPromptOperation } from '../commands/subagentCommandHost.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
@@ -419,10 +420,10 @@ function useBound<Owner, Args extends unknown[], Result>(
 function useBoundRegistry(
   builtins: BuiltinCommandOwners,
   config: CliUiRuntime | null,
-  publishReload: (reload: () => void) => void,
+  reloadRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
   const state = useRegistryState(builtins, config);
-  publishReload(state.reloadCommands);
+  reloadRef.current = state.reloadCommands;
   return { builtins, ...state };
 }
 
@@ -435,6 +436,7 @@ function useRegisteredCommands(
   reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
   const { agent, config, settings, recordingOwner } = args;
+  const fuzzy = useFuzzyPreference(settings);
   const { extensionsCommand, ...staticCommands } = useStaticBuiltinCommands(
     config,
     settings,
@@ -473,15 +475,7 @@ function useRegisteredCommands(
     args.recordingIntegration,
   );
   const builtins = useBuiltinCommandOwners({
-    chatCommand: useChatCommand(
-      ownerChat,
-      rawChat,
-      recordingOwner,
-      useCallback(
-        () => settings.merged.enableFuzzyFiltering ?? true,
-        [settings],
-      ),
-    ),
+    chatCommand: useChatCommand(ownerChat, rawChat, recordingOwner, fuzzy),
     continueCommand: useContinueCommand(
       useBound(session, session?.exportSession ?? missingSession),
       useCallback(() => config?.isInteractive() === true, [config]),
@@ -497,15 +491,21 @@ function useRegisteredCommands(
     historyCommandOwners,
     setCommand: useSetCommand(settings),
     todoCommand: useTodoCommandOwner(args.todoContext, args.addItem),
-    subagentCommand: useSubagentCommand(agent, config, settings, args.addItem),
+    subagentCommand: useSubagentCommand(
+      agent?.workspace.subagentDefinitions,
+      agent?.workspace.subagentWrites,
+      useSubagentProfileCatalog(agent?.workspace.profileDefinitions),
+      fuzzy,
+      useMemo(() => bindAutoPromptOperation(agent, config), [agent, config]),
+      config !== null,
+      args.addItem,
+    ),
     extensionsCommand,
     presentationCommands: { ...staticCommands, ...presentationCommands },
     ...workspaceCommands,
     credentialCommands: providerCommands,
   });
-  return useBoundRegistry(builtins, config, (reload) => {
-    reloadCommandsRef.current = reload;
-  });
+  return useBoundRegistry(builtins, config, reloadCommandsRef);
 }
 
 function useCommandHandler(
@@ -671,4 +671,22 @@ function useCommandView(
 
 function readNull(): null {
   return null;
+}
+
+function useFuzzyPreference(
+  settings: Pick<LoadedSettings, 'merged'>,
+): () => boolean {
+  return useCallback(
+    () => settings.merged.enableFuzzyFiltering !== false,
+    [settings],
+  );
+}
+
+function useSubagentProfileCatalog(
+  profiles: Agent['workspace']['profileDefinitions'] | undefined,
+): () => Promise<string[]> {
+  return useCallback(
+    () => profiles?.listProfiles() ?? Promise.resolve([]),
+    [profiles],
+  );
 }
