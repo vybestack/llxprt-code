@@ -47,10 +47,16 @@ function mcpOwner(
         () => {},
       ),
       bindMcpCommand(
-        null,
+        false,
         null,
         () => 0,
         () => {},
+        async () => {
+          throw new Error('Session agent is unavailable');
+        },
+        async () => {
+          throw new Error('Session agent is unavailable');
+        },
       ),
     ),
   };

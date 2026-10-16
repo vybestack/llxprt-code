@@ -66,21 +66,25 @@ function createToolkeyCommands() {
   };
 }
 
-function createProfileOwnerCommand(
+function useProfileOwnerCommand(
   agent: Agent | null,
   api: ReturnType<typeof useRuntimeApi>,
   settings: LoadedSettings,
   oauthControl: ReturnType<typeof useOAuthControl>,
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ) {
-  return createProfileCommand(
-    bindProfileCommandOperations({
-      agent,
-      runtimeApi: api,
-      settings,
-      oauthControl,
-      recordProviderSwitch,
-    }),
+  return useMemo(
+    () =>
+      createProfileCommand(
+        bindProfileCommandOperations({
+          agent,
+          runtimeApi: api,
+          settings,
+          oauthControl,
+          recordProviderSwitch,
+        }),
+      ),
+    [agent, api, settings, oauthControl, recordProviderSwitch],
   );
 }
 
@@ -122,29 +126,29 @@ export function useCredentialCommands(
     () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
     [api, oauthControl],
   );
-  const mcpCommand = useMemo(
+  const mcpAuthCommand = useMemo(
     () =>
-      createMcpCommand(
-        createMcpAuthCommand(
-          bindMcpAuthCommandOperations(agent, config),
-          () => settings.merged.enableFuzzyFiltering ?? true,
-          addItem,
-          reloadCommands,
-        ),
-        bindMcpCommand(config, agent, addItem, reloadCommands),
+      createMcpAuthCommand(
+        bindMcpAuthCommandOperations(agent, config),
+        () => settings.merged.enableFuzzyFiltering ?? true,
+        addItem,
+        reloadCommands,
       ),
     [agent, config, addItem, reloadCommands, settings],
   );
-  const profileCommand = useMemo(
-    () =>
-      createProfileOwnerCommand(
-        agent,
-        api,
-        settings,
-        oauthControl,
-        recordSwitch,
-      ),
-    [agent, api, oauthControl, recordSwitch, settings],
+  const mcpCommand = useMcpRegistration(
+    agent?.mcp,
+    config !== null,
+    mcpAuthCommand,
+    addItem,
+    reloadCommands,
+  );
+  const profileCommand = useProfileOwnerCommand(
+    agent,
+    api,
+    settings,
+    oauthControl,
+    recordSwitch,
   );
   return useMemoCredentialRegistry({
     ...useModelSelectionCommands(
@@ -233,5 +237,49 @@ function useMemoCredentialRegistry(
       toolkeyCommand,
       toolkeyfileCommand,
     ],
+  );
+}
+
+function useMcpRegistration(
+  mcp: Agent['mcp'] | undefined,
+  isConfigured: boolean,
+  auth: SlashCommand,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
+): SlashCommand {
+  return useMemo(
+    () =>
+      createMcpCommand(
+        auth,
+        bindMcpCommand(
+          isConfigured,
+          mcp === undefined
+            ? null
+            : {
+                listServers: () => mcp.listServers(),
+                listBlockedServers: () => mcp.listBlockedServers(),
+                discoveryState: () => mcp.discoveryState(),
+                readDetails: () =>
+                  mcp.details({
+                    includeTools: true,
+                    includePrompts: true,
+                    includeResources: true,
+                  }),
+              },
+          addItem,
+          reloadCommands,
+          async () => {
+            if (mcp === undefined)
+              throw new Error('Session agent is unavailable');
+            await mcp.reload();
+          },
+          async () => {
+            if (mcp === undefined)
+              throw new Error('Session agent is unavailable');
+            await mcp.refresh();
+          },
+        ),
+      ),
+    [mcp, isConfigured, auth, addItem, reloadCommands],
   );
 }
