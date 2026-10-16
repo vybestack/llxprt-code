@@ -1,3 +1,4 @@
+import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -509,22 +510,13 @@ describe('profile-commit-publication', () => {
     await openbuiltCaller('plain-text.jsonl');
     try {
       const holder = createLoopHolder();
-      const deps = {
-        telemetry: builtCallerSettingsOwner.telemetry,
-        loopHolder: holder,
-        resolveClient: () => builtCallerOwner.getAgentClient(),
-        toolSelection: builtCallerOwner.getAgentClient().tools,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-        readExecutionPolicy: () =>
-          builtCallerSettingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          builtCallerSettingsOwner.readToolGovernance(
-            builtCallerConfig.getExcludeTools() ?? [],
-          ),
-      };
-      const previous = rebuildLoop(deps);
+      const construct = (
+        client: ReturnType<typeof builtCallerOwner.getAgentClient>,
+      ): AgenticLoop =>
+        builtCallerOwner.createLoop(client, undefined, undefined, undefined);
+      const rebuild = (): AgenticLoop =>
+        rebuildLoop(holder, () => builtCallerOwner.getAgentClient(), construct);
+      const previous = rebuild();
       const controller = holder.activeRunController;
       if (!controller) throw new Error('Initial loop controller missing');
       const failure = new Error('replacement loop configuration failed');
@@ -534,7 +526,7 @@ describe('profile-commit-publication', () => {
           throw failure;
         });
       try {
-        expect(() => rebuildLoop(deps)).toThrow(failure);
+        expect(rebuild).toThrow(failure);
       } finally {
         interactive.mockRestore();
       }

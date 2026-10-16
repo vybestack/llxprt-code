@@ -150,3 +150,23 @@ export async function cleanupProviderScope(
     );
   if (result.deferred > 0) await files.waitForScopeCleanup('session', scope);
 }
+
+export class SessionClientWorkQueue {
+  private tail: Promise<void> = Promise.resolve();
+  constructor(private readonly assertAdmission: () => void) {}
+  enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertAdmission();
+    return this.enqueueAccepted(operation);
+  }
+  enqueueAccepted<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.tail.then(operation);
+    this.tail = pending.then(
+      () => undefined,
+      () => undefined,
+    );
+    return pending;
+  }
+  join(): Promise<void> {
+    return this.tail;
+  }
+}

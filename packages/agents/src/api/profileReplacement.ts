@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { prepareLoop, type RebuildLoopDeps } from './loop/rebuildLoop.js';
+import type { prepareLoop } from './loop/rebuildLoop.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ActiveRun } from './directProviderAdmission.js';
 import type { PreparedProfileFacade } from './profileApplicationAssembly.js';
 
 type PrepareClientReplacement = () => Promise<{
-  client: ReturnType<RebuildLoopDeps['resolveClient']>;
+  client: AgentClientContract;
   prepareHistoryCommit: () => Promise<() => void>;
   publish: () => void;
   retire: () => Promise<void>;
@@ -17,23 +18,18 @@ type PrepareClientReplacement = () => Promise<{
 }>;
 
 export function assembleProfileReplacement(
-  resolveClient: RebuildLoopDeps['resolveClient'],
-  telemetry: RebuildLoopDeps['telemetry'],
-  loopHolder: RebuildLoopDeps['loopHolder'],
-  toolSelection: RebuildLoopDeps['toolSelection'],
-  readApprovalMode: RebuildLoopDeps['readApprovalMode'],
-  readExecutionPolicy: RebuildLoopDeps['readExecutionPolicy'],
-  getToolGovernance: RebuildLoopDeps['getToolGovernance'],
-  config: RebuildLoopDeps['config'],
-  messageBus: RebuildLoopDeps['messageBus'],
-  approvalHandler: RebuildLoopDeps['approvalHandler'],
-  displayCallbacks: RebuildLoopDeps['displayCallbacks'],
+  resolveClient: () => AgentClientContract,
+  isCurrentRunLoop: (run: ActiveRun) => boolean,
+  prepareLoopForClient: (
+    client: AgentClientContract,
+  ) => ReturnType<typeof prepareLoop>,
   prepareClientReplacement: PrepareClientReplacement,
   readActiveRun: () => ActiveRun | undefined,
 ): (changed: boolean, signal: AbortSignal) => Promise<PreparedProfileFacade> {
   return (changed, signal) => {
     const active = readActiveRun();
-    const run = active?.loop === loopHolder.current ? active : undefined;
+    const run =
+      active !== undefined && isCurrentRunLoop(active) ? active : undefined;
     const retirePrior = (retire: () => Promise<void>): Promise<void> => {
       if (run !== undefined && readActiveRun() === run) {
         run.retirements = [...run.retirements, retire];
@@ -45,20 +41,7 @@ export function assembleProfileReplacement(
       changed,
       signal,
       resolveClient,
-      (client) =>
-        prepareLoop({
-          telemetry,
-          loopHolder,
-          toolSelection,
-          readApprovalMode,
-          readExecutionPolicy,
-          getToolGovernance,
-          config,
-          messageBus,
-          resolveClient: () => client,
-          approvalHandler,
-          displayCallbacks,
-        }),
+      prepareLoopForClient,
       prepareClientReplacement,
       retirePrior,
     );
@@ -68,9 +51,9 @@ export function assembleProfileReplacement(
 export async function prepareProfileReplacement(
   providerChanged: boolean,
   signal: AbortSignal,
-  resolveClient: RebuildLoopDeps['resolveClient'],
+  resolveClient: () => AgentClientContract,
   prepareLoopForClient: (
-    client: ReturnType<RebuildLoopDeps['resolveClient']>,
+    client: AgentClientContract,
   ) => ReturnType<typeof prepareLoop>,
   prepareClientReplacement: PrepareClientReplacement,
   retirePrior: (retire: () => Promise<void>) => Promise<void>,
