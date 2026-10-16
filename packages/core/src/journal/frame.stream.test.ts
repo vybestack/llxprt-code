@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { crc32 } from 'node:zlib';
 import {
+  FRAME_HEAD_BYTES,
   readFrameBody,
   readFrameHead,
   writeFrame,
@@ -15,6 +16,8 @@ import {
   type ByteSink,
   type PositionalReader,
 } from './positionalFile.js';
+import { RECORD_KIND } from './recordKinds.js';
+import { encodeRowHeader, ROW_ID_KIND } from './rowRecord.js';
 import {
   MIB,
   producedBody,
@@ -144,7 +147,7 @@ describe('a 200 MiB body', () => {
     const read = await decodeFromFile(file, streamingConsumer, decodeProbe);
 
     expect((await fs.stat(file)).size).toBe(
-      16 + KIND_HEADER.length + BODY_BYTES + 4,
+      FRAME_HEAD_BYTES + KIND_HEADER.length + BODY_BYTES + 4,
     );
     expect(read).toStrictEqual(written);
     expect(encodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
@@ -169,5 +172,108 @@ describe('a 200 MiB body', () => {
     await decodeFromFile(file, wholeBodyConsumer, probe);
 
     expect(probe.peakGrowth()).toBeGreaterThan(RETAINED_GROWTH_FLOOR);
+  }, 180_000);
+});
+
+const BIG_ROW_BODY_BYTES = 64 * MIB;
+const BIG_ROW_ITEMS = 100_000;
+
+/** A ROW header of 100,000 blocks and 100,000 ids, about 4.3 MB, held by the test throughout. */
+function bigRowHeader(): Uint8Array {
+  return encodeRowHeader({
+    label: 1n << 20n,
+    owner: 0,
+    speaker: 1,
+    flags: 0,
+    idsLen: 0,
+    metaLen: 0,
+    chronologySeq: 0n,
+    chronologyUserTurn: 0,
+    chronologyStep: 0,
+    chronologyRecordedAt: 0,
+    parentEndpoint: 0n,
+    blocks: Array.from({ length: BIG_ROW_ITEMS }, (_, index) => ({
+      offset: index,
+      length: 1,
+      type: 1,
+    })),
+    ids: Array.from({ length: BIG_ROW_ITEMS }, (_, index) => ({
+      idHash: new Uint8Array(16).fill(index & 0xff),
+      kind: ROW_ID_KIND.call,
+      block: index,
+      score: 0,
+      nameLen: 4,
+    })),
+  });
+}
+
+describe('a 64 MiB body behind a 100,000-block, 100,000-id ROW header', () => {
+  const tempDir = useTempDir('journal-bigrow-');
+
+  async function writeRow(
+    file: string,
+    header: Uint8Array,
+    probe: GrowthProbe,
+    buffered: boolean,
+  ): Promise<{ crc: number; bytes: number }> {
+    const body = producedBody(BIG_ROW_BODY_BYTES, CHUNK_BYTES, probe, 8);
+    const handle = await fs.open(file, 'w+');
+    try {
+      const sink = createFileHandleSink(handle, 0);
+      if (buffered) {
+        const gathered: Uint8Array[] = [];
+        for await (const chunk of body.chunks) gathered.push(chunk);
+        await writeFrame(sink, RECORD_KIND.ROW, header, {
+          length: BIG_ROW_BODY_BYTES,
+          chunks: [Buffer.concat(gathered)],
+        });
+      } else {
+        await writeFrame(sink, RECORD_KIND.ROW, header, {
+          length: BIG_ROW_BODY_BYTES,
+          chunks: body.chunks,
+        });
+      }
+      await probe.sample();
+    } finally {
+      await handle.close();
+    }
+    return body.produced();
+  }
+
+  it('streams the body with heap growth far below the body size', async () => {
+    const header = bigRowHeader();
+    const file = path.join(tempDir(), 'bigrow.llxj');
+    const encodeProbe = await startGrowthProbe();
+    const written = await writeRow(file, header, encodeProbe, false);
+
+    const decodeProbe = await startGrowthProbe();
+    const handle = await fs.open(file, 'r');
+    let read: { crc: number; bytes: number };
+    try {
+      const { size } = await handle.stat();
+      const reader = createFileHandleReader(handle);
+      const head = await readFrameHead(reader, 0, size);
+      expect(head.headerLen).toBe(header.length);
+      expect(size).toBe(
+        FRAME_HEAD_BYTES + header.length + BIG_ROW_BODY_BYTES + 4,
+      );
+      read = await streamingConsumer(reader, head, decodeProbe);
+    } finally {
+      await handle.close();
+    }
+
+    expect(read).toStrictEqual(written);
+    expect(encodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
+    expect(decodeProbe.peakGrowth()).toBeLessThan(STREAMING_GROWTH_BOUND);
+  }, 180_000);
+
+  it('is caught when the encoder buffers the whole body', async () => {
+    const header = bigRowHeader();
+    const probe = await startGrowthProbe();
+
+    await writeRow(path.join(tempDir(), 'trap.llxj'), header, probe, true);
+
+    expect(probe.peakGrowth()).toBeGreaterThan(BIG_ROW_BODY_BYTES / 2);
+    expect(probe.peakGrowth()).not.toBeLessThan(STREAMING_GROWTH_BOUND);
   }, 180_000);
 });

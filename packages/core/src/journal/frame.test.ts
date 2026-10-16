@@ -61,30 +61,31 @@ async function failureOf(run: () => Promise<unknown>): Promise<unknown> {
 }
 
 describe('frame layout', () => {
-  it('is 16 bytes of head, the kind header, the body and a 4-byte body CRC', async () => {
+  it('is 20 bytes of head, the kind header, the body and a 4-byte body CRC', async () => {
     const kindHeader = new SeededRandom(1).bytes(21);
     const body = new SeededRandom(2).bytes(1000);
     const bytes = await frameBytes(kindHeader, body, [300]);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
-    expect(FRAME_HEAD_BYTES).toBe(16);
+    expect(FRAME_HEAD_BYTES).toBe(20);
     expect(BODY_CRC_BYTES).toBe(4);
-    expect(frameLength(21, 1000)).toBe(16 + 21 + 1000 + 4);
+    expect(frameLength(21, 1000)).toBe(20 + 21 + 1000 + 4);
     expect(bytes.length).toBe(frameLength(21, 1000));
     expect(bytes[0]).toBe(KIND);
     expect(bytes[1]).toBe(1);
-    expect(view.getUint16(2, true)).toBe(21);
-    expect(view.getBigUint64(4, true)).toBe(1000n);
-    expect(view.getUint32(12, true)).toBe(
-      crc32(kindHeader, crc32(bytes.subarray(0, 12))),
+    expect(view.getUint16(2, true)).toBe(0);
+    expect(view.getUint32(4, true)).toBe(21);
+    expect(view.getBigUint64(8, true)).toBe(1000n);
+    expect(view.getUint32(16, true)).toBe(
+      crc32(kindHeader, crc32(bytes.subarray(0, 16))),
     );
-    expect(Array.from(bytes.subarray(16, 37))).toStrictEqual(
+    expect(Array.from(bytes.subarray(20, 41))).toStrictEqual(
       Array.from(kindHeader),
     );
-    expect(Array.from(bytes.subarray(37, 1037))).toStrictEqual(
+    expect(Array.from(bytes.subarray(41, 1041))).toStrictEqual(
       Array.from(body),
     );
-    expect(view.getUint32(1037, true)).toBe(crc32(body));
+    expect(view.getUint32(1041, true)).toBe(crc32(body));
   });
 
   it('writes no body flag and a zero body CRC for a frame without a body', async () => {
@@ -108,12 +109,15 @@ describe('frame layout', () => {
     expect((await readBack(bytes)).body.length).toBe(0);
   });
 
-  it('rejects a kind header longer than a u16 can describe', async () => {
-    const out = collectingSink();
+  it('describes a kind header longer than 65,535 bytes in its 32-bit length', async () => {
+    const kindHeader = new SeededRandom(4).bytes(5 * 65536 + 3);
+    const bytes = await frameBytes(kindHeader, new Uint8Array([7, 8]));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
-    await expect(
-      writeFrame(out.sink, KIND, new Uint8Array(65536)),
-    ).rejects.toThrow(JournalFormatError);
+    expect(view.getUint32(4, true)).toBe(kindHeader.length);
+    const back = await readBack(bytes);
+    expect(Buffer.compare(back.kindHeader, kindHeader)).toBe(0);
+    expect(Array.from(back.body)).toStrictEqual([7, 8]);
   });
 });
 
@@ -265,27 +269,38 @@ describe('frame validation', () => {
   });
 
   it('rejects a body flag that disagrees with the body length, behind a valid frame CRC', () => {
-    const head = new Uint8Array(16);
+    const head = new Uint8Array(20);
     const view = new DataView(head.buffer);
     head[0] = KIND;
     head[1] = 0;
-    view.setUint16(2, 0, true);
-    view.setBigUint64(4, 9n, true);
-    view.setUint32(12, crc32(head.subarray(0, 12)), true);
+    view.setUint32(4, 0, true);
+    view.setBigUint64(8, 9n, true);
+    view.setUint32(16, crc32(head.subarray(0, 16)), true);
     const record = Buffer.concat([head, new Uint8Array(9 + 4)]);
 
     expect(() => decodeFrameStart(record, 0)).toThrow(JournalFormatError);
   });
 
   it('rejects unknown frame flag bits, behind a valid frame CRC', () => {
-    const head = new Uint8Array(16);
+    const head = new Uint8Array(20);
     const view = new DataView(head.buffer);
     head[0] = KIND;
     head[1] = 0b10;
-    view.setUint32(12, crc32(head.subarray(0, 12)), true);
+    view.setUint32(16, crc32(head.subarray(0, 16)), true);
     const record = Buffer.concat([head, new Uint8Array(4)]);
 
     expect(() => decodeFrameStart(record, 0)).toThrow(JournalFormatError);
+  });
+
+  it('rejects nonzero reserved bytes in the head, behind a valid frame CRC', () => {
+    const head = new Uint8Array(20);
+    const view = new DataView(head.buffer);
+    head[0] = KIND;
+    head[2] = 1;
+    view.setUint32(16, crc32(head.subarray(0, 16)), true);
+    const record = Buffer.concat([head, new Uint8Array(4)]);
+
+    expect(() => decodeFrameStart(record, 0)).toThrow(/reserved/);
   });
 });
 

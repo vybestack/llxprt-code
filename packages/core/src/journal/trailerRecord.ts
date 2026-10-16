@@ -35,8 +35,8 @@ import {
 
 /** The fixed kind header of a trailer: the whole running state. */
 export const TRAILER_HEADER_BYTES = 1480;
-/** 16-byte frame head, the kind header, no body, 4-byte body CRC. */
-export const TRAILER_RECORD_BYTES = 1500;
+/** 20-byte frame head, the kind header, no body, 4-byte body CRC. */
+export const TRAILER_RECORD_BYTES = 1504;
 
 const SYNC_MARKER_BYTES = 8;
 const GROUP_TAG_LIMIT = 1n << 56n;
@@ -211,7 +211,7 @@ export function decodeTrailerHeader(bytes: Uint8Array): TrailerHeader {
   };
 }
 
-/** The whole 1,500-byte record: frame head, kind header, and the CRC of an empty body. */
+/** The whole 1,504-byte record: frame head, kind header, and the CRC of an empty body. */
 export function encodeTrailerRecord(trailer: TrailerHeader): Uint8Array {
   if (trailer.durableEnd !== trailer.selfOffset + TRAILER_RECORD_BYTES) {
     throw new JournalFormatError(

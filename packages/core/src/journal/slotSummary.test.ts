@@ -9,10 +9,51 @@ import {
   type SlotSummary,
   type SummaryKind,
 } from './slotSummary.js';
-import { randomSlotSummary } from './__tests__/support/randomRecords.js';
+import {
+  decodeTrailerHeader,
+  encodeTrailerHeader,
+  type TrailerHeader,
+} from './trailerRecord.js';
+import {
+  randomSlotSummary,
+  randomTrailer,
+} from './__tests__/support/randomRecords.js';
 import { SeededRandom } from './__tests__/support/seededRandom.js';
 
 const KINDS: readonly SummaryKind[] = ['anthropic', 'chat', 'responses'];
+
+function slotOf(summaryKind: SummaryKind | null): {
+  summaryKind: SummaryKind | null;
+} {
+  return { summaryKind };
+}
+
+function sampleTrailer(
+  random: SeededRandom,
+  summaries: readonly SlotSummary[],
+): TrailerHeader {
+  const base = randomTrailer(random, 0, random.bytes(8));
+  const [first, second, third] = summaries;
+  return {
+    ...base,
+    rootAggregate: {
+      ...base.rootAggregate,
+      summaries: [
+        encodeSlotSummary(first),
+        encodeSlotSummary(second),
+        encodeSlotSummary(third),
+      ],
+    },
+    slots: {
+      ...base.slots,
+      formatSlots: [
+        { ...base.slots.formatSlots[0], summaryKind: first.kind },
+        { ...base.slots.formatSlots[1], summaryKind: second.kind },
+        { ...base.slots.formatSlots[2], summaryKind: third.kind },
+      ],
+    },
+  };
+}
 
 function viewOf(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -61,7 +102,7 @@ describe('slot summary', () => {
       for (const kind of KINDS) {
         const summary = randomSlotSummary(random, kind);
         expect(
-          decodeSlotSummary(encodeSlotSummary(summary), kind),
+          decodeSlotSummary(encodeSlotSummary(summary), slotOf(kind)),
         ).toStrictEqual(summary);
       }
     }
@@ -187,9 +228,52 @@ describe('slot summary', () => {
     paddingDirty[30] = 1;
 
     expect(() =>
-      decodeSlotSummary(bytes.subarray(0, 295), 'responses'),
+      decodeSlotSummary(bytes.subarray(0, 295), slotOf('responses')),
     ).toThrow(/296/);
-    expect(() => decodeSlotSummary(dirty, 'responses')).toThrow(/zero/);
-    expect(() => decodeSlotSummary(paddingDirty, 'responses')).toThrow(/zero/);
+    expect(() => decodeSlotSummary(dirty, slotOf('responses'))).toThrow(/zero/);
+    expect(() => decodeSlotSummary(paddingDirty, slotOf('responses'))).toThrow(
+      /zero/,
+    );
+  });
+
+  it('decodes each slot of a trailer by the kind its own table entry records', () => {
+    const random = new SeededRandom(10);
+    const summaries = KINDS.map((kind) => randomSlotSummary(random, kind));
+    const trailer = sampleTrailer(random, summaries);
+
+    const decoded = decodeTrailerHeader(encodeTrailerHeader(trailer));
+
+    decoded.rootAggregate.summaries.forEach((bytes, index) => {
+      expect(
+        decodeSlotSummary(bytes, decoded.slots.formatSlots[index]),
+      ).toStrictEqual(summaries[index]);
+    });
+  });
+
+  it('throws when the kind in the table is not the kind the slot holds', () => {
+    const random = new SeededRandom(11);
+    const chat = encodeSlotSummary(randomSlotSummary(random, 'chat'));
+    const anthropic = encodeSlotSummary(randomSlotSummary(random, 'anthropic'));
+
+    expect(() => decodeSlotSummary(chat, slotOf('responses'))).toThrow(
+      JournalFormatError,
+    );
+    expect(() => decodeSlotSummary(chat, slotOf('anthropic'))).toThrow(
+      JournalFormatError,
+    );
+    expect(() => decodeSlotSummary(anthropic, slotOf('chat'))).toThrow(
+      JournalFormatError,
+    );
+    expect(() => decodeSlotSummary(anthropic, slotOf('responses'))).toThrow(
+      JournalFormatError,
+    );
+  });
+
+  it('refuses to decode a slot whose table entry is unassigned', () => {
+    const bytes = encodeSlotSummary(
+      randomSlotSummary(new SeededRandom(12), 'chat'),
+    );
+
+    expect(() => decodeSlotSummary(bytes, slotOf(null))).toThrow(/unassigned/);
   });
 });

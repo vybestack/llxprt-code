@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { crc32 } from 'node:zlib';
 import { JournalFormatError, JournalFrameError } from './errors.js';
-import { encodeFrameStart } from './frame.js';
+import { BODY_CRC_BYTES, FRAME_HEAD_BYTES, encodeFrameStart } from './frame.js';
 import { MUTATION, RECORD_KIND } from './recordKinds.js';
 import {
   TRAILER_HEADER_BYTES,
@@ -45,13 +45,16 @@ function options(trailer: TrailerHeader, offset = SELF_OFFSET) {
 }
 
 describe('trailer sizes', () => {
-  it('is a 1,480-byte kind header in a 1,500-byte record', () => {
+  it('is a 1,480-byte kind header in a 1,504-byte record', () => {
     const trailer = sampleTrailer(1);
 
     expect(TRAILER_HEADER_BYTES).toBe(1480);
-    expect(TRAILER_RECORD_BYTES).toBe(1500);
+    expect(TRAILER_RECORD_BYTES).toBe(1504);
+    expect(TRAILER_RECORD_BYTES).toBe(
+      FRAME_HEAD_BYTES + TRAILER_HEADER_BYTES + BODY_CRC_BYTES,
+    );
     expect(encodeTrailerHeader(trailer).length).toBe(1480);
-    expect(encodeTrailerRecord(trailer).length).toBe(1500);
+    expect(encodeTrailerRecord(trailer).length).toBe(1504);
   });
 
   it('lays out the fields contiguously with the sizes of design section 2.5', () => {
@@ -176,15 +179,16 @@ describe('trailer record', () => {
 
     expect(record[0]).toBe(RECORD_KIND.TRAILER);
     expect(record[1]).toBe(0);
-    expect(view.getUint16(2, true)).toBe(1480);
-    expect(view.getBigUint64(4, true)).toBe(0n);
-    expect(view.getUint32(12, true)).toBe(
-      crc32(record.subarray(16, 1496), crc32(record.subarray(0, 12))),
+    expect(view.getUint16(2, true)).toBe(0);
+    expect(view.getUint32(4, true)).toBe(1480);
+    expect(view.getBigUint64(8, true)).toBe(0n);
+    expect(view.getUint32(16, true)).toBe(
+      crc32(record.subarray(20, 1500), crc32(record.subarray(0, 16))),
     );
-    expect(Array.from(record.subarray(1488, 1496))).toStrictEqual(
+    expect(Array.from(record.subarray(1492, 1500))).toStrictEqual(
       Array.from(trailer.syncMarker),
     );
-    expect(view.getUint32(1496, true)).toBe(0);
+    expect(view.getUint32(1500, true)).toBe(0);
   });
 
   it('round-trips randomized records at their own offset', () => {
@@ -201,7 +205,7 @@ describe('trailer record', () => {
     }
   });
 
-  it('detects every single bit flip anywhere in the 1,500 bytes', () => {
+  it('detects every single bit flip anywhere in the 1,504 bytes', () => {
     const trailer = sampleTrailer(8);
     const record = encodeTrailerRecord(trailer);
 
@@ -234,13 +238,13 @@ describe('trailer record', () => {
   });
 
   it('refuses to write a durableEnd that is not the end of the record', () => {
-    const trailer = { ...sampleTrailer(11), durableEnd: SELF_OFFSET + 1499 };
+    const trailer = { ...sampleTrailer(11), durableEnd: SELF_OFFSET + 1503 };
 
     expect(() => encodeTrailerRecord(trailer)).toThrow(/durableEnd/);
   });
 
   it('rejects a durableEnd that is not the end of the record, behind a valid frame CRC', () => {
-    const trailer = { ...sampleTrailer(11), durableEnd: SELF_OFFSET + 1499 };
+    const trailer = { ...sampleTrailer(11), durableEnd: SELF_OFFSET + 1503 };
     const record = new Uint8Array(TRAILER_RECORD_BYTES);
     record.set(
       encodeFrameStart(RECORD_KIND.TRAILER, encodeTrailerHeader(trailer), null),
@@ -263,12 +267,12 @@ describe('trailer record', () => {
     ).toThrow(/syncMarker/);
   });
 
-  it('rejects a record that is not 1,500 bytes', () => {
+  it('rejects a record that is not 1,504 bytes', () => {
     const trailer = sampleTrailer(13);
     const record = encodeTrailerRecord(trailer);
 
     expect(() =>
-      decodeTrailerRecord(record.subarray(0, 1499), options(trailer)),
-    ).toThrow(/1500/);
+      decodeTrailerRecord(record.subarray(0, 1503), options(trailer)),
+    ).toThrow(/1504/);
   });
 });

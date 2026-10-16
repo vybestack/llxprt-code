@@ -38,38 +38,46 @@ export const ROW_FLAG = {
 
 export const CHRONOLOGY_SEQ_NONE = 0xffff_ffff_ffff_ffffn;
 
-const FIXED = {
+/** Design 2.7: every field of the fixed part sits at its natural alignment. */
+export const ROW_FIXED_LAYOUT = {
   label: span(0, 8),
   owner: span(8, 4),
   speaker: span(12, 1),
   reserved: span(13, 1),
   flags: span(14, 2),
-  blockCount: span(16, 2),
-  idCount: span(18, 2),
-  idsLen: span(20, 4),
-  metaLen: span(24, 4),
-  chronologySeq: span(28, 8),
-  chronologyUserTurn: span(36, 4),
-  chronologyStep: span(40, 4),
-  chronologyRecordedAt: span(44, 8),
-  parentEndpoint: span(52, 8),
+  blockCount: span(16, 4),
+  idCount: span(20, 4),
+  idsLen: span(24, 4),
+  metaLen: span(28, 4),
+  chronologySeq: span(32, 8),
+  chronologyUserTurn: span(40, 4),
+  chronologyStep: span(44, 4),
+  chronologyRecordedAt: span(48, 8),
+  parentEndpoint: span(56, 8),
 };
-export const ROW_FIXED_BYTES = 60;
+const FIXED = ROW_FIXED_LAYOUT;
+export const ROW_FIXED_BYTES = 64;
 
-const BLOCK = { offset: span(0, 8), length: span(8, 8), type: span(16, 1) };
+export const ROW_BLOCK_LAYOUT = {
+  offset: span(0, 8),
+  length: span(8, 8),
+  type: span(16, 1),
+};
+const BLOCK = ROW_BLOCK_LAYOUT;
 export const BLOCK_DIR_ENTRY_BYTES = 17;
 
-const TUPLE = {
+export const ROW_ID_TUPLE_LAYOUT = {
   idHash: span(0, 16),
   kind: span(16, 1),
-  block: span(17, 2),
-  score: span(19, 1),
-  nameLen: span(20, 2),
+  block: span(17, 4),
+  score: span(21, 1),
+  nameLen: span(22, 4),
 };
-export const ID_TUPLE_BYTES = 22;
+const TUPLE = ROW_ID_TUPLE_LAYOUT;
+export const ID_TUPLE_BYTES = 26;
 
-/** The frame's `headerLen` is a u16 and the kind header must fit it. */
-export const MAX_ROW_HEADER_BYTES = 0xffff;
+/** The frame's `headerLen` is a u32 and is the only bound on the kind header. */
+export const MAX_ROW_HEADER_BYTES = 0xffff_ffff;
 
 /** One block of the body: where it starts (relative to the body start), its length and type. */
 export interface RowBlockEntry {
@@ -112,6 +120,22 @@ export function rowHeaderBytes(blockCount: number, idCount: number): number {
   );
 }
 
+/** The counts are u32 and the whole header must fit the frame's u32 `headerLen`. */
+export function assertRowHeaderFits(blockCount: number, idCount: number): void {
+  const counts = { blockCount, idCount };
+  for (const [name, count] of Object.entries(counts)) {
+    if (!Number.isSafeInteger(count) || count < 0 || count > 0xffff_ffff) {
+      throw new JournalFormatError(`${name} ${count} does not fit 32 bits`);
+    }
+  }
+  const total = rowHeaderBytes(blockCount, idCount);
+  if (total > MAX_ROW_HEADER_BYTES) {
+    throw new JournalFormatError(
+      `Row header of ${total} bytes (${blockCount} blocks, ${idCount} ids) exceeds the ${MAX_ROW_HEADER_BYTES} a 32-bit headerLen can describe`,
+    );
+  }
+}
+
 function encodeFixedPart(view: DataView, row: RowHeader): void {
   if (row.speaker > ROW_SPEAKER.tool) {
     throw new JournalFormatError(`speaker ${row.speaker} is not 0, 1 or 2`);
@@ -120,8 +144,8 @@ function encodeFixedPart(view: DataView, row: RowHeader): void {
   putU32(view, FIXED.owner.offset, 'owner', row.owner);
   putU8(view, FIXED.speaker.offset, 'speaker', row.speaker);
   putU16(view, FIXED.flags.offset, 'flags', row.flags);
-  putU16(view, FIXED.blockCount.offset, 'blockCount', row.blocks.length);
-  putU16(view, FIXED.idCount.offset, 'idCount', row.ids.length);
+  putU32(view, FIXED.blockCount.offset, 'blockCount', row.blocks.length);
+  putU32(view, FIXED.idCount.offset, 'idCount', row.ids.length);
   putU32(view, FIXED.idsLen.offset, 'idsLen', row.idsLen);
   putU32(view, FIXED.metaLen.offset, 'metaLen', row.metaLen);
   putU64Big(
@@ -185,19 +209,16 @@ function encodeIdTuple(
     TUPLE.idHash.size,
   );
   putU8(view, base + TUPLE.kind.offset, 'id kind', tuple.kind);
-  putU16(view, base + TUPLE.block.offset, 'id block', tuple.block);
+  putU32(view, base + TUPLE.block.offset, 'id block', tuple.block);
   putU8(view, base + TUPLE.score.offset, 'id score', tuple.score);
-  putU16(view, base + TUPLE.nameLen.offset, 'id nameLen', tuple.nameLen);
+  putU32(view, base + TUPLE.nameLen.offset, 'id nameLen', tuple.nameLen);
 }
 
 export function encodeRowHeader(row: RowHeader): Uint8Array {
-  const total = rowHeaderBytes(row.blocks.length, row.ids.length);
-  if (total > MAX_ROW_HEADER_BYTES) {
-    throw new JournalFormatError(
-      `Row header of ${total} bytes (${row.blocks.length} blocks, ${row.ids.length} ids) exceeds the ${MAX_ROW_HEADER_BYTES} a frame header length can describe`,
-    );
-  }
-  const bytes = new Uint8Array(total);
+  assertRowHeaderFits(row.blocks.length, row.ids.length);
+  const bytes = new Uint8Array(
+    rowHeaderBytes(row.blocks.length, row.ids.length),
+  );
   const view = viewOf(bytes);
   encodeFixedPart(view, row);
   let base = ROW_FIXED_BYTES;
@@ -233,9 +254,9 @@ function decodeIdTuple(
   return {
     idHash: bytes.slice(hashStart, hashStart + TUPLE.idHash.size),
     kind,
-    block: view.getUint16(base + TUPLE.block.offset, true),
+    block: view.getUint32(base + TUPLE.block.offset, true),
     score: view.getUint8(base + TUPLE.score.offset),
-    nameLen: view.getUint16(base + TUPLE.nameLen.offset, true),
+    nameLen: view.getUint32(base + TUPLE.nameLen.offset, true),
   };
 }
 
@@ -246,8 +267,8 @@ export function decodeRowHeader(bytes: Uint8Array): RowHeader {
     );
   }
   const view = viewOf(bytes);
-  const blockCount = view.getUint16(FIXED.blockCount.offset, true);
-  const idCount = view.getUint16(FIXED.idCount.offset, true);
+  const blockCount = view.getUint32(FIXED.blockCount.offset, true);
+  const idCount = view.getUint32(FIXED.idCount.offset, true);
   if (bytes.length !== rowHeaderBytes(blockCount, idCount)) {
     throw new JournalFormatError(
       `Row header of ${bytes.length} bytes does not match ${blockCount} blocks and ${idCount} ids (${rowHeaderBytes(blockCount, idCount)} bytes)`,

@@ -110,9 +110,10 @@ Every record has the same frame. There is no line terminator and no size ceiling
 ```
 u8   kind
 u8   frameFlags            bit 0: body present
-u16  headerLen             bytes of the kind header
+u16  reserved              zero
+u32  headerLen             bytes of the kind header
 u64  bodyLen               bytes of the body, no upper bound
-u32  frameCrc              CRC-32 over the 12 bytes above and the kind header
+u32  frameCrc              CRC-32 over the 16 bytes above and the kind header
 [kind header: headerLen bytes]
 [body: bodyLen bytes]
 u32  bodyCrc               CRC-32 over the body, folded while the body is streamed
@@ -120,7 +121,9 @@ u32  bodyCrc               CRC-32 over the body, folded while the body is stream
 
 **CRC function.** CRC-32C is not available natively: neither Bun 1.3.14 (`Bun.hash` offers `crc32`, `adler32`, `xxHash*`, `wyhash` and others, and `crypto.getHashes()` lists no CRC) nor Node v25.2.1 has it. Both have `zlib.crc32` (Node since v22), and both return `0xcbf43926` for the string `123456789`, which is the CRC-32 check value. `zlib.crc32(data, previous)` takes a running value, which was checked (`crc32('ab') === crc32('b', crc32('a'))`), so the body CRC folds while the body streams. On this machine Bun's `zlib.crc32` ran 256 MiB in 41 ms, about 6 GiB/s, so a 200 MiB row costs about 35 ms. A CRC-32C would have to be written in TypeScript and would run as JavaScript rather than native code, and for detecting torn writes and bit flips the two polynomials serve equally well here.
 
-The record length is `16 + headerLen + bodyLen + 4`. A reader validates a frame in this order: the frame fits in the file (`offset + length <= fileSize`, otherwise it is a torn tail), `frameCrc` matches, then the kind header is parsed. The body CRC is checked by whoever consumes the body, while it streams.
+The frame head is 20 bytes. `headerLen` is a `u32` and `bodyLen` a `u64`, each at its natural alignment inside the head, which is why 2 reserved bytes (zero, covered by `frameCrc`, refused when nonzero) sit after `frameFlags`. A `u16` `headerLen` would have capped a `ROW` header at 65,535 bytes, which a row with about 3,850 blocks, or about 1,070 blocks that each carry two ids, already exceeds. With a `u32`, the kind header of any record that exists fits, and a `ROW` header is limited only by the 4 GiB `headerLen` itself (Section 2.4).
+
+The record length is `20 + headerLen + bodyLen + 4`. A reader validates a frame in this order: the frame fits in the file (`offset + length <= fileSize`, otherwise it is a torn tail), `frameCrc` matches, then the kind header is parsed. The body CRC is checked by whoever consumes the body, while it streams.
 
 Two outcomes are kept apart. A frame that does not fit in the file, or whose `frameCrc` fails, is a torn or incomplete write. That is tolerated only at the tail of the file, where trailer recovery (3.1) may step back over it. A record reached through a trailer whose own frame is valid (a root, a node below a root, a `ROW`, a `LENS`, a `VALUE`) that fails its frame CRC or body CRC is corruption. The read throws `JournalCorruptionError` naming the file, the record's offset and the trailer that led to it. It is never skipped, never repaired, and never answered by falling back to an older trailer.
 
@@ -152,8 +155,8 @@ u8   reserved
 u16  flags            curated, hasThinking, hasToolCall, hasToolResponse, hasMedia,
                       hasImage, hasCacheableBlock, cacheAnchor, synthetic,
                       invalidateResponses, responseParent
-u16  blockCount
-u16  idCount
+u32  blockCount
+u32  idCount
 u32  idsLen           bytes of the id piece (first piece of the body)
 u32  metaLen          bytes of the row metadata piece (second piece)
 u64  chronologySeq    0xFFFFFFFFFFFFFFFF = none
@@ -162,12 +165,14 @@ u64  parentEndpoint   on a row with the responseParent flag: hash of metadata.pr
                       stripping trailing slashes, 0 when the recorded URL is absent or empty (a wildcard
                       parent, Section 3.5); else 0
 blockDir[blockCount]  { u64 offset, u64 length, u8 type }   offsets relative to body start
-idTuples[idCount]     { u8[16] idHash, u8 kind (call|response), u16 block, u8 score, u16 nameLen }
+idTuples[idCount]     { u8[16] idHash, u8 kind (call|response), u32 block, u8 score, u32 nameLen }
 ```
+
+The fixed part is 64 bytes, a block directory entry 17 and an id tuple 26, so the kind header is `64 + 17 * blockCount + 26 * idCount` bytes. Every count and index is a `u32` so that a row of any size round-trips: a row with 100,000 blocks and 100,000 ids has a 4,300,064-byte header, which the `u32` `headerLen` of Section 2.2 describes. The only bound is that `headerLen` itself, 4,294,967,295 bytes, and the encoder throws a `JournalFormatError` for a header above it.
 
 A row header holds nothing that depends on any other row. The occurrence chain and the parent chain are not stored here. A link to "the previous row" written into an immutable record is wrong after any compression, density or purge, so both chains are entries of the versioned id trie and meta map (3.3, 3.5). The `responseParent` flag is set at write time when the row is an AI row with `metadata.responsesStored === true`, a non-empty string `metadata.id`, and a self unit (R7 yields a unit for the row, which is a function of the row alone).
 
-The body is the id piece, the metadata JSON piece (`{"speaker":..., "metadata":...}` without the blocks), then one standalone JSON value per block, in order. The pieces are what `JSON.stringify` yields for the same objects, so a decoded piece re-serializes to the same bytes it was parsed from, which is the property the current wire builders already rely on when they parse journal lines. The **id piece** holds the raw id string of every id tuple in tuple order, each as `u32 length` and UTF-8 bytes. It exists because a rebuild must recompute facts from the exact string: the Mistral mapped id is `sha256(raw + "|" + salt)` and the provider-normalized ids of 3.3 are functions of the raw id, and neither is a function of `idHash`, which is `sha256(raw)[0..16)` (prototype `mistral17.ts`: a stale or hash-derived mapping is wrong in 148 of 2,000 removal cases, and rebuilding from the raw id equals the real mapper in 2,000 of 2,000). The id piece comes first in the body so that the kind header and the id piece are adjacent bytes: a rebuild reads them with one `pread` of the record's first 4 KiB, and a second only for a row whose header and id piece are larger. The prototype's ids averaged 7.8 bytes with a maximum of 12; provider ids are longer (typically 20 to 40 bytes, not measured here), so the id piece costs about 25 to 45 bytes per tuple. It is not in the header so that the header stays bounded by `headerLen`.
+The body is the id piece, the metadata JSON piece (`{"speaker":..., "metadata":...}` without the blocks), then one standalone JSON value per block, in order. The pieces are what `JSON.stringify` yields for the same objects, so a decoded piece re-serializes to the same bytes it was parsed from, which is the property the current wire builders already rely on when they parse journal lines. The **id piece** holds the raw id string of every id tuple in tuple order, each as `u32 length` and UTF-8 bytes. It exists because a rebuild must recompute facts from the exact string: the Mistral mapped id is `sha256(raw + "|" + salt)` and the provider-normalized ids of 3.3 are functions of the raw id, and neither is a function of `idHash`, which is `sha256(raw)[0..16)` (prototype `mistral17.ts`: a stale or hash-derived mapping is wrong in 148 of 2,000 removal cases, and rebuilding from the raw id equals the real mapper in 2,000 of 2,000). The id piece comes first in the body so that the kind header and the id piece are adjacent bytes: a rebuild reads them with one `pread` of the record's first 4 KiB, and a second only for a row whose header and id piece are larger. The prototype's ids averaged 7.8 bytes with a maximum of 12; provider ids are longer (typically 20 to 40 bytes, not measured here), so the id piece costs about 25 to 45 bytes per tuple. It is not in the header so that the header holds fixed-width entries only.
 
 Why the directory and the id tuples exist:
 - A reader that needs one block (a best response relocated next to its call, Section 6.3) preads that block's range and does not read the row.
@@ -178,7 +183,7 @@ A row never changes. Anything about a row that changes after it is written (owne
 
 ### 2.5 The `TRAILER` record: the running-state header
 
-A trailer is the last record of every commit group. The writer flushes the group's records before it writes the trailer (Section 4.1), so a trailer on disk never names a node that is missing from the disk. Its kind header is fixed size, 1,480 bytes, and holds the whole state, so a reader that wants "the current state" reads the last trailer and stops. The trailer record is 1,500 bytes with its frame header and body CRC. Its last 8 bytes before the body CRC are the file's `syncMarker`, so every trailer ends with `syncMarker` and the CRC (3.1).
+A trailer is the last record of every commit group. The writer flushes the group's records before it writes the trailer (Section 4.1), so a trailer on disk never names a node that is missing from the disk. Its kind header is fixed size, 1,480 bytes, and holds the whole state, so a reader that wants "the current state" reads the last trailer and stops. The trailer record is 1,504 bytes with its 20-byte frame head and 4-byte body CRC. Its last 8 bytes before the body CRC are the file's `syncMarker`, so every trailer ends with `syncMarker` and the CRC (3.1).
 
 ```
 u64  selfOffset          offset of this record, used to validate a candidate (Section 3.1)
@@ -203,7 +208,8 @@ u64  lastRowOffset       offset of the last live ROW record: the last content of
 u32  lastOwner           owner of the last live row           (+ 4 bytes padding)
 u64  ckptBytes           estimated live bytes of the retained checkpoint versions (Section 4.11)
 Aggregate rootAggregate  copy of the row tree root's aggregate (below), 1,144 bytes
-SlotTable slots          3 format slots of 32 bytes and 4 family slots of 16 bytes (Section 8.5), 160 bytes
+SlotTable slots          3 format slots of 32 bytes (each names the summary kind it holds) and 4 family
+                         slots of 16 bytes (Section 8.5), 160 bytes
 u64  durableEnd          offset just past this record (also the frame end)
 u8[8] syncMarker         the file's marker, so the record ends with it (Section 3.1)
 ```
@@ -224,11 +230,13 @@ The plain part:
 | `pdfBytes[3]` | 24 | sum | provider-effective PDF metric per format slot (Responses PDF aggregate check, Sections 7.3 and 8.4) |
 | `imageRows`, `thinkingRows`, `callRows`, `reconRows`, `pairSensitiveRows`, `imageContribRows` | 24 | sum | counts (`reconRows` counts rows with `reconBlocks > 0`; `pairSensitiveRows` counts the entries with the derived `pairSensitive` flag, Section 7.3; `imageContribRows` counts the entries with the derived `imageContrib` flag: any image in the entry's emitted contribution, Section 8.5; `imageRows` counts source rows with images) |
 | `callBlocks`, `unmappedBlocks` | 8 | sum | eligible call blocks (id and name both non-empty, any speaker, reconstructed blocks included) in unit order and conversion-time counter uses, for Kimi ids (Section 7.2) |
-| `lastThinking`, `lastInvalidate`, `lastCacheable` | 24 | max label | facts the builders need from "the whole history" |
-| `firstAnchor`, `firstImage` | 16 | min label | Anthropic cache placement (Section 7.4) |
+| `lastThinking`, `lastInvalidate`, `lastCacheable` | 24 | max label, 0 = none | facts the builders need from "the whole history" |
+| `firstAnchor`, `firstImage` | 16 | min label, 0 = none | Anthropic cache placement (Section 7.4) |
 | `ownerBloom` | 8 | or | 64-bit filter of owner ids present |
 | `missingBase[3]`, `missingImg[3]` | 24 | sum | per format slot: rows without a budget-independent summary, and entries with `imageContrib` without a valid image-dependent part (Section 8.5) |
 | `stamp[3]` | 24 | equal | per format slot, the `{gen, imageGen}` pair (two `u32`) the node was computed for (Section 8.5) |
+
+**Empty label fields.** Labels are 1-based (Section 2.6), so a label field with value 0 means that no row qualifies. This holds for the max-label fields (`lastThinking`, `lastInvalidate`, `lastCacheable`) and the min-label fields (`firstAnchor`, `firstImage`). Composition treats 0 as the identity: the max of 0 and `x` is `x`, and a min skips an operand that is 0, so the min of 0 and `x` is `x` and the min of 0 and 0 is 0. A composition that used 0 as an ordinary minimum would report no anchor for every range that contains an empty child. The empty aggregate (no rows) is all zero bytes. The codec stores the value it is given, and the composition helpers of phase 2 implement the rule above and are tested against it. A node whose range holds no qualifying row therefore stores 0 and never a sentinel like `2^64-1`.
 
 The plain fields add up to 252 bytes, and 4 reserved zero bytes bring the part to 256. (`lastCall` of the earlier draft is gone: on a pin the Responses dangling set is empty, 7.3. `pairSensitiveRows` is new.)
 
@@ -246,7 +254,7 @@ The plain fields add up to 252 bytes, and 4 reserved zero bytes bring the part t
 | `cOut[2]` (`u8`, padded to 8) and `lastL[2]` (`u64` labels) | 24 | none | none |
 | Slot summary | 296 | 256, in a 296 slot | 64, in a 296 slot |
 
-A slot is not tied to a provider (Section 8.5), so each is sized for the largest summary and a smaller format leaves the tail zero. Responses needs 64 of the 296 bytes. The aggregate stays at 256 + 3 * 296 = 1,144 bytes, because Anthropic needs the full slot and a per-format slot size would make the node layout depend on the active keys. The Responses PDF metric is not in the summary: `pdfBytes[P]` in the plain part already carries it.
+A slot is not tied to a provider (Section 8.5), and the bytes do not say which layout they use. The slot table does: format slot `i` records the `summaryKind` of the summaries in `summaries[i]` of every aggregate (2.7), so a reader decodes `summaries[i]` with `slots.formatSlots[i].summaryKind` and needs nothing from outside the trailer. The kind is written when a base key is assigned to the slot and changes only with it, in the same group that raises `gen`; a slot that has never been assigned has kind 0 and all-zero summaries. Each slot is sized for the largest summary and a smaller format leaves the tail zero. Responses needs 64 of the 296 bytes. The aggregate stays at 256 + 3 * 296 = 1,144 bytes, because Anthropic needs the full slot and a per-format slot size would make the node layout depend on the active keys. The Responses PDF metric is not in the summary: `pdfBytes[P]` in the plain part already carries it.
 
 The plain fields are monoids under concatenation of row ranges. Transfer summaries compose as functions, which is associative with an identity, so they give the same guarantee. That is the rule that keeps the header correct under every mutation: a prefix or range total is derived from the tree in `O(depth)` preads by combining nodes, never by remembering a previous value and never by subtracting one.
 
@@ -256,7 +264,7 @@ Slot counts, state counts and the field list are frozen for format version 3. Th
 
 ### 2.6 Labels
 
-A label is a 64-bit order key assigned to a row when it is written. Live rows are ordered by label, and a label is never reused (the trailer's `nextLabel` only grows).
+A label is a 64-bit order key assigned to a row when it is written. Live rows are ordered by label, and a label is never reused (the trailer's `nextLabel` only grows). Labels are 1-based: no row has label 0, so 0 is free to mean "none" in the aggregate fields of Section 2.5.
 
 - Append: `label = nextLabel; nextLabel += 2^20`.
 - Insert between two live rows (`synthetic_insert`): the midpoint. If there is no midpoint, the mutation relabels the affected run inside the same group (it is a rebuild, Section 4.6).
@@ -264,16 +272,258 @@ A label is a 64-bit order key assigned to a row when it is written. Live rows ar
 
 Labels replace three things the JSONL design used: positions in the row directory (which shift on every prefix drop), chronology markers as cut points (defect #2), and the `seq` of the envelope. Chronology fields stay on the row (they are data), and `chronologySeq` keeps its existing meaning for the UI. It is no longer an address.
 
+### 2.7 Normative codes and field widths
+
+The tables below are the format. The prose of Sections 2.1 to 2.6 explains them, and where a number differs the tables win. The journal library (`packages/core/src/journal/`) holds the same values as constants, and `formatTables.test.ts` reads these tables from this file and fails when a constant differs. All integers are little-endian, offsets are bytes from the start of the structure, and fields are packed in the order listed. A `Type` that is `uN` or `uN[k]` must have a size of `N / 8 * k`, which the test also checks; a `u56` is 7 bytes.
+
+#### Frame head
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| kind | 0 | 1 | u8 |
+| frameFlags | 1 | 1 | u8 |
+| reserved | 2 | 2 | u16 |
+| headerLen | 4 | 4 | u32 |
+| bodyLen | 8 | 8 | u64 |
+| frameCrc | 16 | 4 | u32 |
+
+The head is 20 bytes. `frameCrc` covers bytes 0 to 15 and the kind header. `reserved` is zero.
+
+#### Frame flag bits
+
+| Bit | Name |
+|-----|------|
+| 0 | body present |
+
+Every other bit is zero.
+
+#### Record kinds
+
+| Code | Name |
+|------|------|
+| 1 | ROW |
+| 2 | RTNODE |
+| 3 | ITNODE |
+| 4 | LENS |
+| 5 | VALUE |
+| 6 | EVENT |
+| 127 | TRAILER |
+
+#### ROW fixed part
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| label | 0 | 8 | u64 |
+| owner | 8 | 4 | u32 |
+| speaker | 12 | 1 | u8 |
+| reserved | 13 | 1 | u8 |
+| flags | 14 | 2 | u16 |
+| blockCount | 16 | 4 | u32 |
+| idCount | 20 | 4 | u32 |
+| idsLen | 24 | 4 | u32 |
+| metaLen | 28 | 4 | u32 |
+| chronologySeq | 32 | 8 | u64 |
+| chronologyUserTurn | 40 | 4 | u32 |
+| chronologyStep | 44 | 4 | u32 |
+| chronologyRecordedAt | 48 | 8 | u64 |
+| parentEndpoint | 56 | 8 | u64 |
+
+The fixed part is 64 bytes. `reserved` is zero.
+
+#### ROW block directory entry
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| offset | 0 | 8 | u64 |
+| length | 8 | 8 | u64 |
+| type | 16 | 1 | u8 |
+
+An entry is 17 bytes. `type` is an opaque `u8` until the block types are fixed in phase 2.
+
+#### ROW id tuple
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| idHash | 0 | 16 | u8[16] |
+| kind | 16 | 1 | u8 |
+| block | 17 | 4 | u32 |
+| score | 21 | 1 | u8 |
+| nameLen | 22 | 4 | u32 |
+
+A tuple is 26 bytes.
+
+#### ROW speaker codes
+
+| Code | Name |
+|------|------|
+| 0 | human |
+| 1 | ai |
+| 2 | tool |
+
+#### ROW id kind codes
+
+| Code | Name |
+|------|------|
+| 0 | call |
+| 1 | response |
+
+#### ROW flag bits
+
+| Bit | Name |
+|-----|------|
+| 0 | curated |
+| 1 | hasThinking |
+| 2 | hasToolCall |
+| 3 | hasToolResponse |
+| 4 | hasMedia |
+| 5 | hasImage |
+| 6 | hasCacheableBlock |
+| 7 | cacheAnchor |
+| 8 | synthetic |
+| 9 | invalidateResponses |
+| 10 | responseParent |
+
+Bits 11 to 15 are zero.
+
+#### Trailer kind header
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| selfOffset | 0 | 8 | u64 |
+| commitSeq | 8 | 8 | u64 |
+| parent | 16 | 8 | u64 |
+| skip | 24 | 24 | u64[3] |
+| lineage | 48 | 8 | u64 |
+| lineageDepth | 56 | 8 | u64 |
+| mutation | 64 | 1 | u8 |
+| groupTag | 65 | 7 | u56 |
+| mutationArg0 | 72 | 8 | u64 |
+| mutationArg1 | 80 | 8 | u64 |
+| rowRoot | 88 | 8 | u64 |
+| idRoot | 96 | 8 | u64 |
+| metaRoot | 104 | 8 | u64 |
+| stateRoot | 112 | 8 | u64 |
+| nextLabel | 120 | 8 | u64 |
+| firstLabel | 128 | 8 | u64 |
+| lastRowOffset | 136 | 8 | u64 |
+| lastOwner | 144 | 4 | u32 |
+| padding | 148 | 4 | u8[4] |
+| ckptBytes | 152 | 8 | u64 |
+| rootAggregate | 160 | 1144 | Aggregate |
+| slots | 1304 | 160 | SlotTable |
+| durableEnd | 1464 | 8 | u64 |
+| syncMarker | 1472 | 8 | u8[8] |
+
+The kind header is 1,480 bytes and the trailer record 1,504. `padding` is zero. `mutation` and `groupTag` share the `u64` at offset 64: the low byte is `mutation`.
+
+#### Mutation codes
+
+| Code | Name |
+|------|------|
+| 1 | append |
+| 2 | pop |
+| 3 | compress |
+| 4 | replace |
+| 5 | density |
+| 6 | purge |
+| 7 | clear |
+| 8 | insert |
+| 9 | owner |
+| 10 | fill |
+| 11 | state |
+| 12 | clone |
+| 13 | restore |
+
+Code 0 is invalid.
+
+#### Aggregate
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| rows | 0 | 4 | u32 |
+| curated | 4 | 4 | u32 |
+| units | 8 | 4 | u32 |
+| tokens | 12 | 32 | u64[4] |
+| tokensMissing | 44 | 16 | u32[4] |
+| liveBytes | 60 | 8 | u64 |
+| mediaChars | 68 | 8 | u64 |
+| imageChars | 76 | 24 | u64[3] |
+| pdfBytes | 100 | 24 | u64[3] |
+| imageRows | 124 | 4 | u32 |
+| thinkingRows | 128 | 4 | u32 |
+| callRows | 132 | 4 | u32 |
+| reconRows | 136 | 4 | u32 |
+| pairSensitiveRows | 140 | 4 | u32 |
+| imageContribRows | 144 | 4 | u32 |
+| callBlocks | 148 | 4 | u32 |
+| unmappedBlocks | 152 | 4 | u32 |
+| lastThinking | 156 | 8 | u64 |
+| lastInvalidate | 164 | 8 | u64 |
+| lastCacheable | 172 | 8 | u64 |
+| firstAnchor | 180 | 8 | u64 |
+| firstImage | 188 | 8 | u64 |
+| ownerBloom | 196 | 8 | u64 |
+| missingBase | 204 | 12 | u32[3] |
+| missingImg | 216 | 12 | u32[3] |
+| stamp | 228 | 24 | u32[6] |
+| reserved | 252 | 4 | u8[4] |
+| summaries | 256 | 888 | u8[888] |
+
+Counts are `u32`. Token, byte and character totals are `u64`. The five label fields are `u64` labels, 0 meaning none (Section 2.5). `ownerBloom` is a `u64` bit set. `stamp` is three `{gen, imageGen}` pairs of `u32`. `reserved` is zero. Nothing is padded for alignment.
+
+#### Format slot
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| formatKeyHash | 0 | 8 | u64 |
+| formatRev | 8 | 4 | u32 |
+| gen | 12 | 4 | u32 |
+| imageKeyHash | 16 | 8 | u64 |
+| imageGen | 24 | 4 | u32 |
+| summaryKind | 28 | 1 | u8 |
+| pad | 29 | 3 | u8[3] |
+
+A format slot is 32 bytes. `pad` is zero.
+
+#### Family slot
+
+| Field | Offset | Size | Type |
+|-------|--------|------|------|
+| familyKeyHash | 0 | 8 | u64 |
+| estimatorRev | 8 | 4 | u32 |
+| gen | 12 | 4 | u32 |
+
+A family slot is 16 bytes. The slot table is three format slots followed by four family slots, 160 bytes.
+
+#### Summary kind codes
+
+| Code | Name |
+|------|------|
+| 0 | unassigned |
+| 1 | anthropic |
+| 2 | chat |
+| 3 | responses |
+
+#### Slot summary layout
+
+| Kind | States | Variant size | Variant offsets | bytes | count | out | p | carry | r | cOut | lastL |
+|------|--------|--------------|-----------------|-------|-------|-----|---|-------|---|------|-------|
+| anthropic | 10 | 136 | 0, 136 | 0 | 80 | 120 | - | - | - | 272 | 280 |
+| chat | 6 | 128 | 0, 128 | 0 | 48 | 72 | 78 | 126 | - | - | - |
+| responses | 2 | 32 | 0, 32 | 0 | 16 | 24 | - | - | 26 | - | - |
+
+`bytes`, `count`, `out`, `p`, `carry` and `r` are offsets inside a variant. `cOut` and `lastL` are offsets inside the slot summary. The element widths are in Section 2.5: `bytes` and `p` are `u64` per state, `count` is `u32` per state, `out` is `u8` per state, `carry` is a `u8` bit mask, `r` is a `u32`, `cOut` is two `u8` and `lastL` two `u64`. Bytes not covered are zero.
+
 ## 3. Indexes inside the journal
 
 Four persistent structures live in the file: the row tree, the id trie, the versioned meta map and the state map (the last three are tries over the same node kind). All four are copy-on-write. A node is written once and never changed. A mutation writes the nodes on the changed paths, plus a new trailer that names the new roots. Old versions stay readable because their nodes are still in the file, and the new version shares every untouched subtree with them. That is how rewind, compression, replace, purge and density create a new version "pointing back at shared structure" without touching old bytes.
 
 ### 3.1 Finding the current root: the last trailer
 
-A trailer record has a fixed size of 1,500 bytes (a 16-byte frame header, a 1,480-byte kind header whose last 8 bytes are the file's `syncMarker`, no body, and the 4-byte body CRC). A trailer record therefore ends with `syncMarker` followed by the 4-byte CRC. To open a journal a reader does this:
+A trailer record has a fixed size of 1,504 bytes (a 20-byte frame head, a 1,480-byte kind header whose last 8 bytes are the file's `syncMarker`, no body, and the 4-byte body CRC). A trailer record therefore ends with `syncMarker` followed by the 4-byte CRC. To open a journal a reader does this:
 
 1. `pread` the last 64 KiB of the file (one call; the file is at least that long, or the whole file is read).
-2. Search backwards for `syncMarker`. For each hit, the record end is the hit plus 12 bytes and the record start is the end minus 1,500. A hit whose record start would fall before the window is read directly with one `pread` of the 1,500 bytes.
+2. Search backwards for `syncMarker`. For each hit, the record end is the hit plus 12 bytes and the record start is the end minus 1,504. A hit whose record start would fall before the window is read directly with one `pread` of the 1,504 bytes.
 3. Accept the first structurally valid trailer: the record fits in the file, its kind is `TRAILER`, its `frameCrc` is valid, its `selfOffset` equals its start and it ends with `syncMarker`. A candidate that fails any of these is a torn tail or a quoted marker and sends the search on to the next hit. This is the only case in which an older trailer is used.
    The trailer is the commit point and is written only after its group's records are flushed (4.1), so a structurally valid trailer has its roots on disk. Read the roots back, `rowRoot`, `idRoot`, `metaRoot` and `stateRoot`, each when non-zero, which is four `pread`s with CRC checks. A root that is missing, past the end of the file or fails its CRC is corruption, because the trailer that names it is intact. Open throws `JournalCorruptionError` with the file, the root's name and offset, and the trailer's offset. It does not step back to an older trailer, which would drop a committed version without a word, and the owner truncates nothing. The same trailer is the current state when the roots read cleanly.
 4. If no candidate is found in the window, step back through the file in 4 MiB chunks that overlap by 12 bytes, up to the whole file. This happens only after a crash that left a long uncommitted tail, such as a half-written large row. Each byte is read at most once, so a half-written 200 MiB row costs one 200 MiB sequential read, once, because the next owner removes or skips the tail (4.12).
@@ -286,7 +536,7 @@ A live writer keeps its last acked trailer in memory and never searches.
 
 ### 3.2 The row tree
 
-The row tree is an order-statistic B+tree over live rows, keyed by label. Leaves hold up to 8 entries and internal nodes up to 8 children. An internal child slot holds `{childOffset, maxLabel, count, Aggregate}` (8 + 8 + 4 + 1,144 bytes, padded to 1,168), so every subtree knows its row count and its range aggregate (Section 2.5). Node records are `RTNODE`. The arity is 8 because the `Aggregate` in every child slot dominates the node size, so a smaller fan-out writes fewer bytes per path copy, at the price of more levels. The transfer summaries made the aggregate 1,144 bytes where the scalar layout needed 296, which moves the optimum toward a smaller arity. Arity 4 would write about 25 percent fewer bytes per path copy at 100k rows (about 41.8 KB against 55.8 KB, with 7 internal levels instead of 5). Phase 2 measures both before the layout is frozen, and the write budget test (13.6) decides.
+The row tree is an order-statistic B+tree over live rows, keyed by label. Leaves hold up to 8 entries and internal nodes up to 8 children. An internal child slot holds `{childOffset, maxLabel, count, Aggregate}` (8 + 8 + 4 + 1,144 bytes, padded to 1,168), so every subtree knows its row count and its range aggregate (Section 2.5). Node records are `RTNODE`. The arity is 8 because the `Aggregate` in every child slot dominates the node size, so a smaller fan-out writes fewer bytes per path copy, at the price of more levels. The transfer summaries made the aggregate 1,144 bytes where the scalar layout needed 296, which moves the optimum toward a smaller arity. Arity 4 would write about 25 percent fewer bytes per path copy at 100k rows (about 41.9 KB against 55.8 KB, with 7 internal levels instead of 5). Phase 2 measures both before the layout is frozen, and the write budget test (13.6) decides.
 
 A leaf entry is the row's index entry, 1,104 bytes at format version 3:
 
@@ -302,12 +552,12 @@ A leaf entry is the row's index entry, 1,104 bytes at format version 3:
 | `tokens` | 48 | yes | per vector (stripped self, reconstructed, adjacent response) and tokenizer slot a `u32` token count, 4 slots, 3 vectors |
 | `stamp[3]` | 24 | yes | per format slot, the `{gen, imageGen}` the summary and media numbers were computed for (Section 8.5) |
 
-Node sizes follow: a leaf is 8 * 1,104 + 16 = 8,848 bytes of body (8,868 with the frame), an internal node is 8 * 1,168 + 16 = 9,360 bytes (9,380 with the frame).
+Node sizes follow: a leaf is 8 * 1,104 + 16 = 8,848 bytes of body (8,872 with the 20-byte frame head and 4-byte body CRC), an internal node is 8 * 1,168 + 16 = 9,360 bytes (9,384 with the frame).
 
 Cost model:
 - Ordinal to entry, label to entry, and prefix or range aggregate: `O(depth)` preads. Depth is `1 + ceil(log8(rows / 8))`: 4 for 1k rows, 6 for 100k rows, 7 for 1M rows and 14 for 2^40 rows. The right spine is kept by the writer, so an append reads nothing.
 - Sequential scan: an iterator holds the path of nodes from the root to the current leaf (`depth` nodes, at most about 128 KiB at depth 14, and 64 KiB at 1M rows) and advances leaf by leaf. There are no sibling pointers because nodes are immutable; the parent stack is the cursor.
-- A path copy writes one leaf and one node per internal level: 37.0 KB at 1k rows (8,868 + 3 * 9,380), 55.8 KB at 100k rows (8,868 + 5 * 9,380) and 65.1 KB at 1M rows (8,868 + 6 * 9,380). The scalar layout wrote 11 KB, 16.2 KB and 18.8 KB. A group with one appended row and one id adds the row (about 1 KB), about 6 KB of trie nodes for that id (the namespace 0 fact, its namespace 4 occurrence entry, and the count and occurrence entries of namespaces 1 and 2, each about 1 KB, 3.3) and the 1,500-byte trailer, so it writes about 64 KB at 100k rows; each further id in the row adds about 6 KB. A group whose edits touch a second leaf, such as a response that arrives for an earlier call row, writes a second path, about 120 KB. The write budget test (13.6) fixes limits of 72 KiB and 128 KiB for those two cases with one id per row. Edits that queue during a write share one group (4.1), and compaction (4.11) removes the superseded paths.
+- A path copy writes one leaf and one node per internal level: 37.0 KB at 1k rows (8,872 + 3 * 9,384), 55.8 KB at 100k rows (8,872 + 5 * 9,384) and 65.2 KB at 1M rows (8,872 + 6 * 9,384). The scalar layout wrote 11 KB, 16.2 KB and 18.8 KB. A group with one appended row and one id adds the row (about 1 KB), about 6 KB of trie nodes for that id (the namespace 0 fact, its namespace 4 occurrence entry, and the count and occurrence entries of namespaces 1 and 2, each about 1 KB, 3.3) and the 1,504-byte trailer, so it writes about 64 KB at 100k rows; each further id in the row adds about 6 KB. A group whose edits touch a second leaf, such as a response that arrives for an earlier call row, writes a second path, about 120 KB. The write budget test (13.6) fixes limits of 72 KiB and 128 KiB for those two cases with one id per row. Edits that queue during a write share one group (4.1), and compaction (4.11) removes the superseded paths.
 - A bulk build (replace, rebuild after compression) fills nodes bottom-up from a stream of entries holding one in-progress node per level, so it needs memory proportional to the depth.
 
 ### 3.3 The id trie
@@ -466,7 +716,7 @@ The streamed replacement (`publishReplacement`, used by profile adoption, restor
 
 Until step 3 completes the previous version is the only version. A crash, an error or a cancellation before the trailer leaves an uncommitted tail that nothing reads. `replace_begin`, `replace_commit`, `replace_abort`, `ReplaceTransactionFold` and `ReplaceWriteGuard` are deleted; their single-transaction grammar is carried by the trailer.
 
-Compensation. When a later step of a larger operation fails after a replacement committed, the previous version is still in the file. Compensation is `restore(version)`: a one-trailer group whose `rowRoot`, `idRoot` and `metaRoot` are those of the saved previous trailer and whose `stateRoot` is the current one. It starts a new lineage. It replaces `restorePrevious`, which today re-appends every previous row, and it needs no scratch copy (`historyRowOrigins.ts`, `HistoryMutationSnapshot`'s scratch rows). The saved previous trailer is a 1,500-byte value held by the operation.
+Compensation. When a later step of a larger operation fails after a replacement committed, the previous version is still in the file. Compensation is `restore(version)`: a one-trailer group whose `rowRoot`, `idRoot` and `metaRoot` are those of the saved previous trailer and whose `stateRoot` is the current one. It starts a new lineage. It replaces `restorePrevious`, which today re-appends every previous row, and it needs no scratch copy (`historyRowOrigins.ts`, `HistoryMutationSnapshot`'s scratch rows). The saved previous trailer is a 1,504-byte value held by the operation.
 
 ### 4.6 Density, purge, insert, owner change, fill
 
@@ -732,7 +982,7 @@ for part of parts(rowTreeIterator(from), tailRows):          // skips uncurated 
 
 | State | Bound | Depends on history length? |
 |-------|-------|----------------------------|
-| Row tree iterator (path of nodes) | `depth` nodes, a leaf of 8,868 bytes and internal nodes of 9,380 bytes; depth at most 14 for any row count under 2^40 | only through `log8`, capped at about 128 KiB |
+| Row tree iterator (path of nodes) | `depth` nodes, a leaf of 8,872 bytes and internal nodes of 9,384 bytes; depth at most 14 for any row count under 2^40 | only through `log8`, capped at about 128 KiB |
 | Node cache for the id trie | 256 nodes, fixed capacity | no |
 | Current part (decoded) | one row, at most the largest row | no |
 | Look-ahead (`next`) | one row header and block directory | no |
@@ -971,7 +1221,7 @@ While streaming, the body stream counts the bytes it hands to the transport. If 
 
 ### 8.5 Slots, format keys and versions
 
-The trailer carries a slot table: `FORMAT_SLOTS = 3` entries of `{formatKeyHash, formatRev, gen, imageKeyHash, imageGen}` and `FAMILY_SLOTS = 4` entries of `{familyKeyHash, estimatorRev, gen}`. Both are frozen for format version 3 because they set the size of the aggregate in every node (2.5). A format slot is not tied to a provider. Three slots hold the three keys a session switches among, and a fourth distinct base key evicts the least recently used one. Four family slots hold the tokenizer families of a load-balanced profile with up to four sub-profiles. Changing either constant is a format bump, which costs nothing because old journals are not resumed (2.1). A load-balanced profile that alternates among more than three base keys (for example four Claude models) refills on every switch. That is the cost of keying on the exact model id, and each refill is one pass over the affected rows.
+The trailer carries a slot table: `FORMAT_SLOTS = 3` entries of `{formatKeyHash, formatRev, gen, imageKeyHash, imageGen, summaryKind}` and `FAMILY_SLOTS = 4` entries of `{familyKeyHash, estimatorRev, gen}`. Both are frozen for format version 3 because they set the size of the aggregate in every node (2.5). `summaryKind` is the layout (anthropic, chat or responses) of the transfer summaries the slot holds, set from the base key's format id when the slot is assigned (2.5, 2.7). A format slot is not tied to a provider. Three slots hold the three keys a session switches among, and a fourth distinct base key evicts the least recently used one. Four family slots hold the tokenizer families of a load-balanced profile with up to four sub-profiles. Changing either constant is a format bump, which costs nothing because old journals are not resumed (2.1). A load-balanced profile that alternates among more than three base keys (for example four Claude models) refills on every switch. That is the cost of keying on the exact model id, and each refill is one pass over the affected rows.
 
 **The base key** is the hash of exactly the inputs that change a row's units or bytes, other than through the image budget:
 - the format id (`openai-chat:<toolFormat>`, `responses`, `anthropic`),
@@ -1184,6 +1434,8 @@ Each defect gets a test that fails on the current code and passes on the new cod
 - Meta split: a pop keeps a checkpoint, a rename and owner dictionary entries made after the popped-to version.
 - Lineage: a pop across an owner change or a synthetic insert is a rebuild and keeps the owner change and the inserted row.
 - Kimi and Mistral ids: after compress and density, the mapped ids equal what the current `ToolIdStrategy` code produces for the surviving rows, including a Mistral salt collision whose first holder was removed (the stale mapping must differ, as in the prototype). Kimi: a later eligible duplicate with another name (the earlier rows' prefix is re-measured), an unnamed duplicate that must not overwrite the mapping, an eligible call block in a human row, a reconstructed call, digit boundaries at 9, 10, 11, 99, 100 and 101, and a counter that crosses a boundary; a tail eligible duplicate with a different name that changes the prefix of earlier call rows in two journal rows and of their response rows; and the normalized dropped-output control `[human(text q, call X), tool(response X), ai(call Y), tool(Y)]` (`followup-kimi-control.out:26-29`), where the digit total is 2 for Y's two written uses and not 3, with an unmapped dropped response added to check the counter.
+- Large row header (2.2, 2.4): a `ROW` with 100,000 blocks and 100,000 ids (a 4,300,064-byte kind header) round-trips through the frame with every block, id and id-piece entry intact, and a 64 MiB body behind that header streams with heap growth below 16 MiB on both write and read. A control that buffers the body must fail the heap bound.
+- Format tables (2.7): the codes and field offsets in the code equal the tables of 2.7, which the test reads from this document.
 - Id piece: ids of 0, 1, 12, 40 and 100,000 bytes round-trip; a rebuild of ordinary rows issues one `pread` per row; the normalized-id namespaces and the Mistral mappings after a rebuild equal those built by appending.
 - Rejected parents (finding 4): (a) over 10,000 distinct rejections on one provider instance, heap is flat across the number of rejections and the number of rows, the `pread` count per lookup is flat, at least one rehash ran, and a trap that keeps a `Set` of rejected ids fails the same heap predicate; (b) the selected parent equals the selection of the old in-memory Set on random histories with random rejection sequences, while the old code exists (phase 6b); (c) cross-store: reject parent P in a send through store A, then send through store B, a different journal holding a row with the same response id and the same provider instance, and B skips P; a non-journal call on that instance skips it too; (d) unchanged-key retry: after a rejection the retry with an equal format key gets the same pin from `pin.refresh(key)` and still selects the next candidate; a trap that caches the chosen parent in the pin must fail; (e) a pop keeps the rejection; `clearState()` forgets it and deletes the file; disposal deletes the file; a second provider instance and a resumed session start empty; no file exists before the first rejection and exactly one exists after any number of them; (f) a failed slot write fails the turn.
 - Codex WebSocket fragments (phase 6b): against a local `ws` server, a body of several `fin: false` frames and one `fin: true` frame arrives as one binary message with the exact bytes; a 200 MiB body streams with heap flat; a byte-count mismatch terminates the socket before the final frame; a close in the middle delivers no message. A live smoke against Codex sends one fragmented request. A rejection of fragments raises the dedicated error and is not absorbed by the sticky HTTP fallback.
@@ -1279,7 +1531,7 @@ Built (library under a new directory, not wired):
 - file header, CRC-32 through `node:zlib` `crc32`, `fileId`, `syncMarker` (Section 2.1);
 - frame codec with 64-bit body length and streamed body CRC (2.2);
 - record kinds, the `ROW` codec with the id piece and the `TRAILER` codec with the running-state fields and `Aggregate` layout (2.3, 2.4, 2.5);
-- last-trailer search with window doubling (3.1) and read-only open, with `JournalCorruptionError` for a bad root under an intact trailer and the `groupTag` field (2.5);
+- last-trailer search: a 64 KiB window, then 4 MiB chunks backward that overlap by 12 bytes (3.1), and read-only open, with `JournalCorruptionError` for a bad root under an intact trailer and the `groupTag` field (2.5);
 - `flushRecords` with its platform calls (15.1): `F_FULLFSYNC` through `bun:ffi` under Bun and `fs.fdatasync` under Node on darwin, `fdatasync` on Linux, `FlushFileBuffers` on Windows; an error throws and nothing falls back to plain `fsync`;
 - group writer: positional writes at a tracked offset on a read-write descriptor, records first, `flushRecords` on the records before the trailer, trailer last, ack `{commitSeq, durableEnd}`, best-effort truncation of an uncommitted tail on owner open (4.1, 4.12);
 - the refusal function and its single error message (2.1), plus a bare-store unlinked-file helper.
@@ -1530,7 +1782,7 @@ The two points below were open choices in earlier drafts. Each now has one answe
 
 Without the flush, a power loss can leave a trailer that points at nodes that never reached the disk. The old JSONL file lost only its last lines in that case, and the tree format would lose more than that, which is a regression. The flush is therefore required on every platform. The trailer itself is not flushed, so a power loss can lose the newest group and nothing older.
 
-**Measured cost** (`tmp/854-notes/r3-probe/`, Bun 1.3.14, macOS arm64, 200 groups per case, each a pwrite, a flush and a 1,500-byte trailer pwrite). On the external APFS volume that holds this checkout, a 60 KiB pwrite takes 0.011 ms median (p95 0.026), `fdatasync` 0.23 ms median (p95 0.54) and a whole group 0.25 ms median (p95 0.62). At 120 KiB the flush is 0.30 ms median. On the internal volume `fdatasync` is 0.04 ms median (p95 0.08). Flush time hardly depends on size (16 KiB 0.15 ms, 60 KiB 0.23 ms, 120 KiB 0.30 ms), so a smaller path copy buys almost no latency.
+**Measured cost** (`tmp/854-notes/r3-probe/`, Bun 1.3.14, macOS arm64, 200 groups per case, each a pwrite, a flush and a 1,500-byte trailer pwrite, measured before the trailer record grew to 1,504 bytes with the wider frame head). On the external APFS volume that holds this checkout, a 60 KiB pwrite takes 0.011 ms median (p95 0.026), `fdatasync` 0.23 ms median (p95 0.54) and a whole group 0.25 ms median (p95 0.62). At 120 KiB the flush is 0.30 ms median. On the internal volume `fdatasync` is 0.04 ms median (p95 0.08). Flush time hardly depends on size (16 KiB 0.15 ms, 60 KiB 0.23 ms, 120 KiB 0.30 ms), so a smaller path copy buys almost no latency.
 
 Bun's `fdatasync` on macOS hands the data to the drive but does not ask the drive to empty its write cache. Node 25 (libuv) on the same files takes 1.3 ms (external) and 4.3 ms (internal) per flush, and `fcntl(F_FULLFSYNC)` called from Bun takes 1.5 ms (external, p95 5.2) and 4.2 ms (internal, p95 6.7). Without coalescing, a three-group request costs about 0.8 ms with Bun's `fdatasync` and 4.8 to 12.9 ms with `F_FULLFSYNC`. Each commit group pays one full flush, which costs about 1.5 ms median on the external volume and 4.2 ms on the internal volume, per file written.
 

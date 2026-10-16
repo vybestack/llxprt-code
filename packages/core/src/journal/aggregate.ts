@@ -14,6 +14,14 @@ import {
 import { JournalFormatError } from './errors.js';
 import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
 
+/**
+ * Labels are 1-based, so 0 is the value of a label field no row qualifies for:
+ * `lastThinking`, `lastInvalidate`, `lastCacheable` (max labels) and
+ * `firstAnchor`, `firstImage` (min labels). Composition treats it as the
+ * identity: a max with 0 keeps the other side and a min skips 0 (design 2.5).
+ */
+export const NO_LABEL = 0n;
+
 /** The plain part, 252 bytes of fields and 4 reserved. */
 export const AGGREGATE_PLAIN_BYTES = 256;
 /** 256-byte plain part and three 296-byte summary slots. */
@@ -88,9 +96,9 @@ export interface Aggregate {
   readonly missingImg: Triple<number>;
   readonly stamp: Triple<SlotStamp>;
   /**
-   * The three transfer-summary slots as 296 raw bytes each. Which format a slot
-   * holds is not recorded in the layout, so decoding is left to the caller that
-   * knows it (`decodeSlotSummary`).
+   * The three transfer-summary slots as 296 raw bytes each. The format a slot
+   * holds is the `summaryKind` of the trailer's format slot with the same index,
+   * which `decodeSlotSummary` reads.
    */
   readonly summaries: Triple<Uint8Array>;
 }

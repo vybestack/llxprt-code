@@ -18,6 +18,16 @@ export const SLOT_SUMMARY_BYTES = 296;
 
 export type SummaryKind = 'anthropic' | 'chat' | 'responses';
 
+/**
+ * The code each format slot of the slot table stores for the summary it holds
+ * (design 2.7). 0 is a slot that has not been assigned a format yet.
+ */
+export const SUMMARY_KIND_CODE = {
+  anthropic: 1,
+  chat: 2,
+  responses: 3,
+} as const satisfies Record<SummaryKind, number>;
+
 /** Per incoming boundary state: bytes written, run or message or item count, outgoing state. */
 export interface TransferTable {
   readonly bytes: readonly number[];
@@ -255,11 +265,21 @@ export function encodeSlotSummary(summary: SlotSummary): Uint8Array {
   return bytes;
 }
 
-/** The kind is not recorded in the slot; the caller knows it from the format it is reading for. */
+/**
+ * The kind comes from the slot table entry that owns these bytes. A kind that
+ * does not match what the slot holds is caught when the bytes use more than
+ * the claimed layout (nonzero padding or tail, a state number out of range).
+ */
 export function decodeSlotSummary(
   bytes: Uint8Array,
-  kind: SummaryKind,
+  slot: { readonly summaryKind: SummaryKind | null },
 ): SlotSummary {
+  const kind = slot.summaryKind;
+  if (kind === null) {
+    throw new JournalFormatError(
+      'Slot summary belongs to an unassigned format slot',
+    );
+  }
   assertLength(bytes, SLOT_SUMMARY_BYTES, 'Slot summary');
   for (const [start, end] of SLOT_SUMMARY_LAYOUT[kind].padding) {
     assertAllZero(bytes, start, end, `Slot summary ${kind} padding`);

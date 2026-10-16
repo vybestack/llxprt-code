@@ -3,7 +3,10 @@ import type { Aggregate } from '../../aggregate.js';
 import type { SlotSummary, SummaryKind } from '../../slotSummary.js';
 import type { SlotTable } from '../../slotTable.js';
 import { MUTATION } from '../../recordKinds.js';
-import type { TrailerHeader } from '../../trailerRecord.js';
+import {
+  TRAILER_RECORD_BYTES,
+  type TrailerHeader,
+} from '../../trailerRecord.js';
 import type { SeededRandom } from './seededRandom.js';
 
 const STATES = { anthropic: 10, chat: 6, responses: 2 } as const;
@@ -87,12 +90,19 @@ export function randomAggregate(random: SeededRandom): Aggregate {
 
 export function randomSlotTable(random: SeededRandom): SlotTable {
   const u32 = () => random.mixed(2 ** 32);
+  const kinds: ReadonlyArray<SummaryKind | null> = [
+    null,
+    'anthropic',
+    'chat',
+    'responses',
+  ];
   const format = () => ({
     formatKeyHash: random.bigBits(64),
     formatRev: u32(),
     gen: u32(),
     imageKeyHash: random.bigBits(64),
     imageGen: u32(),
+    summaryKind: kinds[random.int(kinds.length)],
   });
   const family = () => ({
     familyKeyHash: random.bigBits(64),
@@ -134,7 +144,7 @@ export function randomTrailer(
     ckptBytes: random.bits(53),
     rootAggregate: randomAggregate(random),
     slots: randomSlotTable(random),
-    durableEnd: selfOffset + 1500,
+    durableEnd: selfOffset + TRAILER_RECORD_BYTES,
     syncMarker,
   };
 }

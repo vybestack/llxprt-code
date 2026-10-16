@@ -11,6 +11,7 @@ import {
   ROW_FLAG,
   ROW_ID_KIND,
   ROW_SPEAKER,
+  assertRowHeaderFits,
   decodeIdPiece,
   decodeRowHeader,
   encodeIdPiece,
@@ -22,6 +23,13 @@ import {
   type RowHeader,
   type RowIdTuple,
 } from './rowRecord.js';
+import { readFrameBody, readFrameHead, writeFrame } from './frame.js';
+import { RECORD_KIND } from './recordKinds.js';
+import {
+  bufferReader,
+  collect,
+  collectingSink,
+} from './__tests__/support/memoryIo.js';
 import { SeededRandom } from './__tests__/support/seededRandom.js';
 
 const U64_MAX = (1n << 64n) - 1n;
@@ -44,7 +52,7 @@ function randomIds(
     kind: random.int(2) === 0 ? ROW_ID_KIND.call : ROW_ID_KIND.response,
     block: random.mixed(Math.max(blocks, 1)),
     score: random.int(256),
-    nameLen: random.mixed(65536),
+    nameLen: random.mixed(2 ** 32),
   }));
 }
 
@@ -109,7 +117,7 @@ describe('ROW kind header', () => {
           kind: ROW_ID_KIND.response,
           block: 0,
           score: 5,
-          nameLen: 0x0102,
+          nameLen: 0x01020304,
         },
       ],
     });
@@ -121,33 +129,33 @@ describe('ROW kind header', () => {
     expect(bytes[12]).toBe(2);
     expect(bytes[13]).toBe(0);
     expect(view.getUint16(14, true)).toBe(row.flags);
-    expect(view.getUint16(16, true)).toBe(1);
-    expect(view.getUint16(18, true)).toBe(1);
-    expect(view.getUint32(20, true)).toBe(row.idsLen);
-    expect(view.getUint32(24, true)).toBe(row.metaLen);
-    expect(view.getBigUint64(28, true)).toBe(row.chronologySeq);
-    expect(view.getUint32(36, true)).toBe(row.chronologyUserTurn);
-    expect(view.getUint32(40, true)).toBe(row.chronologyStep);
-    expect(view.getBigUint64(44, true)).toBe(BigInt(row.chronologyRecordedAt));
-    expect(view.getBigUint64(52, true)).toBe(row.parentEndpoint);
-    expect(view.getBigUint64(60, true)).toBe(9n);
-    expect(view.getBigUint64(68, true)).toBe(10n);
-    expect(bytes[76]).toBe(3);
-    expect(Array.from(bytes.subarray(77, 93))).toStrictEqual(
+    expect(view.getUint32(16, true)).toBe(1);
+    expect(view.getUint32(20, true)).toBe(1);
+    expect(view.getUint32(24, true)).toBe(row.idsLen);
+    expect(view.getUint32(28, true)).toBe(row.metaLen);
+    expect(view.getBigUint64(32, true)).toBe(row.chronologySeq);
+    expect(view.getUint32(40, true)).toBe(row.chronologyUserTurn);
+    expect(view.getUint32(44, true)).toBe(row.chronologyStep);
+    expect(view.getBigUint64(48, true)).toBe(BigInt(row.chronologyRecordedAt));
+    expect(view.getBigUint64(56, true)).toBe(row.parentEndpoint);
+    expect(view.getBigUint64(64, true)).toBe(9n);
+    expect(view.getBigUint64(72, true)).toBe(10n);
+    expect(bytes[80]).toBe(3);
+    expect(Array.from(bytes.subarray(81, 97))).toStrictEqual(
       new Array(16).fill(0x77),
     );
-    expect(bytes[93]).toBe(1);
-    expect(view.getUint16(94, true)).toBe(0);
-    expect(bytes[96]).toBe(5);
-    expect(view.getUint16(97, true)).toBe(0x0102);
-    expect(bytes.length).toBe(99);
+    expect(bytes[97]).toBe(1);
+    expect(view.getUint32(98, true)).toBe(0);
+    expect(bytes[102]).toBe(5);
+    expect(view.getUint32(103, true)).toBe(0x01020304);
+    expect(bytes.length).toBe(107);
   });
 
-  it('has the encoded size 60 + 17 per block + 22 per id', () => {
-    expect(ROW_FIXED_BYTES).toBe(60);
+  it('has the encoded size 64 + 17 per block + 26 per id', () => {
+    expect(ROW_FIXED_BYTES).toBe(64);
     expect(BLOCK_DIR_ENTRY_BYTES).toBe(17);
-    expect(ID_TUPLE_BYTES).toBe(22);
-    expect(encodeRowHeader(sampleRow()).length).toBe(60);
+    expect(ID_TUPLE_BYTES).toBe(26);
+    expect(encodeRowHeader(sampleRow()).length).toBe(64);
     const random = new SeededRandom(21);
     for (let round = 0; round < 50; round++) {
       const blockCount = random.int(40);
@@ -157,10 +165,10 @@ describe('ROW kind header', () => {
         ids: randomIds(random, idCount, blockCount),
       });
       expect(encodeRowHeader(row).length).toBe(
-        60 + 17 * blockCount + 22 * idCount,
+        64 + 17 * blockCount + 26 * idCount,
       );
       expect(rowHeaderBytes(blockCount, idCount)).toBe(
-        60 + 17 * blockCount + 22 * idCount,
+        64 + 17 * blockCount + 26 * idCount,
       );
     }
   });
@@ -189,15 +197,43 @@ describe('ROW kind header', () => {
     });
   });
 
-  it('refuses a header that would not fit the u16 headerLen of the frame', () => {
-    const blocks = randomBlocks(new SeededRandom(1), 3852);
-    const fits = sampleRow({ blocks: blocks.slice(0, 3851) });
+  it('encodes 100,000 blocks and 100,000 ids, far beyond the old 65,535-byte header', () => {
+    const random = new SeededRandom(100);
+    const blocks = randomBlocks(random, 100_000);
+    const row = sampleRow({
+      blocks,
+      ids: randomIds(random, 100_000, blocks.length),
+    });
 
-    expect(MAX_ROW_HEADER_BYTES).toBe(65535);
-    expect(encodeRowHeader(fits).length).toBe(60 + 17 * 3851);
-    expect(() => encodeRowHeader(sampleRow({ blocks }))).toThrow(
+    const bytes = encodeRowHeader(row);
+
+    expect(bytes.length).toBe(64 + 17 * 100_000 + 26 * 100_000);
+    expect(bytes.length).toBeGreaterThan(0xffff);
+    expect(decodeRowHeader(bytes)).toStrictEqual(row);
+  });
+
+  it('keeps the last block and the last id of a large header addressable', () => {
+    const random = new SeededRandom(101);
+    const blocks = randomBlocks(random, 70_000);
+    const ids = randomIds(random, 70_000, blocks.length);
+    const decoded = decodeRowHeader(
+      encodeRowHeader(sampleRow({ blocks, ids })),
+    );
+
+    expect(decoded.blocks.length).toBe(70_000);
+    expect(decoded.blocks[69_999]).toStrictEqual(blocks[69_999]);
+    expect(decoded.ids[69_999]).toStrictEqual(ids[69_999]);
+  });
+
+  it('bounds the header only by the 32-bit headerLen of the frame', () => {
+    expect(MAX_ROW_HEADER_BYTES).toBe(0xffff_ffff);
+    expect(() => assertRowHeaderFits(100_000, 100_000)).not.toThrow();
+    expect(() => assertRowHeaderFits(250_000_000, 0)).not.toThrow();
+    expect(() => assertRowHeaderFits(250_000_000, 100_000_000)).toThrow(
       JournalFormatError,
     );
+    expect(() => assertRowHeaderFits(2 ** 32, 0)).toThrow(/blockCount/);
+    expect(() => assertRowHeaderFits(0, 2 ** 32)).toThrow(/idCount/);
   });
 
   it('refuses values that do not fit their field', () => {
@@ -238,7 +274,7 @@ describe('ROW kind header', () => {
     expect(() =>
       decodeRowHeader(Buffer.concat([bytes, new Uint8Array(1)])),
     ).toThrow(JournalFormatError);
-    expect(() => decodeRowHeader(bytes.subarray(0, 59))).toThrow(
+    expect(() => decodeRowHeader(bytes.subarray(0, 63))).toThrow(
       JournalFormatError,
     );
   });
@@ -263,11 +299,66 @@ describe('ROW kind header', () => {
     const speaker = base.slice();
     speaker[12] = 3;
     const kind = base.slice();
-    kind[60 + 16] = 2;
+    kind[64 + 16] = 2;
 
     expect(() => decodeRowHeader(reserved)).toThrow(/reserved/);
     expect(() => decodeRowHeader(speaker)).toThrow(/speaker/);
     expect(() => decodeRowHeader(kind)).toThrow(/kind/);
+  });
+});
+
+describe('a ROW record of 100,000 blocks and 100,000 ids', () => {
+  it('round-trips through the frame with its id piece and every block', async () => {
+    const count = 100_000;
+    const rawIds = Array.from({ length: count }, (_, index) => `call_${index}`);
+    const idPiece = encodeIdPiece(rawIds);
+    const meta = new TextEncoder().encode('{"speaker":"ai","metadata":{}}');
+    const blockBytes = Array.from({ length: count }, (_, index) =>
+      new TextEncoder().encode(JSON.stringify({ type: 'text', text: index })),
+    );
+    let offset = idPiece.length + meta.length;
+    const blocks: RowBlockEntry[] = blockBytes.map((bytes) => {
+      const entry = { offset, length: bytes.length, type: 1 };
+      offset += bytes.length;
+      return entry;
+    });
+    const row = sampleRow({
+      idsLen: idPiece.length,
+      metaLen: meta.length,
+      blocks,
+      ids: rawIds.map((id, index) => ({
+        idHash: hashId(id),
+        kind: ROW_ID_KIND.call,
+        block: index,
+        score: 0,
+        nameLen: 4,
+      })),
+    });
+    const body = Buffer.concat([idPiece, meta, ...blockBytes]);
+    const out = collectingSink();
+
+    await writeFrame(out.sink, RECORD_KIND.ROW, encodeRowHeader(row), {
+      length: body.length,
+      chunks: [body],
+    });
+    const bytes = out.bytes();
+    const reader = bufferReader(bytes);
+    const head = await readFrameHead(reader, 0, bytes.length);
+    const decoded = decodeRowHeader(head.kindHeader);
+    const readBody = await collect(readFrameBody(reader, head));
+
+    expect(head.headerLen).toBe(rowHeaderBytes(count, count));
+    expect(decoded).toStrictEqual(row);
+    expect(() => validateRowAgainstBody(decoded, head.bodyLen)).not.toThrow();
+    expect(
+      decodeIdPiece(readBody.subarray(0, decoded.idsLen), count),
+    ).toStrictEqual(rawIds);
+    const last = decoded.blocks[count - 1];
+    expect(
+      new TextDecoder().decode(
+        readBody.subarray(last.offset, last.offset + last.length),
+      ),
+    ).toBe(`{"type":"text","text":${count - 1}}`);
   });
 });
 

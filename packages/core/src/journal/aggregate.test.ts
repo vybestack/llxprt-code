@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'bun:test';
 import { JournalFormatError } from './errors.js';
 import {
+  type Aggregate,
   AGGREGATE_BYTES,
   AGGREGATE_LAYOUT,
   AGGREGATE_PLAIN_BYTES,
+  NO_LABEL,
   decodeAggregate,
   encodeAggregate,
   encodeAggregateInto,
@@ -111,6 +113,83 @@ describe('aggregate', () => {
         aggregate,
       );
     }
+  });
+
+  it('stores 0 for a max-label or min-label field that no row qualifies for', () => {
+    const labelFields = [
+      'lastThinking',
+      'lastInvalidate',
+      'lastCacheable',
+      'firstAnchor',
+      'firstImage',
+    ] as const;
+    const empty: Aggregate = {
+      ...randomAggregate(new SeededRandom(8)),
+      lastThinking: NO_LABEL,
+      lastInvalidate: NO_LABEL,
+      lastCacheable: NO_LABEL,
+      firstAnchor: NO_LABEL,
+      firstImage: NO_LABEL,
+    };
+
+    const bytes = encodeAggregate(empty);
+    const view = viewOf(bytes);
+
+    expect(NO_LABEL).toBe(0n);
+    for (const field of labelFields) {
+      expect(view.getBigUint64(AGGREGATE_LAYOUT[field].offset, true)).toBe(0n);
+    }
+    expect(decodeAggregate(bytes)).toStrictEqual(empty);
+    for (const field of labelFields) {
+      const one = { ...empty, [field]: 1n };
+      expect(decodeAggregate(encodeAggregate(one))[field]).toBe(1n);
+    }
+  });
+
+  it('encodes an aggregate with no rows as all zero bytes', () => {
+    const zeros = [0, 0, 0] as const;
+    const none: Aggregate = {
+      rows: 0,
+      curated: 0,
+      units: 0,
+      tokens: [0, 0, 0, 0],
+      tokensMissing: [0, 0, 0, 0],
+      liveBytes: 0,
+      mediaChars: 0,
+      imageChars: zeros,
+      pdfBytes: zeros,
+      imageRows: 0,
+      thinkingRows: 0,
+      callRows: 0,
+      reconRows: 0,
+      pairSensitiveRows: 0,
+      imageContribRows: 0,
+      callBlocks: 0,
+      unmappedBlocks: 0,
+      lastThinking: NO_LABEL,
+      lastInvalidate: NO_LABEL,
+      lastCacheable: NO_LABEL,
+      firstAnchor: NO_LABEL,
+      firstImage: NO_LABEL,
+      ownerBloom: 0n,
+      missingBase: zeros,
+      missingImg: zeros,
+      stamp: [
+        { gen: 0, imageGen: 0 },
+        { gen: 0, imageGen: 0 },
+        { gen: 0, imageGen: 0 },
+      ],
+      summaries: [
+        new Uint8Array(296),
+        new Uint8Array(296),
+        new Uint8Array(296),
+      ],
+    };
+
+    const bytes = encodeAggregate(none);
+
+    expect(bytes.every((byte) => byte === 0)).toBe(true);
+    expect(decodeAggregate(bytes)).toStrictEqual(none);
   });
 
   it('writes into and reads from an offset inside a larger record', () => {

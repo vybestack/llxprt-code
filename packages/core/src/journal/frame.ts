@@ -1,13 +1,29 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { crc32, putU8, putU16, putU32, putU64, viewOf } from './bytes.js';
+import {
+  assertAllZero,
+  crc32,
+  putU8,
+  putU32,
+  putU64,
+  span,
+  viewOf,
+} from './bytes.js';
 import { JournalFormatError, JournalFrameError } from './errors.js';
 import type { ByteSink, PositionalReader } from './positionalFile.js';
 
-export const FRAME_HEAD_BYTES = 16;
+/** Design 2.2 and 2.7: the 20-byte head, every field at its natural alignment. */
+export const FRAME_HEAD_BYTES = 20;
 export const BODY_CRC_BYTES = 4;
-const FRAME_FLAG_BODY = 0x01;
-const FRAME_CRC_COVERS_BYTES = 12;
-const MAX_KIND_HEADER_BYTES = 0xffff;
+export const FRAME_FLAG_BODY = 0x01;
+const FRAME_CRC_COVERS_BYTES = 16;
+export const FRAME_HEAD_LAYOUT = {
+  kind: span(0, 1),
+  frameFlags: span(1, 1),
+  reserved: span(2, 2),
+  headerLen: span(4, 4),
+  bodyLen: span(8, 8),
+  frameCrc: span(16, 4),
+};
 const DEFAULT_BODY_CHUNK_BYTES = 1024 * 1024;
 
 /** A validated frame head. The body is not read and has no upper bound. */
@@ -37,12 +53,12 @@ interface RawFrameHead {
   readonly frameCrc: number;
 }
 
-/** `16 + headerLen + bodyLen + 4`. */
+/** `20 + headerLen + bodyLen + 4`. */
 export function frameLength(headerLen: number, bodyLen: number): number {
   return FRAME_HEAD_BYTES + headerLen + bodyLen + BODY_CRC_BYTES;
 }
 
-/** The 16-byte head followed by the kind header; `null` means the frame has no body. */
+/** The 20-byte head followed by the kind header; `null` means the frame has no body. */
 export function encodeFrameStart(
   kind: number,
   kindHeader: Uint8Array,
@@ -50,27 +66,34 @@ export function encodeFrameStart(
 ): Uint8Array {
   const bytes = new Uint8Array(FRAME_HEAD_BYTES + kindHeader.length);
   const view = viewOf(bytes);
-  putU8(view, 0, 'kind', kind);
-  putU8(view, 1, 'frameFlags', bodyLen === null ? 0 : FRAME_FLAG_BODY);
-  putU16(view, 2, 'headerLen', kindHeader.length);
-  putU64(view, 4, 'bodyLen', bodyLen ?? 0);
+  const L = FRAME_HEAD_LAYOUT;
+  putU8(view, L.kind.offset, 'kind', kind);
+  putU8(
+    view,
+    L.frameFlags.offset,
+    'frameFlags',
+    bodyLen === null ? 0 : FRAME_FLAG_BODY,
+  );
+  putU32(view, L.headerLen.offset, 'headerLen', kindHeader.length);
+  putU64(view, L.bodyLen.offset, 'bodyLen', bodyLen ?? 0);
   bytes.set(kindHeader, FRAME_HEAD_BYTES);
   const frameCrc = crc32(
     kindHeader,
     crc32(bytes.subarray(0, FRAME_CRC_COVERS_BYTES)),
   );
-  putU32(view, FRAME_CRC_COVERS_BYTES, 'frameCrc', frameCrc);
+  putU32(view, L.frameCrc.offset, 'frameCrc', frameCrc);
   return bytes;
 }
 
 function parseRawHead(head: Uint8Array): RawFrameHead {
   const view = viewOf(head);
+  const L = FRAME_HEAD_LAYOUT;
   return {
-    kind: view.getUint8(0),
-    frameFlags: view.getUint8(1),
-    headerLen: view.getUint16(2, true),
-    bodyLen: view.getBigUint64(4, true),
-    frameCrc: view.getUint32(FRAME_CRC_COVERS_BYTES, true),
+    kind: view.getUint8(L.kind.offset),
+    frameFlags: view.getUint8(L.frameFlags.offset),
+    headerLen: view.getUint32(L.headerLen.offset, true),
+    bodyLen: view.getBigUint64(L.bodyLen.offset, true),
+    frameCrc: view.getUint32(L.frameCrc.offset, true),
   };
 }
 
@@ -104,9 +127,17 @@ function assertFrameCrc(
 /** Checks that run only after the frame CRC has passed, so a failure here is a writer bug. */
 function buildHead(
   offset: number,
+  head: Uint8Array,
   raw: RawFrameHead,
   kindHeader: Uint8Array,
 ): FrameHead {
+  const reserved = FRAME_HEAD_LAYOUT.reserved;
+  assertAllZero(
+    head,
+    reserved.offset,
+    reserved.offset + reserved.size,
+    `Journal frame head reserved bytes at offset ${offset}`,
+  );
   const hasBodyFlag = (raw.frameFlags & FRAME_FLAG_BODY) !== 0;
   if ((raw.frameFlags & ~FRAME_FLAG_BODY) !== 0) {
     throw new JournalFormatError(
@@ -142,7 +173,10 @@ function doesNotFit(offset: number, detail: string): JournalFrameError {
  */
 export function decodeFrameStart(bytes: Uint8Array, offset: number): FrameHead {
   if (bytes.length < FRAME_HEAD_BYTES) {
-    throw doesNotFit(offset, `only ${bytes.length} bytes for a 16-byte head`);
+    throw doesNotFit(
+      offset,
+      `only ${bytes.length} bytes for a ${FRAME_HEAD_BYTES}-byte head`,
+    );
   }
   const head = bytes.subarray(0, FRAME_HEAD_BYTES);
   const raw = parseRawHead(head);
@@ -157,7 +191,7 @@ export function decodeFrameStart(bytes: Uint8Array, offset: number): FrameHead {
     FRAME_HEAD_BYTES + raw.headerLen,
   );
   assertFrameCrc(offset, head, raw, kindHeader);
-  return buildHead(offset, raw, kindHeader);
+  return buildHead(offset, head, raw, kindHeader);
 }
 
 /**
@@ -187,7 +221,7 @@ export async function readFrameHead(
     raw.headerLen,
   );
   assertFrameCrc(offset, head, raw, kindHeader);
-  return buildHead(offset, raw, kindHeader);
+  return buildHead(offset, head, raw, kindHeader);
 }
 
 /**
@@ -202,11 +236,6 @@ export async function writeFrame(
   kindHeader: Uint8Array,
   body?: FrameBody,
 ): Promise<number> {
-  if (kindHeader.length > MAX_KIND_HEADER_BYTES) {
-    throw new JournalFormatError(
-      `Kind header of ${kindHeader.length} bytes exceeds the ${MAX_KIND_HEADER_BYTES} a frame can describe`,
-    );
-  }
   const start = encodeFrameStart(
     kind,
     kindHeader,

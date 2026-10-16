@@ -8,7 +8,9 @@ import {
   SLOT_TABLE_BYTES,
   decodeSlotTable,
   encodeSlotTableInto,
+  type SlotTable,
 } from './slotTable.js';
+import { SUMMARY_KIND_CODE } from './slotSummary.js';
 import { randomSlotTable } from './__tests__/support/randomRecords.js';
 import { SeededRandom } from './__tests__/support/seededRandom.js';
 
@@ -36,7 +38,10 @@ describe('slot table', () => {
     expect(view.getUint32(44, true)).toBe(second.gen);
     expect(view.getBigUint64(48, true)).toBe(second.imageKeyHash);
     expect(view.getUint32(56, true)).toBe(second.imageGen);
-    expect(view.getUint32(60, true)).toBe(0);
+    expect(view.getUint8(60)).toBe(
+      second.summaryKind === null ? 0 : SUMMARY_KIND_CODE[second.summaryKind],
+    );
+    expect(Array.from(bytes.subarray(61, 64))).toStrictEqual([0, 0, 0]);
     const third = table.familySlots[2];
     expect(view.getBigUint64(96 + 32, true)).toBe(third.familyKeyHash);
     expect(view.getUint32(96 + 40, true)).toBe(third.estimatorRev);
@@ -59,5 +64,39 @@ describe('slot table', () => {
     bytes[31] = 1;
 
     expect(() => decodeSlotTable(bytes, 0)).toThrow(/pad/);
+  });
+
+  it('records the summary kind of each format slot, 0 meaning an unassigned slot', () => {
+    const base = randomSlotTable(new SeededRandom(4));
+    const kinds = [
+      ['anthropic', 1],
+      ['chat', 2],
+      ['responses', 3],
+    ] as const;
+    const table: SlotTable = {
+      ...base,
+      formatSlots: [
+        { ...base.formatSlots[0], summaryKind: kinds[0][0] },
+        { ...base.formatSlots[1], summaryKind: kinds[1][0] },
+        { ...base.formatSlots[2], summaryKind: kinds[2][0] },
+      ],
+    };
+    const bytes = new Uint8Array(SLOT_TABLE_BYTES);
+    encodeSlotTableInto(bytes, 0, table);
+
+    expect([bytes[28], bytes[60], bytes[92]]).toStrictEqual([1, 2, 3]);
+    expect(
+      decodeSlotTable(bytes, 0).formatSlots.map((s) => s.summaryKind),
+    ).toStrictEqual(['anthropic', 'chat', 'responses']);
+    bytes[28] = 0;
+    expect(decodeSlotTable(bytes, 0).formatSlots[0].summaryKind).toBeNull();
+  });
+
+  it('rejects a summary kind code that is not 0 to 3', () => {
+    const bytes = new Uint8Array(SLOT_TABLE_BYTES);
+    encodeSlotTableInto(bytes, 0, randomSlotTable(new SeededRandom(5)));
+    bytes[60] = 4;
+
+    expect(() => decodeSlotTable(bytes, 0)).toThrow(/summary kind/);
   });
 });
