@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
 import type { JournalHeader } from './fileHeader.js';
-import type { FrameHead } from './frame.js';
+import type { FrameHead, FrameStart } from './frame.js';
 import {
   createFileHandleReader,
   type JournalFileHandle,
@@ -49,6 +49,7 @@ export async function openJournalReadOnly(
       trailer === undefined
         ? {
             readRecordHead: (): Promise<FrameHead> => noCommittedState(),
+            readRecordStart: (): Promise<FrameStart> => noCommittedState(),
             readRecordBody: (): AsyncGenerator<Uint8Array> =>
               noCommittedState(),
           }
@@ -59,6 +60,7 @@ export async function openJournalReadOnly(
       trailer,
       fileSize: size,
       readRecordHead: access.readRecordHead,
+      readRecordStart: access.readRecordStart,
       readRecordBody: access.readRecordBody,
       close: () => handle.close(),
     };

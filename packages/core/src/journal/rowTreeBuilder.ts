@@ -206,10 +206,10 @@ export async function appendRowEntries(
   appender: RecordAppender,
   algebra: RowTreeAlgebra,
   spine: RightSpine | undefined,
-  entries: readonly RowEntry[],
+  entries: Iterable<RowEntry> | AsyncIterable<RowEntry>,
 ): Promise<RowTreeState> {
   const assembler = new RowTreeAssembler(appender, algebra, spine);
-  for (const entry of entries) await assembler.add(entry);
+  for await (const entry of entries) await assembler.add(entry);
   const state = await assembler.finish();
   if (state === undefined) {
     throw new JournalFormatError('A row append needs at least one entry');

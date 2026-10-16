@@ -8,8 +8,10 @@ import {
   type RecordAppender,
 } from './groupAppender.js';
 import {
+  createFileHandleReader,
   createFileHandleSink,
   type JournalFileHandle,
+  type PositionalReader,
 } from './positionalFile.js';
 import {
   encodeTrailerRecord,
@@ -85,6 +87,8 @@ export class JournalGroupWriter {
   private readonly handle: JournalFileHandle;
   private readonly syncMarker: Uint8Array;
   private readonly dependencies: GroupWriterDependencies;
+  /** Positional reads on the writer's own descriptor; they never touch its write offset. */
+  readonly reader: PositionalReader;
   private writeOffset: number;
   private publishedTrailer: TrailerHeader | undefined;
   private queue: Promise<void> = Promise.resolve();
@@ -93,6 +97,7 @@ export class JournalGroupWriter {
 
   constructor(start: GroupWriterStart, dependencies: GroupWriterDependencies) {
     this.handle = start.handle;
+    this.reader = createFileHandleReader(start.handle);
     this.syncMarker = start.syncMarker;
     this.writeOffset = start.writeOffset;
     this.publishedTrailer = start.published;

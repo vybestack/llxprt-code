@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalCorruptionError, JournalFrameError } from './errors.js';
-import { readFrameBody, readFrameHead, type FrameHead } from './frame.js';
+import {
+  readFrameBody,
+  readFrameStart,
+  type FrameHead,
+  type FrameStart,
+} from './frame.js';
 import type { PositionalReader } from './positionalFile.js';
 import type { TrailerHeader } from './trailerRecord.js';
 
@@ -24,6 +29,15 @@ export interface RecordAccess {
     what?: string,
     prefetchBytes?: number,
   ): Promise<FrameHead>;
+  /**
+   * The head and the body bytes that arrived with it, in one read of up to
+   * `prefetchBytes`. The prefix is not CRC-checked (see `FrameStart`).
+   */
+  readRecordStart(
+    offset: number,
+    what: string,
+    prefetchBytes: number,
+  ): Promise<FrameStart>;
   /** Streams the body; the CRC is checked after the last chunk, so consume it to the end. */
   readRecordBody(
     head: FrameHead,
@@ -50,22 +64,31 @@ export function createRecordAccess(
       error.message,
       { cause: error },
     );
+  const readStart = async (
+    offset: number,
+    what: string,
+    prefetchBytes?: number,
+  ): Promise<FrameStart> => {
+    try {
+      return await readFrameStart(
+        reader,
+        offset,
+        trailer.durableEnd,
+        prefetchBytes,
+      );
+    } catch (error) {
+      if (error instanceof JournalFrameError) {
+        throw corruption(what, offset, error);
+      }
+      throw error;
+    }
+  };
   return {
     async readRecordHead(offset, what = DEFAULT_WHAT, prefetchBytes) {
-      try {
-        return await readFrameHead(
-          reader,
-          offset,
-          trailer.durableEnd,
-          prefetchBytes,
-        );
-      } catch (error) {
-        if (error instanceof JournalFrameError) {
-          throw corruption(what, offset, error);
-        }
-        throw error;
-      }
+      return (await readStart(offset, what, prefetchBytes)).head;
     },
+    readRecordStart: (offset, what, prefetchBytes) =>
+      readStart(offset, what, prefetchBytes),
     async *readRecordBody(head, chunkBytes, what = DEFAULT_WHAT) {
       try {
         yield* readFrameBody(reader, head, chunkBytes);

@@ -35,6 +35,8 @@ export interface Failures {
   failTruncate?: boolean;
   /** Holds the write at this index until `release` is called. */
   gateWriteAt?: number;
+  /** Counts the positional reads that reach the file. */
+  readCounter?: { reads: number };
 }
 
 export interface TestJournalSeams {
@@ -62,8 +64,10 @@ function wrapHandle(
   };
   return {
     fd: real.fd,
-    read: (buffer, offset, length, position) =>
-      real.read(buffer, offset, length, position),
+    read: (buffer, offset, length, position) => {
+      if (failures.readCounter !== undefined) failures.readCounter.reads += 1;
+      return real.read(buffer, offset, length, position);
+    },
     write: async (buffer, offset, length, position) => {
       await admit(position, length);
       return real.write(buffer, offset, length, position);

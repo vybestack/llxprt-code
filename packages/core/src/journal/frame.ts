@@ -217,6 +217,18 @@ export function decodeFrameStart(bytes: Uint8Array, offset: number): FrameHead {
   return buildHead(offset, head, raw, kindHeader);
 }
 
+/** A validated head with the bytes that followed the kind header in the same read. */
+export interface FrameStart {
+  readonly head: FrameHead;
+  /**
+   * Body bytes that arrived with the head, at most the prefetch size and at
+   * most the body. They are not covered by the body CRC check, so only a
+   * caller that accepts that (design 4.6: a rebuild reads a row's id piece
+   * and never its blocks) may use them.
+   */
+  readonly bodyPrefix: Uint8Array;
+}
+
 /**
  * Reads the head and kind header of the frame at `offset`, in the order of
  * design 2.2: the frame fits in the file, then the frame CRC matches.
@@ -226,12 +238,12 @@ export function decodeFrameStart(bytes: Uint8Array, offset: number): FrameHead {
  * the kind header in one read (clipped to the end of the file); a kind header
  * larger than that is read with a second one.
  */
-export async function readFrameHead(
+export async function readFrameStart(
   reader: PositionalReader,
   offset: number,
   fileSize: number,
   prefetchBytes: number = FRAME_HEAD_BYTES,
-): Promise<FrameHead> {
+): Promise<FrameStart> {
   if (offset + FRAME_HEAD_BYTES > fileSize) {
     throw doesNotFit(offset, `file ends at ${fileSize}`);
   }
@@ -248,12 +260,27 @@ export async function readFrameHead(
     );
   }
   const kindHeaderEnd = FRAME_HEAD_BYTES + raw.headerLen;
-  const kindHeader =
-    kindHeaderEnd <= first.length
-      ? first.slice(FRAME_HEAD_BYTES, kindHeaderEnd)
-      : await reader.readAt(offset + FRAME_HEAD_BYTES, raw.headerLen);
+  const inFirstRead = kindHeaderEnd <= first.length;
+  const kindHeader = inFirstRead
+    ? first.slice(FRAME_HEAD_BYTES, kindHeaderEnd)
+    : await reader.readAt(offset + FRAME_HEAD_BYTES, raw.headerLen);
   assertFrameCrc(offset, head, raw, kindHeader);
-  return buildHead(offset, head, raw, kindHeader);
+  const bodyEnd = Math.min(first.length, kindHeaderEnd + Number(raw.bodyLen));
+  return {
+    head: buildHead(offset, head, raw, kindHeader),
+    bodyPrefix: inFirstRead
+      ? first.slice(kindHeaderEnd, bodyEnd)
+      : new Uint8Array(0),
+  };
+}
+
+export async function readFrameHead(
+  reader: PositionalReader,
+  offset: number,
+  fileSize: number,
+  prefetchBytes: number = FRAME_HEAD_BYTES,
+): Promise<FrameHead> {
+  return (await readFrameStart(reader, offset, fileSize, prefetchBytes)).head;
 }
 
 /**
