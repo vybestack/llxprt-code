@@ -1,9 +1,10 @@
-import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
 import { useIdePromptComplete } from './useIdePromptComplete.js';
 import {
   computeIsInputActive,

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStdin, useStdout } from 'ink';
@@ -43,6 +44,11 @@ import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './historyTokenSubscriptions.js';
+import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
 import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
@@ -347,7 +353,7 @@ function useBootstrapEvents(
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
     metrics: props.metrics,
-    uiRuntime,
+    ...useHistoryMetricBindings(uiRuntime),
     updateHistoryTokenCount,
     recordingIntegrationRef,
     recordingOwner: props.recordingOwner,
@@ -407,5 +413,28 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     shouldShowIdePrompt: e.shouldShowIdePrompt,
     handleNewMessage: e.handleNewMessage,
     clearConsoleMessagesState: e.clearConsoleMessagesState,
+  };
+}
+
+function useHistoryMetricBindings(uiRuntime: UiRuntime) {
+  const runtime = useRuntimeApi();
+  const readHistory = useCallback(() => {
+    const client = uiRuntime.agentClientSource.getAgentClient();
+    return client.hasChatInitialized() === true
+      ? (client.getHistoryService() ?? null)
+      : null;
+  }, [uiRuntime]);
+  const logger = useMemo(() => new DebugLogger('llxprt:ui:tokentracking'), []);
+  return {
+    subscribeHistoryTokens: useMemo(
+      () => bindHistoryTokenSubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    subscribeRecordingHistory: useMemo(
+      () => bindRecordingHistorySubscription(readHistory, logger),
+      [readHistory, logger],
+    ),
+    readProviderMetrics: useBound(runtime, runtime.getActiveProviderMetrics),
+    readSessionTokenUsage: useBound(runtime, runtime.getSessionTokenUsage),
   };
 }
