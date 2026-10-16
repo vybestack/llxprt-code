@@ -59,7 +59,10 @@ import {
   type AppCommands,
 } from './contexts/AppCommandsContext.js';
 import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useCallback } from 'react';
+import { useBound } from './hooks/agentStream/useStreamOwnerCallbacks.js';
+import { useAutoPromptOperation } from './hooks/useAutoPromptOperation.js';
+import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
@@ -147,7 +150,38 @@ function useAppDialogsRuntime(
 ): AppDialogsResult {
   return useAppDialogs({
     config: props.slashCommandRuntime,
-    agent: props.agent,
+    recordRecordingEvent: useBound(
+      props.agent.session,
+      props.agent.session.recordRecordingEvent,
+    ),
+    switchProviderAfterAuth: useCallback(
+      (provider: string) =>
+        props.agent.setProvider(provider, undefined, { autoOAuth: false }),
+      [props.agent],
+    ),
+    listTools: useBound(props.agent.tools, props.agent.tools.list),
+    generatePrompt: useAutoPromptOperation(
+      useBound(props.agent, props.agent.getProvider),
+      useCallback(() => props.agent.agentClient, [props.agent]),
+      useBound(
+        props.agent.sessionClient,
+        props.agent.sessionClient.createDetachedAgentClient,
+      ),
+      useBound(
+        props.slashCommandRuntime,
+        props.slashCommandRuntime.getContentGeneratorConfig,
+      ),
+    ),
+    readPolicyRules: useMemo(
+      () =>
+        bindPolicyRulesReader(props.agent.policy, () =>
+          props.slashCommandRuntime.getApprovalMode(),
+        ),
+      [props.agent.policy, props.slashCommandRuntime],
+    ),
+    subagentDefinitions: props.agent.workspace.subagentDefinitions,
+    subagentWrites: props.agent.workspace.subagentWrites,
+    profileDefinitions: props.agent.workspace.profileDefinitions,
     settings: bootstrap.settings,
     store: dialogStore,
     dialogs: dialogOpeners,

@@ -9,9 +9,8 @@ import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
-import { useAutoPromptOperation } from '../../../hooks/useAutoPromptOperation.js';
-import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
-import { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
+import type { useAutoPromptOperation } from '../../../hooks/useAutoPromptOperation.js';
+import type { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
 import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
@@ -45,7 +44,6 @@ import type {
   IdeInfo,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { ConsoleMessageItem } from '../../../types.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
@@ -62,7 +60,18 @@ const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
   config: SlashCommandRuntime;
-  agent: Agent;
+  recordRecordingEvent: NonNullable<
+    Parameters<typeof bindModelSwitchRecording>[1]
+  >;
+  switchProviderAfterAuth: Parameters<
+    typeof useWelcomeOnboarding
+  >[0]['switchProviderAfterAuth'];
+  listTools: Parameters<typeof useToolsDialog>[0]['listTools'];
+  generatePrompt: ReturnType<typeof useAutoPromptOperation>;
+  readPolicyRules: ReturnType<typeof bindPolicyRulesReader>;
+  subagentDefinitions: Parameters<typeof useSubagentDialogCommands>[0];
+  subagentWrites: Parameters<typeof useSubagentDialogCommands>[1];
+  profileDefinitions: Parameters<typeof useSubagentDialogCommands>[2];
   settings: LoadedSettings;
   store: DialogStore;
   dialogs: DialogOpeners;
@@ -167,7 +176,7 @@ function useQueueErrorTimeoutWiring(
 }
 
 function useProviderDialogRecording(
-  session: Pick<Agent['session'], 'recordRecordingEvent'>,
+  recordRecordingEvent: AppDialogsParams['recordRecordingEvent'],
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegration: RecordingIntegration | undefined,
 ) {
@@ -175,10 +184,10 @@ function useProviderDialogRecording(
     () =>
       bindModelSwitchRecording(
         recordingOwner,
-        (event) => session.recordRecordingEvent(event),
+        recordRecordingEvent,
         recordingIntegration,
       ),
-    [session, recordingOwner, recordingIntegration],
+    [recordRecordingEvent, recordingOwner, recordingIntegration],
   );
 }
 
@@ -226,7 +235,7 @@ function useDialogsAuthProviders(
     setProvider: runtime.setProvider,
     getActiveModelName: runtime.getActiveModelName,
     recordProviderSwitch: useProviderDialogRecording(
-      p.agent.session,
+      p.recordRecordingEvent,
       p.recordingOwner,
       recordingIntegration,
     ),
@@ -280,11 +289,7 @@ function useDialogsWelcome(
     saveProfileSnapshot: p.runtime.saveProfileSnapshot,
     setDefaultProfileName: p.runtime.setDefaultProfileName,
     loadProfileByName: p.runtime.loadProfileByName,
-    switchProviderAfterAuth: useCallback(
-      (provider: string) =>
-        p.agent.setProvider(provider, undefined, { autoOAuth: false }),
-      [p.agent],
-    ),
+    switchProviderAfterAuth: p.switchProviderAfterAuth,
     updateActiveProviderApiKey: p.runtime.updateActiveProviderApiKey,
     authenticate: oauthControl.authenticate,
     suppressStartup: p.suppressStartupWelcome === true,
@@ -386,17 +391,17 @@ function useDialogHistoryMessage(turnStore: TurnStore) {
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, agent, dialogs } = p;
+  const { config, recordRecordingEvent, dialogs } = p;
   const addMessage = useDialogHistoryMessage(p.turnStore);
   const { recordingOwner, recordingIntegrationRef } = p;
   const recorder = useMemo<ProviderSwitchRecorder>(
     () =>
       dialogProviderSwitchRecorder(
         recordingOwner,
-        (event) => agent.session.recordRecordingEvent(event),
+        recordRecordingEvent,
         recordingIntegrationRef,
       ),
-    [agent, recordingOwner, recordingIntegrationRef],
+    [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
   );
   const loadProfile = useLoadProfileDialog({
     addMessage,
@@ -411,7 +416,7 @@ function useDialogsProfiles(p: AppDialogsParams) {
   });
   const toolsRaw = useToolsDialog({
     addMessage,
-    listTools: useCallback(() => agent.tools.list(), [agent]),
+    listTools: p.listTools,
     readDisabledTools: useCallback(
       () => config.getEphemeralSettings()['tools.disabled'],
       [config],
@@ -585,16 +590,6 @@ function useDialogActionsSync(
   }, [settingsStore, dialogActions]);
 }
 
-function useDialogPolicyReader(
-  policy: Parameters<typeof bindPolicyRulesReader>[0],
-  config: Pick<SlashCommandRuntime, 'getApprovalMode'>,
-) {
-  return useMemo(
-    () => bindPolicyRulesReader(policy, () => config.getApprovalMode()),
-    [policy, config],
-  );
-}
-
 export function useAppDialogs(params: AppDialogsParams) {
   const st = useDialogsStoreState(params.terminalStore, params.settingsStore);
   const core = useDialogsCore(params, st);
@@ -610,31 +605,27 @@ export function useAppDialogs(params: AppDialogsParams) {
     core.setContextLimit,
   );
   const profiles = useDialogsProfiles(params);
-  const { agent, recordingOwner, recordingIntegration } = params;
-  const generatePrompt = useAutoPromptOperation(
-    useBound(agent, agent.getProvider),
-    useCallback(() => agent.agentClient, [agent]),
-    useBound(
-      agent.sessionClient,
-      agent.sessionClient.createDetachedAgentClient,
-    ),
-    useBound(params.config, params.config.getContentGeneratorConfig),
-  );
-  const readPolicyRules = useDialogPolicyReader(agent.policy, params.config);
+  const {
+    recordRecordingEvent,
+    recordingOwner,
+    recordingIntegration,
+    generatePrompt,
+    readPolicyRules,
+  } = params;
   const subagents = useSubagentDialogCommands(
-    agent.workspace.subagentDefinitions,
-    agent.workspace.subagentWrites,
-    agent.workspace.profileDefinitions,
+    params.subagentDefinitions,
+    params.subagentWrites,
+    params.profileDefinitions,
     generatePrompt,
   );
   const recordModelSwitch = useMemo(
     () =>
       bindModelSwitchRecording(
         recordingOwner,
-        (event) => agent.session.recordRecordingEvent(event),
+        recordRecordingEvent,
         recordingIntegration,
       ),
-    [agent, recordingOwner, recordingIntegration],
+    [recordRecordingEvent, recordingOwner, recordingIntegration],
   );
   useDialogDataSync(
     params.settingsStore,
