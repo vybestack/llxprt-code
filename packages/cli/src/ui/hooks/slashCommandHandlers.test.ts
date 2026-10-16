@@ -23,7 +23,10 @@ import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtim
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { createDirectoryCommand } from '../commands/directoryCommand.js';
-import { bindDirectoryCommand } from '../commands/directoryCommandHost.js';
+import {
+  bindDirectoryCommand,
+  bindDirectoryChangeRecording,
+} from '../commands/directoryCommandHost.js';
 import { mkdtemp, readFile, rm, realpath } from 'node:fs/promises';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { tmpdir } from 'node:os';
@@ -209,9 +212,12 @@ describe('slashCommandHandlers', () => {
                 createDirectoryCommand(
                   bindDirectoryCommand(
                     runtime,
-                    agent,
-                    'agent',
-                    undefined,
+                    () => agent.agentClient.addDirectoryContext(),
+                    bindDirectoryChangeRecording(
+                      'agent',
+                      (event) => agent.session.recordRecordingEvent(event),
+                      undefined,
+                    ),
                     deps.commandContext.ui.addItem,
                     deps.commandContext.ui.setLlxprtMdFileCount,
                   ),

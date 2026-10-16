@@ -4,17 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
+import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { DirectoryCommandOperations } from './directoryCommand.js';
 
 export function bindDirectoryCommand(
   config: CliUiRuntime | null,
-  agent: Agent | null,
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recordingIntegration: RecordingIntegration | undefined,
+  addDirectoryContext: DirectoryCommandOperations['addDirectoryContext'],
+  recordDirectoriesChanged: DirectoryCommandOperations['recordDirectoriesChanged'],
   addItem: UseHistoryManagerReturn['addItem'],
   setMemoryFileCount: (count: number) => void,
 ): DirectoryCommandOperations {
@@ -46,20 +44,25 @@ export function bindDirectoryCommand(
     },
     addItem,
     setMemoryFileCount,
-    addDirectoryContext: async () => {
-      if (!agent) throw new Error('Session agent is unavailable');
-      await agent.agentClient.addDirectoryContext();
-    },
-    recordDirectoriesChanged: async (directories) => {
-      if (recordingOwner === 'agent') {
-        if (!agent) throw new Error('Session agent is unavailable');
-        await agent.session.recordRecordingEvent({
-          type: 'directories_changed',
-          directories: [...directories],
-        });
-      } else {
-        recordingIntegration?.recordDirectoriesChanged([...directories]);
-      }
-    },
+    addDirectoryContext,
+    recordDirectoriesChanged,
+  };
+}
+
+export function bindDirectoryChangeRecording(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordEvent: ((event: SessionRecordingEvent) => Promise<void>) | null,
+  recordRawDirectories: ((directories: string[]) => void) | undefined,
+): DirectoryCommandOperations['recordDirectoriesChanged'] {
+  return async (directories) => {
+    if (recordingOwner === 'agent') {
+      if (recordEvent === null) throw new Error('Session agent is unavailable');
+      await recordEvent({
+        type: 'directories_changed',
+        directories: [...directories],
+      });
+    } else {
+      recordRawDirectories?.([...directories]);
+    }
   };
 }
