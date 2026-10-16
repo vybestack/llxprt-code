@@ -32,6 +32,7 @@ import {
 } from './rowReads.js';
 import { readVersionAt } from './trailerAccess.js';
 import { versionOf, type Version } from './version.js';
+import { VersionSnapshot } from './versionSnapshot.js';
 import type { SlotKinds } from './aggregateComposition.js';
 
 /** What the store is built from: the file seams, the hash, the two normalizers and the planner. */
@@ -191,6 +192,11 @@ export class JournalStore {
     const root = this.rowRootRef();
     if (root === undefined || this.access === undefined) return;
     yield* iterateRowEntries(this.access, root, from);
+  }
+
+  /** The published version with the reads that reach it, taken together (see `VersionSnapshot`). */
+  snapshot(): VersionSnapshot {
+    return new VersionSnapshot(this.currentVersion, this.access);
   }
 
   /** The header and raw id strings of the row an entry points at (design 4.6), without its blocks. */

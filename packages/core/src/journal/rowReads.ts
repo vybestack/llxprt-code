@@ -87,15 +87,28 @@ export interface StoredRow {
   readonly blocks: readonly Uint8Array[];
 }
 
+/** Reads the body into one buffer of its declared length, so a row is never held twice. */
 async function readBody(
   access: RecordAccess,
   head: Parameters<RecordAccess['readRecordBody']>[0],
 ): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
+  const body = Buffer.allocUnsafe(head.bodyLen);
+  let filled = 0;
   for await (const chunk of access.readRecordBody(head, undefined, 'ROW')) {
-    chunks.push(chunk);
+    if (filled + chunk.length > head.bodyLen) {
+      throw new JournalFormatError(
+        `Row at offset ${head.offset} has more body bytes than its ${head.bodyLen}`,
+      );
+    }
+    body.set(chunk, filled);
+    filled += chunk.length;
   }
-  return Buffer.concat(chunks);
+  if (filled !== head.bodyLen) {
+    throw new JournalFormatError(
+      `Row at offset ${head.offset} has ${filled} body bytes, its head says ${head.bodyLen}`,
+    );
+  }
+  return body;
 }
 
 /**
