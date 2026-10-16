@@ -1,4 +1,3 @@
-import { createSessionMetrics } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,7 +7,6 @@ import {
   FatalInputError,
   type Config,
   type AgentRequestInput,
-  type WorkspaceTrustReadPort,
 } from '@vybestack/llxprt-code-core';
 
 import { parseSlashCommand } from './utils/commands.js';
@@ -16,7 +14,6 @@ import { CommandService } from './services/CommandService.js';
 import { bindShellPromptOperations } from './services/prompt-processors/shellPromptHost.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext, SlashCommand } from './ui/commands/types.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
 import { firstNonEmptyString } from './utils/coalesce.js';
@@ -33,8 +30,8 @@ export const handleSlashCommand = async (
   rawQuery: string,
   abortController: AbortController,
   config: Config,
-  agent: Agent | undefined,
-  trust: WorkspaceTrustReadPort | undefined,
+  readMetrics: () => SessionStatsState['metrics'],
+  isTrustedFolder: (() => boolean) | undefined,
 ): Promise<AgentRequestInput | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
@@ -42,8 +39,7 @@ export const handleSlashCommand = async (
   }
 
   // Only custom commands are supported for now.
-  const authority = agent?.ide ?? trust;
-  if (authority === undefined)
+  if (isTrustedFolder === undefined)
     throw new Error('File commands require the workspace trust authority');
   const loaders = [
     new FileCommandLoader(
@@ -53,7 +49,7 @@ export const handleSlashCommand = async (
         getProjectRoot: () => config.getProjectRoot(),
         getExtensions: () => config.getExtensions(),
         getFolderTrust: () => config.getFolderTrust(),
-        isTrustedFolder: () => authority.isTrustedFolder(),
+        isTrustedFolder,
       },
       bindShellPromptOperations(config),
     ),
@@ -69,7 +65,7 @@ export const handleSlashCommand = async (
   if (commandToExecute?.action) {
     const context = buildHeadlessCommandContext(
       config,
-      agent,
+      readMetrics,
       abortController.signal,
       trimmed,
       commandToExecute.name,
@@ -112,7 +108,7 @@ function commandPrompt(
 
 function buildHeadlessCommandContext(
   config: Config,
-  agent: Agent | undefined,
+  readMetrics: () => SessionStatsState['metrics'],
   signal: AbortSignal,
   trimmed: string,
   name: string,
@@ -121,8 +117,7 @@ function buildHeadlessCommandContext(
   const sessionStats: SessionStatsState = {
     sessionId: firstNonEmptyString(config.getSessionId(), 'unknown'),
     sessionStartTime: new Date(),
-    metrics:
-      agent === undefined ? createSessionMetrics() : agent.metrics.getMetrics(),
+    metrics: readMetrics(),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 1,

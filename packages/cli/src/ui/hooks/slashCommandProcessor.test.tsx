@@ -8,7 +8,15 @@ import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testH
 
 const runtimeApi = createMockRuntimeApi();
 const refreshAliases = vi.fn(async () => {});
-const oauthControl = { isAvailable: () => false };
+function unavailableOAuth(): never {
+  throw new Error('OAuth is unavailable in this command fixture');
+}
+const oauthControl = {
+  isAvailable: () => false,
+  getSupportedProviders: unavailableOAuth,
+  isAuthenticated: unavailableOAuth,
+  logout: unavailableOAuth,
+};
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => runtimeApi,
 }));

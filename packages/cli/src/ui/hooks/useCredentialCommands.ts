@@ -106,50 +106,9 @@ export function useCredentialCommands(
   const api = useRuntimeApi();
   const oauthControl = useOAuthControl();
   const recordSwitch = useSwitch(agent?.session, rawRecording, recordingOwner);
-  const baseurlCommand = useMemo(
-    () => createBaseurlCommand(bindBaseurlCommandOperations(api, agent)),
-    [api, agent],
-  );
-  const logoutCommand = useMemo(
-    () => createLogoutCommand(bindLogoutCommandOperations(agent, oauthControl)),
-    [agent, oauthControl],
-  );
-  const keyfileCommand = useMemo(
-    () => createKeyfileCommand(bindKeyfileCommandOperations(api, settings)),
-    [api, settings],
-  );
-  const keyCommand = useMemo(
-    () => createKeyCommand(bindKeyCommandOperations(api, config)),
-    [api, config],
-  );
-  const quotaCommand = useMemo(
-    () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
-    [api, oauthControl],
-  );
-  const mcpAuthCommand = useMemo(
-    () =>
-      createMcpAuthCommand(
-        bindMcpAuthCommandOperations(agent, config),
-        () => settings.merged.enableFuzzyFiltering ?? true,
-        addItem,
-        reloadCommands,
-      ),
-    [agent, config, addItem, reloadCommands, settings],
-  );
-  const mcpCommand = useMcpRegistration(
-    agent?.mcp,
-    config !== null,
-    mcpAuthCommand,
-    addItem,
-    reloadCommands,
-  );
-  const profileCommand = useProfileOwnerCommand(
-    agent,
-    api,
-    settings,
-    oauthControl,
-    recordSwitch,
-  );
+
+  const auth = agent?.auth;
+
   return useMemoCredentialRegistry({
     ...useModelSelectionCommands(
       useBound(api, api.setActiveModel),
@@ -162,14 +121,57 @@ export function useCredentialCommands(
       refreshProviderAliases,
       recordSwitch,
     ),
-    baseurlCommand,
-    logoutCommand,
-    keyfileCommand,
-    keyCommand,
+    baseurlCommand: useBaseurlRegistration(
+      useBound(agent, agent?.getProvider ?? unavailableProvider),
+      useBound(agent?.auth, agent?.auth.setBaseUrl ?? unavailableProvider),
+      agent !== null,
+      useBound(api, api.providerStatus),
+      useBound(api, api.updateActiveProviderBaseUrl),
+    ),
+    logoutCommand: useLogoutRegistration(
+      useBound(agent, agent?.listProviders ?? unavailableProvider),
+      useBound(auth, auth?.status ?? unavailableProvider),
+      useBound(auth, auth?.logout ?? unavailableProvider),
+      useBound(oauthControl, oauthControl.logout),
+      agent !== null,
+      useBound(oauthControl, oauthControl.getSupportedProviders),
+      useBound(oauthControl, oauthControl.isAuthenticated),
+    ),
+    keyfileCommand: useMemo(
+      () => createKeyfileCommand(bindKeyfileCommandOperations(api, settings)),
+      [api, settings],
+    ),
+    keyCommand: useMemo(
+      () => createKeyCommand(bindKeyCommandOperations(api, config)),
+      [api, config],
+    ),
     authCommand: useAuthOwnerCommand(oauthControl, settings),
-    quotaCommand,
-    mcpCommand,
-    profileCommand,
+    quotaCommand: useMemo(
+      () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
+      [api, oauthControl],
+    ),
+    mcpCommand: useMcpRegistration(
+      agent?.mcp,
+      config !== null,
+      useMcpAuthRegistration(
+        useMemo(
+          () => bindMcpAuthCommandOperations(agent, config),
+          [agent, config],
+        ),
+        settings,
+        addItem,
+        reloadCommands,
+      ),
+      addItem,
+      reloadCommands,
+    ),
+    profileCommand: useProfileOwnerCommand(
+      agent,
+      api,
+      settings,
+      oauthControl,
+      recordSwitch,
+    ),
     ...useMemo(createToolkeyCommands, []),
   });
 }
@@ -281,5 +283,95 @@ function useMcpRegistration(
         ),
       ),
     [mcp, isConfigured, auth, addItem, reloadCommands],
+  );
+}
+
+function unavailableProvider(): never {
+  throw new Error('Session agent is unavailable');
+}
+
+function useBaseurlRegistration(
+  readProvider: Agent['getProvider'],
+  writeBaseUrl: Agent['auth']['setBaseUrl'],
+  hasAgent: boolean,
+  readBootstrapStatus: ReturnType<typeof useRuntimeApi>['providerStatus'],
+  updateBootstrapBaseUrl: ReturnType<
+    typeof useRuntimeApi
+  >['updateActiveProviderBaseUrl'],
+): SlashCommand {
+  return useMemo(
+    () =>
+      createBaseurlCommand(
+        hasAgent
+          ? bindBaseurlCommandOperations(readProvider, writeBaseUrl)
+          : {
+              activeProviderName: () =>
+                readBootstrapStatus().providerName ?? 'unknown',
+              updateBaseUrl: async (baseUrl) =>
+                (await updateBootstrapBaseUrl(baseUrl)).message,
+            },
+      ),
+    [
+      readProvider,
+      writeBaseUrl,
+      hasAgent,
+      readBootstrapStatus,
+      updateBootstrapBaseUrl,
+    ],
+  );
+}
+
+function useLogoutRegistration(
+  listProviders: Agent['listProviders'],
+  readStatus: Agent['auth']['status'],
+  logout: (provider: string) => Promise<void>,
+  bootstrapLogout: (provider: string) => Promise<void>,
+  hasAgent: boolean,
+  listBootstrapProviders: ReturnType<
+    typeof useOAuthControl
+  >['getSupportedProviders'],
+  readBootstrapStatus: ReturnType<typeof useOAuthControl>['isAuthenticated'],
+): SlashCommand {
+  return useMemo(
+    () =>
+      createLogoutCommand(
+        bindLogoutCommandOperations(
+          hasAgent
+            ? () => listProviders().map((provider) => provider.name)
+            : listBootstrapProviders,
+          hasAgent
+            ? (provider) => readStatus(provider) === 'authenticated'
+            : readBootstrapStatus,
+          hasAgent ? logout : bootstrapLogout,
+          hasAgent ? 'Supported' : 'Supported providers',
+        ),
+      ),
+    [
+      listProviders,
+      readStatus,
+      logout,
+      bootstrapLogout,
+      hasAgent,
+      listBootstrapProviders,
+      readBootstrapStatus,
+    ],
+  );
+}
+
+function useMcpAuthRegistration(
+  operations: ReturnType<typeof bindMcpAuthCommandOperations>,
+  settings: LoadedSettings,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
+): SlashCommand {
+  return useMemo(
+    () =>
+      createMcpAuthCommand(
+        operations,
+        () => settings.merged.enableFuzzyFiltering ?? true,
+        addItem,
+        reloadCommands,
+      ),
+    [operations, settings, addItem, reloadCommands],
   );
 }
