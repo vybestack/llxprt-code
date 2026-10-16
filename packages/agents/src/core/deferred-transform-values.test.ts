@@ -49,7 +49,7 @@ async function observeDeferred(
       probes,
     );
     const failure = new Error('deferred streamed finalization rollback');
-    const finalization = pauseTransformFinalization(
+    const finalization = await pauseTransformFinalization(
       history,
       rollback ? failure : undefined,
     );

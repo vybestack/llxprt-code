@@ -406,7 +406,7 @@ describe('AC5 — content equivalence unchanged', () => {
       fc.asyncProperty(
         fc.array(contentArb, { maxLength: 20 }),
         async (entries) => {
-          conversationManager.clearHistory();
+          await conversationManager.clearHistory();
           for (const entry of entries) {
             conversationManager.addHistory(entry);
           }

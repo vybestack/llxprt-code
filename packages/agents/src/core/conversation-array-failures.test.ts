@@ -19,17 +19,17 @@ import {
   recordArrayProof,
 } from './__tests__/support/conversation-array-test-helpers.js';
 
-function injectFailure(
+async function injectFailure(
   history: HistoryService,
   stage: string,
   failure: Error,
-): string[] {
+): Promise<string[]> {
   const order: string[] = [];
   const visit = (label: string): void => {
     order.push(label);
     if (stage === label) throw failure;
   };
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => {
       visit('prepare');
       return {
@@ -74,7 +74,7 @@ describe('conversation array replacement fault compensation', () => {
           const expected = await detachedDigest(detachedRows(size));
           const range = expectedRange(size);
           const failure = new Error(stage);
-          const order = injectFailure(history, stage, failure);
+          const order = await injectFailure(history, stage, failure);
           if (stage === 'zero' || stage === 'prefix')
             recorder.failAdmissionAfter(stage === 'zero' ? 0 : 2);
           forbidArrayRollback(history);

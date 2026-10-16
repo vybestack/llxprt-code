@@ -646,7 +646,10 @@ export type {
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
 } from './runtime/AgentRuntimeContext.js';
-export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
+export {
+  createAgentRuntimeContext,
+  registerRuntimeMediaOwner,
+} from './runtime/createAgentRuntimeContext.js';
 
 // Export profile contracts and ports
 export * from './profiles/index.js';

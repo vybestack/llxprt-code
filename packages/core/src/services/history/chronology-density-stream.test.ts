@@ -37,7 +37,7 @@ describe('density repeatable candidate publication', () => {
           metadata: { chronology: marker },
         };
         const primary = new Error('candidate publication');
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant((input) => ({
             publish: () => {
               expect(Array.isArray(input.next)).toBe(false);

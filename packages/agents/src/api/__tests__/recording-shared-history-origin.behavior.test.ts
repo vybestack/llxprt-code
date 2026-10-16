@@ -107,7 +107,7 @@ describe('shared history recording origin', () => {
         ),
       );
       if (!reused) throw new Error('Missing committed content');
-      history.clear();
+      await history.clear();
       history.add(reused);
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });

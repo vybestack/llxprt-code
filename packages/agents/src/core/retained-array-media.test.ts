@@ -127,7 +127,7 @@ function registerCleanup(): void {
             }
             await release(id, owner);
           };
-          fixture.history.registerMediaOwner(
+          await fixture.history.registerMediaOwner(
             mediaParticipant(() => ({
               publish: () => undefined,
               finalize: () => {

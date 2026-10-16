@@ -54,7 +54,7 @@ for (const size of [512, 8192]) {
           const first = await cursor.next();
           expect(first.value).toStrictEqual(publicRow(0));
           expect(counters.snapshot().rowsDecoded).toBe(1);
-          history.clear();
+          await history.clear();
           const second = await cursor.next();
           expect(second.value).toStrictEqual(publicRow(1));
           await cursor.return();

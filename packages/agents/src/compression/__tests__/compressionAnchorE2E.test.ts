@@ -224,7 +224,7 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
 
     // Now manually simulate a prefix-destroying result by clearing history
     // and resetting the anchor (as TopDownTruncationStrategy path would do)
-    historyService.clear();
+    await historyService.clear();
     historyService.resetCacheAnchorSeq();
     const resetAnchor = historyService.getCacheAnchorSeq();
 
@@ -258,14 +258,14 @@ describe('Defect 6: client.restoreHistory resets the cache anchor (#3070)', () =
     expect(hs.getCacheAnchorSeq()).toBe(0);
   });
 
-  it('a wholesale history replacement via addAll after resetCacheAnchorSeq leaves the anchor at 0', () => {
+  it('a wholesale history replacement via addAll after resetCacheAnchorSeq leaves the anchor at 0', async () => {
     const hs = new HistoryService();
     hs.setCacheAnchorSeq(99);
     expect(hs.getCacheAnchorSeq()).toBe(99);
 
     // Simulate the restoreHistory flow: reset + validateAndFix + addAll
     hs.resetCacheAnchorSeq();
-    hs.validateAndFix();
+    await hs.validateAndFix();
     const newHistory: IContent[] = [];
     for (let i = 0; i < 5; i++) {
       newHistory.push(humanMsg(`restored user ${i}`));

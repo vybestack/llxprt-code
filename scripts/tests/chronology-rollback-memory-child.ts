@@ -30,7 +30,7 @@ const trap = process.argv[3] === 'trap';
 if (!Number.isSafeInteger(size) || size < 1)
   throw new Error('Expected positive row count');
 await withSuffixFixture(32, async (service) => {
-  service.registerMediaOwner(
+  await service.registerMediaOwner(
     mediaParticipant(() => ({
       publish: () => undefined,
       rollback: () => undefined,
@@ -54,7 +54,7 @@ await withSuffixFixture(
     });
     let heldRows = 0;
     let heldBytes = 0;
-    service.registerMediaOwner(
+    await service.registerMediaOwner(
       mediaParticipant((input) => {
         heldRows = input.previous.length;
         for (const row of input.previous)

@@ -48,7 +48,7 @@ async function pendingCheckpoint(
   const replace = history.detachedValues.replace;
   history.detachedValues.replace = (rows, model, options) =>
     replace(rows, model, { ...options, signal: controller.signal });
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => ({
       publish: () => undefined,
       rollback: () => undefined,
@@ -116,7 +116,7 @@ async function retainingControl(
     }
     let held = owners.snapshot();
     const failure = new Error('retaining caller');
-    history.registerMediaOwner(
+    await history.registerMediaOwner(
       mediaParticipant(() => ({
         publish: () => undefined,
         rollback: () => undefined,

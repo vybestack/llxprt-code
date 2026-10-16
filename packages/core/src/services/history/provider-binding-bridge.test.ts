@@ -34,13 +34,13 @@ async function bindingFault(size: number, stage: string): Promise<number> {
     if (stage === 'zero' || stage === 'prefix')
       recorder.failAdmissionAfter(stage === 'zero' ? 0 : 2);
     if (stage === 'prepare')
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => {
           throw primary;
         }),
       );
     if (stage === 'publish' || stage === 'finalize')
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => {
             if (stage === 'publish') throw primary;

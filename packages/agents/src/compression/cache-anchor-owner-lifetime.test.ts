@@ -72,7 +72,7 @@ for (const size of [512, 8192]) {
         const release = gate();
         const failure = new Error('compression finalizer failed');
         let fail = true;
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant(() => ({
             publish: (): void => {},
             finalize: async (): Promise<void> => {

@@ -179,7 +179,7 @@ describe('HistoryService chronology - AC2: seq never reused after clear()', () =
     service.add(synchronousInput1);
     // seq max is now 2
 
-    service.clear();
+    await service.clear();
     const synchronousInput2 = makeHumanContent('c');
     service.add(synchronousInput2);
     expect(service.length()).toBe(1);
@@ -423,7 +423,7 @@ describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () =
     const synchronousInput1 = makeHumanContent('next question');
     service.add(synchronousInput1);
 
-    service.validateAndFix();
+    await service.validateAndFix();
     expect(service.length()).toBe(3);
 
     const synchronousMarkers = [synchronousInput0, synchronousInput1].map(

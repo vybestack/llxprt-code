@@ -451,9 +451,12 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   /**
-   * Clear all history
+   * Clear all history. Resolves once the clear has been applied. When
+   * compression holds the history lock the clear is queued: the promise
+   * settles when the queue flushes at the end of compression, and a failure
+   * both rejects it and is reported by the flush like any queued operation.
    */
-  clear(): void {
+  async clear(): Promise<void> {
     const rebuilding = this.isCompressing && this.inRebuildScope;
     const clearAndRelease = (): void => {
       this.runSynchronousHistoryMutation(() => {
@@ -466,7 +469,17 @@ export class HistoryService extends HistoryServiceReads {
     };
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
-      this.queueCompressionOperation(clearAndRelease);
+      await new Promise<void>((resolve, reject) => {
+        this.queueCompressionOperation(() => {
+          try {
+            clearAndRelease();
+            resolve();
+          } catch (error: unknown) {
+            reject(error);
+            throw error;
+          }
+        });
+      });
       return;
     }
 
@@ -643,7 +656,7 @@ export class HistoryService extends HistoryServiceReads {
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
-  validateAndFix(): void {
+  async validateAndFix(): Promise<void> {
     this.runSynchronousHistoryMutation(() => this.validateAndFixInternal());
   }
 

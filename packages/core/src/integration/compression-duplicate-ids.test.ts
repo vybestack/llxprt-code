@@ -214,7 +214,7 @@ function legacyTest0() {
 function addHumanFixture(history: HistoryService, text: string): void {
   history.add({ speaker: 'human', blocks: [{ type: 'text', text }] });
 }
-function legacyTest1() {
+async function legacyTest1() {
   const historyService = new HistoryService();
   // Add some history with tool calls
   addHumanFixture(historyService, 'Do something');
@@ -245,7 +245,7 @@ function legacyTest1() {
   let curated = curatedHistoryForTest(historyService);
   let contents = encodeForProvider(curated);
   // Clear and rebuild
-  historyService.clear();
+  await historyService.clear();
   historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'Compressed context' }],
@@ -283,7 +283,7 @@ function legacyTest1() {
   curated = curatedHistoryForTest(historyService);
   contents = encodeForProvider(curated);
   // Clear and rebuild again
-  historyService.clear();
+  await historyService.clear();
   addHumanFixture(historyService, 'Double compressed context');
   // Re-add kept history
   const kept2 = contents.slice(-2);
@@ -307,7 +307,7 @@ describe('Compression and duplicate tool call IDs / should not create duplicate 
   });
 });
 describe('Compression and duplicate tool call IDs / should handle multiple compressions without duplicating IDs', () => {
-  it('should handle multiple compressions without duplicating IDs', () => {
-    expect(legacyTest1).not.toThrow();
+  it('should handle multiple compressions without duplicating IDs', async () => {
+    await expect(legacyTest1()).resolves.toBeUndefined();
   });
 });

@@ -28,7 +28,7 @@ describe('queued synchronous clear failure', () => {
       };
       history.on('tokensUpdated', rejectClear);
       try {
-        history.clear();
+        await history.clear();
         expect(history.length()).toBe(1);
         release.resolve();
         await expect(replacing).rejects.toThrow('queued clear observer failed');
@@ -59,7 +59,7 @@ describe('queued clear and append', () => {
       });
       await entered.promise;
       try {
-        history.clear();
+        await history.clear();
         history.add(next);
         release.resolve();
         await replacing;

@@ -817,7 +817,7 @@ export abstract class HistoryServiceCore
     return this.transformRows(transform, modelName, options);
   }
 
-  registerMediaOwner(owner: HistoryMediaOwner): void {
+  async registerMediaOwner(owner: HistoryMediaOwner): Promise<void> {
     this.runSynchronousHistoryMutation(() => {
       this.mediaOwner = owner;
       this.journal.withReadRows((cursor) => owner.adopt(cursor.rows()));

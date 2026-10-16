@@ -36,7 +36,7 @@ describe('density chronology rollback before the batch commit', () => {
         };
         if (stage === 'tokenizer')
           history.setTokenizerFactory(exactTokenizer(fail));
-        else history.registerMediaOwner(mediaParticipant(fail));
+        else await history.registerMediaOwner(mediaParticipant(fail));
         const error = await rejectedValue(
           history.applyDensityResult({
             removals: [2],

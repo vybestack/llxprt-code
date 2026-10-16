@@ -38,7 +38,7 @@ describe('frozen pending batch rollback', () => {
         const primary = new Error(`${stage} frozen batch failure`);
         if (stage === 'prepare') {
           let prepared = false;
-          history.registerMediaOwner(
+          await history.registerMediaOwner(
             mediaParticipant(() => {
               if (!prepared) {
                 prepared = true;

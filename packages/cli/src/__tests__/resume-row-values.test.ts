@@ -12,7 +12,7 @@ describe('relocated resume row values', () => {
       history.addAll([suffixRow(0), suffixRow(1)]);
       await history.waitForCommit();
       const collected = await collectResumeRows(history.streamRawHistory());
-      history.clear();
+      await history.clear();
       await history.waitForCommit();
       await history.dispose();
       gcAndSweep();

@@ -86,7 +86,7 @@ describe('history size breakdown via HistoryService.getRawHistory', () => {
     service.add(toolResponseItem('read_file', 'c1', 'a'.repeat(50_000)));
     expect((await sizeOf(service)).totalBytes).toBeGreaterThan(49_000);
 
-    service.clear();
+    await service.clear();
 
     const afterClear = await sizeOf(service);
     expect(afterClear.itemCount).toBe(0);

@@ -103,7 +103,7 @@ describe('Durable mutations @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / l
       toolCallContent('call-7', 'working'),
     ]);
 
-    session.history.validateAndFix();
+    await session.history.validateAndFix();
     await collectRowsForAssertions(
       session.history.streamRawHistory(),
       async (contentsForAssertions) => {
@@ -141,7 +141,7 @@ describe('Durable mutations @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / l
     ]);
 
     await session.history.applyDensityResult(makeDensityResult([2]));
-    session.history.validateAndFix();
+    await session.history.validateAndFix();
     await collectRowsForAssertions(
       session.history.streamRawHistory(),
       async (contentsForAssertions) => {

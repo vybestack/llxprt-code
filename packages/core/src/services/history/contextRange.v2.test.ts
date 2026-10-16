@@ -262,13 +262,13 @@ describe('HistoryService context range v2 membership changes', () => {
     expectWellFormedInterior(range);
   });
 
-  it('reports the full span as cleared on clear', () => {
+  it('reports the full span as cleared on clear', async () => {
     const service = new HistoryService();
     for (const text of ['one', 'two', 'three']) {
       service.add(textContent('human', text));
     }
     const events = captureRanges(service);
-    service.clear();
+    await service.clear();
     expect(events).toHaveLength(1);
     expect(lastRangeOf(events)).toStrictEqual({
       firstSeq: 0,

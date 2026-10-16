@@ -137,7 +137,7 @@ describe('ChatSession media history boundaries', () => {
 });
 
 async function testMediaHistory1(): Promise<void> {
-  const chat = createChat();
+  const chat = await createChat();
   const input = mediaHistory();
 
   await chat.setHistory(input);
@@ -150,7 +150,7 @@ async function testMediaHistory1(): Promise<void> {
 }
 
 async function testMediaHistory2(): Promise<void> {
-  const chat = createChat();
+  const chat = await createChat();
   let finishDeletion = (): void => {
     throw new Error('Provider-file deletion did not initialize');
   };
@@ -206,7 +206,7 @@ async function testMediaHistory2(): Promise<void> {
 }
 
 async function testMediaHistory3(): Promise<void> {
-  const chat = createChat();
+  const chat = await createChat();
   await chat.setHistory([
     { speaker: 'human', blocks: [{ type: 'text', text: 'retained' }] },
   ]);
@@ -241,7 +241,7 @@ async function testMediaHistory3(): Promise<void> {
 }
 
 async function testMediaHistory4(): Promise<void> {
-  const chat = createChat();
+  const chat = await createChat();
   await chat.setHistory([
     { speaker: 'human', blocks: [{ type: 'text', text: 'retained' }] },
   ]);
@@ -552,10 +552,10 @@ async function testMediaHistory16(): Promise<void> {
 }
 
 async function testMediaHistory17(): Promise<void> {
-  const oldChat = createChat();
+  const oldChat = await createChat();
   await oldChat.setHistory(mediaHistory());
   const live = oldChat.getHistoryService();
-  const candidate = createChat(async (request, bindings) => {
+  const candidate = await createChat(async (request, bindings) => {
     const media = await findReferenceMedia(request.contents);
     if (media !== undefined) {
       if (!bindings) throw new Error('Missing history binding');

@@ -79,7 +79,7 @@ for (const [size, bytes] of [
         const entered = envelopeGate();
         const finish = envelopeGate();
         const storage: Array<Iterable<IContent>> = [];
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant((rows) => {
             storage.push(rows.previous, rows.next);
             return {

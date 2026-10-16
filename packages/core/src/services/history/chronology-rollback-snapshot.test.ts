@@ -129,7 +129,7 @@ describe('rollback serialization order', () => {
       await history.addBatch([original]);
       forbidden = true;
       const primary = new Error('ownership prepare failure');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => {
           throw primary;
         }),

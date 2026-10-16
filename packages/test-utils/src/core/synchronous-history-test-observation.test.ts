@@ -69,7 +69,7 @@ function assertPendingValues(
 function assertEventSampling(
   service: HistoryService,
   original: IContent[],
-): void {
+): Array<Promise<void>> {
   let yielded = false;
   queueMicrotask(() => {
     yielded = true;
@@ -103,8 +103,9 @@ function assertEventSampling(
   expect(events[2].rows[original.length]).not.toBe(queued);
   expect(yielded).toBe(false);
   const rebuilt = suffixRow(original.length + 2);
+  const cleared: Array<Promise<void>> = [];
   service.rebuildWith(() => {
-    service.clear();
+    cleared.push(service.clear());
     service.add(rebuilt);
   });
   const afterCut = observeHistorySynchronouslyForTest(service);
@@ -118,17 +119,20 @@ function assertEventSampling(
   // These detached values are test-owned observations, not memory acceptance evidence.
   assertPendingValues(retained, original, original);
   expect(yielded).toBe(false);
+  return cleared;
 }
 
 describe('test-only same-turn history observation', () => {
   for (const size of [512, 8192]) {
     it(`keeps detached pending values and event-time samples through a cut marker and GC at ${size} rows`, async () => {
+      let cleared: Array<Promise<void>> = [];
       await withPendingObservation(size, (service, original) => {
-        assertEventSampling(service, original);
+        cleared = assertEventSampling(service, original);
         expect(observeHistorySynchronouslyForTest(service)[0]).toStrictEqual(
           suffixRow(size + 2),
         );
       });
+      await Promise.all(cleared);
     }, 120_000);
 
     it(`reads the same durable sequence with fresh decoded objects at ${size} rows`, async () => {
@@ -143,7 +147,7 @@ describe('test-only same-turn history observation', () => {
             expect(observed[index]).toStrictEqual(suffixRow(index));
             expect(observed[index]).not.toBe(reference[index]);
           }
-          service.clear();
+          await service.clear();
           expect(observeHistorySynchronouslyForTest(service)).toStrictEqual([]);
           await service.waitForCommit();
           gcAndSweep();

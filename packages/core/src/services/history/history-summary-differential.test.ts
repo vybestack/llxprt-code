@@ -232,7 +232,7 @@ describe('history scalar queries', () => {
         await rescanned('append after replace'),
       );
 
-      history.clear();
+      await history.clear();
       expect(await observed('clear')).toStrictEqual(await rescanned('clear'));
       await history.waitForCommit();
       expect(await observed('clear acknowledged')).toStrictEqual(

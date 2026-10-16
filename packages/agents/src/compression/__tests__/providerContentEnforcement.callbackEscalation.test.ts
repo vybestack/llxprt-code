@@ -117,7 +117,7 @@ async function shedOldestMessage(
   historyService: HistoryService,
 ): Promise<void> {
   const original = [...curatedHistoryForTest(historyService)];
-  historyService.clear();
+  await historyService.clear();
   for (const entry of original.slice(1)) {
     historyService.add(entry);
   }

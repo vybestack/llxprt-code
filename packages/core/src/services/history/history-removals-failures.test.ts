@@ -35,7 +35,7 @@ function registerRemovalFailure(
           };
           if (failure === 'observer') history.on('tokensUpdated', listener);
           const execute = async (): Promise<void> => {
-            if (operation === 'clear') history.clear();
+            if (operation === 'clear') await history.clear();
             else if (operation === 'pop') await history.pop();
             else await history.removeLastIfMatches(input[1]);
           };

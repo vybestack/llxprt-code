@@ -76,7 +76,7 @@ async function compare(size: number): Promise<void> {
       await recomposeFixture(history, providerPendingFixture()),
       Array.from({ length: size - 2 }, (_, index) => acceptedRow(index)),
     );
-    history.clear();
+    await history.clear();
     await history.addBatch(
       [acceptedRow(size), acceptedRow(size + 1)],
       undefined,

@@ -148,7 +148,7 @@ async function setupDurability(): Promise<void> {
     store,
   );
   history = new HistoryService();
-  history.registerMediaOwner(new HistoryMediaOwnership(store));
+  await history.registerMediaOwner(new HistoryMediaOwnership(store));
 }
 
 async function retireFailedObserver(): Promise<void> {

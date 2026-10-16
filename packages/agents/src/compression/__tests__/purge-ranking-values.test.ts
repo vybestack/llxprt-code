@@ -42,7 +42,7 @@ async function observeRoute(
     expect(history.getContextRange()).toStrictEqual(beforeRange);
     const prepared = await prepareValueRoute(history, route, size, owners);
     const failure = new Error('value route finalization failure');
-    const finalization = pauseTransformFinalization(
+    const finalization = await pauseTransformFinalization(
       history,
       rollback ? failure : undefined,
     );

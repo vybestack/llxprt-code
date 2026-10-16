@@ -31,7 +31,7 @@ function registerScale(size: number): void {
           history.setBaseTokenOffset(17);
           history.setCacheAnchorSeq(1);
           const order: string[] = [];
-          history.registerMediaOwner(
+          await history.registerMediaOwner(
             mediaParticipant(() => {
               order.push('prepare');
               return {

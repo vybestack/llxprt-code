@@ -298,9 +298,10 @@ describe('SemanticMediaPurgeStreamCoordinator: rebases the durable frontier afte
         ],
       );
       history.startCompression();
-      history.clear();
+      const cleared = history.clear();
       history.addAll(compressed);
       history.endCompression();
+      await cleared;
 
       const next = await begin(coordinator, { mode: 'remove' });
 
@@ -486,7 +487,7 @@ describe('SemanticMediaPurgeStreamCoordinator: rehydrates the frontier after who
     expect(afterReplacement?.changedContentIndex).toBe(0);
     expect(afterReplacement?.changedBlockIndex).toBe(1);
 
-    history.clear();
+    await history.clear();
     history.add(content('human', 'after-clear-image', [firstImage]));
 
     const afterClear = await begin(coordinator, { mode: 'remove' });

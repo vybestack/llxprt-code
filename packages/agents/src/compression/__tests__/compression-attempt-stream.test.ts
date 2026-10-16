@@ -36,7 +36,7 @@ function registerPinnedCases(): void {
                 hash.update(JSON.stringify(row));
                 count += 1;
               }
-              service.clear();
+              await service.clear();
             });
             const result = await handler.performCompression('pinned');
             expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);

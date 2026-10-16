@@ -137,7 +137,7 @@ async function observeDensity(
     reached = resolve;
   });
   const primary = new Error('paused density rollback');
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant((input) => {
       const rollback = prepareOwners(
         input,

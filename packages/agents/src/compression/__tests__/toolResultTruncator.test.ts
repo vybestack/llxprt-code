@@ -142,7 +142,7 @@ const densityFixture6_observeAbortsSafelyWhenHistoryIsConcurrentlyClearedDuringA
         estimateCallCount++;
         // On the first block estimate, simulate a concurrent clear.
         if (estimateCallCount === 1) {
-          densityFixture4_historyService.clear();
+          await densityFixture4_historyService.clear();
         }
         return estimateBlockByLength(block);
       },

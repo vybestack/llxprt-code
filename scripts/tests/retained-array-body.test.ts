@@ -121,7 +121,7 @@ async function compareBodies(size: number, rollback: boolean): Promise<number> {
         });
       const failure = new Error('client BODY rollback');
       if (rollback)
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant(() => ({
             publish: () => undefined,
             rollback: () => undefined,

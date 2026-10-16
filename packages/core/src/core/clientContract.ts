@@ -151,7 +151,7 @@ export interface AgentChatContract {
   /** Raw rows pinned on first next. Exhaust or return to release; abort is checked during iteration. */
   streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown>;
   setHistory(history: readonly IContent[]): Promise<void>;
-  clearHistory(): void;
+  clearHistory(): Promise<void>;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
   performCompression(

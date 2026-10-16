@@ -34,7 +34,7 @@ async function initializeBaseline(
   for (let index = 0; index < 3; index++) history.add(detachedRow(index));
   await history.waitForTokenUpdates();
   if (!pending) await recorder.flush();
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => {
       expect(recorder.getPendingRecordCount()).toBe(0);
       return { publish: () => {}, rollback: () => {} };

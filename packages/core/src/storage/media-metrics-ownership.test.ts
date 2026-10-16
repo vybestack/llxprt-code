@@ -25,7 +25,7 @@ describe('media metrics and real ownership', () => {
         semanticMetadata: {},
       });
       const history = new StreamMetricHistory();
-      history.registerMediaOwner(new HistoryMediaOwnership(store));
+      await history.registerMediaOwner(new HistoryMediaOwnership(store));
       const resolver = new RequestMediaResolver(store);
       const metrics = new MediaLifecycleMetrics({
         ...metricSources(store, history),

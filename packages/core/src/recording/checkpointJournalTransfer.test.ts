@@ -303,7 +303,7 @@ async function verifyAdoptsCopiedMediaReferencesAndReleasesLiveOwnershipOnDispos
   const result = await fork(target, undefined, store);
   expect(await store.hasReservations(block.contentId)).toBe(false);
   const history = new HistoryService();
-  history.registerMediaOwner(new HistoryMediaOwnership(store));
+  await history.registerMediaOwner(new HistoryMediaOwnership(store));
   try {
     await history.adoptResumeBoot(result.recording, result.boot);
     expect(await store.hasReservations(block.contentId)).toBe(true);

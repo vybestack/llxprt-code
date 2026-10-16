@@ -22,7 +22,7 @@ export function createTestAgentChat(): AgentChatContract {
       yield* [];
     },
     setHistory: async () => {},
-    clearHistory: () => {},
+    clearHistory: async () => {},
     getHistoryService: () => null,
     wasRecentlyCompressed: () => false,
     performCompression: async () => PerformCompressionResult.SKIPPED_EMPTY,

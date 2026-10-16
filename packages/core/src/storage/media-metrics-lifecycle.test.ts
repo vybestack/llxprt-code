@@ -47,7 +47,7 @@ describe('media metric snapshot lifetime', () => {
           },
         });
         const pending = metrics.snapshot();
-        history.clear();
+        await history.clear();
         history.add(metricRow(9, 0));
         bytes = 0;
         const snapshot = await pending;

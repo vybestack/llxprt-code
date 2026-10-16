@@ -71,7 +71,7 @@ describe('client default history ownership lifetime', () => {
           const cursor = client.getHistory(false, controller.signal);
           expect(reader.snapshot().acquisitions).toBe(0);
           expect((await cursor.next()).value).toStrictEqual(accountingRow(0));
-          history.clear();
+          await history.clear();
           expect({
             decoded: counters.snapshot().rowsDecoded,
             held: reader.snapshot().liveRows,

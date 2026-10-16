@@ -29,11 +29,11 @@ const stages = [
   'finalize',
   'range',
 ];
-function installFault(
+async function installFault(
   fixture: DetachedFixture,
   stage: string,
   failure: Error,
-): void {
+): Promise<void> {
   const { history, recorder } = fixture;
   if (stage === 'tokenizer')
     history.setTokenizerFactory(
@@ -41,7 +41,7 @@ function installFault(
         throw failure;
       }),
     );
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => {
       if (stage === 'prepare') throw failure;
       return {
@@ -82,7 +82,7 @@ function registerFailure(size: number, stage: string): void {
           const tokens = size * 4 + 17;
           const range = expectedRange(size);
           const failure = new Error(`client fault ${stage}`);
-          installFault(fixture, stage, failure);
+          await installFault(fixture, stage, failure);
           forbidClientArrayRollback(fixture);
           const input = clientArrayRows(size).map((row) => ({
             ...row,

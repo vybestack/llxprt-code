@@ -376,7 +376,7 @@ async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClea
           },
         ],
       });
-      history.validateAndFix();
+      await history.validateAndFix();
       await check();
       await collectRowsForAssertions(
         history.streamRawHistory(),
@@ -389,7 +389,7 @@ async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClea
             history.endCompression(rows[0], 3);
           });
           await check();
-          history.clear();
+          await history.clear();
           await check();
           expect(await reopen(result.boot.filePath)).toStrictEqual([]);
         },
@@ -417,7 +417,7 @@ async function verifyRetainsTheOldRecordingSubscriptionWhenPublicationRollsBack(
   );
   await entered.promise;
   history.add(row('queued rollback row'));
-  history.validateAndFix();
+  await history.validateAndFix();
   const barrier = history.waitForCommit();
   release.resolve();
   await expect(adoption).rejects.toThrow('rollback owner');

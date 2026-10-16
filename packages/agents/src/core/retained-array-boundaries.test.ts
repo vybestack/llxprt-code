@@ -94,7 +94,7 @@ async function abortPending(size: number): Promise<number> {
       await fixture.history.waitForTokenUpdates();
       const ready = gate();
       const release = gate();
-      fixture.history.registerMediaOwner(
+      await fixture.history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => undefined,
           rollback: () => undefined,
@@ -148,7 +148,7 @@ function registerParticipant(size: number, retain: boolean): void {
           const held: { rows: readonly IContent[] } = { rows: [] };
           let prepared = fixture.owners.snapshot();
           let finalized = fixture.owners.snapshot();
-          fixture.history.registerMediaOwner(
+          await fixture.history.registerMediaOwner(
             mediaParticipant(({ next }) => {
               const rows = [...next];
               for (const row of rows) fixture.owners.retain(row);

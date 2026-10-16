@@ -166,7 +166,7 @@ describe('density replacement values', () => {
         throw failure;
       });
       let census = -1;
-      history.registerMediaOwner({
+      await history.registerMediaOwner({
         adopt: () => undefined,
         reconcile: async () => undefined,
         releaseAll: async () => undefined,

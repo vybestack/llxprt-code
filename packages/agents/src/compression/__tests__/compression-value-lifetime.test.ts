@@ -46,7 +46,7 @@ async function weakAlive(
   gcAndSweep();
   return weak.filter((reference) => reference.deref() !== undefined).length;
 }
-function suspendPublication(history: ObservedValueHistory): {
+async function suspendPublication(history: ObservedValueHistory): Promise<{
   readonly ready: ReturnType<typeof valueGate>;
   readonly release: ReturnType<typeof valueGate>;
   readonly failure: Error;
@@ -56,12 +56,12 @@ function suspendPublication(history: ObservedValueHistory): {
     published: number;
   };
   restore(): void;
-} {
+}> {
   const ready = valueGate();
   const release = valueGate();
   const failure = new Error('production value callback failed');
   const state = { acknowledged: false, callbacks: 0, published: 0 };
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant((input) => ({
       publish: () => {
         for (const _row of input.next) state.published++;
@@ -113,7 +113,7 @@ async function exercise(
       yield middleoutRow(index, index === 0 ? bytes : 2048);
   }
   const baseline = await compressionValueDigest(originalRows());
-  const suspension = suspendPublication(history);
+  const suspension = await suspendPublication(history);
   const { handler } = middleoutSetup(history, new StreamingSummaryTransport());
   history.setCacheAnchorSeq(1);
   const operation = handler.performCompression('value-lifetime').then(

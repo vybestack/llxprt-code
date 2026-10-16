@@ -14,7 +14,7 @@ describe('durable relocated helper values', () => {
       const observed = observeHistorySynchronouslyForTest(history);
       expect(observed).toStrictEqual(retained);
       expect(observed[0]).not.toBe(retained[0]);
-      history.clear();
+      await history.clear();
       await history.waitForCommit();
       gcAndSweep();
       expect(ownership.snapshot().liveRows).toBe(0);
@@ -41,7 +41,7 @@ describe('durable relocated helper values', () => {
       });
       expect(borrowed).toHaveLength(0);
       expect(ownership.snapshot().liveRows).toBe(0);
-      history.clear();
+      await history.clear();
       await history.waitForCommit();
       expect(values).toStrictEqual(
         Array.from({ length: 512 }, (_, index) => `${index}:`),

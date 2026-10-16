@@ -60,7 +60,7 @@ async function publishRestoredHistory(
         'Cannot restore history: History service unavailable after chat initialization',
       );
     try {
-      history.validateAndFix();
+      await history.validateAndFix();
       if (submission.rows === undefined)
         throw new Error('Restored history rows already submitted');
       const operation = history.detachedValues.replace(

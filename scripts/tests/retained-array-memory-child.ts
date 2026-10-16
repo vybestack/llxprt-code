@@ -71,7 +71,7 @@ async function probe(size: number, trap: boolean): Promise<void> {
       const ready = gate();
       const release = gate();
       const failure = new Error('client suspended finalization');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => undefined,
           finalize: async () => {

@@ -77,7 +77,7 @@ describe('streamed deferred history admission', () => {
               expect(client.hasChatInitialized()).toBe(false);
               expect(owners.snapshot().liveRows).toBe(0);
               expect(owners.within(bounds)).toBe(true);
-              source.clear();
+              await source.clear();
               const stream = client.streamHistory();
               const first = await stream.next();
               if (first.done === true) throw new Error('No admitted history');

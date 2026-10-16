@@ -39,7 +39,7 @@ async function probe(size: number, trap: boolean): Promise<void> {
       release = resolve;
     });
     const failure = new Error('binding suspended finalization');
-    history.registerMediaOwner(
+    await history.registerMediaOwner(
       mediaParticipant(({ previous }) => {
         if (trap)
           for (const row of previous) {

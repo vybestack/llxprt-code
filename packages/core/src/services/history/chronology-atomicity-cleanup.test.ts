@@ -21,7 +21,7 @@ describe('history mutation cleanup after compensation failure', () => {
       await history.addBatch([rollbackRow(0)]);
       const primary = new Error('publication failed');
       const ownershipFailure = new Error('ownership rollback failed');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => undefined,
           rollback: () => {
@@ -74,7 +74,7 @@ describe('history mutation cleanup after marker restoration failure', () => {
       const fresh = rollbackRow(2);
       const primary = new Error('callback failed');
       let ownership = 'baseline';
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => {
             ownership = 'replacement';

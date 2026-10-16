@@ -130,7 +130,7 @@ describe('live near-limit retained participant controls', () => {
         const retained: IContent[] = [];
         const failure = new Error('trap rollback');
         let held: RowOwnershipStats | undefined;
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant(() => {
             for (let index = 0; index < count; index++) {
               const row = detachedRow(index, bytes);

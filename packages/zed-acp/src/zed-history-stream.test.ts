@@ -32,7 +32,7 @@ for (const size of [512, 8192]) {
               'replay-cursor',
               async (update) => {
                 if (first) {
-                  history.clear();
+                  await history.clear();
                   await delay(10);
                   pausedDecodeCount = counters.snapshot().rowsDecoded;
                 } else actual.update(',');
@@ -75,7 +75,7 @@ for (const size of [512, 8192]) {
                 'replay-cursor',
                 async () => {
                   if (delivered++ === 0) {
-                    history.clear();
+                    await history.clear();
                     await delay(10);
                     pausedDecodeCount = counters.snapshot().rowsDecoded;
                   }

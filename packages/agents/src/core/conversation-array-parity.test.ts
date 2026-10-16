@@ -28,7 +28,7 @@ async function outcome(
     history.setCacheAnchorSeq(1);
     const order: string[] = [];
     const failure = new Error(stage);
-    history.registerMediaOwner(
+    await history.registerMediaOwner(
       mediaParticipant(() => {
         order.push('prepare');
         if (stage === 'prepare') throw failure;

@@ -573,7 +573,7 @@ describe('HistoryService: validate and fix unmatched tool calls', () => {
     expect(unmatched).toHaveLength(1);
     expect(unmatched[0]?.id).toBe('hist_tool_orphan1');
 
-    service.validateAndFix();
+    await service.validateAndFix();
     await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
       // History should now include a synthetic tool response to keep pairing intact.
       const history = rows;

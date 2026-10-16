@@ -266,7 +266,7 @@ async function facadeCallback8(): Promise<void> {
   await service.waitForTokenUpdates();
   expect(service.getTotalTokens()).toBeGreaterThan(50);
 
-  service.clear();
+  await service.clear();
   expect(service.getTotalTokens()).toBe(50);
 }
 

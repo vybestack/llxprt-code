@@ -59,7 +59,7 @@ async function highdensity(size: number): Promise<number> {
       throw new Error('Borrowed highdensity dump reached');
     };
     const { handler } = highdensitySetup(history);
-    const paused = pauseTransformFinalization(history);
+    const paused = await pauseTransformFinalization(history);
     fixture.pauseWriter();
     const operation = rejectedValue(
       handler.performCompression('values').then((result) => {

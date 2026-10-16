@@ -101,7 +101,7 @@ describe('curated membership snapshots', () => {
       service.add(suffixRow(2));
       const expectedSecond = curatedHistoryForTest(service);
       const secondHead = await second.next();
-      service.clear();
+      await service.clear();
       service.add(suffixRow(3));
       expect([
         firstHead.value,

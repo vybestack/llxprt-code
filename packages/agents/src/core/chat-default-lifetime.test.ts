@@ -35,7 +35,7 @@ for (const size of [512, 8192]) {
               decoded: decoded(),
             }).toStrictEqual({ held: 1, decoded: 1 });
             expect((await source.next()).value).toStrictEqual(accountingRow(1));
-            history.clear();
+            await history.clear();
             expect((await source.next()).value).toStrictEqual(accountingRow(2));
             await source.return();
             expect(reader.snapshot().liveRows).toBe(0);

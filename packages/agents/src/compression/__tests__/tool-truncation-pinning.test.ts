@@ -34,7 +34,7 @@ describe('pinned ranking source and returned consumers', () => {
             async (block) => {
               if (!cleared) {
                 cleared = true;
-                history.clear();
+                await history.clear();
               }
               return toolScore(block);
             },

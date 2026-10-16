@@ -195,7 +195,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
         .spyOn(historyService, 'estimateTokensForContents')
         .mockResolvedValue(197_464); // 197464 + 65536 = 263000 > 262144
       s.performCompression.mockImplementation(async () => {
-        historyService.clear();
+        await historyService.clear();
         historyService.add(makeUserMessage('compressed summary'));
         estimateSpy.mockResolvedValue(1_000);
         return PerformCompressionResult.COMPRESSED;
@@ -222,7 +222,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
       let compressionCallCount = 0;
       s.performCompression.mockImplementation(async () => {
         compressionCallCount++;
-        historyService.clear();
+        await historyService.clear();
         if (compressionCallCount === 1) {
           historyService.add(makeUserMessage('first compressed summary'));
           estimateSpy.mockResolvedValue(148_000);
@@ -252,7 +252,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
       let compressionCallCount = 0;
       s.performCompression.mockImplementation(async () => {
         compressionCallCount++;
-        historyService.clear();
+        await historyService.clear();
         historyService.add(makeUserMessage('compressed still large'));
         estimateSpy.mockResolvedValue(148_000);
         return PerformCompressionResult.COMPRESSED;
@@ -279,7 +279,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
       let compressionCallCount = 0;
       s.performCompression.mockImplementation(async () => {
         compressionCallCount++;
-        historyService.clear();
+        await historyService.clear();
         historyService.add(makeUserMessage('attempted compression'));
         return PerformCompressionResult.FAILED;
       });
@@ -322,7 +322,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
       let compressionCallCount = 0;
       s.performCompression.mockImplementation(async () => {
         compressionCallCount++;
-        historyService.clear();
+        await historyService.clear();
         if (compressionCallCount === 1) {
           // First compression succeeds but is ineffective
           historyService.add(makeUserMessage('ineffective compression'));
@@ -350,7 +350,7 @@ describe('provider-source hard-limit retry policy (Issue #2588)', () => {
         .spyOn(historyService, 'estimateTokensForContents')
         .mockResolvedValue(150_000);
       s.performCompression.mockImplementation(async () => {
-        historyService.clear();
+        await historyService.clear();
         historyService.add(makeUserMessage('ineffective compression'));
         estimateSpy.mockResolvedValue(148_000);
         return PerformCompressionResult.COMPRESSED;
@@ -472,7 +472,7 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       let compressionCallCount = 0;
       s.performCompression.mockImplementation(async () => {
         compressionCallCount++;
-        historyService.clear();
+        await historyService.clear();
         if (compressionCallCount === 1) {
           historyService.add(makeUserMessage('ineffective compression'));
           estimateSpy.mockResolvedValue(148_000);
@@ -554,7 +554,7 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       const finalizedEstimates = [150_000, 150_000, 135_000, 50_000];
       let estimateIndex = 0;
       s.performCompression.mockImplementation(async () => {
-        historyService.clear();
+        await historyService.clear();
         historyService.add(makeUserMessage('compressed'));
         return PerformCompressionResult.COMPRESSED;
       });

@@ -184,13 +184,13 @@ export async function withValueTransformFixture<T>(
   }
 }
 
-export function pauseTransformFinalization(
+export async function pauseTransformFinalization(
   history: HistoryService,
   failure?: Error,
-): { acknowledged: Promise<void>; release(): void } {
+): Promise<{ acknowledged: Promise<void>; release(): void }> {
   const reached = batchGate();
   const gate = batchGate();
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => ({
       publish: (): void => {},
       rollback: (): void => {},

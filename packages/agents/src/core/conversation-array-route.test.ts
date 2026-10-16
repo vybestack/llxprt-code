@@ -28,7 +28,7 @@ for (const size of [512, 8192]) {
         history.setBaseTokenOffset(17);
         history.setCacheAnchorSeq(1);
         let held: RowOwnershipStats | undefined;
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant(() => ({
             publish: () => undefined,
             rollback: () => undefined,

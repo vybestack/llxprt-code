@@ -754,7 +754,7 @@ export class ChatSession {
       );
     }
     this.setHistoryAdmission = undefined;
-    this.conversationManager.clearHistory();
+    await this.conversationManager.clearHistory();
   }
 
   addHistory(content: IContent): void {

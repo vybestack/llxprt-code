@@ -56,7 +56,7 @@ describe('a mutation is durable in every mirror once the history reports it comm
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
 
-    service.clear();
+    await service.clear();
     await service.waitForCommit();
 
     expect(lastOf(typesOnDisk(a))).toBe('rewind');

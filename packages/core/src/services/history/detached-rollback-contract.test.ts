@@ -71,13 +71,13 @@ for (const stage of [
         const failure = new Error(stage);
         const controller = new AbortController();
         if (stage === 'prepare')
-          history.registerMediaOwner(
+          await history.registerMediaOwner(
             mediaParticipant(() => {
               throw failure;
             }),
           );
         if (stage === 'publish' || stage === 'finalize')
-          history.registerMediaOwner(
+          await history.registerMediaOwner(
             mediaParticipant(() => ({
               publish: () => {
                 if (stage === 'publish') throw failure;
@@ -162,7 +162,7 @@ describe('detached scalar and large-value recovery', () => {
       const tokens = 4;
       const failure = new Error('publication');
       const rollbackFailure = new Error('participant rollback');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => undefined,
           rollback: () => {

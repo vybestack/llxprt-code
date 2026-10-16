@@ -53,7 +53,7 @@ describe('binding bridge local media reservations', () => {
         const reference = rows[0].blocks[0];
         if (reference.type !== 'media' || reference.encoding !== 'reference')
           throw new Error('Expected admitted reference');
-        history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.registerMediaOwner(new HistoryMediaOwnership(store));
         await history.addBatch(rows);
         await history.waitForCommit();
         const expected = await detachedDigest(history.streamRawHistory());
@@ -90,7 +90,7 @@ describe('binding bridge local media reservations', () => {
         const boundReservation = await store.hasReservations(
           reference.contentId,
         );
-        history.clear();
+        await history.clear();
         await history.waitForOwnershipSettlement();
         expect({
           beforeReservation,

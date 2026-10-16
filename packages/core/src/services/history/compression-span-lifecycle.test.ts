@@ -54,7 +54,7 @@ describe('raw compression cursor lifetime', () => {
         await entered.promise;
         ledger.push(readdirSync(root).length);
         expect(ownership.snapshot().liveRows).toBe(1);
-        history.clear();
+        await history.clear();
         gate.resolve();
         const result = await operation;
         ledger.push(readdirSync(root).length);

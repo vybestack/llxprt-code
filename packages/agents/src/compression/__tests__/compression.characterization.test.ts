@@ -325,7 +325,7 @@ async function facadeCallback3(): Promise<void> {
   );
 
   harness.performCompression.mockImplementation(async () => {
-    harness.historyService.clear();
+    await harness.historyService.clear();
     harness.historyService.add(
       textContent('human', 'compressed retained summary'),
     );

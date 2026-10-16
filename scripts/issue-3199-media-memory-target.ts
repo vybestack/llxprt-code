@@ -261,7 +261,7 @@ try {
   });
   resources.store = store;
   const history = new HistoryService();
-  history.registerMediaOwner(new HistoryMediaOwnership(store));
+  await history.registerMediaOwner(new HistoryMediaOwnership(store));
   resources.history = history;
   const admission = new MediaAdmissionService(store);
   const resolver = new RequestMediaResolver(store);

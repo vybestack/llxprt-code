@@ -159,7 +159,7 @@ async function lifecycleBehavior(): Promise<number> {
       assertActiveMetrics(active, payload.byteLength, encoded.length);
 
       await resolved.release();
-      history.clear();
+      await history.clear();
       providerRetention.release();
       await finishPersistenceSave();
       await activeRecording.flush();

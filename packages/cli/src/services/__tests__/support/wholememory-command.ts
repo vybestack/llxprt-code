@@ -74,7 +74,7 @@ export class MemoryCommand {
     workload: string,
     target: string,
   ): Promise<void> {
-    this.registerMediaOwner(directory, workload);
+    await this.registerMediaOwner(directory, workload);
     const result = await performResume(target, this.resumeOptions(directory));
     if (!result.ok) throw new Error(result.error);
     this.uiHistory = await resumeHistoryWindow(
@@ -89,13 +89,16 @@ export class MemoryCommand {
     await this.verifyPager(count, workload);
   }
 
-  private registerMediaOwner(directory: string, workload: string): void {
+  private async registerMediaOwner(
+    directory: string,
+    workload: string,
+  ): Promise<void> {
     if (workload === 'media' || workload === 'media-dense') {
       this.mediaStore = new LocalMediaStore({
         rootDirectory: join(directory, 'media'),
         quotaBytes: 1024 * 1024,
       });
-      this.history.registerMediaOwner(
+      await this.history.registerMediaOwner(
         new HistoryMediaOwnership(this.mediaStore),
       );
     }

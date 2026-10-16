@@ -356,15 +356,26 @@ function freezeProviderRuntime(
   });
 }
 
+/**
+ * Makes the history own the media references of `context.mediaStore`. The
+ * factory below is synchronous and cannot await the registration, so a context
+ * built with a `mediaStore` must be passed here before its history is used.
+ */
+export async function registerRuntimeMediaOwner(
+  context: AgentRuntimeContext,
+): Promise<void> {
+  if (context.mediaStore === undefined) return;
+  await context.history.registerMediaOwner(
+    new HistoryMediaOwnership(context.mediaStore),
+  );
+}
+
 export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
   validateRequiredOptions(options);
 
   const history = options.history ?? new HistoryService();
-  if (options.mediaStore !== undefined) {
-    history.registerMediaOwner(new HistoryMediaOwnership(options.mediaStore));
-  }
 
   const getLiveSetting = createGetLiveSetting(options);
 

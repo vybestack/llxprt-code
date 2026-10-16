@@ -63,7 +63,7 @@ async function pendingParity(size: number): Promise<number> {
       history.add(queued);
       const ready = pendingGate();
       const gate = pendingGate();
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant((input) => ({
           rollback: () => {},
           publish: async () => {

@@ -28,7 +28,7 @@ async function paused(size: number): Promise<number> {
       const ready = deferred();
       const gate = deferred();
       let rejecting = true;
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant((input) => ({
           rollback: () => {},
           publish: async () => {

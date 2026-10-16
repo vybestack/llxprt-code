@@ -75,7 +75,7 @@ async function compareBodies(
       await recorder.commit('content', { content: rowAt(index) });
     const failure = new Error('conversation BODY rollback');
     if (rollback)
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => undefined,
           rollback: () => undefined,

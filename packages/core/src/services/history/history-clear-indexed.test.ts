@@ -41,7 +41,7 @@ describe('indexed clear chronology boundaries', () => {
       await withSuffixFixture(
         fixture.size,
         async (history, owners, counters) => {
-          history.clear();
+          await history.clear();
           expect(counters.snapshot().rowsDecoded).toBe(0);
           expect(owners.snapshot().acquisitions).toBe(0);
           expect(history.length()).toBe(0);

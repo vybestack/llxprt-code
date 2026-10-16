@@ -15,7 +15,7 @@ async function exercisePending(size: number): Promise<number> {
       expect(
         await history.replaceToolResponseBlock(index, 2, replacementFor(index)),
       ).toBe(true);
-    history.validateAndFix();
+    await history.validateAndFix();
     await history.waitForTokenUpdates();
     let position = 0;
     let syntheticCount = 0;

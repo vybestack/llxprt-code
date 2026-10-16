@@ -181,7 +181,7 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
         estimateBlockTokensAsync: async (block: ContentBlock) => {
           estimateCallCount++;
           if (estimateCallCount === 1) {
-            historyService.clear();
+            await historyService.clear();
           }
           return estimateBlockByLength(block);
         },

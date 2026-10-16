@@ -126,7 +126,7 @@ async function createFixture(): Promise<TransactionFixture> {
     quotaBytes: 1024,
   });
   const owner = new HistoryMediaOwnership(store);
-  history.registerMediaOwner(owner);
+  await history.registerMediaOwner(owner);
   const prior = await store.admit({
     bytes: new Uint8Array([1]),
     mimeType: 'image/png',

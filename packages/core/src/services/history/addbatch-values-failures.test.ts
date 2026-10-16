@@ -87,7 +87,7 @@ async function stageFailure(stage: string): Promise<number | undefined> {
     };
     if (stage === 'tokenizer')
       history.setTokenizerFactory(exactTokenizer(fail));
-    history.registerMediaOwner(
+    await history.registerMediaOwner(
       mediaParticipant(() => {
         if (stage === 'prepare') fail();
         return {

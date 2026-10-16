@@ -161,7 +161,7 @@ for (const size of [512, 8192]) {
                 owner.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
               ).toBe(true);
             }
-            history.clear();
+            await history.clear();
           } finally {
             resume.resolve();
           }

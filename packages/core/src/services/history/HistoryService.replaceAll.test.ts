@@ -158,7 +158,7 @@ describe('HistoryService replaceAll serialization', () => {
 
     const replacing = service.replaceAll([createUserMessage('replacement')]);
     await estimationStarted;
-    service.clear();
+    await service.clear();
     blocked.release();
     await replacing;
 

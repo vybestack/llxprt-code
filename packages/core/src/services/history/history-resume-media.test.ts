@@ -45,7 +45,7 @@ describe('resume media lifecycle', () => {
       quotaBytes: 1024 * 1024,
     });
     history = new HistoryService();
-    history.registerMediaOwner(new HistoryMediaOwnership(store));
+    await history.registerMediaOwner(new HistoryMediaOwnership(store));
     const admission = new MediaAdmissionService(store);
     const context = { turnId: 'old', source: 'user-input' };
     const old = await admission.admitContents([inline], context);

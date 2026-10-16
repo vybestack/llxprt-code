@@ -67,7 +67,7 @@ describe('journal writers keep every row with its owner', () => {
     service.add(textRow('A1'), undefined, ownerA);
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
-    service.registerMediaOwner(failingMediaOwner('removal failed'));
+    await service.registerMediaOwner(failingMediaOwner('removal failed'));
 
     await expect(service.pop()).rejects.toThrow('removal failed');
     await service.waitForCommit();
@@ -91,7 +91,7 @@ describe('journal writers keep every row with its owner', () => {
       if (armed) throw new Error('clear observer failed');
     });
 
-    expect(() => service.clear()).toThrow('clear observer failed');
+    await expect(service.clear()).rejects.toThrow('clear observer failed');
     armed = false;
     await service.waitForCommit();
 
@@ -110,7 +110,7 @@ describe('journal writers keep every row with its owner', () => {
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
 
-    service.clear();
+    await service.clear();
     await service.waitForCommit();
 
     expect(await harness.replayed(a)).toStrictEqual([]);
@@ -153,7 +153,7 @@ describe('journal writers keep every row with its owner', () => {
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
 
-    service.validateAndFix();
+    await service.validateAndFix();
     await service.waitForCommit();
 
     expect((await harness.shared(service)).map(rowText)).toStrictEqual([

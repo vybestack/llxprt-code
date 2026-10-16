@@ -38,7 +38,7 @@ function registerRemovalScale(size: number): void {
         expect(
           owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
         ).toBe(true);
-        history.clear();
+        await history.clear();
         await history.waitForOwnershipSettlement();
         expect(history.length()).toBe(0);
         expect(await store.hasReservations(shared.contentId)).toBe(false);
@@ -98,7 +98,7 @@ describe('pending clear and large-row identity', () => {
         await waitForPausedWrite;
         await history.waitForTokenUpdates();
         await history.settleMediaOwnership();
-        history.clear();
+        await history.clear();
         expect(history.length()).toBe(0);
         expect(history.getTotalTokens()).toBe(0);
         expect(history.getContextRange().removedInterior).toContainEqual({

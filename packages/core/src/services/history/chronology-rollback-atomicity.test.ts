@@ -86,7 +86,7 @@ describe('chronology rollback across mutation stages', () => {
             const failure = new Error(`injected ${stage} failure`);
             const fail = oneShotFailure(failure);
             let ownership = 'baseline';
-            history.registerMediaOwner(
+            await history.registerMediaOwner(
               mediaParticipant(() => {
                 if (stage === 'prepare') fail();
                 return {
@@ -229,7 +229,7 @@ describe('chronology compensation failures', () => {
     await withRollbackFixture(async (history) => {
       const primary = new Error('publication failure');
       const rollback = new Error('ownership rollback failure');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => {
             throw primary;
@@ -255,7 +255,7 @@ describe('chronology compensation failures', () => {
     await withRollbackFixture(async (history, recorder) => {
       const primary = new Error('publication failure');
       let ownership = 'baseline';
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => {
             ownership = 'replacement';
@@ -297,7 +297,7 @@ describe('large media/tool chronology rollback parity', () => {
           rollbackRow(index),
         );
         const primary = new Error('late publication failure');
-        history.registerMediaOwner(
+        await history.registerMediaOwner(
           mediaParticipant(() => ({
             publish: () => undefined,
             rollback: () => undefined,

@@ -505,8 +505,8 @@ export class ConversationManager {
   /**
    * Clears the chat history.
    */
-  clearHistory(): void {
-    this.historyService.clear();
+  async clearHistory(): Promise<void> {
+    await this.historyService.clear();
     this.historyService.resetCacheAnchorSeq();
   }
 

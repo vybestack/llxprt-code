@@ -92,7 +92,7 @@ describe('profile history adoption', () => {
     commit();
     expect(await rawHistory(live)).toStrictEqual(staged);
     expect(live.getTotalTokens()).toBe(1234);
-    candidate.clear();
+    await candidate.clear();
     await candidate.waitForTokenUpdates();
     expect(await rawHistory(live)).toStrictEqual(staged);
     live.syncTotalTokens(2345);

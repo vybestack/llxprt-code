@@ -48,7 +48,7 @@ describe('tool repair duplicate media references', () => {
         expect(
           await history.replaceToolResponseBlock(0, 2, replacementFor(0)),
         ).toBe(true);
-        history.validateAndFix();
+        await history.validateAndFix();
         await history.waitForTokenUpdates();
         expect(await store.hasReservations(shared.contentId)).toBe(true);
         expect(await store.hasReservations(tail.contentId)).toBe(true);

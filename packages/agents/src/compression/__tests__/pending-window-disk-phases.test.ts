@@ -9,13 +9,13 @@ import {
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 
-function pausePublication(history: PendingFixture['history']): {
+async function pausePublication(history: PendingFixture['history']): Promise<{
   publishing: ReturnType<typeof pendingGate>;
   publish: ReturnType<typeof pendingGate>;
-} {
+}> {
   const publishing = pendingGate();
   const publish = pendingGate();
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant((input) => ({
       rollback: () => {},
       publish: async () => {
@@ -56,7 +56,7 @@ async function phases(size: number): Promise<number> {
         await prepare.promise;
         return 'todo';
       });
-      const { publishing, publish } = pausePublication(history);
+      const { publishing, publish } = await pausePublication(history);
       history.startCompression();
       const operation = setup.handler.enforceContextWindow(
         600,

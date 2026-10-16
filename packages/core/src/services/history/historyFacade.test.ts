@@ -402,7 +402,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
     expect(textOf(popped as IContent)).toBe('');
 
     // …which leaves call-1 orphaned for the synthetic-insert path.
-    service.validateAndFix();
+    await service.validateAndFix();
 
     // Density mutation: remove row 0 outright, replace row 1 in place.
     const replacement = textContent('ai', 'a1-compact');
@@ -434,7 +434,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
     ).toHaveLength(1);
 
     // Clear reaches the journal as a durable op, then the session continues.
-    service.clear();
+    await service.clear();
     service.add(textContent('human', 'u2'));
     service.add(textContent('ai', 'a2'));
     await service.waitForCommit();
@@ -560,7 +560,7 @@ describe('HistoryService facade context-range clear (P05b3)', () => {
     service.on('contextRangeChanged', (range) => {
       events.push(range);
     });
-    service.clear();
+    await service.clear();
     expect(events).toHaveLength(1);
     expect(events[0]).toStrictEqual({
       firstSeq: 0,

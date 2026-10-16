@@ -49,7 +49,7 @@ async function mediaRoute(
     });
     return await withValueTransformFixture(async (fixture) => {
       const { history, recorder, owners } = fixture;
-      history.registerMediaOwner(owner);
+      await history.registerMediaOwner(owner);
       await history.detachedValues.replace(referenceRows(size, media));
       const before = await detachedDigest(referenceRows(size, media));
       const tokens = size * 2 + 1000;
@@ -57,7 +57,7 @@ async function mediaRoute(
       expect(await store.hasReservations(media.contentId)).toBe(true);
       const prepared = await prepareValueRoute(history, route, size, owners);
       const failure = new Error('media finalization failed');
-      history.registerMediaOwner({
+      await history.registerMediaOwner({
         adopt: (rows) => owner.adopt(rows),
         reconcile: (rows, next) => owner.reconcile(rows, next),
         releaseAll: () => owner.releaseAll(),

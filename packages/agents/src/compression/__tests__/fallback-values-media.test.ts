@@ -72,7 +72,7 @@ async function run(size: number, rollback: boolean): Promise<number> {
     });
     return await withValueTransformFixture(async (fixture) => {
       const { history, recorder, owners } = fixture;
-      history.registerMediaOwner(owner);
+      await history.registerMediaOwner(owner);
       await history.detachedValues.replace(mediaRows(size, prior));
       const before = await detachedDigest(mediaRows(size, prior));
       const expected = await detachedDigest(mediaRows(size, next));

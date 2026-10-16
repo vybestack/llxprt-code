@@ -38,7 +38,7 @@ for (const size of [512, 8192]) {
               added: [],
               removed: [],
             });
-            history.clear();
+            await history.clear();
             const empty = await metrics.snapshot();
             expect(
               empty.localRetainedBlobBytes + empty.residentEncodedBytes,

@@ -65,7 +65,7 @@ async function pendingCheckpoint(
   const replace = history.detachedValues.replace;
   history.detachedValues.replace = (rows, model, options) =>
     replace(rows, model, { ...options, signal: controller.signal });
-  history.registerMediaOwner(
+  await history.registerMediaOwner(
     mediaParticipant(() => ({
       publish: () => undefined,
       rollback: () => undefined,
@@ -155,7 +155,7 @@ function registerTrap(count: number, bytes: number): void {
           }
           const failure = new Error('client retaining caller');
           let held = fixture.owners.snapshot();
-          fixture.history.registerMediaOwner(
+          await fixture.history.registerMediaOwner(
             mediaParticipant(() => ({
               publish: () => undefined,
               rollback: () => undefined,

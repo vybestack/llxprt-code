@@ -130,7 +130,7 @@ describe('recorder mirrors stay replayable under random operations', () => {
             who.owner,
           );
           await ownNewRows(who.id, false);
-          service.validateAndFix();
+          await service.validateAndFix();
           await service.waitForCommit();
           await ownRepairRows();
           return;

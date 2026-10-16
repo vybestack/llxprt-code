@@ -108,7 +108,7 @@ describe('raw stream snapshot lifetime', () => {
       const stream = service.streamRawHistory();
       service.add(suffixRow(2));
       const first = await stream.next();
-      service.clear();
+      await service.clear();
       const tail = await Array.fromAsync(stream);
       expect([first.value, ...tail]).toHaveLength(3);
       expect(ownership.snapshot().liveRows).toBe(0);

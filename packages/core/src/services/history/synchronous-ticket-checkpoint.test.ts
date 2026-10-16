@@ -149,7 +149,7 @@ describe('value-stage disk failure compensation', () => {
       let ownership = 'baseline';
       let rolledBack = false;
       const write = spyOn(fs, 'writeSync');
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(() => ({
           publish: () => {
             ownership = 'replacement';

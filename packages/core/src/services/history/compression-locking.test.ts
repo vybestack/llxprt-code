@@ -5,7 +5,10 @@ import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-
  * Test that compression locking prevents race conditions
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { createBlockedTokenizerFactory } from './compression-locking-test-helpers.js';
+import {
+  createBlockedTokenizerFactory,
+  rebuildAfterClear,
+} from './compression-locking-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 
@@ -131,9 +134,8 @@ async function legacyTest3() {
   });
   // Start compression
   legacySuite0_historyService.startCompression();
-  legacySuite0_historyService.rebuildWith(() => {
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     // Clear history (as compression would)
-    legacySuite0_historyService.clear();
     // Add compressed summary
     legacySuite0_historyService.add({
       speaker: 'human',
@@ -182,6 +184,7 @@ async function legacyTest3() {
       expect(callsWithId.length).toBe(1);
     },
   );
+  await cleared;
 }
 async function legacyTest4() {
   // Add some history
@@ -288,7 +291,7 @@ function legacyTest10() {
   expect(legacySuite1_observed).toContain('compressionLockReleased');
 }
 let legacySuite1_observed: string[];
-function legacyTest12() {
+async function legacyTest12(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -299,8 +302,7 @@ function legacyTest12() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -316,8 +318,9 @@ function legacyTest12() {
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+  await cleared;
 }
-function legacyTest13() {
+async function legacyTest13(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -339,8 +342,7 @@ function legacyTest13() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -359,8 +361,9 @@ function legacyTest13() {
     // flush after the release and the events (#3264).
     'contentAdded:mid-stream content',
   ]);
+  await cleared;
 }
-function legacyTest14() {
+async function legacyTest14(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -382,8 +385,7 @@ function legacyTest14() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'follow-up stream chunk' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -408,8 +410,9 @@ function legacyTest14() {
     type: 'text',
     text: 'follow-up stream chunk',
   });
+  await cleared;
 }
-function legacyTest15() {
+async function legacyTest15(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -427,8 +430,7 @@ function legacyTest15() {
     observed.push('compressionEnded');
   });
   legacySuite0_historyService.startCompression();
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -454,8 +456,9 @@ function legacyTest15() {
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'late streaming content']);
+  await cleared;
 }
-function legacyTest16() {
+async function legacyTest16(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -473,9 +476,10 @@ function legacyTest16() {
     observed.push('compressionEnded');
   });
   legacySuite0_historyService.startCompression();
+  const cleared: Array<Promise<void>> = [];
   expect(() =>
     legacySuite0_historyService.rebuildWith(() => {
-      legacySuite0_historyService.clear();
+      cleared.push(legacySuite0_historyService.clear());
       for (const content of retained) {
         legacySuite0_historyService.add(content);
       }
@@ -505,6 +509,7 @@ function legacyTest16() {
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'late streaming content']);
+  await Promise.all(cleared);
 }
 async function legacyTest18() {
   // A blocked replaceAll holds the mutation FIFO across the whole
@@ -540,8 +545,7 @@ async function legacyTest18() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -571,8 +575,9 @@ async function legacyTest18() {
       ).toStrictEqual(['original question', 'mid-stream content']);
     },
   );
+  await cleared;
 }
-function legacyTest20() {
+async function legacyTest20(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -586,8 +591,7 @@ function legacyTest20() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -607,8 +611,9 @@ function legacyTest20() {
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+  await cleared;
 }
-function legacyTest21() {
+async function legacyTest21(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -634,8 +639,7 @@ function legacyTest21() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -646,6 +650,7 @@ function legacyTest21() {
       1,
     ),
   ).toThrow('rebuild listener failure');
+  await expect(cleared).rejects.toThrow('rebuild listener failure');
   // A failing rebuild op must not prevent the release events from firing or the
   // streaming slice from being applied: both are still attempted (#3264).
   expect(compressionLockReleasedObserved).toBe(true);
@@ -657,7 +662,7 @@ function legacyTest21() {
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
 }
-function legacyTest22() {
+async function legacyTest22(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
@@ -674,8 +679,7 @@ function legacyTest22() {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'mid-stream content' }],
   });
-  legacySuite0_historyService.rebuildWith(() => {
-    legacySuite0_historyService.clear();
+  const cleared = rebuildAfterClear(legacySuite0_historyService, () => {
     for (const content of retained) {
       legacySuite0_historyService.add(content);
     }
@@ -701,6 +705,7 @@ function legacyTest22() {
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
+  await cleared;
 }
 let legacySuite0_historyService: HistoryService;
 function legacyTest25() {
@@ -808,32 +813,32 @@ describe('Compression locking > compressionLockReleased event / emits compressio
 });
 describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / preserves content queued before the rebuild clear, landing it after the rebuild', () => {
   beforeEach(legacyHook0);
-  it('preserves content queued before the rebuild clear, landing it after the rebuild', () => {
-    expect(legacyTest12).not.toThrow();
+  it('preserves content queued before the rebuild clear, landing it after the rebuild', async () => {
+    await expect(legacyTest12()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', () => {
   beforeEach(legacyHook0);
-  it('flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', () => {
-    expect(legacyTest13).not.toThrow();
+  it('flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', async () => {
+    await expect(legacyTest13()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / keeps every queued streaming entry when several arrive before the rebuild clear', () => {
   beforeEach(legacyHook0);
-  it('keeps every queued streaming entry when several arrive before the rebuild clear', () => {
-    expect(legacyTest14).not.toThrow();
+  it('keeps every queued streaming entry when several arrive before the rebuild clear', async () => {
+    await expect(legacyTest14()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', () => {
   beforeEach(legacyHook0);
-  it('flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', () => {
-    expect(legacyTest15).not.toThrow();
+  it('flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', async () => {
+    await expect(legacyTest15()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', () => {
   beforeEach(legacyHook0);
-  it('flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', () => {
-    expect(legacyTest16).not.toThrow();
+  it('flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', async () => {
+    await expect(legacyTest16()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > deferred asynchronous mutation ordering / keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', () => {
@@ -844,20 +849,20 @@ describe('Compression locking > deferred asynchronous mutation ordering / keeps 
 });
 describe('Compression locking > listener throw during flush / still applies the streaming phase and rethrows when a compressionLockReleased listener throws', () => {
   beforeEach(legacyHook0);
-  it('still applies the streaming phase and rethrows when a compressionLockReleased listener throws', () => {
-    expect(legacyTest20).not.toThrow();
+  it('still applies the streaming phase and rethrows when a compressionLockReleased listener throws', async () => {
+    await expect(legacyTest20()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > listener throw during flush / still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', () => {
   beforeEach(legacyHook0);
-  it('still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', () => {
-    expect(legacyTest21).not.toThrow();
+  it('still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', async () => {
+    await expect(legacyTest21()).resolves.toBeUndefined();
   });
 });
 describe('Compression locking > listener throw during flush / propagates a thrown undefined listener failure instead of swallowing it', () => {
   beforeEach(legacyHook0);
-  it('propagates a thrown undefined listener failure instead of swallowing it', () => {
-    expect(legacyTest22).not.toThrow();
+  it('propagates a thrown undefined listener failure instead of swallowing it', async () => {
+    await expect(legacyTest22()).resolves.toBeUndefined();
   });
 });
 describe('CompressionOperationQueue high-water latch / re-arms the one-shot high-water diagnostic after clear() (#2852)', () => {

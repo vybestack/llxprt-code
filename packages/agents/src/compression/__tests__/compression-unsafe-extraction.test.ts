@@ -51,7 +51,7 @@ function replaceHistoryWithSummary(
   tokensAfter: number,
 ): void {
   harness.performCompression.mockImplementation(async () => {
-    historyService.clear();
+    await historyService.clear();
     historyService.add(makeUserMessage(text));
     estimateSpy.mockResolvedValue(tokensAfter);
     return PerformCompressionResult.COMPRESSED;

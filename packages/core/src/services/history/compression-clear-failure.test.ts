@@ -83,7 +83,9 @@ async function withClearMediaFixture(
   });
   try {
     await withClearFixture(async (fixture) => {
-      fixture.history.registerMediaOwner(new HistoryMediaOwnership(store));
+      await fixture.history.registerMediaOwner(
+        new HistoryMediaOwnership(store),
+      );
       try {
         await action(fixture, store);
       } finally {
@@ -134,8 +136,9 @@ describe('compression rebuild clear observer failure', () => {
         });
         history.startCompression();
         history.add(incoming);
+        let cleared: Promise<void> | undefined;
         history.rebuildWith(() => {
-          history.clear();
+          cleared = history.clear();
           for (const row of retained) history.add(row);
         });
         let observed: unknown;
@@ -145,6 +148,7 @@ describe('compression rebuild clear observer failure', () => {
           observed = error;
         }
         expect(observed).toBe(failure);
+        await expect(cleared).rejects.toBe(failure);
         expect(events).toStrictEqual([
           'clear',
           'rebuild',
@@ -189,7 +193,7 @@ describe('standalone clear observer failure', () => {
       history.on('tokensUpdated', rejectClear);
       let observed: unknown;
       try {
-        history.clear();
+        await history.clear();
       } catch (error: unknown) {
         observed = error;
       }
@@ -230,8 +234,9 @@ describe('compression rebuild clear media settlement', () => {
       });
       history.startCompression();
       history.add(incoming);
+      let cleared: Promise<void> | undefined;
       history.rebuildWith(() => {
-        history.clear();
+        cleared = history.clear();
         history.add(retained);
       });
       let observed: unknown;
@@ -241,6 +246,7 @@ describe('compression rebuild clear media settlement', () => {
         observed = error;
       }
       expect(observed).toBe(failure);
+      await expect(cleared).rejects.toBe(failure);
       expect(released).toBe(true);
       expect(observeHistorySynchronouslyForTest(history)).toStrictEqual([
         retained,

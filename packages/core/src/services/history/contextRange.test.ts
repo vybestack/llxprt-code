@@ -61,10 +61,10 @@ describe('HistoryService context range', () => {
     expect(range.firstSeq).toBeLessThan(range.lastSeq);
   });
 
-  it('reports an empty range after clear', () => {
+  it('reports an empty range after clear', async () => {
     const service = new HistoryService();
     service.add(textContent('human', 'only'));
-    service.clear();
+    await service.clear();
     expect(service.getContextRange()).toStrictEqual({
       firstSeq: 0,
       lastSeq: 0,
@@ -119,14 +119,14 @@ describe('HistoryService context range publication', () => {
     expect(events[1]?.approximate).toBe(false);
   });
 
-  it('emits on clear with a zero-entry range', () => {
+  it('emits on clear with a zero-entry range', async () => {
     const service = new HistoryService();
     service.add(textContent('human', 'one'));
     const events: ContextRange[] = [];
     service.on('contextRangeChanged', (range) => {
       events.push(range);
     });
-    service.clear();
+    await service.clear();
     expect(events).toHaveLength(1);
     expect(events[0]).toStrictEqual({
       firstSeq: 0,

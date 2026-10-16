@@ -35,7 +35,7 @@ function registerPendingRemoval(size: number): void {
         expect(await store.hasReservations(removed.contentId)).toBe(false);
         expect(await store.hasReservations(shared.contentId)).toBe(true);
         recordRemovalOwners('pending-removals', size, owners);
-        history.clear();
+        await history.clear();
         expect(history.length()).toBe(0);
         await history.waitForOwnershipSettlement();
         expect(await store.hasReservations(shared.contentId)).toBe(false);

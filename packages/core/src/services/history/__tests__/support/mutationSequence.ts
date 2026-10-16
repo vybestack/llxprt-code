@@ -246,10 +246,10 @@ async function applyStep(
       await history.replaceAll(generatedRows(step.count, 'replaced'));
       return;
     case 'validateAndFix':
-      history.validateAndFix();
+      await history.validateAndFix();
       return;
     case 'clear':
-      history.clear();
+      await history.clear();
       return;
     case 'merge': {
       const other = new HistoryService();

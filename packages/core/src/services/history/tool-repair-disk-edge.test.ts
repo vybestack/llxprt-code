@@ -20,7 +20,7 @@ describe('disk repair edge contracts', () => {
       const input = repairRow(0, 3);
       history.add(input);
       const projection = testHistory(history);
-      history.validateAndFix();
+      await history.validateAndFix();
       expect(projection).toHaveLength(1);
       expect(projection[0]).toStrictEqual(input);
       expect(history.length()).toBe(2);
@@ -66,7 +66,7 @@ describe('disk repair edge contracts', () => {
         },
       ];
       for (const content of rows) await recorder.commit('content', { content });
-      history.validateAndFix();
+      await history.validateAndFix();
       await history.waitForTokenUpdates();
       const actual = await collectRawHistory(history);
       expect(
@@ -102,7 +102,7 @@ describe('disk repair large-row and cancellation contracts', () => {
       expect(
         await history.replaceToolResponseBlock(0, 2, replacementFor(0)),
       ).toBe(true);
-      history.validateAndFix();
+      await history.validateAndFix();
       await history.waitForTokenUpdates();
       const cursor = history.streamRawHistory();
       const first = await cursor.next();

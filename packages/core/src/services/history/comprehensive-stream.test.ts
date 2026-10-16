@@ -91,7 +91,7 @@ describe('comprehensive snapshot and content identity', () => {
       await collectJournalRowsForAssertions(service, async (expected) => {
         const first = await stream.next();
         expect(first.done).toBe(false);
-        service.clear();
+        await service.clear();
         service.add(suffixRow(3));
         expect<ReadonlyArray<IContent | void>>([
           first.value,

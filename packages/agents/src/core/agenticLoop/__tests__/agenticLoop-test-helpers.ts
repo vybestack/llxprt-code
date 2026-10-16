@@ -121,7 +121,7 @@ function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
     setHistory: async (nextHistory: readonly IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
-    clearHistory: () => {
+    clearHistory: async () => {
       history.splice(0, history.length);
     },
     getHistoryService: () => null,

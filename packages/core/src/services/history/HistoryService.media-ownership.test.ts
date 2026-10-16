@@ -132,9 +132,9 @@ describe('HistoryService local-media ownership lifecycle', () => {
     });
   }
 
-  function serviceOf(store: LocalMediaStore): HistoryService {
+  async function serviceOf(store: LocalMediaStore): Promise<HistoryService> {
     const service = new HistoryService();
-    service.registerMediaOwner(new HistoryMediaOwnership(store));
+    await service.registerMediaOwner(new HistoryMediaOwnership(store));
     return service;
   }
 
@@ -150,7 +150,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('adopts the durable reservation exactly once for content entering live history via addBatch', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const first = await admitted(store, [inlineImageContent(PNG_BASE64)]);
 
     await service.addBatch(first, undefined, {
@@ -175,7 +175,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     };
     const service = new HistoryService();
     service.addAll(initial);
-    service.registerMediaOwner(new HistoryMediaOwnership(store));
+    await service.registerMediaOwner(new HistoryMediaOwnership(store));
     store.failNextReserve();
 
     await expect(service.settleMediaOwnership()).rejects.toThrow(
@@ -190,14 +190,14 @@ describe('HistoryService local-media ownership lifecycle', () => {
     await service.settleMediaOwnership();
     expect(await store.hasReservations(block.contentId)).toBe(true);
 
-    service.clear();
+    await service.clear();
     await service.waitForOwnershipSettlement();
     expect(await store.hasReservations(block.contentId)).toBeFalsy();
   });
 
   it('keeps overlapping references and releases only content that leaves on replaceBatch then clear', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const first = await admitted(store, [inlineImageContent(PNG_BASE64)]);
     await service.addBatch(first, undefined, {
       adoptedOwners: reservations(first),
@@ -218,7 +218,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       removed: await store.hasReservations(removed.contentId),
     };
 
-    service.clear();
+    await service.clear();
     await service.waitForOwnershipSettlement();
 
     expect({
@@ -234,14 +234,14 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('releases every reservation on clear and dispose with nothing left behind', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const content = await admitted(store, [inlineImageContent(PNG_BASE64)]);
     await service.addBatch(content, undefined, {
       adoptedOwners: reservations(content),
     });
     const block = referenceBlockOf(content[0]);
 
-    service.clear();
+    await service.clear();
     await service.waitForOwnershipSettlement();
     const afterClear = await store.hasReservations(block.contentId);
 
@@ -263,7 +263,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('keeps retained references and releases compression-removed references through replaceAll and transformAll', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const first = await admitted(store, [inlineImageContent(PNG_BASE64)]);
     await service.addBatch(first, undefined, {
       adoptedOwners: reservations(first),
@@ -294,7 +294,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('releases media removed by a density mutation while retaining surviving ownership', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const contents = await admitted(store, [
       inlineImageContent(PNG_BASE64),
       inlineImageContent(SECOND_IMAGE_BASE64),
@@ -330,7 +330,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('restores ownership and history together when a batch listener fails', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const previous = await admitted(store, [inlineImageContent(PNG_BASE64)]);
     await service.addBatch(previous, undefined, {
       adoptedOwners: reservations(previous),
@@ -365,7 +365,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       rootDirectory: join(directory, 'media'),
       quotaBytes: 1024 * 1024,
     });
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     store.failEach(1);
     const replacement = await admitted(store, [inlineImageContent(PNG_BASE64)]);
     service.on('contentBatchAdded', () => {
@@ -387,7 +387,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('keeps legacy inline and URL media compatible without ownership changes', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const legacy: IContent[] = [
       {
         speaker: 'human',
@@ -417,7 +417,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
       const before = rows.map((content) => content.blocks[0].type);
 
-      service.clear();
+      await service.clear();
       await service.waitForOwnershipSettlement();
 
       await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
@@ -431,7 +431,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   it('does not lose a concurrent add while earlier ownership settles', async () => {
     const store = storeOf();
-    const service = serviceOf(store);
+    const service = await serviceOf(store);
     const first = await admitted(store, [inlineImageContent(PNG_BASE64)]);
 
     await service.addBatch(first, undefined, {

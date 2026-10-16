@@ -35,13 +35,13 @@ async function legacyRestore(
     await admissions.release(retained === undefined ? [] : [retained]);
   }
 }
-function participant(
+async function participant(
   history: HistoryService,
   stage: string,
   failure: Error,
   order: string[],
-): void {
-  history.registerMediaOwner(
+): Promise<void> {
+  await history.registerMediaOwner(
     mediaParticipant(() => {
       order.push('prepare');
       if (stage === 'prepare') throw failure;
@@ -86,7 +86,7 @@ async function outcome(
       history.setCacheAnchorSeq(1);
       const order: string[] = [];
       const failure = new Error(stage);
-      participant(history, stage, failure, order);
+      await participant(history, stage, failure, order);
       const input = clientArrayRows(size).map((row, index) =>
         index === size - 1
           ? {

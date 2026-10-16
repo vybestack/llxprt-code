@@ -41,7 +41,7 @@ async function observeUnbind(size: number, rollback: boolean): Promise<number> {
     const tokens = size * 3;
     expect(history.getTotalTokens()).toBe(tokens);
     const failure = new Error('unbind finalization rollback');
-    const finalization = pauseTransformFinalization(
+    const finalization = await pauseTransformFinalization(
       history,
       rollback ? failure : undefined,
     );

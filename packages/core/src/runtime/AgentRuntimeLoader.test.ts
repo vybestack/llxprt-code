@@ -417,7 +417,7 @@ describe('AgentRuntimeLoader', () => {
       await admission.releaseContents(admittedHistory, admissionContext);
       expect(await store.hasReservations(block.contentId)).toBe(true);
 
-      sharedHistory.clear();
+      await sharedHistory.clear();
       await sharedHistory.waitForOwnershipSettlement();
       expect(await store.hasReservations(block.contentId)).toBe(false);
     } finally {

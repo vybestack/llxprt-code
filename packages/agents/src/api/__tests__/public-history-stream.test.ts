@@ -43,7 +43,7 @@ for (const size of [512, 8192]) {
             try {
               const first = await cursor.next();
               expect(first.value).toStrictEqual(accountingRow(0));
-              history.clear();
+              await history.clear();
               await delay(10);
               expect({
                 decoded: decoded(),

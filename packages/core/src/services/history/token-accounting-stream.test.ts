@@ -198,7 +198,7 @@ describe('streamed hypothetical token estimate membership', () => {
           'active',
         );
         await entered.promise;
-        service.clear();
+        await service.clear();
         release.resolve();
         const expected = Array.from({ length: 512 }, (_, index) =>
           accountingTexts(index).reduce((sum, text) => sum + text.length, 0),

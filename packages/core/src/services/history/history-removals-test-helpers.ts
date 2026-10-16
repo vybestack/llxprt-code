@@ -23,7 +23,9 @@ export async function withRemovalFixture(
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
   try {
     await withBatchFixture(async (fixture) => {
-      fixture.history.registerMediaOwner(new HistoryMediaOwnership(store));
+      await fixture.history.registerMediaOwner(
+        new HistoryMediaOwnership(store),
+      );
       try {
         await action(fixture, store);
       } finally {

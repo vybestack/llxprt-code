@@ -62,7 +62,7 @@ describe('conversation array restore real local media ownership', () => {
             yield* rows;
           })(),
         );
-        history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.registerMediaOwner(new HistoryMediaOwnership(store));
         await history.addBatch(rows);
         await history.waitForCommit();
         await admission.releaseContents(rows, context);

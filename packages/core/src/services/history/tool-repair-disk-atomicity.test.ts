@@ -13,10 +13,10 @@ describe('disk validation repair atomicity', () => {
   it('repairs synchronously and does not insert duplicate synthetic rows', async () => {
     await withBatchFixture(async ({ history, recorder }) => {
       await recorder.commit('content', { content: repairRow(0, 3) });
-      history.validateAndFix();
+      await history.validateAndFix();
       const afterFirstRepair = history.length();
       await history.waitForTokenUpdates();
-      history.validateAndFix();
+      await history.validateAndFix();
       expect([afterFirstRepair, history.length()]).toStrictEqual([2, 2]);
     });
   });
@@ -29,7 +29,7 @@ describe('disk validation repair atomicity', () => {
         repairRow(index, 3),
       );
       recorder.failAdmissionAfter(1);
-      expect(() => history.validateAndFix()).toThrow(
+      await expect(history.validateAndFix()).rejects.toThrow(
         'injected journal admission failure',
       );
       expect(await collectRawHistory(history)).toStrictEqual(before);
@@ -49,7 +49,7 @@ describe('disk validation repair atomicity', () => {
         history.add(batchRow(10));
         throw new Error('repair observer rejection');
       });
-      history.validateAndFix();
+      await history.validateAndFix();
       await expect(history.waitForTokenUpdates()).rejects.toThrow(
         'repair observer rejection',
       );

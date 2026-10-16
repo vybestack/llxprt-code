@@ -22,7 +22,7 @@ async function verifyPause(size: number, active: boolean): Promise<number> {
         await delay(10);
         expect(decoded()).toBe(1);
         const before = owners.snapshot();
-        history.clear();
+        await history.clear();
         const afterClear = owners.snapshot();
         await delay(10);
         const output = process.env.PUBLIC_HISTORY_PAUSE_OUTPUT;

@@ -387,7 +387,7 @@ async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
       waitForIdle: async (): Promise<void> => {},
       streamHistory: (signal) => history.streamRawHistory(signal),
       clearHistory: async (): Promise<void> => {
-        history.clear();
+        await history.clear();
         await history.waitForOwnershipSettlement();
       },
       getHistoryService: () => history,
@@ -437,11 +437,11 @@ async function verifyStoredHistoryOnToolsRefresh(): Promise<{
       },
       streamHistory: (signal?: AbortSignal) => stored.streamRawHistory(signal),
       clearHistory: async (): Promise<void> => {
-        stored.clear();
+        await stored.clear();
         await stored.waitForOwnershipSettlement();
       },
       clearHistoryForDisposal: async (): Promise<void> => {
-        stored.clear();
+        await stored.clear();
         await stored.waitForOwnershipSettlement();
       },
       getHistoryService: vi.fn().mockReturnValue(stored),

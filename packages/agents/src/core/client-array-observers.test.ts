@@ -46,7 +46,7 @@ function registerObserver(size: number, retain: boolean): void {
               expect(count).toBe(size);
             });
           });
-          history.registerMediaOwner(
+          await history.registerMediaOwner(
             mediaParticipant(() => ({
               publish: () => undefined,
               rollback: () => undefined,

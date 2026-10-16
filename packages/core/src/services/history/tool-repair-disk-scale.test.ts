@@ -28,7 +28,7 @@ describe('disk tool replacement and validation repair', () => {
             ),
           ).toBe(true);
         const before = history.getTotalTokens();
-        history.validateAndFix();
+        await history.validateAndFix();
         await history.waitForTokenUpdates();
         let sourceIndex = 0;
         let synthetics = 0;

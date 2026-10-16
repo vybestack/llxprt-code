@@ -12,7 +12,10 @@ import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import {
+  createAgentRuntimeContext,
+  registerRuntimeMediaOwner,
+} from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
@@ -87,7 +90,7 @@ let directory = '';
 let store: LocalMediaStore;
 let admission: SpyAdmission;
 
-function createSession(): ChatSession {
+async function createSession(): Promise<ChatSession> {
   const provider: IProvider = {
     name: 'session-admission-provider',
     getDefaultModel: () => 'session-admission-model',
@@ -135,6 +138,7 @@ function createSession(): ChatSession {
     mediaStore: store,
     mediaAdmission: admission,
   });
+  await registerRuntimeMediaOwner(runtime);
   return new ChatSession(
     runtime,
     {
@@ -191,7 +195,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('keeps media usable after replacement settles and retains no admitted transcript rows', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG), imageRow(RED_PNG)]);
     const [first] = await referencedIds(chat);
     expect(first).toBeDefined();
@@ -201,7 +205,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('control: the retention check fails when an admitted array is deliberately retained', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     admission.retainStrongly = [];
     await chat.setHistory([imageRow(RED_PNG)]);
     await expect(expectNoLive(admission.weakAdmitted)).rejects.toThrow(
@@ -210,7 +214,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('releases prior media only after the replacement is published, keeping the new media reserved', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     const [oldId] = await referencedIds(chat);
     await chat.setHistory([imageRow(BLUE_PNG)]);
@@ -221,7 +225,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('releases each distinct reference once regardless of how many rows reference it', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([
       imageRow(RED_PNG),
       imageRow(BLUE_PNG),
@@ -237,7 +241,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('releases rows admitted before a mid-stream admission failure and keeps the prior history', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     const [priorId] = await referencedIds(chat);
     admission.failAdmitAtCall = admission.admitCalls + 2;
@@ -251,7 +255,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('reports a failed prior-media release after publishing the replacement', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     admission.failRelease = true;
     await expect(chat.setHistory([imageRow(BLUE_PNG)])).rejects.toThrow(
@@ -261,7 +265,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('clear releases media ownership and a second clear has nothing left to release', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     const [id] = await referencedIds(chat);
     await chat.clearHistory();
@@ -271,7 +275,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   });
 
   it('surfaces a failed release during clear', async () => {
-    const chat = createSession();
+    const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     admission.failRelease = true;
     await expect(chat.clearHistory()).rejects.toThrow(

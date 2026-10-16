@@ -62,7 +62,7 @@ async function compareBodies(size: number): Promise<void> {
       expect(
         await history.replaceToolResponseBlock(index, 2, replacementFor(index)),
       ).toBe(true);
-    history.validateAndFix();
+    await history.validateAndFix();
     await history.waitForTokenUpdates();
     const tail: IContent[] = [
       {

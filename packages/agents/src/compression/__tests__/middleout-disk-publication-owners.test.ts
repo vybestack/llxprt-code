@@ -35,7 +35,7 @@ async function publication(size: number): Promise<number> {
       let traversed = 0;
       let published = 0;
       let rejecting = true;
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant((input) => {
           if (!rejecting) return { publish: () => {}, rollback: () => {} };
           expect(Array.isArray(input.previous)).toBe(false);

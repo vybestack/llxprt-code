@@ -31,7 +31,7 @@ describe('summary cancellation before journal publication', () => {
       await history.waitForCommit();
       const controller = new AbortController();
       let publishedMedia = false;
-      history.registerMediaOwner(
+      await history.registerMediaOwner(
         mediaParticipant(async () => ({
           publish: async () => {
             publishedMedia = true;

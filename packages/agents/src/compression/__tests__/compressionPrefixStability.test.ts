@@ -445,11 +445,11 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
     );
   });
 
-  it('clear() preserves the anchor (compression rebuild survives)', () => {
+  it('clear() preserves the anchor (compression rebuild survives)', async () => {
     const hs = new HistoryService();
     hs.add(humanMsg('msg'));
     hs.setCacheAnchorSeq(3);
-    hs.clear();
+    await hs.clear();
     expect(hs.getCacheAnchorSeq()).toBe(3);
   });
 

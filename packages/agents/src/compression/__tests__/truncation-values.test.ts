@@ -67,7 +67,7 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
       truncationValues(size, 11, 2048, true),
     );
     const failure = new Error('truncation finalization rejection');
-    const paused = pauseTransformFinalization(
+    const paused = await pauseTransformFinalization(
       history,
       rollback ? failure : undefined,
     );

@@ -215,7 +215,7 @@ function legacyTest10() {
     systemPromptTokens,
   );
 }
-function legacyTest11() {
+async function legacyTest11() {
   const systemPromptTokens = 500;
   legacySuite0_historyService.setBaseTokenOffset(systemPromptTokens);
   // Add messages
@@ -238,7 +238,7 @@ function legacyTest11() {
   const curated = curatedHistoryForTest(legacySuite0_historyService);
   const messagesToKeep = curated.slice(10); // Keep last 10 messages (remove first 10)
   // Clear history and re-add the messages we want to keep
-  legacySuite0_historyService.clear();
+  await legacySuite0_historyService.clear();
   legacySuite0_historyService.setBaseTokenOffset(systemPromptTokens); // Restore system prompt offset
   for (const content of messagesToKeep) {
     legacySuite0_historyService.add(content);
@@ -401,8 +401,8 @@ describe('Compression Threshold: System Prompt Token Inclusion > System prompt i
 });
 describe('Compression Threshold: System Prompt Token Inclusion > System prompt is never compressed / should preserve system prompt offset after compression operations', () => {
   beforeEach(legacyHook0);
-  it('should preserve system prompt offset after compression operations', () => {
-    expect(legacyTest11).not.toThrow();
+  it('should preserve system prompt offset after compression operations', async () => {
+    await expect(legacyTest11()).resolves.toBeUndefined();
   });
 });
 describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle zero system prompt tokens', () => {

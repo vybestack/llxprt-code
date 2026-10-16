@@ -57,7 +57,7 @@ async function candidate(size: number, rollback: boolean): Promise<number> {
       for (let index = 0; index < size; index++)
         rows.append(suffixRow(index, 2048));
       const failure = new Error('candidate finalization rejected');
-      const finalization = pauseTransformFinalization(
+      const finalization = await pauseTransformFinalization(
         history,
         rollback ? failure : undefined,
       );
@@ -160,7 +160,7 @@ async function pending(size: number, rollback: boolean): Promise<number> {
     const selected = await detachedDigest(expectedRows(size, size - 2));
     const state: { baseline: number | null } = { baseline: 123 };
     const failure = new Error('fallback rejected after candidate installation');
-    const finalization = pauseTransformFinalization(history);
+    const finalization = await pauseTransformFinalization(history);
     fixture.pauseWriter();
     const operation = rejectedValue(
       applyPendingWindowFallback(

@@ -123,7 +123,7 @@ async function batchCase2(): Promise<unknown> {
 async function batchCase3(): Promise<string[]> {
   const history = new HistoryService();
   const externalRecords: string[] = [];
-  history.registerMediaOwner({
+  await history.registerMediaOwner({
     adopt: () => undefined,
     releaseAll: async () => undefined,
     reconcile: async () => undefined,
@@ -275,7 +275,7 @@ async function batchCase8(): Promise<number> {
   ]);
   await tokenizer.waitUntilSecond;
 
-  history.clear();
+  await history.clear();
   tokenizer.releaseSecond();
   await batch;
   await history.waitForTokenUpdates();

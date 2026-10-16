@@ -41,7 +41,7 @@ async function observerOwners(size: number, retain: boolean): Promise<boolean> {
       });
     });
     const failure = new Error('observer owner checkpoint');
-    history.registerMediaOwner(
+    await history.registerMediaOwner(
       mediaParticipant(() => ({
         publish: () => undefined,
         rollback: () => undefined,

@@ -16,7 +16,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from './chatSession.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import {
+  createAgentRuntimeContext,
+  registerRuntimeMediaOwner,
+} from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
@@ -315,6 +318,7 @@ async function createFixture(
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
+  await registerRuntimeMediaOwner(runtime);
   const contentGenerator = createFixtureContentGenerator();
   return {
     chat: new ChatSession(runtime, contentGenerator, {}, []),

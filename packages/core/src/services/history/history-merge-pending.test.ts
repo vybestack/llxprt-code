@@ -90,11 +90,13 @@ describe('history merge source membership pinning', () => {
             target.on('contentAdded', (row) =>
               observed.push(row.metadata?.chronology?.seq ?? -1),
             );
+            let sourceCleared: Promise<void> | undefined;
             target.once('contentAdded', () => {
-              source.clear();
+              sourceCleared = source.clear();
               source.add(mergeRow(30000));
             });
             await target.merge(source);
+            await sourceCleared;
             expect(observed).toStrictEqual(
               Array.from({ length: size }, (_unused, index) => index + 1),
             );
