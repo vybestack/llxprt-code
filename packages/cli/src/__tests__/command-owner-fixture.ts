@@ -18,6 +18,7 @@ import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/o
 export function useCommandOwners(): (
   label: string,
   mcpServers?: AgentConfig['mcpServers'],
+  hooks?: AgentConfig['hooks'],
 ) => Promise<Agent> {
   const credentials = useOwnedCredentials();
   let root: string;
@@ -65,7 +66,7 @@ export function useCommandOwners(): (
     }
   });
 
-  return async (label, mcpServers) => {
+  return async (label, mcpServers, hooks) => {
     const workingDir = join(root, label);
     await mkdir(workingDir);
     const agent = await createAgent({
@@ -80,6 +81,8 @@ export function useCommandOwners(): (
         includeProcessCwd: false,
       },
       mcpServers,
+      hooks,
+      settings: hooks === undefined ? undefined : { enableHooks: true },
       mcpEnabled: mcpServers !== undefined,
       folderTrust: mcpServers === undefined ? undefined : true,
       lsp: false,

@@ -11,7 +11,6 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
-import { bindToolsCommand } from './toolsCommandHost.js';
 import { createToolsCommand } from './toolsCommand.js';
 
 describe('registered tools command owner', () => {
@@ -25,9 +24,17 @@ describe('registered tools command owner', () => {
     owner.setEphemeralSetting('tools.disabled', []);
     decoy.setEphemeralSetting('tools.disabled', []);
     const history: HistoryItemWithoutId[] = [];
-    const command = createToolsCommand(bindToolsCommand(owner), (item) => {
-      history.push(item);
-    });
+    const command = createToolsCommand(
+      {
+        listTools: () => owner.tools.list(),
+        readSetting: (key) => owner.getEphemeralSetting(key),
+        writeSetting: (key, value) => owner.setEphemeralSetting(key, value),
+        refreshToolSchema: () => owner.agentClient.setTools(),
+      },
+      (item) => {
+        history.push(item);
+      },
+    );
     const registry = await CommandService.create(
       [
         new BuiltinCommandLoader(

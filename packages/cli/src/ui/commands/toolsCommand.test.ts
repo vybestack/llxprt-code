@@ -7,7 +7,6 @@ import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js'
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { createToolsCommand } from './toolsCommand.js';
-import { bindToolsCommand } from './toolsCommandHost.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -58,8 +57,16 @@ function createMockAgent(
 }
 
 function createCommand(context: CommandOwnerFixture) {
+  const agent = context.services.agent;
   return createToolsCommand(
-    bindToolsCommand(context.services.agent),
+    agent === null
+      ? null
+      : {
+          listTools: () => agent.tools.list(),
+          readSetting: (key) => agent.getEphemeralSetting(key),
+          writeSetting: (key, value) => agent.setEphemeralSetting(key, value),
+          refreshToolSchema: () => agent.agentClient.setTools(),
+        },
     context.ui.addItem,
   );
 }
