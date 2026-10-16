@@ -13,7 +13,10 @@ import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  validateSessionMediaPackage,
+} from '@vybestack/llxprt-code-core';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -67,7 +70,12 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
           commands.addItem(item, timestamp);
         const continueCommand = createContinueCommand(
-          bindContinueCommandOperations(next, null, 'agent'),
+          bindContinueCommandOperations(
+            next.session.exportSession.bind(next.session),
+            () => false,
+            async () => [...(await next.session.listBrowserTargets())],
+            validateSessionMediaPackage,
+          ),
         );
         const deps: SlashCommandHandlerDeps = {
           commands: [continueCommand],

@@ -21,6 +21,11 @@ import {
 } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook } from '../../__tests__/render.js';
+import {
+  ownerOperations,
+  rawOperations,
+} from '../hooks/__tests__/chat-registration-inputs.js';
+import { bindChatRecordingOperations } from './chatCommandHost.js';
 import { useChatCommand } from '../hooks/useChatCommand.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { SlashCommand } from './types.js';
@@ -31,7 +36,23 @@ function registeredChat(
   swap?: RecordingSwapCallbacks,
 ): SlashCommand {
   const { result, unmount } = renderHook(() =>
-    useChatCommand(agent, null, mode, undefined, swap, () => true),
+    useChatCommand(
+      ownerOperations(agent),
+      bindChatRecordingOperations(
+        () => swap?.getCurrentRecording() ?? null,
+        () => null,
+        () => null,
+        rawOperations(agent).getMediaStore,
+        () =>
+          agent.agentClient.hasChatInitialized()
+            ? agent.agentClient.getChat().getHistory()
+            : null,
+        rawOperations(agent).replaceChatHistory,
+        () => null,
+      ),
+      mode,
+      () => true,
+    ),
   );
   const command = result.current;
   unmount();

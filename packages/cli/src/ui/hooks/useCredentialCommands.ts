@@ -1,3 +1,8 @@
+import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
+import { useSwitch } from './useProviderSwitchRecording.js';
+import { useProviderCommand } from './useProviderCommand.js';
+import { useModelSelectionCommands } from './useModelSelectionCommands.js';
+import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -38,6 +43,9 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 type CredentialCommands = Pick<
   BuiltinCommandOwners,
+  | 'modelCommand'
+  | 'toolFormatCommand'
+  | 'providerCommand'
   | 'baseurlCommand'
   | 'logoutCommand'
   | 'keyfileCommand'
@@ -85,12 +93,15 @@ export function useCredentialCommands(
   agent: Agent | null,
   settings: LoadedSettings,
   config: CliUiRuntime | null,
-  recordProviderSwitch: (provider: string, model: string) => Promise<void>,
+  rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
+  recordingOwner: 'agent' | 'raw' | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
   reloadCommands: () => void,
+  refreshProviderAliases: () => Promise<void>,
 ): CredentialCommands {
   const api = useRuntimeApi();
   const oauthControl = useOAuthControl();
+  const recordSwitch = useSwitch(agent?.session, rawRecording, recordingOwner);
   const baseurlCommand = useMemo(
     () => createBaseurlCommand(bindBaseurlCommandOperations(api, agent)),
     [api, agent],
@@ -107,7 +118,6 @@ export function useCredentialCommands(
     () => createKeyCommand(bindKeyCommandOperations(api, config)),
     [api, config],
   );
-  const authCommand = useAuthOwnerCommand(oauthControl, settings);
   const quotaCommand = useMemo(
     () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
     [api, oauthControl],
@@ -132,21 +142,31 @@ export function useCredentialCommands(
         api,
         settings,
         oauthControl,
-        recordProviderSwitch,
+        recordSwitch,
       ),
-    [agent, api, oauthControl, recordProviderSwitch, settings],
+    [agent, api, oauthControl, recordSwitch, settings],
   );
-  const toolkeyCommands = useMemo(createToolkeyCommands, []);
   return useMemoCredentialRegistry({
+    ...useModelSelectionCommands(
+      useBound(api, api.setActiveModel),
+      useBound(api, api.getActiveToolFormatState),
+      useBound(api, api.setActiveToolFormatOverride),
+      recordSwitch,
+    ),
+    providerCommand: useProviderCommand(
+      agent,
+      refreshProviderAliases,
+      recordSwitch,
+    ),
     baseurlCommand,
     logoutCommand,
     keyfileCommand,
     keyCommand,
-    authCommand,
+    authCommand: useAuthOwnerCommand(oauthControl, settings),
     quotaCommand,
     mcpCommand,
     profileCommand,
-    ...toolkeyCommands,
+    ...useMemo(createToolkeyCommands, []),
   });
 }
 
@@ -168,6 +188,9 @@ function useMemoCredentialRegistry(
   commands: CredentialCommands,
 ): CredentialCommands {
   const {
+    modelCommand,
+    toolFormatCommand,
+    providerCommand,
     baseurlCommand,
     logoutCommand,
     keyfileCommand,
@@ -181,6 +204,9 @@ function useMemoCredentialRegistry(
   } = commands;
   return useMemo(
     () => ({
+      modelCommand,
+      toolFormatCommand,
+      providerCommand,
       baseurlCommand,
       logoutCommand,
       keyfileCommand,
@@ -193,6 +219,9 @@ function useMemoCredentialRegistry(
       toolkeyfileCommand,
     }),
     [
+      modelCommand,
+      toolFormatCommand,
+      providerCommand,
       baseurlCommand,
       logoutCommand,
       keyfileCommand,
