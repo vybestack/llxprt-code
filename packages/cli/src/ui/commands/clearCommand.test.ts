@@ -31,8 +31,17 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { assertDefined } from '../../__tests__/assertions.js';
 
 async function clearAction(context: CommandOwnerFixture, args: string) {
+  const agent = context.services.agent;
+  const session =
+    agent === null
+      ? null
+      : bindClearSession(
+          (reason) => agent.hooks.triggerSessionEnd(reason),
+          () => agent.session.startNewSession(),
+          (reason) => agent.hooks.triggerSessionStart(reason),
+        );
   const action = createClearCommand(
-    bindClearSession(context.services.agent),
+    session,
     context.ui.setDebugMessage,
     context.ui.addItem,
     context.ui.updateHistoryTokenCount,

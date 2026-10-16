@@ -53,7 +53,19 @@ export function usePresentationCommands(
         addItem,
       ),
       clearCommand: createClearCommand(
-        bindClearSession(agent),
+        bindClearSession(
+          agent === null
+            ? null
+            : agent.hooks.triggerSessionEnd.bind(agent.hooks),
+          async () => {
+            if (agent === null) throw new Error('Session agent is unavailable');
+            await agent.session.startNewSession();
+          },
+          async (reason) => {
+            if (agent === null) throw new Error('Session agent is unavailable');
+            return agent.hooks.triggerSessionStart(reason);
+          },
+        ),
         setDebugMessage,
         addItem,
         updateHistoryTokenCount,

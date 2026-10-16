@@ -35,7 +35,11 @@ describe('restoreCommand', () => {
   function registerRestore(config: Parameters<typeof bindRestoreCommand>[0]) {
     return bindRestoreCommand(
       config,
-      mockContext.services.agent,
+      async (history) => {
+        const agent = mockContext.services.agent;
+        if (agent === null) throw new Error('Session agent is unavailable');
+        await agent.setHistory(history);
+      },
       mockContext.services.git,
       () => mockContext.services.settings.merged.enableFuzzyFiltering ?? true,
       (history) => mockContext.ui.loadHistory(history),

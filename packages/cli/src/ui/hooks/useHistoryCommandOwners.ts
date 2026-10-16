@@ -27,6 +27,10 @@ import {
   bindCopyCommandHistoryRead,
 } from '../commands/copyCommandHost.js';
 
+function toolsUnavailable(): never {
+  throw new Error('agent not available');
+}
+
 export function useHistoryCommandOwners(
   agent: Agent | null,
   config: CliUiRuntime | null,
@@ -47,7 +51,13 @@ export function useHistoryCommandOwners(
   return useMemo(
     () => ({
       diagnosticsCommand: createDiagnosticsCommand(
-        bindDiagnosticsReads(config, settings, agent, runtimeApi, oauthControl),
+        bindDiagnosticsReads(
+          config,
+          settings,
+          agent === null ? toolsUnavailable : () => agent.tools.list(),
+          runtimeApi,
+          oauthControl,
+        ),
       ),
       perfCommand: createPerfCommand({
         snapshotCapability: config?.getPerfSnapshotCapability?.() ?? null,
@@ -86,7 +96,10 @@ export function useHistoryCommandOwners(
       ),
       restoreCommand: bindRestoreCommand(
         config,
-        agent,
+        async (history) => {
+          if (agent === null) throw new Error('Session agent is unavailable');
+          await agent.setHistory(history);
+        },
         config?.getCheckpointingEnabled() === true
           ? config.checkpoints
           : undefined,

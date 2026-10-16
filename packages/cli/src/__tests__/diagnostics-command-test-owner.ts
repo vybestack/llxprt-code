@@ -12,7 +12,11 @@ export function registerDiagnosticsCommand(owner: CommandOwnerFixture) {
     bindDiagnosticsReads(
       owner.services.config,
       owner.services.settings,
-      owner.services.agent,
+      () => {
+        const agent = owner.services.agent;
+        if (agent === null) throw new Error('agent not available');
+        return agent.tools.list();
+      },
       owner.runtimeApi,
       owner.oauthControl,
     ),

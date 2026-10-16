@@ -93,7 +93,14 @@ function runProvider(context: CommandOwnerFixture, args: string) {
   const command = createProviderCommand(
     bindProviderCommandOperations(
       context.runtimeApi,
-      context.services.agent,
+      async (name, options) => {
+        const agent = context.services.agent;
+        if (agent === null)
+          throw new Error(
+            'Cannot switch provider: the interactive Agent is not available. Restart the session.',
+          );
+        return agent.setProvider(name, undefined, options);
+      },
       context.refreshProviderAliases,
       async () => {},
     ),

@@ -115,7 +115,11 @@ async function dispatchFailure(
     isMcpDiscoveryPending: () => false,
     resumeRawSession: null,
     replayResumedHistory: () => {},
-    recordCommandError: bindCommandErrorRecorder(owner, 'agent', undefined),
+    recordCommandError: bindCommandErrorRecorder(
+      owner.session.recordRecordingEvent.bind(owner.session),
+      'agent',
+      undefined,
+    ),
     loadCommandHistory: async () => {},
   };
   await processSlashCommand(deps, `/mcp auth ${server}`);
