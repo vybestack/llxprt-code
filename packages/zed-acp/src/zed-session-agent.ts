@@ -292,19 +292,33 @@ export async function buildZedSessionAgent(
 export async function disposeZedSession(
   detach: () => void,
   terminals: TerminalManager | null,
-  logger: DebugLogger,
+  _logger: DebugLogger,
   abortPrompt: () => void,
   agent: Pick<Agent, 'dispose'>,
 ): Promise<void> {
+  const failures: unknown[] = [];
   try {
     detach();
-    await terminals
-      ?.settleAll()
-      .catch((error) =>
-        logger.debug(() => `Terminal cleanup failed: ${error}`),
-      );
-    abortPrompt();
-  } finally {
-    await agent.dispose();
+  } catch (error) {
+    failures.push(error);
   }
+  const terminalRelease = terminals?.dispose();
+  try {
+    abortPrompt();
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    await terminalRelease;
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    await agent.dispose();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'ACP session release failed');
 }

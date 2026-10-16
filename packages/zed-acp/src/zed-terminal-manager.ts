@@ -42,11 +42,20 @@ interface ActiveTerminal {
   readonly command: string;
   readonly cwd: string;
   toolCallId: string | undefined;
+  killPromise: Promise<void> | undefined;
+  releasePromise: Promise<void> | undefined;
+}
+
+interface AcceptedTerminal {
+  readonly controller: AbortController;
+  readonly completed: Promise<void>;
+  readonly complete: () => void;
+  failure: { readonly reason: unknown } | undefined;
 }
 
 interface TerminalWaitState {
   exit: acp.WaitForTerminalExitResponse | undefined;
-  exitError: unknown;
+  exitError: { readonly reason: unknown } | undefined;
   previousOutput: string;
   killed: boolean;
   killDeadline: number;
@@ -68,6 +77,9 @@ function errorMessage(error: unknown): string {
 export class TerminalManager {
   private readonly pendingCalls: PendingShellCall[] = [];
   private readonly activeTerminals = new Set<ActiveTerminal>();
+  private readonly accepted = new Set<AcceptedTerminal>();
+  private disposed = false;
+  private closing: Promise<void> | undefined;
 
   constructor(
     private readonly sessionId: string,
@@ -87,6 +99,7 @@ export class TerminalManager {
   }
 
   async observeToolCall(call: AgentToolCall): Promise<void> {
+    this.assertOpen();
     const command = readCommand(call);
     if (command === null) {
       return;
@@ -135,12 +148,47 @@ export class TerminalManager {
     onOutput: (event: ShellOutputEvent) => void,
     signal: AbortSignal,
   ): Promise<ShellExecutionResult> {
-    if (signal.aborted) {
-      return abortedResult();
-    }
-    if (command.trim().length === 0) {
+    this.assertOpen();
+    if (signal.aborted) return abortedResult();
+    if (command.trim().length === 0)
       throw new Error('Shell command must not be empty');
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    const accepted: AcceptedTerminal = {
+      controller,
+      completed,
+      complete,
+      failure: undefined,
+    };
+    this.accepted.add(accepted);
+    try {
+      return await this.executeAccepted(
+        command,
+        cwd,
+        onOutput,
+        controller.signal,
+      );
+    } catch (reason) {
+      accepted.failure = { reason };
+      throw reason;
+    } finally {
+      signal.removeEventListener('abort', abort);
+      this.accepted.delete(accepted);
+      accepted.complete();
     }
+  }
+
+  private async executeAccepted(
+    command: string,
+    cwd: string,
+    onOutput: (event: ShellOutputEvent) => void,
+    signal: AbortSignal,
+  ): Promise<ShellExecutionResult> {
     const shell = getShellConfiguration();
     const handle = await this.connection.createTerminal({
       command: shell.executable,
@@ -154,33 +202,47 @@ export class TerminalManager {
       command,
       cwd,
       toolCallId: undefined,
+      killPromise: undefined,
+      releasePromise: undefined,
     };
-    let registered = false;
+    this.activeTerminals.add(active);
     try {
-      active.toolCallId = this.claimPendingCall(command, cwd);
-      this.activeTerminals.add(active);
-      registered = true;
-      if (active.toolCallId !== undefined) {
-        await this.sendTerminalUpdate(active);
+      let result: ShellExecutionResult;
+      try {
+        active.toolCallId = this.claimPendingCall(command, cwd);
+        if (active.toolCallId !== undefined)
+          await this.sendTerminalUpdate(active);
+        result = await this.waitForTerminal(active, onOutput, signal);
+      } catch (primary) {
+        return await this.rejectTerminal(active, primary);
       }
-      return await this.waitForTerminal(active, onOutput, signal);
-    } catch (error) {
-      if (this.activeTerminals.delete(active) || !registered) {
-        await this.killAndRelease(active);
-      }
-      throw error;
+      await this.release(active);
+      return result;
     } finally {
-      if (this.activeTerminals.delete(active)) {
-        await this.release(active);
-      }
+      this.activeTerminals.delete(active);
     }
   }
 
   async settleAll(): Promise<void> {
     this.pendingCalls.splice(0);
-    const terminals = [...this.activeTerminals];
-    this.activeTerminals.clear();
-    await Promise.allSettled(terminals.map((t) => this.killAndRelease(t)));
+    const accepted = [...this.accepted];
+    for (const terminal of accepted) terminal.controller.abort();
+    await Promise.all(accepted.map((terminal) => terminal.completed));
+    const failures = accepted.flatMap((terminal) =>
+      terminal.failure === undefined ? [] : [terminal.failure.reason],
+    );
+    raiseTerminalFailures(failures);
+  }
+
+  dispose(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
+    this.disposed = true;
+    this.closing = this.settleAll();
+    return this.closing;
+  }
+
+  private assertOpen(): void {
+    if (this.disposed) throw new Error('ACP terminal manager is disposed');
   }
 
   private claimPendingCall(command: string, cwd: string): string | undefined {
@@ -242,7 +304,7 @@ export class TerminalManager {
     try {
       state.exit = await active.handle.waitForExit();
     } catch (error) {
-      state.exitError = error;
+      state.exitError = { reason: error };
     }
   }
 
@@ -342,7 +404,7 @@ export class TerminalManager {
       finalEviction ||= finalPollEviction;
     }
     if (state.exitError !== undefined) {
-      throw state.exitError;
+      throw state.exitError.reason;
     }
     return finalEviction;
   }
@@ -406,27 +468,39 @@ export class TerminalManager {
     return !hadEviction && state.evictionNoticeEmitted;
   }
 
-  private async killAndRelease(active: ActiveTerminal): Promise<void> {
-    await this.kill(active);
-    await this.release(active);
+  private async rejectTerminal(
+    active: ActiveTerminal,
+    primary: unknown,
+  ): Promise<never> {
+    const failures: unknown[] = [primary];
+    if (active.killPromise === undefined) {
+      try {
+        await this.kill(active);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      await this.release(active);
+    } catch (error) {
+      failures.push(error);
+    }
+    raiseTerminalFailures(failures);
+    throw primary;
   }
 
-  private async kill(active: ActiveTerminal): Promise<void> {
-    try {
-      await active.handle.kill();
-    } catch (error) {
-      this.logger.debug(() => `Terminal kill failed: ${errorMessage(error)}`);
-    }
+  private kill(active: ActiveTerminal): Promise<void> {
+    active.killPromise ??= Promise.resolve()
+      .then(() => active.handle.kill())
+      .then(() => undefined);
+    return active.killPromise;
   }
 
-  private async release(active: ActiveTerminal): Promise<void> {
-    try {
-      await active.handle.release();
-    } catch (error) {
-      this.logger.debug(
-        () => `Terminal release failed: ${errorMessage(error)}`,
-      );
-    }
+  private release(active: ActiveTerminal): Promise<void> {
+    active.releasePromise ??= Promise.resolve()
+      .then(() => active.handle.release())
+      .then(() => undefined);
+    return active.releasePromise;
   }
 }
 
@@ -605,4 +679,10 @@ function delay(milliseconds: number): {
       }
     },
   };
+}
+
+function raiseTerminalFailures(failures: readonly unknown[]): void {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'ACP terminal release failed');
 }
