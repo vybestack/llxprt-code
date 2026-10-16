@@ -4,98 +4,51 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { OAuthControl } from '../contexts/OAuthControlContext.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
-import type { LoadedSettings } from '../../config/settings.js';
-import { SettingScope } from '../../config/settings.js';
-import {
-  agentActiveProviderStatus,
-  recordActiveProviderSwitch,
-} from '../utils/recordActiveProviderSwitch.js';
-import {
-  listProfiles as listRuntimeProfiles,
-  createProfileSchemas,
-} from './profileSchemas.js';
+import { createProfileSchemas } from './profileSchemas.js';
 import {
   saveLoadBalancerProfile,
   saveModelProfile,
 } from './profileLoadBalancer.js';
 import type { ProfileCommandOperations } from './profileCommand.js';
 
-export interface ProfileCommandHost {
-  readonly agent: Agent | null;
-  readonly runtimeApi: RuntimeApi;
-  readonly settings: Pick<LoadedSettings, 'setValue' | 'merged'>;
-  readonly oauthControl: Pick<OAuthControl, 'listBuckets'>;
-  readonly recordProviderSwitch: (
-    provider: string,
-    model: string,
-  ) => void | Promise<void>;
-}
-
 export function bindProfileCommandOperations(
-  host: ProfileCommandHost,
+  listProfiles: ProfileCommandOperations['listProfiles'],
+  readProvider: Parameters<typeof saveModelProfile>[1],
+  listBuckets: Parameters<typeof saveModelProfile>[3],
+  isFuzzyEnabled: () => boolean,
+  saveSnapshot: Parameters<typeof saveModelProfile>[2],
+  listSavedProfiles: Parameters<typeof saveLoadBalancerProfile>[1],
+  readEphemerals: Parameters<typeof saveLoadBalancerProfile>[2],
+  saveLoadBalancer: Parameters<typeof saveLoadBalancerProfile>[3],
+  loadProfile: ProfileCommandOperations['loadProfile'],
+  publishLoadedProfile: ProfileCommandOperations['publishLoadedProfile'],
+  recordProviderSwitch: ProfileCommandOperations['recordProviderSwitch'],
+  deleteProfile: ProfileCommandOperations['deleteProfile'],
+  setDefaultProfileName: ProfileCommandOperations['setDefaultProfileName'],
 ): ProfileCommandOperations {
-  const { agent, runtimeApi, settings, oauthControl } = host;
-  const listProfiles = async (): Promise<readonly string[]> =>
-    agent === null
-      ? listRuntimeProfiles(runtimeApi)
-      : agent.workspace.profileDefinitions.listProfiles();
-  const schemas = createProfileSchemas(
-    {
-      listProfiles,
-      getActiveProviderName: () =>
-        agent?.getProvider() ??
-        runtimeApi.providerStatus().providerName ??
-        undefined,
-      listBuckets: oauthControl.listBuckets,
-    },
-    () => settings.merged.enableFuzzyFiltering ?? true,
-  );
-
   return {
-    schemas,
+    schemas: createProfileSchemas(
+      {
+        listProfiles,
+        getActiveProviderName: () => readProvider() ?? undefined,
+        listBuckets,
+      },
+      isFuzzyEnabled,
+    ),
     saveModelProfile: (parts) =>
-      saveModelProfile(parts, runtimeApi, agent, oauthControl.listBuckets),
+      saveModelProfile(parts, readProvider, saveSnapshot, listBuckets),
     saveLoadBalancerProfile: (parts) =>
-      saveLoadBalancerProfile(parts, runtimeApi),
-    loadProfile: async (profileName) => {
-      if (agent === null)
-        throw new Error('Agent unavailable. Restart before loading a profile.');
-      return agent.profiles.load(profileName);
-    },
-    publishLoadedProfile: async () => {
-      if (agent !== null) await agent.mcp.refresh();
-    },
-    recordProviderSwitch: (result, profileLoadResult, reportFailure) => {
-      if (agent === null) throw new Error('Session agent is unavailable');
-      return recordActiveProviderSwitch(
-        { recordProviderSwitch: host.recordProviderSwitch },
-        agentActiveProviderStatus(
-          () => agent.getProvider(),
-          () => agent.getModel(),
-        ),
-        reportFailure,
-        {
-          providerName: result.providerName,
-          modelName: profileLoadResult.modelName,
-        },
-      );
-    },
-    deleteProfile: async (profileName) => {
-      if (agent === null) await runtimeApi.deleteProfileByName(profileName);
-      else await agent.deleteProfileByName(profileName);
-    },
+      saveLoadBalancerProfile(
+        parts,
+        listSavedProfiles,
+        readEphemerals,
+        saveLoadBalancer,
+      ),
+    loadProfile,
+    publishLoadedProfile,
+    recordProviderSwitch,
+    deleteProfile,
     listProfiles,
-    setDefaultProfileName: async (profileName) => {
-      if (agent === null) runtimeApi.setDefaultProfileName(profileName);
-      else agent.setDefaultProfileName(profileName);
-      settings.setValue(
-        SettingScope.User,
-        'defaultProfile',
-        profileName ?? undefined,
-      );
-    },
+    setDefaultProfileName,
   };
 }

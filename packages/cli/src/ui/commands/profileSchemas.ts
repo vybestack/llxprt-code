@@ -8,7 +8,6 @@ import {
   type CommandArgumentSchema,
   type CompleterFn,
 } from './schema/types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { MessageActionReturn } from './types.js';
 
@@ -42,10 +41,6 @@ export function validateBucketName(bucket: string): {
   }
 
   return { valid: true };
-}
-
-export async function listProfiles(runtimeApi: RuntimeApi): Promise<string[]> {
-  return runtimeApi.listSavedProfiles();
 }
 
 // Recursive schema for unlimited profile selection
