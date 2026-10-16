@@ -51,21 +51,20 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
   /**
    * Get the last user (human) content
    */
-  getLastUserContent(): IContent | undefined {
+  getLastUserContent(): Promise<IContent | undefined> {
     return this.getLastContent('human');
   }
 
   /**
    * Get the last AI content
    */
-  getLastAIContent(): IContent | undefined {
+  getLastAIContent(): Promise<IContent | undefined> {
     return this.getLastContent('ai');
   }
 
-  getLastContent(speaker?: IContent['speaker']): IContent | undefined {
-    return this.journal.withRowSummary((summary) =>
-      summary.lastContent(speaker),
-    );
+  /** The newest row, optionally of one speaker; the row is read, never cached. */
+  getLastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
+    return this.journal.lastContent(speaker);
   }
 
   /**

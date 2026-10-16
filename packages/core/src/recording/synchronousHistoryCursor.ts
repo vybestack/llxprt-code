@@ -381,15 +381,15 @@ export function captureHistoryOrdinalDirectory(
 }
 
 /**
- * Run `execute` over a cursor on `snapshot` and leave the snapshot pinned; the
- * caller still owns its release.
+ * Fold `snapshot` into a cursor. `dispose` closes the cursor and the scratch
+ * directory behind it; the snapshot stays pinned and its release stays with
+ * the caller.
  */
-export function executePinnedCursor<T>(
+function openPinnedCursor(
   snapshot: PendingFoldSnapshot,
-  execute: (cursor: HistoryReadCursor) => T,
   counters?: JournalReadCounters,
   signal?: AbortSignal,
-): T {
+): { readonly cursor: HistoryReadCursor; dispose(): void } {
   const directory = new MutableRowDirectory();
   const origins = new RowOriginDictionary();
   try {
@@ -412,19 +412,58 @@ export function executePinnedCursor<T>(
     } finally {
       staged.close();
     }
-    const cursor = new SynchronousHistoryCursor(
-      snapshot,
-      directory,
-      origins,
-      counters,
-      signal,
-    );
-    try {
-      return execute(cursor);
-    } finally {
-      cursor.close();
-    }
-  } finally {
+  } catch (error) {
     directory.close();
+    throw error;
+  }
+  const cursor = new SynchronousHistoryCursor(
+    snapshot,
+    directory,
+    origins,
+    counters,
+    signal,
+  );
+  return {
+    cursor,
+    dispose: (): void => {
+      try {
+        cursor.close();
+      } finally {
+        directory.close();
+      }
+    },
+  };
+}
+
+/**
+ * Run `execute` over a cursor on `snapshot` and leave the snapshot pinned; the
+ * caller still owns its release.
+ */
+export function executePinnedCursor<T>(
+  snapshot: PendingFoldSnapshot,
+  execute: (cursor: HistoryReadCursor) => T,
+  counters?: JournalReadCounters,
+  signal?: AbortSignal,
+): T {
+  const { cursor, dispose } = openPinnedCursor(snapshot, counters, signal);
+  try {
+    return execute(cursor);
+  } finally {
+    dispose();
+  }
+}
+
+/** {@link executePinnedCursor} for a callback that keeps reading across awaits. */
+export async function executePinnedCursorAsync<T>(
+  snapshot: PendingFoldSnapshot,
+  execute: (cursor: HistoryReadCursor) => Promise<T>,
+  counters?: JournalReadCounters,
+  signal?: AbortSignal,
+): Promise<T> {
+  const { cursor, dispose } = openPinnedCursor(snapshot, counters, signal);
+  try {
+    return await execute(cursor);
+  } finally {
+    dispose();
   }
 }

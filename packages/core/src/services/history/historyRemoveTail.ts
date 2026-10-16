@@ -55,13 +55,13 @@ function suffixOrigins(
   journal: HistoryStorePort,
   previous: HistoryMutationSnapshot,
   cut: number,
-): ReadonlyArray<string | undefined> {
-  return journal.withReadRows((cursor) => {
-    if (cursor.length !== previous.length)
+): Promise<ReadonlyArray<string | undefined>> {
+  return journal.readRows(async (view) => {
+    if (view.length !== previous.length)
       throw new Error('History changed between the snapshot and its removal');
     const origins: Array<string | undefined> = [];
-    for (let index = cut; index < cursor.length; index++)
-      origins.push(cursor.originAt(index));
+    for (let index = cut; index < view.length; index++)
+      origins.push(await view.originAt(index));
     return origins;
   });
 }
@@ -176,7 +176,7 @@ async function removeAndRecalculate(
   let origins: ReadonlyArray<string | undefined> = [];
   try {
     input.journal.adoptMutationBoundary(previous.durableTail);
-    origins = suffixOrigins(input.journal, previous, cut);
+    origins = await suffixOrigins(input.journal, previous, cut);
     input.journal.apply({
       kind: 'rewind',
       itemsRemoved: 1,

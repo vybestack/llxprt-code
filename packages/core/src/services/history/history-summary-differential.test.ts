@@ -31,7 +31,7 @@ class RescanHistory extends HistoryService {
     });
   }
 
-  lastRow(speaker?: IContent['speaker']): IContent | undefined {
+  lastRow(speaker?: IContent['speaker']): Promise<IContent | undefined> {
     return this.getLastContent(speaker);
   }
 }
@@ -80,38 +80,48 @@ interface Views {
   readonly lastAI: IContent | undefined;
 }
 
-function serviceViews(history: RescanHistory, at: string): Views {
+async function serviceViews(
+  history: RescanHistory,
+  at: string,
+): Promise<Views> {
   return {
     at,
     statistics: history.getStatistics(),
     range: history.getContextRange(),
-    lastRow: SPEAKERS.map((speaker) => history.lastRow(speaker)),
-    lastUser: history.getLastUserContent(),
-    lastAI: history.getLastAIContent(),
+    lastRow: await Promise.all(
+      SPEAKERS.map((speaker) => history.lastRow(speaker)),
+    ),
+    lastUser: await history.getLastUserContent(),
+    lastAI: await history.getLastAIContent(),
   };
 }
 
-function rescanViews(history: RescanHistory, at: string): Views {
+function rescanViews(history: RescanHistory, at: string): Promise<Views> {
   const expected = history.rescan();
-  return {
+  return Promise.resolve({
     at,
     statistics: expected.statistics,
     range: expected.range,
     lastRow: SPEAKERS.map((speaker) => lastBy(expected.rows, speaker)),
     lastUser: lastBy(expected.rows, 'human'),
     lastAI: lastBy(expected.rows, 'ai'),
-  };
+  });
 }
 
 /** Every scalar query is read twice, so the second read resumes saved state. */
-function twice(step: string, views: (at: string) => Views): Views[] {
-  return [0, 1].map((call) => views(`${step} (call ${call})`));
+async function twice(
+  step: string,
+  views: (at: string) => Promise<Views>,
+): Promise<Views[]> {
+  const read: Views[] = [];
+  for (const call of [0, 1]) read.push(await views(`${step} (call ${call})`));
+  return read;
 }
 
 describe('history scalar queries', () => {
-  const observed = (step: string): Views[] =>
+  const observed = (step: string): Promise<Views[]> =>
     twice(step, (at) => serviceViews(history, at));
-  const rescanned = (step: string): Views[] =>
+  const rescanned = (step: string): Promise<Views[]> =>
     twice(step, (at) => rescanViews(history, at));
 
   let root: string;
@@ -140,45 +150,47 @@ describe('history scalar queries', () => {
 
   describe('scalar history queries against a full rescan', () => {
     it('match across appends, rewinds, compressions, replace and clear written through the service', async () => {
-      expect(observed('empty')).toStrictEqual(rescanned('empty'));
+      expect(await observed('empty')).toStrictEqual(await rescanned('empty'));
 
       for (let index = 0; index < 8; index++) {
         history.add(mixedRow(index));
-        expect(observed(`pending add ${index}`)).toStrictEqual(
-          rescanned(`pending add ${index}`),
+        expect(await observed(`pending add ${index}`)).toStrictEqual(
+          await rescanned(`pending add ${index}`),
         );
       }
       await history.waitForCommit();
-      expect(observed('acknowledged adds')).toStrictEqual(
-        rescanned('acknowledged adds'),
+      expect(await observed('acknowledged adds')).toStrictEqual(
+        await rescanned('acknowledged adds'),
       );
 
       await history.addBatch([8, 9, 10].map((index) => mixedRow(index)));
-      expect(observed('batch')).toStrictEqual(rescanned('batch'));
+      expect(await observed('batch')).toStrictEqual(await rescanned('batch'));
       await history.waitForCommit();
-      expect(observed('acknowledged batch')).toStrictEqual(
-        rescanned('acknowledged batch'),
+      expect(await observed('acknowledged batch')).toStrictEqual(
+        await rescanned('acknowledged batch'),
       );
 
       expect(await history.pop()).toBeDefined();
-      expect(observed('pop pending')).toStrictEqual(rescanned('pop pending'));
+      expect(await observed('pop pending')).toStrictEqual(
+        await rescanned('pop pending'),
+      );
       await history.waitForCommit();
-      expect(observed('pop acknowledged')).toStrictEqual(
-        rescanned('pop acknowledged'),
+      expect(await observed('pop acknowledged')).toStrictEqual(
+        await rescanned('pop acknowledged'),
       );
 
       const tail = lastBy(history.rescan().rows);
       if (tail === undefined) throw new Error('Expected a tail row');
       expect(await history.removeLastIfMatches(tail)).toBe(true);
       await history.waitForCommit();
-      expect(observed('removeLastIfMatches')).toStrictEqual(
-        rescanned('removeLastIfMatches'),
+      expect(await observed('removeLastIfMatches')).toStrictEqual(
+        await rescanned('removeLastIfMatches'),
       );
 
       history.add(mixedRow(11));
       await history.waitForCommit();
-      expect(observed('append after rewind')).toStrictEqual(
-        rescanned('append after rewind'),
+      expect(await observed('append after rewind')).toStrictEqual(
+        await rescanned('append after rewind'),
       );
 
       await history.summarizeOldHistory(2, async () => ({
@@ -188,47 +200,49 @@ describe('history scalar queries', () => {
           chronologyReplaced: { fromSeq: 1, toSeq: 6, itemCount: 6 },
         },
       }));
-      expect(observed('compression pending')).toStrictEqual(
-        rescanned('compression pending'),
+      expect(await observed('compression pending')).toStrictEqual(
+        await rescanned('compression pending'),
       );
       await history.waitForCommit();
-      expect(observed('compression acknowledged')).toStrictEqual(
-        rescanned('compression acknowledged'),
+      expect(await observed('compression acknowledged')).toStrictEqual(
+        await rescanned('compression acknowledged'),
       );
 
       for (let index = 12; index < 16; index++)
         history.add(mixedRow(index, false));
       await history.waitForCommit();
-      expect(observed('append after compression')).toStrictEqual(
-        rescanned('append after compression'),
+      expect(await observed('append after compression')).toStrictEqual(
+        await rescanned('append after compression'),
       );
 
       await history.replaceAll(
         [20, 21, 22, 23].map((index) => mixedRow(index)),
       );
-      expect(observed('replace')).toStrictEqual(rescanned('replace'));
+      expect(await observed('replace')).toStrictEqual(
+        await rescanned('replace'),
+      );
       await history.waitForCommit();
-      expect(observed('replace acknowledged')).toStrictEqual(
-        rescanned('replace acknowledged'),
+      expect(await observed('replace acknowledged')).toStrictEqual(
+        await rescanned('replace acknowledged'),
       );
 
       history.add(mixedRow(24));
       await history.waitForCommit();
-      expect(observed('append after replace')).toStrictEqual(
-        rescanned('append after replace'),
+      expect(await observed('append after replace')).toStrictEqual(
+        await rescanned('append after replace'),
       );
 
       history.clear();
-      expect(observed('clear')).toStrictEqual(rescanned('clear'));
+      expect(await observed('clear')).toStrictEqual(await rescanned('clear'));
       await history.waitForCommit();
-      expect(observed('clear acknowledged')).toStrictEqual(
-        rescanned('clear acknowledged'),
+      expect(await observed('clear acknowledged')).toStrictEqual(
+        await rescanned('clear acknowledged'),
       );
 
       history.add(mixedRow(30));
       await history.waitForCommit();
-      expect(observed('append after clear')).toStrictEqual(
-        rescanned('append after clear'),
+      expect(await observed('append after clear')).toStrictEqual(
+        await rescanned('append after clear'),
       );
     });
 
@@ -239,11 +253,13 @@ describe('history scalar queries', () => {
         blocks: [{ type: 'text', text: 'bare' }],
       });
       await history.waitForCommit();
-      expect(observed('unmarked row')).toStrictEqual(rescanned('unmarked row'));
+      expect(await observed('unmarked row')).toStrictEqual(
+        await rescanned('unmarked row'),
+      );
       history.add(mixedRow(2));
       await history.waitForCommit();
-      expect(observed('marked after unmarked')).toStrictEqual(
-        rescanned('marked after unmarked'),
+      expect(await observed('marked after unmarked')).toStrictEqual(
+        await rescanned('marked after unmarked'),
       );
     });
   });
@@ -256,27 +272,29 @@ describe('history scalar queries', () => {
 
     it('match across appends, rewind, compression, density, insert, replace and purge records', async () => {
       await commitRows(0, 6);
-      expect(observed('seeded')).toStrictEqual(rescanned('seeded'));
+      expect(await observed('seeded')).toStrictEqual(await rescanned('seeded'));
       await commitRows(6, 9);
-      expect(observed('external appends')).toStrictEqual(
-        rescanned('external appends'),
+      expect(await observed('external appends')).toStrictEqual(
+        await rescanned('external appends'),
       );
 
       await recording.commit('rewind', { itemsRemoved: 2, cutSeq: 8 });
-      expect(observed('rewind')).toStrictEqual(rescanned('rewind'));
+      expect(await observed('rewind')).toStrictEqual(await rescanned('rewind'));
       await commitRows(9, 11);
-      expect(observed('append after rewind')).toStrictEqual(
-        rescanned('append after rewind'),
+      expect(await observed('append after rewind')).toStrictEqual(
+        await rescanned('append after rewind'),
       );
 
       await recording.commit('density_mutation', {
         removedSeqs: [2],
         replacements: [{ replacedSeq: 3, replacement: mixedRow(2, false) }],
       });
-      expect(observed('density')).toStrictEqual(rescanned('density'));
+      expect(await observed('density')).toStrictEqual(
+        await rescanned('density'),
+      );
       await commitRows(11, 12);
-      expect(observed('append after density')).toStrictEqual(
-        rescanned('append after density'),
+      expect(await observed('append after density')).toStrictEqual(
+        await rescanned('append after density'),
       );
 
       await recording.commit('synthetic_insert', {
@@ -284,8 +302,8 @@ describe('history scalar queries', () => {
         afterSeq: 1,
         content: mixedRow(40, false),
       });
-      expect(observed('synthetic insert')).toStrictEqual(
-        rescanned('synthetic insert'),
+      expect(await observed('synthetic insert')).toStrictEqual(
+        await rescanned('synthetic insert'),
       );
 
       await recording.commit('replace_begin', { txId: 'tx-1' });
@@ -293,20 +311,20 @@ describe('history scalar queries', () => {
         content: mixedRow(50),
         tx: 'tx-1',
       });
-      expect(observed('open replace transaction')).toStrictEqual(
-        rescanned('open replace transaction'),
+      expect(await observed('open replace transaction')).toStrictEqual(
+        await rescanned('open replace transaction'),
       );
       await recording.commit('content', {
         content: mixedRow(51),
         tx: 'tx-1',
       });
       await recording.commit('replace_commit', { txId: 'tx-1', rowCount: 2 });
-      expect(observed('committed replace transaction')).toStrictEqual(
-        rescanned('committed replace transaction'),
+      expect(await observed('committed replace transaction')).toStrictEqual(
+        await rescanned('committed replace transaction'),
       );
       await commitRows(12, 14);
-      expect(observed('append after replace')).toStrictEqual(
-        rescanned('append after replace'),
+      expect(await observed('append after replace')).toStrictEqual(
+        await rescanned('append after replace'),
       );
 
       await recording.commit('replace_begin', { txId: 'tx-2' });
@@ -314,42 +332,44 @@ describe('history scalar queries', () => {
         content: mixedRow(60),
         tx: 'tx-2',
       });
-      expect(observed('transaction left open')).toStrictEqual(
-        rescanned('transaction left open'),
+      expect(await observed('transaction left open')).toStrictEqual(
+        await rescanned('transaction left open'),
       );
       await commitRows(14, 15);
-      expect(observed('append abandons the open transaction')).toStrictEqual(
-        rescanned('append abandons the open transaction'),
-      );
+      expect(
+        await observed('append abandons the open transaction'),
+      ).toStrictEqual(await rescanned('append abandons the open transaction'));
 
       const before = history.rescan().rows;
       await recording.commit('semantic_media_purge', {
         history: before.slice(1),
         frontier: { contentIndex: 0, blockIndex: 0 },
       });
-      expect(observed('semantic purge')).toStrictEqual(
-        rescanned('semantic purge'),
+      expect(await observed('semantic purge')).toStrictEqual(
+        await rescanned('semantic purge'),
       );
       await commitRows(15, 17);
-      expect(observed('append after purge')).toStrictEqual(
-        rescanned('append after purge'),
+      expect(await observed('append after purge')).toStrictEqual(
+        await rescanned('append after purge'),
       );
 
       await recording.commit('compression_detail', {
         originalRows: 3,
         summaryRows: 1,
       } as never);
-      expect(observed('compression detail')).toStrictEqual(
-        rescanned('compression detail'),
+      expect(await observed('compression detail')).toStrictEqual(
+        await rescanned('compression detail'),
       );
       await recording.commit('compressed', {
         summary: mixedRow(70),
         itemsCompressed: 3,
       });
-      expect(observed('compressed')).toStrictEqual(rescanned('compressed'));
+      expect(await observed('compressed')).toStrictEqual(
+        await rescanned('compressed'),
+      );
       await commitRows(17, 20);
-      expect(observed('append after compressed')).toStrictEqual(
-        rescanned('append after compressed'),
+      expect(await observed('append after compressed')).toStrictEqual(
+        await rescanned('append after compressed'),
       );
     });
   });

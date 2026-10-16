@@ -33,6 +33,8 @@ const PORT_METHODS = [
   'getLength',
   'materialize',
   'streamRows',
+  'lastContent',
+  'readRows',
   'capturePendingFold',
   'withReadRows',
   'withRowSummary',

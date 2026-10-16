@@ -28,10 +28,10 @@ export function bindChatHistoryTail(
   let tailReads = 0;
   chat.waitForIdle = () => Promise.resolve();
   chat.getHistoryService = (() => ({
-    getLastContent: (): IContent | undefined => {
+    getLastContent: (): Promise<IContent | undefined> => {
       tailReads += 1;
       const rows = readRows();
-      return rows[rows.length - 1];
+      return Promise.resolve(rows[rows.length - 1]);
     },
   })) as unknown as ChatSession['getHistoryService'];
   return { tailReads: () => tailReads };

@@ -216,7 +216,7 @@ async function managementCase4(service: HistoryService): Promise<void> {
   expect(testHistory(service)).toStrictEqual([]);
   expect(curatedHistoryForTest(service)).toStrictEqual([]);
   expect(await service.pop()).toBeUndefined();
-  expect(service.getLastUserContent()).toBeUndefined();
+  expect(await service.getLastUserContent()).toBeUndefined();
 }
 
 function managementCase5(service: HistoryService): IContent[] {
@@ -498,7 +498,7 @@ describe('HistoryService - Behavioral Tests', () => {
   describe('Edge Cases', () => {
     it('should handle empty history operations', async () => {
       await managementCase4(service);
-      expect(service.getLastAIContent()).toBeUndefined();
+      expect(await service.getLastAIContent()).toBeUndefined();
     });
 
     it('should handle thinking blocks appropriately', () => {

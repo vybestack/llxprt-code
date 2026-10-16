@@ -130,8 +130,10 @@ import {
 import {
   withSynchronousHistoryCursor,
   executePinnedCursor,
+  executePinnedCursorAsync,
   type HistoryReadCursor,
 } from '../../recording/synchronousHistoryCursor.js';
+import { rowViewOfCursor, type HistoryRowView } from './historyRowView.js';
 
 // ---------------------------------------------------------------------------
 // The store
@@ -421,6 +423,30 @@ export class HistoryJournalStore implements HistoryStorePort {
     try {
       return read(
         this.summaryTracker.summarize(snapshot, this.attachmentCounters),
+      );
+    } finally {
+      snapshot.release();
+    }
+  }
+
+  /** The newest row, optionally of one speaker, read from a pinned fold. */
+  async lastContent(
+    speaker?: IContent['speaker'],
+  ): Promise<IContent | undefined> {
+    return this.withRowSummary((summary) => summary.lastContent(speaker));
+  }
+
+  async readRows<T>(
+    execute: (view: HistoryRowView) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const snapshot = this.capturePendingFold();
+    try {
+      return await executePinnedCursorAsync(
+        snapshot,
+        (cursor) => execute(rowViewOfCursor(cursor)),
+        this.attachmentCounters,
+        signal,
       );
     } finally {
       snapshot.release();

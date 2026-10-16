@@ -557,7 +557,7 @@ export class HistoryService extends HistoryServiceReads {
   private async removeLastIfMatchesInternal(
     content: IContent,
   ): Promise<boolean> {
-    const tail = this.getLastContent();
+    const tail = await this.getLastContent();
     if (tail === undefined || !isDeepStrictEqual(tail, content)) return false;
     return (
       (await removeHistoryTail({

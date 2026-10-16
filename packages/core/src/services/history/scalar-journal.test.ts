@@ -95,11 +95,12 @@ async function checkPendingScalarAppend(
   const { append, probes } = appendScalarRow(history, size);
   await waitForPausedWrite;
   expect(history.length()).toBe(size + 1);
-  expect(history.getLastUserContent()).toStrictEqual(
-    size % 3 === 0 ? batchRow(size) : scalarRow(size - (size % 3)),
-  );
+  const lastUser = history.getLastUserContent();
   expect(emitted).toBeUndefined();
   expect(history.getTotalTokens()).toBe(0);
+  expect(await lastUser).toStrictEqual(
+    size % 3 === 0 ? batchRow(size) : scalarRow(size - (size % 3)),
+  );
   expectScalarCharge(owners, 1, scalarRowCharge(batchRow(size)));
   const ticket = captureTicketWrite(recorder);
   await expectTicketCallersReleased(probes);
@@ -151,13 +152,13 @@ describe('scalar queries over mixed disk history', () => {
           expect(history.getContextRange()).toStrictEqual(
             computeContextRange(expected),
           );
-          expect(history.getLastUserContent()).toStrictEqual(
+          expect(await history.getLastUserContent()).toStrictEqual(
             expected
               .slice()
               .reverse()
               .find((row) => row.speaker === 'human'),
           );
-          expect(history.getLastAIContent()).toStrictEqual(
+          expect(await history.getLastAIContent()).toStrictEqual(
             expected
               .slice()
               .reverse()
@@ -194,13 +195,13 @@ describe('scalar empty and single-row membership', () => {
     await withBatchFixture(async ({ history, owners }) => {
       expect(history.length()).toBe(0);
       expect(history.isEmpty()).toBe(true);
-      expect(history.getLastAIContent()).toBeUndefined();
-      expect(history.getLastUserContent()).toBeUndefined();
+      expect(await history.getLastAIContent()).toBeUndefined();
+      expect(await history.getLastUserContent()).toBeUndefined();
       expect(history.getStatistics().totalMessages).toBe(0);
       expect(await history.pop()).toBeUndefined();
       await history.addBatch([batchRow(0)]);
       expect(history.length()).toBe(1);
-      expect(history.getLastUserContent()).toStrictEqual(batchRow(0));
+      expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
       await history.waitForTokenUpdates();
       await history.waitForCommit();
       expect(history.getTotalTokens()).toBe(4);
@@ -212,7 +213,7 @@ describe('scalar empty and single-row membership', () => {
     await withBatchFixture(async ({ history, owners }) => {
       history.add(batchRow(0));
       expect(history.length()).toBe(1);
-      expect(history.getLastUserContent()).toStrictEqual(batchRow(0));
+      expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
       await history.waitForTokenUpdates();
       await history.waitForCommit();
       expect(history.getTotalTokens()).toBe(4);
@@ -225,7 +226,7 @@ describe('scalar empty and single-row membership', () => {
       const row = batchRow(0, 9 * 1024 * 1024);
       await recorder.commit('content', { content: row });
       expect(history.length()).toBe(1);
-      const last = history.getLastUserContent();
+      const last = await history.getLastUserContent();
       expect(last).toStrictEqual(row);
       expect(Buffer.byteLength(JSON.stringify(last))).toBeGreaterThan(
         8 * 1024 * 1024,

@@ -113,11 +113,11 @@ describe('pending clear and large-row identity', () => {
           blocks: [{ type: 'text', text: 'next' }],
         };
         history.add(next);
-        expect(history.getLastUserContent()).toStrictEqual(next);
+        expect(await history.getLastUserContent()).toStrictEqual(next);
         expect(next).toHaveProperty('metadata.chronology.seq', 3);
         releaseWriter();
         await history.waitForCommit();
-        expect(history.getLastUserContent()).toStrictEqual(next);
+        expect(await history.getLastUserContent()).toStrictEqual(next);
       },
     );
   });

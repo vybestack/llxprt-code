@@ -10,7 +10,7 @@ import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 
 /** Journal bytes plus fold-scratch bytes read through readSync by `action`. */
-function bytesRead(action: () => void): number {
+async function bytesRead(action: () => Promise<void>): Promise<number> {
   const original = fs.readSync;
   let total = 0;
   const spy = spyOn(fs, 'readSync').mockImplementation(((
@@ -21,7 +21,7 @@ function bytesRead(action: () => void): number {
     return count;
   }) as typeof fs.readSync);
   try {
-    action();
+    await action();
   } finally {
     spy.mockRestore();
   }
@@ -59,11 +59,11 @@ async function withSession<T>(
   }
 }
 
-function askAll(history: HistoryService): void {
+async function askAll(history: HistoryService): Promise<void> {
   history.getStatistics();
   history.getContextRange();
-  history.getLastUserContent();
-  history.getLastAIContent();
+  await history.getLastUserContent();
+  await history.getLastAIContent();
 }
 
 /**
@@ -75,10 +75,10 @@ async function bytesAfterOneAppend(
   settle: boolean,
 ): Promise<number> {
   return withSession(rows, async (history) => {
-    askAll(history);
+    await askAll(history);
     history.add(batchRow(rows));
     if (settle) await history.waitForCommit();
-    const bytes = bytesRead(() => askAll(history));
+    const bytes = await bytesRead(() => askAll(history));
     expect(history.getStatistics().totalMessages).toBe(rows + 1);
     expect(history.getContextRange().totalEntries).toBe(rows + 1);
     return bytes;
@@ -108,22 +108,22 @@ describe('scalar history queries on an append-only session', () => {
 
   it('read no row bytes when nothing was appended since the last query', async () => {
     await withSession(LARGE, async (history) => {
-      askAll(history);
-      const repeated = bytesRead(() => askAll(history));
+      await askAll(history);
+      const repeated = await bytesRead(() => askAll(history));
       expect(repeated).toBeLessThan(BOUND);
     });
   });
 
   it('fold the journal again only for the mutation that changed it', async () => {
     await withSession(LARGE, async (history) => {
-      askAll(history);
+      await askAll(history);
       await history.pop();
       await history.waitForCommit();
-      const afterMutation = bytesRead(() => askAll(history));
+      const afterMutation = await bytesRead(() => askAll(history));
       expect(afterMutation).toBeGreaterThan(LARGE * 1024);
       history.add(batchRow(LARGE + 1));
       await history.waitForCommit();
-      const afterAppend = bytesRead(() => askAll(history));
+      const afterAppend = await bytesRead(() => askAll(history));
       expect(afterAppend).toBeLessThan(BOUND);
     });
   });

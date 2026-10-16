@@ -63,10 +63,10 @@ describe('scalar chronology and filter semantics', () => {
           toolResponses: 3,
           totalTokens: legacy ? 10 : 15,
         });
-        expect(history.getLastUserContent()).toStrictEqual(first);
-        expect(history.getLastAIContent()?.metadata?.chronology?.seq).toBe(
-          legacy ? undefined : 2,
-        );
+        expect(await history.getLastUserContent()).toStrictEqual(first);
+        expect(
+          (await history.getLastAIContent())?.metadata?.chronology?.seq,
+        ).toBe(legacy ? undefined : 2);
       });
     },
   );

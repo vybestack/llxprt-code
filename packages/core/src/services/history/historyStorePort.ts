@@ -18,6 +18,7 @@ import type { IContent } from './IContent.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
+import type { HistoryRowView } from './historyRowView.js';
 import type { HistoryRowSummary } from './historySummaryTracker.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
@@ -143,6 +144,16 @@ export interface HistoryStorePort {
     query?: HistorySuffixQuery,
     signal?: AbortSignal,
   ): AsyncIterable<IContent>;
+  /** The newest row, optionally of one speaker. Nothing is retained between calls. */
+  lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined>;
+  /**
+   * Row facts for a mutation that runs inside the mutation queue. The view is
+   * valid until the callback settles.
+   */
+  readRows<T>(
+    execute: (view: HistoryRowView) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T>;
   capturePendingFold(): PendingFoldSnapshot;
   withReadRows<T>(
     execute: (cursor: HistoryReadCursor) => T,

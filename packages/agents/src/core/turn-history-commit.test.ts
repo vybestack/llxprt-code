@@ -193,7 +193,7 @@ for (const pending of [false, true]) {
             });
             await history.waitForTokenUpdates();
             expect(
-              history.getLastUserContent()?.metadata?.chronology?.seq,
+              (await history.getLastUserContent())?.metadata?.chronology?.seq,
             ).toBe(4);
           },
           pending,
