@@ -127,8 +127,6 @@ describe('journal history store whole operations', () => {
   });
 
   it.each([
-    ['validateAndFix', 'S04'],
-    ['adoptMediaOwner', 'S04'],
     ['captureCompensation', 'S05'],
     ['compensate', 'S05'],
     ['captureDetached', 'S05'],

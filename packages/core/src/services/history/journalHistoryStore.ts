@@ -1,14 +1,25 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { VersionEdit } from '../../journal/groupEdits.js';
+import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import { INHERIT_OWNER } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
+import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
+import {
+  checkedPositions,
+  inheritingDraft,
+  labelsAt,
+  planDensity,
+  type PositionedContent,
+  type PositionedOwner,
+} from './journalHistoryEdits.js';
+import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
   HistoryClearRequest,
   HistoryJournalOp,
+  HistoryRepairRequest,
 } from './historyStorePort.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
@@ -20,10 +31,26 @@ import {
   encodeContentRow,
   UNOWNED_ROW,
 } from './journalRowCodec.js';
+import { planToolPairingRepair } from './journalHistoryRepair.js';
 import type { JournalSession } from './journalSession.js';
+import type { DensityMutationPayload } from '../../recording/types.js';
+
+/** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
+export interface JournalRepair {
+  readonly inserted: IContent[];
+  rollback(): Promise<void>;
+  close(): void;
+}
 
 /** Builds the edits of one queued operation against the version the previous operation published. */
 type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
+
+/** The drafts of `rows`, each encoded when the consumer asks for it. */
+function* encodedRows(rows: readonly IContent[]): Generator<RowDraft> {
+  for (const content of rows) {
+    yield encodeContentRow(content, { owner: UNOWNED_ROW });
+  }
+}
 
 /** The first of the last `count` rows; a count that is not a positive number keeps the whole history. */
 function recentStart(length: number, count: number): number {
@@ -92,10 +119,12 @@ export class JournalHistoryStore {
       case 'compressionDetail':
         // The span a compression destroyed is in the summary row's metadata (design 4.4).
         return;
+      case 'density':
+        this.applyDensity(op.payload);
+        return;
       case 'replaceBegin':
       case 'replaceCommit':
       case 'replaceAbort':
-      case 'density':
         throw new Error(
           `The "${op.kind}" operation is not implemented in the journal store yet`,
         );
@@ -106,6 +135,78 @@ export class JournalHistoryStore {
         );
       }
     }
+  }
+
+  /**
+   * Rewrites the rows at `changes[].position` of the history under their own
+   * labels and owners (a semantic media purge). Positions are those of the
+   * history once everything queued is applied.
+   */
+  purge(changes: readonly PositionedContent[]): void {
+    this.assertUsable();
+    const sorted = checkedPositions(changes, this.tentativeRows);
+    if (sorted.length === 0) return;
+    const rows = sorted.map(({ content }) => inheritingDraft(content));
+    const positions = sorted.map(({ position }) => position);
+    this.enqueue(this.tentativeRows, async (snapshot) => {
+      const labels = await labelsAt(snapshot, positions);
+      return [
+        {
+          kind: 'purge',
+          rows: labels.map((label, at) => ({ label, draft: rows[at] })),
+        },
+      ];
+    });
+  }
+
+  /** Gives the rows at `changes[].position` a new owner; no row is rewritten (design 5.4). */
+  changeOwners(changes: readonly PositionedOwner[]): void {
+    this.assertUsable();
+    const sorted = checkedPositions(changes, this.tentativeRows);
+    if (sorted.length === 0) return;
+    this.enqueue(this.tentativeRows, async (snapshot) => {
+      const labels = await labelsAt(
+        snapshot,
+        sorted.map(({ position }) => position),
+      );
+      return [
+        {
+          kind: 'owner',
+          changes: labels.map((label, at) => ({
+            label,
+            owner: sorted[at].owner,
+          })),
+        },
+      ];
+    });
+  }
+
+  /** Sets entry fields of rows (design 8.2); the rows and their order do not change. */
+  fill(fills: readonly EntryFill[]): void {
+    this.assertUsable();
+    if (fills.length === 0) return;
+    this.enqueue(this.tentativeRows, () =>
+      Promise.resolve([{ kind: 'fill', fills }]),
+    );
+  }
+
+  /**
+   * Replaces the whole history by `rows` in one group. The rows are encoded
+   * as the writer pulls them, one at a time, so no encoded copy of the array
+   * exists. Only the references are copied, which keeps a later edit of the
+   * caller's array out of the queued group.
+   */
+  replaceAll(rows: readonly IContent[]): void {
+    this.assertUsable();
+    const held = [...rows];
+    this.enqueue(held.length, () =>
+      Promise.resolve([
+        {
+          kind: 'replace',
+          rows: encodedRows(held),
+        },
+      ]),
+    );
   }
 
   /** Resolves when every operation applied so far is acked; throws the first failure of the queue. */
@@ -160,9 +261,7 @@ export class JournalHistoryStore {
   async clear(request: HistoryClearRequest): Promise<void> {
     await this.waitForDurable();
     const snapshot = this.session.store.snapshot();
-    if (snapshot.rows !== this.tentativeRows) {
-      throw new Error('History changed while it was being cleared');
-    }
+    this.assertSettled(snapshot, 'cleared');
     const spans = await this.spansAfterClear(snapshot, request.spans);
     if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
     try {
@@ -191,12 +290,64 @@ export class JournalHistoryStore {
     ]);
   }
 
-  validateAndFix(): never {
-    throw new Error('not implemented: S04 (tool-pairing repair)');
+  /**
+   * Inserts a synthetic response after every AI row whose tool calls have
+   * none, and resolves once the insertions are durable. The rows come back
+   * in `inserted`; they are small and few, one per unanswered call row.
+   * `rollback` restores the version the repair started from, so it refuses
+   * once any other group has been written.
+   */
+  async validateAndFix(request: HistoryRepairRequest): Promise<JournalRepair> {
+    await this.waitForDurable();
+    const snapshot = this.session.store.snapshot();
+    this.assertSettled(snapshot, 'repaired');
+    const plan = await planToolPairingRepair(
+      this.session.store,
+      snapshot,
+      request.stamp,
+    );
+    const saved = snapshot.version;
+    if (plan.inserts.length === 0 || saved === undefined) {
+      return {
+        inserted: plan.inserted,
+        rollback: async () => {},
+        close: () => {},
+      };
+    }
+    const rowsBefore = snapshot.rows;
+    this.enqueue(rowsBefore + plan.inserts.length, () =>
+      Promise.resolve(
+        plan.inserts.map(({ afterLabel, draft }) => ({
+          kind: 'insert' as const,
+          afterLabel,
+          draft,
+        })),
+      ),
+    );
+    await this.waitForDurable();
+    const repairedAt = this.ack?.commitSeq;
+    return {
+      inserted: plan.inserted,
+      rollback: async () => {
+        if (this.ack?.commitSeq !== repairedAt) {
+          throw new Error(
+            'Rows were written since the repair; it cannot be rolled back',
+          );
+        }
+        this.enqueue(rowsBefore, () =>
+          Promise.resolve([{ kind: 'restore', saved }]),
+        );
+        await this.waitForDurable();
+      },
+      close: () => {},
+    };
   }
 
-  adoptMediaOwner(): never {
-    throw new Error('not implemented: S04 (media owner adoption)');
+  /** Hands the owner every row, one at a time, once the queue is durable. */
+  async adoptMediaOwner(
+    owner: Pick<HistoryMediaOwner, 'adopt'>,
+  ): Promise<void> {
+    for await (const row of this.streamRows()) owner.adopt([row]);
   }
 
   captureCompensation(): never {
@@ -230,6 +381,17 @@ export class JournalHistoryStore {
     this.enqueue(this.tentativeRows + 1, () =>
       Promise.resolve([{ kind: 'append', rows: [draft] }]),
     );
+  }
+
+  private applyDensity(payload: DensityMutationPayload): void {
+    const planned = planDensity(payload);
+    if (planned.empty) return;
+    if (planned.removedRows > this.tentativeRows) {
+      throw new Error(
+        `A density removing ${planned.removedRows} rows exceeds the ${this.tentativeRows} rows of the history`,
+      );
+    }
+    this.enqueue(this.tentativeRows - planned.removedRows, planned.build);
   }
 
   private applyRewind(itemsRemoved: number): void {
@@ -344,6 +506,13 @@ export class JournalHistoryStore {
       this.ack = group.ack;
     } catch (error) {
       this.failure = { error };
+    }
+  }
+
+  /** The mutation FIFO keeps the queue empty around a whole operation; a count that differs means it did not. */
+  private assertSettled(snapshot: VersionSnapshot, doing: string): void {
+    if (snapshot.rows !== this.tentativeRows) {
+      throw new Error(`History changed while it was being ${doing}`);
     }
   }
 
