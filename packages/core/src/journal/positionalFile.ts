@@ -1,15 +1,48 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { FileHandle } from 'node:fs/promises';
-
 /** Reads that name their offset. A read returns exactly `length` bytes or throws. */
 export interface PositionalReader {
   readAt(position: number, length: number): Promise<Uint8Array>;
 }
 
+/** The part of a file handle that positional reads need. */
+export interface PositionalReadTarget {
+  read(
+    buffer: Uint8Array,
+    offset: number,
+    length: number,
+    position: number,
+  ): Promise<{ bytesRead: number }>;
+}
+
+/** The part of a file handle that positional writes need. */
+export interface PositionalWriteTarget {
+  write(
+    buffer: Uint8Array,
+    offset: number,
+    length: number,
+    position: number,
+  ): Promise<{ bytesWritten: number }>;
+}
+
+/**
+ * The file handle the journal opens and closes. A `node:fs/promises`
+ * `FileHandle` fits it; tests wrap one to record or fail single operations.
+ */
+export interface JournalFileHandle
+  extends PositionalReadTarget,
+    PositionalWriteTarget {
+  readonly fd: number;
+  stat(): Promise<{ size: number }>;
+  truncate(length: number): Promise<void>;
+  close(): Promise<void>;
+}
+
 /** Receives the bytes of one record in order. The caller owns the offsets. */
 export type ByteSink = (chunk: Uint8Array) => Promise<void>;
 
-export function createFileHandleReader(handle: FileHandle): PositionalReader {
+export function createFileHandleReader(
+  handle: PositionalReadTarget,
+): PositionalReader {
   return {
     async readAt(position: number, length: number): Promise<Uint8Array> {
       const buffer = new Uint8Array(length);
@@ -35,7 +68,7 @@ export function createFileHandleReader(handle: FileHandle): PositionalReader {
 
 /** Positional writes starting at `startOffset`; the descriptor is never in append mode. */
 export function createFileHandleSink(
-  handle: FileHandle,
+  handle: PositionalWriteTarget,
   startOffset: number,
 ): ByteSink {
   let position = startOffset;
@@ -48,6 +81,11 @@ export function createFileHandleSink(
         chunk.length - written,
         position + written,
       );
+      if (bytesWritten === 0) {
+        throw new Error(
+          `Write of ${chunk.length - written} bytes at ${position + written} made no progress`,
+        );
+      }
       written += bytesWritten;
     }
     position += chunk.length;

@@ -19,7 +19,11 @@ import {
   viewOf,
   type Triple,
 } from './bytes.js';
-import { JournalFormatError, JournalFrameError } from './errors.js';
+import {
+  JournalFormatError,
+  JournalFrameError,
+  JournalTrailerCandidateError,
+} from './errors.js';
 import { BODY_CRC_BYTES, decodeFrameStart, encodeFrameStart } from './frame.js';
 import {
   isMutationCode,
@@ -239,7 +243,9 @@ export interface TrailerRecordExpectation {
  * Validates one candidate trailer record (design 3.1): the frame, the kind,
  * the self offset, the durable end and the closing sync marker. A frame
  * failure is a `JournalFrameError`; a record that is intact but not a trailer
- * of this file at this offset is a `JournalFormatError`.
+ * of this file at this offset is a `JournalTrailerCandidateError`. Any other
+ * `JournalFormatError` comes from a frame whose CRC passed, so it is a writer
+ * bug and not a torn write.
  */
 export function decodeTrailerRecord(
   record: Uint8Array,
@@ -252,7 +258,7 @@ export function decodeTrailerRecord(
     frame.headerLen !== TRAILER_HEADER_BYTES ||
     frame.bodyLen !== 0
   ) {
-    throw new JournalFormatError(
+    throw new JournalTrailerCandidateError(
       `Record at offset ${expected.offset} is not a trailer frame (kind ${frame.kind}, header ${frame.headerLen}, body ${frame.bodyLen})`,
     );
   }
@@ -277,17 +283,17 @@ function assertTrailerPlacement(
   expected: TrailerRecordExpectation,
 ): void {
   if (trailer.selfOffset !== expected.offset) {
-    throw new JournalFormatError(
+    throw new JournalTrailerCandidateError(
       `Trailer selfOffset ${trailer.selfOffset} does not match its position ${expected.offset}`,
     );
   }
   if (trailer.durableEnd !== expected.offset + TRAILER_RECORD_BYTES) {
-    throw new JournalFormatError(
+    throw new JournalTrailerCandidateError(
       `Trailer durableEnd ${trailer.durableEnd} is not the end of the record at ${expected.offset}`,
     );
   }
   if (!bytesEqual(trailer.syncMarker, expected.syncMarker)) {
-    throw new JournalFormatError(
+    throw new JournalTrailerCandidateError(
       `Trailer at offset ${expected.offset} ends with a syncMarker that is not the file's`,
     );
   }
