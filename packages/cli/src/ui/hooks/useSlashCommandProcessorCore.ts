@@ -43,7 +43,7 @@ import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
 import { basename } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
-import { bindAutoPromptOperation } from '../commands/subagentCommandHost.js';
+import { useAutoPromptOperation } from './useAutoPromptOperation.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
@@ -427,6 +427,25 @@ function useBoundRegistry(
   return { builtins, ...state };
 }
 
+function useRawChatRegistration(
+  readCurrent: Parameters<typeof useCurrentChatRecording>[0],
+  readFallback: Parameters<typeof useCurrentChatRecording>[1],
+  readRoot: Parameters<typeof useChatProjectHash>[0],
+  readDirectory: Parameters<typeof useRawChatOperations>[2],
+  history: ReturnType<typeof useRawChatHistory>,
+  readModel: Parameters<typeof useRawChatOperations>[6],
+): ReturnType<typeof useRawChatOperations> {
+  return useRawChatOperations(
+    useCurrentChatRecording(readCurrent, readFallback),
+    useChatProjectHash(readRoot),
+    readDirectory,
+    history.getMediaStore,
+    history.getChatHistory,
+    history.replaceChatHistory,
+    readModel,
+  );
+}
+
 function useRegisteredCommands(
   args: UseSlashCommandProcessorCoreArgs,
   presentationCommands: ReturnType<typeof usePresentationCommands>,
@@ -445,7 +464,7 @@ function useRegisteredCommands(
     args.actions.dispatchExtensionStateUpdate,
   );
 
-  const { session, agentClient: chatClient } = agent ?? {};
+  const { session, agentClient: chatClient, sessionClient: port } = agent ?? {};
   const raw = args.recordingIntegration;
   const swaps = args.recordingSwapCallbacks;
   const ownerChat = useOwnedChatOperations(
@@ -454,16 +473,12 @@ function useRegisteredCommands(
     useCallback(() => resolveEmojiFilterMode(config), [config]),
   );
   const history = useRawChatHistory(chatClient);
-  const rawChat = useRawChatOperations(
-    useCurrentChatRecording(
-      useBound(swaps, swaps?.getCurrentRecording ?? readNull),
-      useBound(raw, raw?.getRecordingService ?? readNull),
-    ),
-    useChatProjectHash(useBound(config, config?.getProjectRoot ?? readNull)),
+  const rawChat = useRawChatRegistration(
+    useBound(swaps, swaps?.getCurrentRecording ?? readNull),
+    useBound(raw, raw?.getRecordingService ?? readNull),
+    useBound(config, config?.getProjectRoot ?? readNull),
     useCallback(() => config?.projectChatsDir ?? null, [config]),
-    history.getMediaStore,
-    history.getChatHistory,
-    history.replaceChatHistory,
+    history,
     useCallback(() => (config ? config.getModel() : null), [config]),
   );
   const workspaceCommands = useWorkspaceRegistration(
@@ -496,7 +511,12 @@ function useRegisteredCommands(
       agent?.workspace.subagentWrites,
       useSubagentProfileCatalog(agent?.workspace.profileDefinitions),
       fuzzy,
-      useMemo(() => bindAutoPromptOperation(agent, config), [agent, config]),
+      useAutoPromptOperation(
+        useBound(agent, agent?.getProvider ?? missingSession),
+        useCallback(() => chatClient, [chatClient]),
+        useBound(port, port?.createDetachedAgentClient ?? missingSession),
+        useBound(config, config?.getContentGeneratorConfig ?? readNoConfig),
+      ),
       config !== null,
       args.addItem,
     ),
@@ -689,4 +709,8 @@ function useSubagentProfileCatalog(
     () => profiles?.listProfiles() ?? Promise.resolve([]),
     [profiles],
   );
+}
+
+function readNoConfig(): undefined {
+  return undefined;
 }

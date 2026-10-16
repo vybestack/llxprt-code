@@ -17,7 +17,9 @@ void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
   createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
 }));
 
-const { bindAutoPromptGeneration } = await import('./autoPromptGeneration.js');
+const { bindAutoPromptOperation } = await import(
+  '../commands/subagentCommandHost.js'
+);
 type PromptOwner = {
   readonly getProvider: () => string;
   readonly agentClient: AgentClientContract | null | undefined;
@@ -28,7 +30,7 @@ const generateAutoPrompt = (
   description: string,
   config: ContentGeneratorConfig | undefined,
 ): Promise<string> =>
-  bindAutoPromptGeneration(
+  bindAutoPromptOperation(
     owner.getProvider,
     () => owner.agentClient,
     owner.createDetached,

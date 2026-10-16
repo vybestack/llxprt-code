@@ -16,15 +16,28 @@ export function registerSubagentCommand(
   context: CommandOwnerFixture,
 ): SlashCommand {
   const manager = context.services.subagentManager;
+  const agent = context.services.agent;
+  const config = context.services.config;
   return createSubagentCommand(
     bindSubagentCommand(
       manager,
       manager,
       async () => context.services.profileManager?.listProfiles() ?? [],
       () => context.services.settings.merged.enableFuzzyFiltering !== false,
-      bindAutoPromptOperation(context.services.agent, context.services.config),
+      bindAutoPromptOperation(
+        agent?.getProvider.bind(agent) ?? unavailableSession,
+        () => agent?.agentClient,
+        agent?.sessionClient.createDetachedAgentClient.bind(
+          agent.sessionClient,
+        ) ?? unavailableSession,
+        () => config?.getContentGeneratorConfig(),
+      ),
       context.services.config !== null,
       context.ui.addItem,
     ),
   );
+}
+
+function unavailableSession(): never {
+  throw new Error('Session agent is unavailable');
 }

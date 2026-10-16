@@ -9,7 +9,8 @@ import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
-import { bindAutoPromptOperation } from '../../../commands/subagentCommandHost.js';
+import { useAutoPromptOperation } from '../../../hooks/useAutoPromptOperation.js';
+import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
 import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
@@ -610,9 +611,14 @@ export function useAppDialogs(params: AppDialogsParams) {
   );
   const profiles = useDialogsProfiles(params);
   const { agent, recordingOwner, recordingIntegration } = params;
-  const generatePrompt = useMemo(
-    () => bindAutoPromptOperation(agent, params.config),
-    [agent, params.config],
+  const generatePrompt = useAutoPromptOperation(
+    useBound(agent, agent.getProvider),
+    useCallback(() => agent.agentClient, [agent]),
+    useBound(
+      agent.sessionClient,
+      agent.sessionClient.createDetachedAgentClient,
+    ),
+    useBound(params.config, params.config.getContentGeneratorConfig),
   );
   const readPolicyRules = useDialogPolicyReader(agent.policy, params.config);
   const subagents = useSubagentDialogCommands(

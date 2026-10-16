@@ -29,7 +29,7 @@ import {
   test,
   vi,
 } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 // ---------------------------------------------------------------------------
 // JSDOM globals for React DOM components
@@ -47,6 +47,7 @@ Object.assign(globalThis, {
   HTMLElement: dom.window.HTMLElement,
   Node: dom.window.Node,
   Event: dom.window.Event,
+  EventTarget: dom.window.EventTarget,
   CustomEvent: dom.window.CustomEvent,
   MutationObserver: dom.window.MutationObserver,
   getComputedStyle: dom.window.getComputedStyle.bind(dom.window),

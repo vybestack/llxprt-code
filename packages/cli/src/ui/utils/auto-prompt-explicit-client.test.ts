@@ -37,7 +37,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
-import { bindAutoPromptGeneration } from './autoPromptGeneration.js';
+import { bindAutoPromptOperation } from '../commands/subagentCommandHost.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -168,7 +168,7 @@ describe('auto prompt explicit client ownership', () => {
     const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
       runtimeId: 'failure-scope',
     });
-    const result = await bindAutoPromptGeneration(
+    const result = await bindAutoPromptOperation(
       () => 'anthropic',
       () => a.sessionClient.getAgentClient(),
       () => a.sessionClient.createDetachedAgentClient(),
@@ -188,7 +188,7 @@ describe('auto prompt explicit client ownership', () => {
     const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
       runtimeId: 'owner-b',
     });
-    const result = await bindAutoPromptGeneration(
+    const result = await bindAutoPromptOperation(
       () => 'anthropic',
       () => a.sessionClient.getAgentClient(),
       () => a.sessionClient.createDetachedAgentClient(),
@@ -204,7 +204,7 @@ describe('auto prompt explicit client ownership', () => {
     it(`releases detached client event subscriptions after ${failure ? 'failure' : 'success'}`, async () => {
       const detached = await owner('detached-owner', failure);
       expect(detached.readModelListenerCount()).toBe(1);
-      const result = await bindAutoPromptGeneration(
+      const result = await bindAutoPromptOperation(
         () => 'gemini',
         () => detached.sessionClient.getAgentClient(),
         () => detached.sessionClient.createDetachedAgentClient(),
