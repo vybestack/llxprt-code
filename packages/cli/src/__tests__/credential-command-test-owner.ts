@@ -58,8 +58,20 @@ export function registerBaseurlCommand(
     services: Pick<CommandOwnerFixture['services'], 'agent'>;
   },
 ): SlashCommand {
+  const agent = owners.services.agent;
+  const api = owners.runtimeApi;
   return createBaseurlCommand(
-    bindBaseurlCommandOperations(owners.runtimeApi, owners.services.agent),
+    agent === null
+      ? {
+          activeProviderName: () =>
+            api.providerStatus().providerName ?? 'unknown',
+          updateBaseUrl: async (baseUrl) =>
+            (await api.updateActiveProviderBaseUrl(baseUrl)).message,
+        }
+      : bindBaseurlCommandOperations(
+          () => agent.getProvider(),
+          (baseUrl) => agent.auth.setBaseUrl(baseUrl),
+        ),
   );
 }
 
@@ -68,8 +80,21 @@ export function registerLogoutCommand(
     services: Pick<CommandOwnerFixture['services'], 'agent'>;
   },
 ): SlashCommand {
+  const agent = owners.services.agent;
+  const oauth = owners.oauthControl;
   return createLogoutCommand(
-    bindLogoutCommandOperations(owners.services.agent, owners.oauthControl),
+    bindLogoutCommandOperations(
+      agent === null
+        ? () => oauth.getSupportedProviders()
+        : () => agent.listProviders().map((provider) => provider.name),
+      agent === null
+        ? (provider) => oauth.isAuthenticated(provider)
+        : (provider) => agent.auth.status(provider) === 'authenticated',
+      agent === null
+        ? (provider) => oauth.logout(provider)
+        : (provider) => agent.auth.logout(provider),
+      agent === null ? 'Supported providers' : 'Supported',
+    ),
   );
 }
 

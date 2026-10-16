@@ -20,27 +20,15 @@ import { fetchAllQuotaInfo } from './statsQuota.js';
 const MISSING_CREDENTIAL_OWNER =
   'Key commands require an explicit credential owner';
 
-/**
- * Binds /baseurl to one session. The Agent is nullable because the interactive
- * UI mounts before bootstrap hands it over; until then the session runtime API
- * performs the update.
- */
 export function bindBaseurlCommandOperations(
-  api: RuntimeApi,
-  agent: Agent | null,
+  activeProviderName: () => string,
+  writeBaseUrl: (baseUrl: string | null) => Promise<void>,
 ): BaseurlCommandOperations {
-  if (agent === null) {
-    return {
-      activeProviderName: () => api.providerStatus().providerName ?? 'unknown',
-      updateBaseUrl: async (baseUrl) =>
-        (await api.updateActiveProviderBaseUrl(baseUrl)).message,
-    };
-  }
   return {
-    activeProviderName: () => agent.getProvider(),
+    activeProviderName,
     updateBaseUrl: async (baseUrl) => {
-      const provider = agent.getProvider();
-      await agent.auth.setBaseUrl(baseUrl || null);
+      const provider = activeProviderName();
+      await writeBaseUrl(baseUrl || null);
       return baseUrl
         ? `Base URL set to '${baseUrl}' for provider '${provider}'`
         : `Base URL cleared for provider '${provider}'`;
@@ -48,43 +36,23 @@ export function bindBaseurlCommandOperations(
   };
 }
 
-/**
- * Binds /logout to one session. An Agent validates against its own provider
- * list; before the Agent exists the OAuth control answers instead.
- */
 export function bindLogoutCommandOperations(
-  agent: Agent | null,
-  oauthControl: OAuthControl,
+  listProviderNames: () => readonly string[],
+  isAuthenticated: (provider: string) => boolean | Promise<boolean>,
+  logout: (provider: string) => Promise<void>,
+  supportedLabel: 'Supported' | 'Supported providers',
 ): LogoutCommandOperations {
-  if (agent === null) {
-    return {
-      logout: async (provider) => {
-        const supportedProviders = oauthControl.getSupportedProviders();
-        if (!supportedProviders.includes(provider)) {
-          return {
-            kind: 'unknown-provider',
-            message: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-          };
-        }
-        const wasAuthenticated = await oauthControl.isAuthenticated(provider);
-        await oauthControl.logout(provider);
-        return { kind: 'logged-out', wasAuthenticated };
-      },
-    };
-  }
   return {
     logout: async (provider) => {
-      // auth.status() only returns 'authenticated'/'unauthenticated' (never
-      // 'unknown'), so unsupported providers are rejected from the list.
-      const knownProviders = agent.listProviders().map((p) => p.name);
+      const knownProviders = listProviderNames();
       if (!knownProviders.includes(provider)) {
         return {
           kind: 'unknown-provider',
-          message: `Unknown provider: ${provider}. Supported: ${knownProviders.join(', ')}`,
+          message: `Unknown provider: ${provider}. ${supportedLabel}: ${knownProviders.join(', ')}`,
         };
       }
-      const wasAuthenticated = agent.auth.status(provider) === 'authenticated';
-      await agent.auth.logout(provider);
+      const wasAuthenticated = await isAuthenticated(provider);
+      await logout(provider);
       return { kind: 'logged-out', wasAuthenticated };
     },
   };

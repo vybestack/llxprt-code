@@ -21,7 +21,6 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { createBaseurlCommand } from './baseurlCommand.js';
 import {
   bindBaseurlCommandOperations,
@@ -33,17 +32,6 @@ import { createLogoutCommand } from './logoutCommand.js';
 import { createToolkeyCommand } from './toolkeyCommand.js';
 import { createToolkeyfileCommand } from './toolkeyfileCommand.js';
 import type { SlashCommand } from './types.js';
-
-function unusedRuntimeApi(): RuntimeApi {
-  return new Proxy(
-    {},
-    {
-      get: (_target, property) => {
-        throw new Error(`Runtime API read through ${String(property)}`);
-      },
-    },
-  ) as RuntimeApi;
-}
 
 async function registered(
   name: string,
@@ -91,7 +79,10 @@ describe('registered credential command ownership', () => {
     const right = await owner('baseurl-right');
     const command = await registered('baseurl', {
       baseurlCommand: createBaseurlCommand(
-        bindBaseurlCommandOperations(unusedRuntimeApi(), left),
+        bindBaseurlCommandOperations(
+          () => left.getProvider(),
+          (url) => left.auth.setBaseUrl(url),
+        ),
       ),
     });
 
@@ -122,7 +113,10 @@ describe('registered credential command ownership', () => {
     const right = await owner('baseurl-surviving');
     const rightCommand = await registered('baseurl', {
       baseurlCommand: createBaseurlCommand(
-        bindBaseurlCommandOperations(unusedRuntimeApi(), right),
+        bindBaseurlCommandOperations(
+          () => right.getProvider(),
+          (url) => right.auth.setBaseUrl(url),
+        ),
       ),
     });
     await left.dispose();
@@ -139,8 +133,10 @@ describe('registered credential command ownership', () => {
     const command = await registered('logout', {
       logoutCommand: createLogoutCommand(
         bindLogoutCommandOperations(
-          left,
-          createMockCommandContext().oauthControl,
+          () => left.listProviders().map((provider) => provider.name),
+          (provider) => left.auth.status(provider) === 'authenticated',
+          (provider) => left.auth.logout(provider),
+          'Supported',
         ),
       ),
     });

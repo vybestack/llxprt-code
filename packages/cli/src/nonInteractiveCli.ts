@@ -16,7 +16,6 @@ import {
   type SessionSettingsOwner,
   type RuntimePolicyOwner,
   type Config,
-  type WorkspaceTrustReadPort,
   parseAndFormatApiError,
   ExitCodes,
   FatalInputError,
@@ -41,7 +40,10 @@ import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServ
 
 import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  debugLogger,
+  createSessionMetrics,
+} from '@vybestack/llxprt-code-telemetry';
 import {
   fromConfig,
   type Agent,
@@ -243,9 +245,9 @@ async function resolveSlashQuery(
   input: string,
   abortController: AbortController,
   config: Config,
-  agent: Agent | undefined,
+  readMetrics: Parameters<typeof handleSlashCommand>[3],
   runtimeSettings: RunNonInteractiveParams['runtimeSettings'],
-  trust: WorkspaceTrustReadPort | undefined,
+  isTrustedFolder: Parameters<typeof handleSlashCommand>[4],
 ): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
@@ -258,8 +260,8 @@ async function resolveSlashQuery(
     input,
     abortController,
     config,
-    agent,
-    trust,
+    readMetrics,
+    isTrustedFolder,
   );
   if (
     slashCommandResult !== undefined &&
@@ -483,13 +485,14 @@ async function resolveAndStream(
   },
 ): Promise<void> {
   const { config, input } = params;
+  const trust = params.agent?.ide ?? params.policyOwner?.trust;
   const slashQuery = await resolveSlashQuery(
     input,
     options.abortController,
     config,
-    params.agent,
+    () => params.agent?.metrics.getMetrics() ?? createSessionMetrics(),
     params.runtimeSettings,
-    params.policyOwner?.trust,
+    trust?.isTrustedFolder.bind(trust),
   );
   // #2378: reuse the composition-root Agent when supplied. The composition
   // root owns its lifecycle (registerCleanup disposes it), so a reused Agent

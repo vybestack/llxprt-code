@@ -63,6 +63,52 @@ export interface CommandOwnerFixture extends CommandContext {
 }
 
 // A utility type to make all properties of an object, and its nested objects, partial.
+function unavailableOAuth(): never {
+  throw new Error('OAuth is unavailable in this command fixture');
+}
+
+function createUnavailableOAuthControl(): OAuthControl {
+  return {
+    isAvailable: () => false,
+    attachInteractiveAuthMessages: unavailableOAuth,
+    bindInteractiveAuthHost: unavailableOAuth,
+    unbindInteractiveAuthHost: unavailableOAuth,
+    cancelInteractiveAuth: unavailableOAuth,
+    getInteractiveAuthSessions: unavailableOAuth,
+    getAuthStatus: unavailableOAuth,
+    toggleOAuthEnabled: unavailableOAuth,
+    authenticate: unavailableOAuth,
+    getSupportedProviders: unavailableOAuth,
+    listBuckets: unavailableOAuth,
+    isOAuthEnabled: unavailableOAuth,
+    isAuthenticated: unavailableOAuth,
+    peekStoredToken: unavailableOAuth,
+    getHigherPriorityAuth: unavailableOAuth,
+    activateNamedLoginBucket: unavailableOAuth,
+    logoutAllBuckets: unavailableOAuth,
+    logout: unavailableOAuth,
+    clearSessionBucket: unavailableOAuth,
+    getAuthStatusWithBuckets: unavailableOAuth,
+    setSessionBucket: unavailableOAuth,
+    getSessionBucket: unavailableOAuth,
+    inspectAuthLock: unavailableOAuth,
+    forceRecoverAuthLock: unavailableOAuth,
+    recoverAuthLock: unavailableOAuth,
+    clearBrowserProfileAssociation: unavailableOAuth,
+    setBrowserProfileAssociation: unavailableOAuth,
+    getAllAnthropicUsageInfo: unavailableOAuth,
+    getAllCodexUsageInfo: unavailableOAuth,
+    getAllCodexRateLimitResetCredits: unavailableOAuth,
+    hasCodexToken: unavailableOAuth,
+    clearProviderClientCache: unavailableOAuth,
+    discoverBuckets: unavailableOAuth,
+    readStoredTokenSummary: unavailableOAuth,
+    readCodexBucketToken: unavailableOAuth,
+    attachProviderMessages: unavailableOAuth,
+    submitCode: unavailableOAuth,
+  };
+}
+
 type DeepPartial<T> = T extends object
   ? {
       [P in keyof T]?: DeepPartial<T[P]>;
@@ -79,9 +125,7 @@ type DeepPartial<T> = T extends object
 const buildDefaultMocks = (): CommandOwnerFixture => ({
   runtimeApi: createMockRuntimeApi(),
   refreshProviderAliases: vi.fn(async () => {}),
-  oauthControl: {
-    isAvailable: () => false,
-  } as CommandOwnerFixture['oauthControl'],
+  oauthControl: createUnavailableOAuthControl(),
   signal: new AbortController().signal,
   invocation: {
     raw: '',
