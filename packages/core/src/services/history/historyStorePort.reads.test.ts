@@ -62,6 +62,27 @@ describe('HistoryStorePort asynchronous reads', () => {
     });
   });
 
+  it('readRows view serves chronology seqs and rows asynchronously', async () => {
+    await withStore(async (store) => {
+      store.apply({ kind: 'content', content: row('human', 'one', 4) });
+      store.apply({ kind: 'content', content: row('ai', 'two', 9) });
+      const seen = await store.readRows(async (view) => {
+        const seqs: Array<number | undefined> = [];
+        for (let index = 0; index < view.length; index++)
+          seqs.push(await view.chronologySeqAt(index));
+        const texts: string[] = [];
+        for await (const content of view.rows())
+          texts.push(JSON.stringify(content.blocks));
+        return { seqs, texts };
+      });
+      expect(seen.seqs).toStrictEqual([4, 9]);
+      expect(seen.texts).toStrictEqual([
+        JSON.stringify([{ type: 'text', text: 'one' }]),
+        JSON.stringify([{ type: 'text', text: 'two' }]),
+      ]);
+    });
+  });
+
   it('readRows closes the view when the callback has settled', async () => {
     await withStore(async (store) => {
       store.apply({ kind: 'content', content: row('human', 'one', 1) });
