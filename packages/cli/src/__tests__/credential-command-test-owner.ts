@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { fetchAllQuotaInfo } from '../ui/commands/statsQuota.js';
+
 import type { CommandOwnerFixture } from './mockCommandContext.js';
 
 import {
@@ -37,10 +39,25 @@ export function registerKeyCommand(
   },
   overrides: Partial<KeyCommandOperations> = {},
 ): SlashCommand {
+  const { config } = owners.services;
+  const api = owners.runtimeApi;
   return createKeyCommand({
-    ...bindKeyCommandOperations(owners.runtimeApi, owners.services.config),
+    ...bindKeyCommandOperations(
+      config?.getProviderKeys.bind(config) ?? unavailableCredentialOwner,
+      config?.listKeyCompletionNames.bind(config) ?? unavailableCredentialOwner,
+      config?.invalidateKeyCompletion.bind(config) ??
+        unavailableCredentialOwner,
+      () => (config === null ? true : config.isInteractive()),
+      () => api.providerStatus().providerName ?? null,
+      api.updateActiveProviderApiKey.bind(api),
+      config?.setEphemeralSetting.bind(config) ?? unavailableCredentialOwner,
+    ),
     ...overrides,
   });
+}
+
+function unavailableCredentialOwner(): never {
+  throw new Error('Key commands require an explicit credential owner');
 }
 
 export function registerKeyfileCommand(
@@ -118,7 +135,21 @@ export function registerQuotaCommand(
   owners: Pick<CommandOwnerFixture, 'oauthControl' | 'runtimeApi'>,
 ): SlashCommand {
   return createQuotaCommand(
-    bindQuotaCommandOperations(owners.runtimeApi, owners.oauthControl),
+    bindQuotaCommandOperations(
+      owners.oauthControl,
+      owners.runtimeApi.fetch,
+      () => owners.runtimeApi.getEphemeralSetting('base-url'),
+      () =>
+        fetchAllQuotaInfo(
+          owners.runtimeApi.getEphemeralSetting.bind(owners.runtimeApi),
+          owners.runtimeApi.getActiveProviderName.bind(owners.runtimeApi),
+          owners.runtimeApi.detectProviderQuota.bind(owners.runtimeApi),
+          owners.runtimeApi.fetch,
+          owners.oauthControl.isAvailable.bind(owners.oauthControl),
+          (request) => owners.oauthControl.getAllAnthropicUsageInfo(request),
+          (request) => owners.oauthControl.getAllCodexUsageInfo(request),
+        ),
+    ),
   );
 }
 
@@ -126,7 +157,24 @@ export function registerMcpCommand(context: CommandOwnerFixture): SlashCommand {
   const agent = context.services.agent;
   return createMcpCommand(
     createMcpAuthCommand(
-      bindMcpAuthCommandOperations(agent, context.services.config),
+      bindMcpAuthCommandOperations(
+        () =>
+          (agent?.mcp.listServers() ?? []).map((server) => ({
+            name: server.name,
+            oauthEnabled: server.config.oauth?.enabled === true,
+          })),
+        async () =>
+          agent === null
+            ? []
+            : (await agent.mcp.details()).servers
+                .filter((server) => server.requiresAuth)
+                .map((server) => server.name),
+        async (name, display) => {
+          if (agent === null) throw new Error('Agent is not available.');
+          await agent.mcp.authenticate(name, display);
+        },
+        () => context.services.config !== null,
+      ),
       () => context.services.settings.merged.enableFuzzyFiltering ?? true,
       (...input) => context.ui.addItem(...input),
       () => context.ui.reloadCommands(),

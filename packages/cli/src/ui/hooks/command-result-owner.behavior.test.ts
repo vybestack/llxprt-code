@@ -70,7 +70,21 @@ async function dispatchFailure(
     services: { agent: decoy },
   });
   const auth = createMcpAuthCommand(
-    bindMcpAuthCommandOperations(owner, context.services.config),
+    bindMcpAuthCommandOperations(
+      () =>
+        owner.mcp.listServers().map((server) => ({
+          name: server.name,
+          oauthEnabled: server.config.oauth?.enabled === true,
+        })),
+      async () =>
+        (await owner.mcp.details()).servers
+          .filter((server) => server.requiresAuth)
+          .map((server) => server.name),
+      async (name, display) => {
+        await owner.mcp.authenticate(name, display);
+      },
+      () => context.services.config !== null,
+    ),
     () => true,
     context.ui.addItem,
     context.ui.reloadCommands,

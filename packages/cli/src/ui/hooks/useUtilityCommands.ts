@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useQuotaReader } from './useQuotaReader.js';
+
 import { useCallback, useMemo } from 'react';
 import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry';
 import { createDocsCommand } from '../commands/docsCommand.js';
@@ -13,7 +15,6 @@ import { bindDebugCommand } from '../commands/debugCommandHost.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { createStatsCommand } from '../commands/statsCommand.js';
@@ -34,15 +35,23 @@ export function useUtilityCommands(
   | 'helpCommand'
   | 'quitCommand'
 > {
-  const api = useRuntimeApi();
+  const readQuota = useQuotaReader();
   const oauth = useOAuthControl();
   const { stats } = useSessionStats();
   const startTime = stats.sessionStartTime;
   const readStartTime = useCallback(() => startTime, [startTime]);
   const statsCommand = useMemo(
     () =>
-      createStatsCommand(bindStatsCommand(api, oauth, readStartTime, addItem)),
-    [api, oauth, readStartTime, addItem],
+      createStatsCommand(
+        bindStatsCommand(
+          readQuota,
+          () => oauth.isAvailable(),
+          (logger) => oauth.discoverBuckets(logger),
+          readStartTime,
+          addItem,
+        ),
+      ),
+    [readQuota, oauth, readStartTime, addItem],
   );
   const loggingCommand = useMemo(
     () => createLoggingCommand(bindLoggingCommand(config, settings, addItem)),
