@@ -15,7 +15,7 @@ import {
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
