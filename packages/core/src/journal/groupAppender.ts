@@ -21,8 +21,11 @@ export interface RecordAppender {
   append(record: GroupRecord): Promise<number>;
 }
 
-/** A group is written in batches of about this many bytes, each as one vectored write. */
-export const DEFAULT_BATCH_BYTES = 1024 * 1024;
+/**
+ * A group is written in batches of about this many bytes, each as one vectored write.
+ * The batch is the compaction copy's in-flight bound, so it must sit well below the 1 MiB memory proof bound.
+ */
+export const DEFAULT_BATCH_BYTES = 256 * 1024;
 /**
  * A body chunk smaller than this is copied into the batch, so a producer that
  * reuses its buffer cannot change bytes that are waiting for the write. A

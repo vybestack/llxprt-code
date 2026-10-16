@@ -106,7 +106,7 @@ export interface TrailerHeader {
   readonly syncMarker: Uint8Array;
 }
 
-const OFFSET_FIELDS = [
+const U64_NUMBER_FIELDS = [
   'selfOffset',
   'commitSeq',
   'parent',
@@ -136,7 +136,7 @@ export function encodeTrailerHeader(trailer: TrailerHeader): Uint8Array {
   const L = TRAILER_LAYOUT;
   const bytes = new Uint8Array(TRAILER_HEADER_BYTES);
   const view = viewOf(bytes);
-  for (const name of OFFSET_FIELDS)
+  for (const name of U64_NUMBER_FIELDS)
     putU64(view, L[name].offset, name, trailer[name]);
   for (const name of LABEL_FIELDS)
     putU64Big(view, L[name].offset, name, trailer[name]);

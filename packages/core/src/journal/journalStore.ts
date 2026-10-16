@@ -173,6 +173,15 @@ export class JournalStore {
     return readStoredRow(this.requireAccess(), entry);
   }
 
+  /**
+   * Reads of the records the published version reaches, for a copy of it
+   * (design 4.8). Bound to the published `durableEnd`: take a new one after
+   * the next commit.
+   */
+  recordAccess(): RecordAccess {
+    return this.requireAccess();
+  }
+
   /** The version a trailer at `offset` carries. */
   readVersion(offset: number): Promise<Version> {
     return readVersionAt(this.requireAccess(), offset);

@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { JournalWriterPoisonedError } from './errors.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { frameLength } from './frame.js';
-import type { RecordAppender } from './groupAppender.js';
+import { DEFAULT_BATCH_BYTES, type RecordAppender } from './groupAppender.js';
 import { openJournalReadOnly } from './journalReader.js';
 import type { GroupRecord } from './groupWriter.js';
 import { createJournal } from './journalWriterOpen.js';
@@ -378,8 +378,13 @@ describe('vectored group writes', () => {
     const { events, dependencies } = testJournalSeams();
     const writer = await createJournal(file, dependencies);
     events.length = 0;
-    const records = Array.from({ length: 100 }, (_, index) =>
-      plainRecord(RECORD_KIND.ROW, index + 1, 20 * 1024),
+    const recordCount = 100;
+    const recordBytes = 20 * 1024;
+    const records = Array.from({ length: recordCount }, (_, index) =>
+      plainRecord(RECORD_KIND.ROW, index + 1, recordBytes),
+    );
+    const batches = Math.ceil(
+      (recordCount * recordBytes) / DEFAULT_BATCH_BYTES,
     );
 
     await writer.commitGroup({
@@ -390,8 +395,8 @@ describe('vectored group writes', () => {
 
     const steps = onlyWritesAndFlushes(events);
     const flushAt = steps.findIndex((step) => step.type === 'flush');
-    expect(flushAt).toBeGreaterThanOrEqual(2);
-    expect(flushAt).toBeLessThanOrEqual(3);
+    expect(flushAt).toBeGreaterThanOrEqual(batches);
+    expect(flushAt).toBeLessThanOrEqual(batches + 1);
     expect(steps.slice(flushAt + 1)).toHaveLength(1);
   });
 
@@ -522,12 +527,15 @@ describe('streamed groups', () => {
     const writer = await createJournal(file, dependencies);
     events.length = 0;
     let lastOffset = 0;
+    const recordCount = 600;
+    const recordBytes = 9000;
+    const batches = (recordCount * recordBytes) / DEFAULT_BATCH_BYTES;
 
     await writer.commitStreamedGroup(async (appender) => {
-      for (let index = 0; index < 600; index++) {
+      for (let index = 0; index < recordCount; index++) {
         lastOffset = await appender.append({
           kind: RECORD_KIND.RTNODE,
-          kindHeader: new Uint8Array(9000).fill(index & 0xff),
+          kindHeader: new Uint8Array(recordBytes).fill(index & 0xff),
         });
       }
       return trailerStateFor(1, { rowRoot: lastOffset });
@@ -535,8 +543,8 @@ describe('streamed groups', () => {
     await writer.close();
 
     const writes = events.filter((event) => event.type === 'write');
-    expect(writes.length).toBeGreaterThan(3);
-    expect(writes.length).toBeLessThan(12);
+    expect(writes.length).toBeGreaterThanOrEqual(Math.floor(batches));
+    expect(writes.length).toBeLessThanOrEqual(Math.ceil(batches) + 1);
     const reader = await openJournalReadOnly(file, dependencies);
     expect(reader.trailer?.rowRoot).toBe(lastOffset);
     await reader.close();

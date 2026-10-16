@@ -93,6 +93,13 @@ const PART_BIT = (name: PositionName): number =>
 const MAPPED_BIT = 1 << (2 * POSITION_ORDER.length);
 const USED_BITS = (1 << (2 * POSITION_ORDER.length + 1)) - 1;
 
+/**
+ * The smallest `IdFact`: the flags and the five counters. Every other value of
+ * the id trie is shorter (a count is 4 bytes, a unit position 13, an
+ * occurrence 14, a hash 16), so a value of at least this size is a fact.
+ */
+export const ID_FACT_MIN_BYTES = FLAGS_BYTES + COUNTERS * 4;
+
 /** Flags, six positions of 12 bytes, the score, a name length, five counters and the mapped reference. */
 export const ID_FACT_MAX_BYTES =
   FLAGS_BYTES +

@@ -2,11 +2,7 @@
 import { JournalWriterPoisonedError } from './errors.js';
 import type { FlushRecords } from './flushRecords.js';
 import { frameLength } from './frame.js';
-import {
-  VectoredRecordAppender,
-  type GroupRecord,
-  type RecordAppender,
-} from './groupAppender.js';
+import { VectoredRecordAppender, type GroupRecord } from './groupAppender.js';
 import {
   createFileHandleReader,
   createFileHandleSink,
@@ -23,11 +19,15 @@ export type { GroupRecord, RecordAppender } from './groupAppender.js';
 
 const GROUP_TAG_BYTES = 7;
 
-/** What the caller decides about a trailer; the writer fills in the rest. */
+/**
+ * What the caller decides about a trailer; the writer fills in the rest. A
+ * copy that keeps the identity of a version it copies names its `commitSeq`
+ * (design 4.11); every other group takes the next one.
+ */
 export type TrailerState = Omit<
   TrailerHeader,
   'selfOffset' | 'commitSeq' | 'groupTag' | 'durableEnd' | 'syncMarker'
->;
+> & { readonly commitSeq?: number };
 
 export interface CommitGroup {
   readonly records: readonly GroupRecord[];
@@ -142,7 +142,7 @@ export class JournalGroupWriter {
    * group began does.
    */
   commitStreamedGroup(
-    build: (appender: RecordAppender) => Promise<TrailerState>,
+    build: (appender: VectoredRecordAppender) => Promise<TrailerState>,
   ): Promise<CommitAck> {
     const turn = this.queue.then(() => this.runGroup(build));
     this.queue = turn.then(noop, noop);
@@ -156,7 +156,7 @@ export class JournalGroupWriter {
   }
 
   private async runGroup(
-    build: (appender: RecordAppender) => Promise<TrailerState>,
+    build: (appender: VectoredRecordAppender) => Promise<TrailerState>,
   ): Promise<CommitAck> {
     if (this.closed) throw new Error('The journal writer is closed');
     if (this.failure !== undefined) {
@@ -180,7 +180,7 @@ export class JournalGroupWriter {
     return {
       ...state,
       selfOffset,
-      commitSeq: (this.publishedTrailer?.commitSeq ?? 0) + 1,
+      commitSeq: state.commitSeq ?? (this.publishedTrailer?.commitSeq ?? 0) + 1,
       groupTag: groupTagFrom(this.dependencies.random(GROUP_TAG_BYTES)),
       durableEnd: selfOffset + TRAILER_RECORD_BYTES,
       syncMarker: this.syncMarker,

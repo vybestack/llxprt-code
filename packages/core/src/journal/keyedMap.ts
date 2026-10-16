@@ -51,13 +51,14 @@ function assertValue(value: Uint8Array): void {
   }
 }
 
-function encodeRef(offset: number): Uint8Array {
+/** A map entry's value in the trie: the offset of its `VALUE` record. */
+export function encodeMapRef(offset: number): Uint8Array {
   const bytes = new Uint8Array(REF_BYTES);
   new DataView(bytes.buffer).setBigUint64(0, BigInt(offset), true);
   return bytes;
 }
 
-function decodeRef(bytes: Uint8Array): number {
+export function decodeMapRef(bytes: Uint8Array): number {
   if (bytes.length !== REF_BYTES) {
     throw new JournalFormatError(
       `A map entry is ${REF_BYTES} bytes, got ${bytes.length}`,
@@ -119,7 +120,7 @@ export class KeyedMapReader {
     }
     const ref = await this.trie.lookup(root, this.hashOf(key));
     if (ref === undefined) return undefined;
-    const offset = decodeRef(ref);
+    const offset = decodeMapRef(ref);
     const cached = this.cache.get(offset);
     if (cached !== undefined) return cached.slice();
     const value = await this.readValue(this.access, offset, encodeKey(key));
@@ -205,7 +206,7 @@ export class KeyedMapBatch {
     const entries: IdEntry[] = [];
     for (const { hash, key, value } of this.pending.values()) {
       const offset = await appender.append(valueRecord(key, value));
-      entries.push({ hash, value: encodeRef(offset) });
+      entries.push({ hash, value: encodeMapRef(offset) });
     }
     entries.sort((left, right) => compareIdHashes(left.hash, right.hash));
     return mergeIdTrie(appender, this.reader.nodeReader, this.root, entries);

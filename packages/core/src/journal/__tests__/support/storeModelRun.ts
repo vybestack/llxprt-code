@@ -112,6 +112,12 @@ export async function runModelSequence(
   file: string,
   seed: number,
   steps: number,
+  /** Called after each step has been checked, with the store and the model as they are. */
+  onStep?: (
+    store: JournalStore,
+    model: StoreModel,
+    index: number,
+  ) => Promise<void>,
 ): Promise<SequenceResult> {
   const random = new SeededRandom(seed);
   const model = new StoreModel(random);
@@ -141,6 +147,7 @@ export async function runModelSequence(
     if (version === undefined) throw new Error('nothing is published');
     saved.push({ version, rows: [...model.rows] });
     if (saved.length > SAVED_VERSIONS) saved.shift();
+    await onStep?.(store, model, index);
   }
   await store.close();
   const reopened = await JournalStore.open(file, storeDeps());

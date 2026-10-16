@@ -46,10 +46,17 @@ export interface RecordAccess {
   ): AsyncGenerator<Uint8Array>;
 }
 
+/**
+ * What bounds a record access: the end of the readable bytes and the trailer
+ * named in an error. A published trailer is one; a copier that reads back
+ * records of its own unfinished group passes the end of what it has written.
+ */
+export type AccessBounds = Pick<TrailerHeader, 'selfOffset' | 'durableEnd'>;
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
-  trailer: TrailerHeader,
+  trailer: AccessBounds,
 ): RecordAccess {
   const corruption = (
     what: string,

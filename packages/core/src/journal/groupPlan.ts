@@ -1,4 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  checkpointKey,
+  encodeCheckpointDescriptor,
+} from './checkpointDescriptor.js';
 import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
@@ -177,14 +181,16 @@ function applyCheckpoint(
     throw new JournalFormatError('A checkpoint needs a committed version');
   }
   const liveBytes = published.aggregate.liveBytes;
-  const value = JSON.stringify({
-    name: edit.name,
-    trailerOffset: published.selfOffset,
-    commitSeq: published.commitSeq,
-    createdAtMs: edit.createdAtMs,
-    liveBytes,
-  });
-  plan.stateSets.set(`ckpt:${edit.id}`, new TextEncoder().encode(value));
+  plan.stateSets.set(
+    checkpointKey(edit.id),
+    encodeCheckpointDescriptor({
+      name: edit.name,
+      trailerOffset: published.selfOffset,
+      commitSeq: published.commitSeq,
+      createdAtMs: edit.createdAtMs,
+      liveBytes,
+    }),
+  );
   plan.ckptDelta += liveBytes;
 }
 
