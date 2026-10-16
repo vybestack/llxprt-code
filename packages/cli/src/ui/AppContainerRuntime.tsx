@@ -59,7 +59,6 @@ import {
   type AppCommands,
 } from './contexts/AppCommandsContext.js';
 import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
-import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -368,13 +367,17 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
   });
   useUnconfiguredGuidance(props, turnStore, dialogStore);
-  const appCommands = useAppCommands(dialogs, input, layout, terminalStore);
   return (
     <AppRuntimeView
       runtimeMessageBus={props.runtimeMessageBus}
       slashCommandRuntime={props.slashCommandRuntime}
       version={props.version}
-      uiRuntime={bootstrap.uiRuntime}
+      screenReaderEnabled={bootstrap.uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        bootstrap.uiRuntime.app.getAccessibility().disableLoadingPhrases ===
+        true
+      }
+      debugMode={bootstrap.uiRuntime.app.getDebugMode()}
       settings={bootstrap.settings}
       startupWarnings={bootstrap.startupWarnings}
       nightly={bootstrap.nightly}
@@ -383,14 +386,21 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       rootUiRef={layout.rootUiRef}
       pendingHistoryItemRef={layout.pendingHistoryItemRef}
       contextFileNames={layout.contextFileNames}
-      appCommands={appCommands}
+      appCommands={useAppCommands(dialogs, input, layout, terminalStore)}
       dialogStore={dialogStore}
       terminalStore={terminalStore}
       turnStore={turnStore}
       settingsStore={settingsStore}
-      recordingSwapCallbacks={bootstrap.recordingSwapCallbacks}
-      recordingOwner={bootstrap.recordingOwner}
-      agent={props.agent}
+      getTranscriptFilePath={() =>
+        getInteractiveTranscriptPath(
+          bootstrap.recordingOwner,
+          () => props.agent.session.getRecording().path,
+          () =>
+            bootstrap.recordingSwapCallbacks
+              ?.getCurrentRecording()
+              ?.getFilePath() ?? undefined,
+        )
+      }
     />
   );
 };
@@ -401,9 +411,7 @@ interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   terminalStore: TerminalStore;
   turnStore: TurnStore;
   settingsStore: SettingsProfileStore;
-  recordingSwapCallbacks?: RecordingSwapCallbacks;
-  recordingOwner?: 'agent' | 'raw';
-  agent: Agent;
+  getTranscriptFilePath: () => string | undefined;
 }
 
 function AppRuntimeView({
@@ -412,22 +420,14 @@ function AppRuntimeView({
   terminalStore,
   turnStore,
   settingsStore,
-  recordingSwapCallbacks,
-  recordingOwner,
-  agent,
+  getTranscriptFilePath,
   ...layoutProps
 }: AppRuntimeViewProps): React.ReactNode {
   return (
     <TerminalProvider store={terminalStore}>
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
-          getTranscriptFilePath={() =>
-            getInteractiveTranscriptPath(
-              recordingOwner,
-              agent,
-              recordingSwapCallbacks,
-            )
-          }
+          getTranscriptFilePath={getTranscriptFilePath}
         >
           <SettingsProfileProvider store={settingsStore}>
             <DialogProvider store={dialogStore}>
@@ -444,11 +444,8 @@ function AppRuntimeView({
 
 export function getInteractiveTranscriptPath(
   recordingOwner: 'agent' | 'raw' | undefined,
-  agent: Agent,
-  recordingSwapCallbacks?: RecordingSwapCallbacks,
+  readOwnedPath: () => string | undefined,
+  readRawPath: () => string | undefined,
 ): string | undefined {
-  return recordingOwner === 'agent'
-    ? agent.session.getRecording().path
-    : (recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
-        undefined);
+  return recordingOwner === 'agent' ? readOwnedPath() : readRawPath();
 }

@@ -290,4 +290,50 @@ FAILRETRY-end`;
       process.off('unhandledRejection', onUnhandledRejection);
     }
   });
+  it('loads from a replacement transcript accessor while the expansion provider stays mounted', async () => {
+    const firstBody = 'FIRST-start-' + 'x'.repeat(100 * KIB);
+    const nextBody = 'SECOND-start-' + 'y'.repeat(100 * KIB);
+    service.recordContent(toolResponseContent('original-call', firstBody));
+    service.recordContent(toolResponseContent('replacement-call', firstBody));
+    await service.flush();
+    const firstPath = service.getFilePath();
+    if (!firstPath) throw new Error('Missing original transcript');
+    const replacement = new SessionRecordingService({
+      sessionId: 'replacement-session',
+      projectHash: 'testhash',
+      chatsDir: tempDir,
+      workspaceDirs: [tempDir],
+      provider: 'fake',
+      model: 'fake-model',
+    });
+    replacement.recordContent(
+      toolResponseContent('replacement-call', nextBody),
+    );
+    await replacement.flush();
+    const nextPath = replacement.getFilePath();
+    if (!nextPath) throw new Error('Missing replacement transcript');
+    const tree = (readPath: () => string, callId: string) => (
+      <TestHarness
+        turnStore={turnStore}
+        getTranscriptFilePath={readPath}
+        callId={callId}
+        cappedPreview="preview"
+        constrainHeight={false}
+      />
+    );
+    const view = render(tree(() => firstPath, 'original-call'));
+    try {
+      await waitFor(() => {
+        expect(view.lastFrame()).toContain('head=FIRST-start-');
+      });
+      view.rerender(tree(() => nextPath, 'replacement-call'));
+      await waitFor(() => {
+        expect(view.lastFrame()).toContain('head=SECOND-start');
+      });
+      expect(view.lastFrame()).not.toContain('head=FIRST-start-');
+    } finally {
+      view.unmount();
+      await replacement.dispose();
+    }
+  });
 });

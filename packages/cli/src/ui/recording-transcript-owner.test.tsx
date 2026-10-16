@@ -21,7 +21,11 @@ import { Agent } from '@vybestack/llxprt-code-agents';
 function Transcript({ agent }: { agent: Agent }) {
   return (
     <Text color={Colors.Foreground}>
-      {getInteractiveTranscriptPath('agent', agent) ?? 'disabled'}
+      {getInteractiveTranscriptPath(
+        'agent',
+        () => agent.session.getRecording().path,
+        () => undefined,
+      ) ?? 'disabled'}
     </Text>
   );
 }

@@ -209,12 +209,17 @@ async function withLayout(
   const owner = await createUiSessionOwner(config);
   let view: ReturnType<typeof realInk.render> | undefined;
   act(() => {
+    const uiRuntime = buildUiRuntimeFromSource(config, owner);
     view = realInk.render(
       wrapWithProviders(
         <TerminalProvider store={terminal}>
           <TurnProvider store={turn}>
             <DefaultAppLayout
-              uiRuntime={buildUiRuntimeFromSource(config, owner)}
+              screenReaderEnabled={uiRuntime.app.getScreenReader()}
+              disableLoadingPhrases={
+                uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+              }
+              debugMode={uiRuntime.app.getDebugMode()}
               slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
               settings={settings}
               startupWarnings={[]}

@@ -93,8 +93,7 @@ function ComposerContent(props: DefaultAppLayoutProps) {
       contextFileNames={props.contextFileNames}
       hideContextSummary={props.settings.merged.ui.hideContextSummary ?? false}
       disableLoadingPhrases={
-        props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true ||
-        props.uiRuntime.app.getScreenReader()
+        props.disableLoadingPhrases || props.screenReaderEnabled
       }
       onSuggestionsVisibilityChange={setSuggestionsVisible}
     />
@@ -153,8 +152,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
         settings={props.settings}
         hideFooter={props.settings.merged.ui.hideFooter ?? false}
         showMemoryUsage={
-          props.uiRuntime.app.getDebugMode() ||
-          (props.settings.merged.ui.showMemoryUsage ?? false)
+          props.debugMode || (props.settings.merged.ui.showMemoryUsage ?? false)
         }
         currentThemeName={themeManager.getActiveTheme().name}
         nightly={props.nightly}

@@ -93,10 +93,18 @@ async function mountLayout(
     debugMode: false,
     model: 'test-model',
   });
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    await createUiSessionOwner(),
+  );
   const layout = (
     <DefaultAppLayout
       runtimeMessageBus={runtimeMessageBus}
-      uiRuntime={buildUiRuntimeFromSource(config, await createUiSessionOwner())}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
       slashCommandRuntime={buildSlashCommandRuntime(
         config,
         await createUiSessionOwner(),

@@ -72,7 +72,11 @@ async function mountFooter(trustedFolder = true) {
     });
     return (
       <FooterRegion
-        uiRuntime={uiRuntime}
+        screenReaderEnabled={uiRuntime.app.getScreenReader()}
+        disableLoadingPhrases={
+          uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+        }
+        debugMode={uiRuntime.app.getDebugMode()}
         slashCommandRuntime={slashCommandRuntime}
         settings={settings}
         startupWarnings={[]}
