@@ -3,7 +3,7 @@ import { JournalFormatError } from './errors.js';
 import { buildGroup, mapReader, type BuildContext } from './groupBuild.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
 import { mutationOf, planGroup } from './groupPlan.js';
-import type { PlanContext } from './groupPlanTypes.js';
+import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck } from './groupWriter.js';
 import type { JournalGroupWriter } from './groupWriter.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
@@ -47,6 +47,31 @@ export interface JournalStoreDependencies {
 
 function noop(): void {
   // Settles the tail of the commit queue; the caller sees the commit's own outcome.
+}
+
+/**
+ * A group that was acked, with what a reader of the group needs (design 5.2):
+ * the version before and after it, reads bound to the version after, which
+ * reach the version before too, and the labels of the rows whose records the
+ * group wrote.
+ */
+export interface CommittedGroup {
+  readonly ack: CommitAck;
+  readonly before: Version | undefined;
+  readonly after: Version;
+  readonly access: RecordAccess;
+  readonly writtenLabels: readonly bigint[];
+}
+
+/** The labels of the rows a group writes. A replace streams its rows, so it names none. */
+function writtenLabelsOf(plan: GroupPlan): bigint[] {
+  if (plan.segments === undefined) return plan.newRows.map((row) => row.label);
+  const labels: bigint[] = [];
+  for (const segment of plan.segments) {
+    if (segment.kind === 'fresh') labels.push(segment.label);
+    if (segment.kind === 'foreign') labels.push(segment.row.entry.label);
+  }
+  return labels;
 }
 
 interface SpineEntry {
@@ -114,6 +139,11 @@ export class JournalStore {
    * group. Groups run one at a time in the order they are submitted.
    */
   commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
+    return this.commitDetailed(edits).then((group) => group.ack);
+  }
+
+  /** `commit`, returning the group with the versions around it, for the fan-out to mirrors (design 5.2). */
+  commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     const turn = this.tail.then(() => this.runCommit(edits));
     this.tail = turn.then(noop, noop);
     return turn;
@@ -187,8 +217,11 @@ export class JournalStore {
     return readVersionAt(this.requireAccess(), offset);
   }
 
-  private async runCommit(edits: readonly VersionEdit[]): Promise<CommitAck> {
+  private async runCommit(
+    edits: readonly VersionEdit[],
+  ): Promise<CommittedGroup> {
     const mutation = mutationOf(edits);
+    const before = this.currentVersion;
     const plan = await planGroup(this.planContext(), edits);
     let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
     const ack = await this.writer.commitStreamedGroup(async (appender) => {
@@ -204,7 +237,20 @@ export class JournalStore {
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };
     }
-    return ack;
+    return {
+      ack,
+      before,
+      after: this.requireVersion(),
+      access: this.requireAccess(),
+      writtenLabels: writtenLabelsOf(plan),
+    };
+  }
+
+  private requireVersion(): Version {
+    if (this.currentVersion === undefined) {
+      throw new JournalFormatError('The journal has no committed group');
+    }
+    return this.currentVersion;
   }
 
   /** The only place the published version moves. */

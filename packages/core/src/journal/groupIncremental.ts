@@ -13,12 +13,19 @@ import {
 } from './groupBuildShared.js';
 import {
   applyDraftRow,
+  applyEntryRow,
   finishFacts,
   startFacts,
   type GroupFacts,
 } from './groupFacts.js';
 import { monotoneInsertOccurrences } from './groupInsertCheck.js';
-import type { FreshSegment, GroupPlan, Segment } from './groupPlanTypes.js';
+import { copyForeignRow } from './foreignRows.js';
+import type {
+  ForeignSegment,
+  FreshSegment,
+  GroupPlan,
+  Segment,
+} from './groupPlanTypes.js';
 import { writeFresh } from './groupRebuild.js';
 import { rootRef } from './groupSegments.js';
 import type { MutationCode } from './recordKinds.js';
@@ -34,6 +41,46 @@ function freshOf(segments: readonly Segment[]): FreshSegment[] {
   );
 }
 
+/** The rows a group adds, in label order: written fresh, or copied from another journal. */
+function addsOf(
+  segments: readonly Segment[],
+): Array<FreshSegment | ForeignSegment> {
+  return segments.filter(
+    (segment): segment is FreshSegment | ForeignSegment =>
+      segment.kind === 'foreign' ||
+      (segment.kind === 'fresh' && segment.role !== 'purge'),
+  );
+}
+
+/** Adds the facts of one added row; false when the row has to be rebuilt instead. */
+async function addFacts(
+  ctx: BuildContext,
+  plan: GroupPlan,
+  facts: GroupFacts,
+  segment: FreshSegment | ForeignSegment,
+): Promise<boolean> {
+  if (segment.kind === 'foreign') {
+    // A copied row in the middle of the history is rebuilt (design 5.2): its facts must be added in position order.
+    if (segment.role === 'insert') return false;
+    await applyEntryRow(segment.row.source, facts, ctx, segment.row.entry);
+    return true;
+  }
+  if (segment.role !== 'insert') {
+    await applyDraftRow(facts, ctx, segment.label, segment.draft);
+    return true;
+  }
+  const occurrences = await monotoneInsertOccurrences(
+    facts,
+    ctx,
+    plan.base.slots,
+    segment.label,
+    segment.draft,
+  );
+  if (occurrences === undefined) return false;
+  for (const occurrence of occurrences) await facts.ids.apply(occurrence);
+  return true;
+}
+
 /**
  * The facts of the rows a group adds, when they can be added to the trie of
  * the base as they are. `undefined` means some added row has to be rebuilt
@@ -43,7 +90,7 @@ function freshOf(segments: readonly Segment[]): FreshSegment[] {
 async function incrementalFacts(
   ctx: BuildContext,
   plan: GroupPlan,
-  adds: readonly FreshSegment[],
+  adds: ReadonlyArray<FreshSegment | ForeignSegment>,
 ): Promise<{ facts: GroupFacts | undefined } | undefined> {
   if (adds.length === 0) return { facts: undefined };
   const facts = await startFacts(
@@ -53,19 +100,7 @@ async function incrementalFacts(
     mapReader(ctx, 'meta'),
   );
   for (const segment of adds) {
-    if (segment.role !== 'insert') {
-      await applyDraftRow(facts, ctx, segment.label, segment.draft);
-      continue;
-    }
-    const occurrences = await monotoneInsertOccurrences(
-      facts,
-      ctx,
-      plan.base.slots,
-      segment.label,
-      segment.draft,
-    );
-    if (occurrences === undefined) return undefined;
-    for (const occurrence of occurrences) await facts.ids.apply(occurrence);
+    if (!(await addFacts(ctx, plan, facts, segment))) return undefined;
   }
   return { facts: finishFacts(facts) };
 }
@@ -92,6 +127,8 @@ async function writeChanges(
   for (const segment of segments) {
     if (segment.kind === 'entry') {
       replace.push(segment.entry);
+    } else if (segment.kind === 'foreign') {
+      insert.push(await copyForeignRow(appender, segment.row));
     } else if (segment.kind === 'fresh') {
       const record = encoded.get(segment);
       if (record === undefined) {
@@ -187,8 +224,7 @@ export async function buildIncremental(
   mutation: MutationCode,
   appender: RecordAppender,
 ): Promise<BuiltGroup | undefined> {
-  const adds = freshOf(segments).filter((segment) => segment.role !== 'purge');
-  const collected = await incrementalFacts(ctx, plan, adds);
+  const collected = await incrementalFacts(ctx, plan, addsOf(segments));
   if (collected === undefined) return undefined;
   const chainBase = await ctx.chainFor(plan.parent);
   const changes = await writeChanges(appender, segments);

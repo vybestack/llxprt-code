@@ -150,10 +150,12 @@ export class StoreModel {
         pick(this.random, FLAG_CHOICES) |
         (parent ? ROW_FLAG.responseParent : 0);
     }
+    // One rewrite in four names a new owner (design 5.1), which a mirror sees as a row that changes hands.
+    const owner = this.random.int(4) === 0 ? this.random.int(4) : row.owner;
     return {
       ...ZERO_FIELDS,
       label: row.label,
-      owner: row.owner,
+      owner,
       speaker: row.speaker,
       flags,
       seq: this.freshSeq(),

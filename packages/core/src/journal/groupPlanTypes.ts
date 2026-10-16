@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionReader } from './lineageChain.js';
 import type { RecordAccess } from './recordAccess.js';
+import type { SourceRow } from './groupEdits.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
@@ -58,6 +59,21 @@ export interface FreshSegment {
   readonly replaces?: RowEntry;
 }
 
+/** A row copied from another journal under its own label (design 5.2). It is an addition, never a replacement. */
+export interface ForeignSegment {
+  readonly kind: 'foreign';
+  readonly row: SourceRow;
+  /** `append` at the end of the history; `insert` anywhere else, which rebuilds the facts. */
+  readonly role: 'append' | 'insert';
+}
+
+/** The rows of an adopt-all, copied as the stream produces them. */
+export interface ForeignStreamSegment {
+  readonly kind: 'foreignStream';
+  readonly rows: AsyncIterable<SourceRow>;
+  readonly nextLabel: bigint;
+}
+
 /** The rows of a replace, written as the stream produces them. */
 export interface StreamSegment {
   readonly kind: 'stream';
@@ -69,7 +85,9 @@ export type Segment =
   | ExistingSegment
   | EntrySegment
   | FreshSegment
-  | StreamSegment;
+  | StreamSegment
+  | ForeignSegment
+  | ForeignStreamSegment;
 
 /**
  * What a group has decided so far. The version it builds on, `base`, is a

@@ -1,10 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
-import type {
-  EntryFill,
-  LabeledDraft,
-  OwnerChange,
-  VersionEdit,
+import { applyAdopt, applyAdoptAll, applyTrimHead } from './groupForeign.js';
+import {
+  INHERIT_OWNER,
+  type EntryFill,
+  type InheritingDraft,
+  type LabeledDraft,
+  type OwnerChange,
+  type VersionEdit,
 } from './groupEdits.js';
 import type {
   FreshRole,
@@ -20,6 +23,7 @@ import {
   firstLabelOf,
   insertSegment,
   leaveLineage,
+  ownerAt,
   rejectAfterStream,
   requireAccess,
   transformRows,
@@ -45,7 +49,10 @@ export type RewriteEdit = Extract<
       | 'purge'
       | 'insert'
       | 'owner'
-      | 'fill';
+      | 'fill'
+      | 'adopt'
+      | 'adoptAll'
+      | 'trimHead';
   }
 >;
 
@@ -58,6 +65,9 @@ export function isRewriteEdit(edit: VersionEdit): edit is RewriteEdit {
     case 'insert':
     case 'owner':
     case 'fill':
+    case 'adopt':
+    case 'adoptAll':
+    case 'trimHead':
       return true;
     default:
       return false;
@@ -216,14 +226,25 @@ async function keepsIndexFacts(
   return sameIds && sameParentFlag && sameSpeakerAndParent;
 }
 
+/** The draft with its owner settled: a named owner stands, `inherit` takes `inherited`. */
+function withOwner(draft: InheritingDraft, inherited: number): RowDraft {
+  const owner = draft.owner === INHERIT_OWNER ? inherited : draft.owner;
+  assertOwner(owner);
+  return { ...draft, owner };
+}
+
 function rewriteTransform(
   ctx: PlanContext,
   label: bigint,
-  draft: RowDraft,
+  inheriting: InheritingDraft,
   role: 'purge' | 'replacement',
 ): RowTransform {
   return async (ref) => {
-    if (!('entry' in ref)) return { ...ref.fresh, draft };
+    if (!('entry' in ref)) {
+      const draft = withOwner(inheriting, ref.fresh.draft.owner);
+      return { ...ref.fresh, draft };
+    }
+    const draft = withOwner(inheriting, ref.entry.owner);
     const kept =
       role === 'purge' && (await keepsIndexFacts(ctx, ref.entry, draft));
     const chosen: FreshRole = kept ? 'purge' : 'replacement';
@@ -278,9 +299,14 @@ async function applyInsert(
   ctx: PlanContext,
   plan: GroupPlan,
   afterLabel: bigint,
-  draft: RowDraft,
+  inheriting: InheritingDraft,
 ): Promise<void> {
   leaveLineage(plan);
+  const anchorOwner =
+    inheriting.owner === INHERIT_OWNER
+      ? await ownerAt(ctx, plan, afterLabel)
+      : 0;
+  const draft = withOwner(inheriting, anchorOwner);
   await insertSegment(ctx, plan, afterLabel, (label) => ({
     kind: 'fresh',
     label,
@@ -355,6 +381,12 @@ export async function applyRewrite(
       return applyOwner(ctx, plan, edit.changes);
     case 'fill':
       return applyFill(ctx, plan, edit.fills);
+    case 'adopt':
+      return applyAdopt(ctx, plan, edit);
+    case 'adoptAll':
+      return Promise.resolve(applyAdoptAll(plan, edit.rows, edit.nextLabel));
+    case 'trimHead':
+      return applyTrimHead(ctx, plan, edit.belowLabel, edit.expectedRemoved);
     default: {
       const unknown: never = edit;
       throw new JournalFormatError(`Unknown edit ${JSON.stringify(unknown)}`);

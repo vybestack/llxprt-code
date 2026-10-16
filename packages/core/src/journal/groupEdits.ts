@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IdFactQueries } from './idFactQueries.js';
 import type { IdOccurrence } from './idFactUpdate.js';
+import type { RecordAccess } from './recordAccess.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
@@ -19,16 +20,40 @@ export interface EntryFill {
   readonly lensRef?: RowEntry['lensRef'];
 }
 
+/**
+ * The owner of a row that rewrites a live row or sits next to one (design
+ * 5.1): this says "the owner of the entry I replace" for a density or purge
+ * replacement, and "the owner of the row I follow" for a synthetic insert. A
+ * number, 0 for unowned included, names the owner outright.
+ */
+export const INHERIT_OWNER = 'inherit';
+
+/** A draft whose owner may be inherited; the owner is still required, so a caller always says which. */
+export type InheritingDraft = Omit<RowDraft, 'owner'> & {
+  readonly owner: number | typeof INHERIT_OWNER;
+};
+
 /** A row written for a label that is already live: a density replacement or a purged row. */
 export interface LabeledDraft {
   readonly label: bigint;
-  readonly draft: RowDraft;
+  readonly draft: InheritingDraft;
 }
 
 /** A new owner for the entry of one live row. */
 export interface OwnerChange {
   readonly label: bigint;
   readonly owner: number;
+}
+
+/**
+ * A row of another journal's file, as a mirror takes it (design 5.2 and 5.3):
+ * the `ROW` record is copied byte for byte under the label it has there, so a
+ * label means the same row in every file. `entry` is the row's entry in the
+ * version `source` is bound to, which is where the current owner is read.
+ */
+export interface SourceRow {
+  readonly source: RecordAccess;
+  readonly entry: RowEntry;
 }
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
@@ -82,10 +107,35 @@ export type VersionEdit =
   | {
       readonly kind: 'insert';
       readonly afterLabel: bigint;
-      readonly draft: RowDraft;
+      readonly draft: InheritingDraft;
     }
   /** Design 5.4: an entry replacement; the `ROW` record is not rewritten. */
   | { readonly kind: 'owner'; readonly changes: readonly OwnerChange[] }
+  /**
+   * Design 5.2: rows copied from another journal under their own labels,
+   * which must not be live. `end` says every label is above the last live
+   * row, so the group is an append and keeps its lineage; `anywhere` is an
+   * insert and starts a new one. `nextLabel` is the `nextLabel` of the journal
+   * the rows come from, so a label is never handed out below a copied one.
+   */
+  | {
+      readonly kind: 'adopt';
+      readonly rows: readonly SourceRow[];
+      readonly placement: 'end' | 'anywhere';
+      readonly nextLabel: bigint;
+    }
+  /** Design 5.3: the whole history becomes the rows of a stream, copied from another journal. */
+  | {
+      readonly kind: 'adoptAll';
+      readonly rows: AsyncIterable<SourceRow>;
+      readonly nextLabel: bigint;
+    }
+  /** Design 5.2: removes every live row below `belowLabel`; `expectedRemoved` is checked and may be 0. */
+  | {
+      readonly kind: 'trimHead';
+      readonly belowLabel: bigint;
+      readonly expectedRemoved: number;
+    }
   /** Design 4.6 and 8.2: entry fields for rows; the row set does not change. */
   | { readonly kind: 'fill'; readonly fills: readonly EntryFill[] }
   /** Design 4.9: a named checkpoint of the version the group builds on; a state-only group. */

@@ -34,7 +34,10 @@ function isPathCopy(plan: GroupPlan, segments: readonly Segment[]): boolean {
           return false;
         }
         break;
+      case 'foreign':
+        break;
       case 'stream':
+      case 'foreignStream':
         return false;
       default: {
         const unknown: never = segment;
@@ -61,7 +64,11 @@ export async function buildFromSegments(
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
   const writesRows = segments.some(
-    (segment) => segment.kind === 'fresh' || segment.kind === 'stream',
+    (segment) =>
+      segment.kind === 'fresh' ||
+      segment.kind === 'stream' ||
+      segment.kind === 'foreign' ||
+      segment.kind === 'foreignStream',
   );
   if (writesRows && hasActiveSlot(plan.base.slots)) {
     throw new JournalFormatError(

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { Aggregate } from './aggregate.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -174,6 +175,40 @@ export async function* iterateRowEntries(
     within = 0;
     leaf = await nextLeaf(access, path);
   }
+}
+
+async function* matchingBelow(
+  access: RecordAccess,
+  node: RowTreeNode,
+  mightMatch: (aggregate: Aggregate) => boolean,
+): AsyncGenerator<RowEntry> {
+  if (node.kind === 'leaf') {
+    yield* node.entries;
+    return;
+  }
+  for (const slot of node.slots) {
+    if (!mightMatch(slot.aggregate)) continue;
+    const child = await readRowTreeNode(access, slot.childOffset);
+    yield* matchingBelow(access, child, mightMatch);
+  }
+}
+
+/**
+ * The entries of the leaves that might hold a match, in label order. A
+ * subtree whose aggregate fails `mightMatch` is skipped without being read
+ * (design 5.3: the owner bloom keeps a mirror seed from reading the rows of
+ * other agents). The entries of a leaf that passes are all yielded, so the
+ * caller still tests each one. Memory is the nodes from the root to the
+ * current leaf.
+ */
+export async function* iterateMatchingEntries(
+  access: RecordAccess,
+  root: RowTreeRootRef,
+  rootAggregate: Aggregate,
+  mightMatch: (aggregate: Aggregate) => boolean,
+): AsyncGenerator<RowEntry> {
+  if (!mightMatch(rootAggregate)) return;
+  yield* matchingBelow(access, await readRoot(access, root), mightMatch);
 }
 
 /**

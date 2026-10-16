@@ -9,16 +9,24 @@ import {
   type BuildContext,
   type BuiltGroup,
 } from './groupBuildShared.js';
+import { copyForeignRow } from './foreignRows.js';
+import type { SourceRow } from './groupEdits.js';
 import {
   NO_FACT_ROOTS,
   applyDraftRow,
+  applyRowIds,
   applyEntryRow,
   rangeEntries,
   finishFacts,
   startFacts,
   type GroupFacts,
 } from './groupFacts.js';
-import type { FreshSegment, GroupPlan, Segment } from './groupPlanTypes.js';
+import type {
+  ForeignStreamSegment,
+  FreshSegment,
+  GroupPlan,
+  Segment,
+} from './groupPlanTypes.js';
 import { allocateAppendLabels } from './labels.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { MutationCode } from './recordKinds.js';
@@ -31,6 +39,7 @@ import {
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import { bulkBuildRowTree } from './rowTreeBuilder.js';
+import { readRowIds } from './rowReads.js';
 import { slotKindsOf } from './version.js';
 
 /** Writes the record of a fresh row and returns its entry. */
@@ -87,6 +96,12 @@ class RebuildPass {
           break;
         case 'stream':
           yield* this.stream(segment.rows);
+          break;
+        case 'foreign':
+          yield await this.foreign(segment.row);
+          break;
+        case 'foreignStream':
+          yield* this.foreignStream(segment);
           break;
         default: {
           const unknown: never = segment;
@@ -148,6 +163,29 @@ class RebuildPass {
       await applyDraftRow(this.facts, this.ctx, label, draft);
       yield this.note(entry);
     }
+  }
+
+  /** Copies the row's record and applies its facts from the header and id piece, read once. */
+  private async foreign(row: SourceRow): Promise<RowEntry> {
+    const ids = await readRowIds(row.source, row.entry);
+    await applyRowIds(this.facts, this.ctx, ids);
+    return this.note(await copyForeignRow(this.appender, row, ids));
+  }
+
+  private async *foreignStream(
+    segment: ForeignStreamSegment,
+  ): AsyncGenerator<RowEntry> {
+    let previous = 0n;
+    for await (const row of segment.rows) {
+      if (row.entry.label <= previous) {
+        throw new JournalFormatError(
+          `Rows copied in one stream must have ascending labels, but ${row.entry.label} follows ${previous}`,
+        );
+      }
+      previous = row.entry.label;
+      yield await this.foreign(row);
+    }
+    if (segment.nextLabel > this.nextLabel) this.nextLabel = segment.nextLabel;
   }
 
   private note(entry: RowEntry): RowEntry {

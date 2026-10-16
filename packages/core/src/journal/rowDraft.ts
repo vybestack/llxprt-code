@@ -116,7 +116,7 @@ const UNSTAMPED = { gen: 0, imageGen: 0 };
  * and the call counts and the answered count come with the normalizer.
  */
 export function entryForNewRow(
-  encoded: EncodedRow,
+  encoded: Pick<EncodedRow, 'header' | 'recordLength'>,
   recordOffset: number,
 ): RowEntry {
   const { header } = encoded;

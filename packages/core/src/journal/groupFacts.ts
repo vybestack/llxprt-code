@@ -15,7 +15,7 @@ import {
 import type { RecordAccess } from './recordAccess.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
-import { readRowIds } from './rowReads.js';
+import { readRowIds, type RowIds } from './rowReads.js';
 import { iterateRowEntries } from './rowTreeReader.js';
 import type { ExistingRange, GroupPlan } from './groupPlanTypes.js';
 
@@ -125,14 +125,12 @@ export function applyDraftRow(
   return applyRow(facts, deps, plannedFromDraft(label, draft), draft);
 }
 
-/** Applies a row that is already in the file, from its header and id piece (design 4.6). */
-export async function applyEntryRow(
-  access: RecordAccess,
+/** Applies a row whose header and id piece have been read (design 4.6). */
+export async function applyRowIds(
   facts: GroupFacts,
   deps: FactDeps,
-  entry: RowEntry,
+  { header, rawIds }: RowIds,
 ): Promise<void> {
-  const { header, rawIds } = await readRowIds(access, entry);
   const ids = header.ids.map((tuple, index) => ({
     rawId: rawIds[index],
     kind: tuple.kind,
@@ -146,6 +144,16 @@ export async function applyEntryRow(
     { label: header.label, speaker: header.speaker, ids },
     header,
   );
+}
+
+/** Applies a row that is already in the file, from its header and id piece (design 4.6). */
+export async function applyEntryRow(
+  access: RecordAccess,
+  facts: GroupFacts,
+  deps: FactDeps,
+  entry: RowEntry,
+): Promise<void> {
+  await applyRowIds(facts, deps, await readRowIds(access, entry));
 }
 
 /** Records the length of the Kimi exception list when the group changed it. */

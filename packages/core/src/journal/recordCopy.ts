@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import { FRAME_FLAG_BODY, frameLength, type FrameHead } from './frame.js';
-import type { GroupRecord, VectoredRecordAppender } from './groupAppender.js';
+import type { GroupRecord, RecordAppender } from './groupAppender.js';
 import type { OffsetField, PointsAt } from './offsetFields.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -75,7 +75,7 @@ function prefetchFor(points: WholeRecord): number {
  */
 export async function appendSourceRecord(
   source: RecordAccess,
-  appender: VectoredRecordAppender,
+  appender: RecordAppender,
   head: FrameHead,
   points: WholeRecord,
 ): Promise<{ offset: number; bytes: number }> {

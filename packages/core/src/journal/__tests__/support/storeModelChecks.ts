@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ownerBloomBit } from '../../ownerRules.js';
 import { expect } from 'bun:test';
 import type { IdOccurrence } from '../../idFactUpdate.js';
 import {
@@ -103,7 +104,7 @@ function expectAggregateMatches(
   const kinds = slotKindsOf(version.slots);
   expect(version.aggregate).toStrictEqual(naiveAggregate(entries, kinds));
   let bloom = 0n;
-  for (const row of model.rows) bloom |= 1n << BigInt(row.owner % 64);
+  for (const row of model.rows) bloom |= ownerBloomBit(row.owner);
   expect({
     rows: version.aggregate.rows,
     curated: version.aggregate.curated,

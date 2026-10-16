@@ -3,10 +3,13 @@ import { JournalFormatError } from './errors.js';
 import type {
   EntrySegment,
   ExistingSegment,
+  ForeignSegment,
+  ForeignStreamSegment,
   FreshSegment,
   GroupPlan,
   PlanContext,
   Segment,
+  StreamSegment,
 } from './groupPlanTypes.js';
 import { labelBetween } from './labels.js';
 import type { RecordAccess } from './recordAccess.js';
@@ -28,7 +31,7 @@ export function rootRef(version: Version): RowTreeRootRef | undefined {
     : { offset: version.roots.rowRoot, rows: version.rows };
 }
 
-function requireRoot(version: Version): RowTreeRootRef {
+export function requireRoot(version: Version): RowTreeRootRef {
   const root = rootRef(version);
   if (root === undefined) {
     throw new JournalFormatError(`Version ${version.commitSeq} has no rows`);
@@ -78,8 +81,35 @@ export function leaveLineage(plan: GroupPlan): void {
   plan.walkable = false;
 }
 
+/** A replace and an adopt-all take the whole history, so nothing is addressed by label inside them. */
+function isStream(
+  segment: Segment,
+): segment is StreamSegment | ForeignStreamSegment {
+  return segment.kind === 'stream' || segment.kind === 'foreignStream';
+}
+
+/** The label of a segment that is one row. */
+export function singleLabel(
+  segment: EntrySegment | FreshSegment | ForeignSegment,
+): bigint {
+  switch (segment.kind) {
+    case 'entry':
+      return segment.entry.label;
+    case 'fresh':
+      return segment.label;
+    case 'foreign':
+      return segment.row.entry.label;
+    default: {
+      const unknown: never = segment;
+      throw new JournalFormatError(
+        `Unknown segment ${JSON.stringify(unknown)}`,
+      );
+    }
+  }
+}
+
 export function rejectAfterStream(segments: readonly Segment[]): void {
-  if (segments.some((segment) => segment.kind === 'stream')) {
+  if (segments.some(isStream)) {
     throw new JournalFormatError(
       'A replace takes the whole history, so no other row edit may follow it in its group',
     );
@@ -138,15 +168,20 @@ async function splitExisting(
 }
 
 async function transformSingle(
-  segment: EntrySegment | FreshSegment,
+  segment: EntrySegment | FreshSegment | ForeignSegment,
   pending: Map<bigint, RowTransform>,
   out: Segment[],
 ): Promise<void> {
-  const label = segment.kind === 'entry' ? segment.entry.label : segment.label;
+  const label = singleLabel(segment);
   const transform = pending.get(label);
   if (transform === undefined) {
     out.push(segment);
     return;
+  }
+  if (segment.kind === 'foreign') {
+    throw new JournalFormatError(
+      `Row ${label} is copied in this group, so it cannot be changed in it`,
+    );
   }
   pending.delete(label);
   const replaced = await transform(
@@ -175,7 +210,7 @@ export async function transformRows(
       out.push(segment);
     } else if (segment.kind === 'existing') {
       await splitExisting(access, segment, pending, out);
-    } else if (segment.kind === 'stream') {
+    } else if (isStream(segment)) {
       out.push(segment);
     } else {
       await transformSingle(segment, pending, out);
@@ -186,6 +221,36 @@ export async function transformRows(
     throw new JournalFormatError(`Row ${missing} is not live in this group`);
   }
   plan.segments = out;
+}
+
+/**
+ * The owner of the live row `label` as the group sees it so far. A row that
+ * is not there is an error: an owner that is inherited must come from a row.
+ */
+export async function ownerAt(
+  ctx: PlanContext,
+  plan: GroupPlan,
+  label: bigint,
+): Promise<number> {
+  const access = requireAccess(ctx);
+  for (const segment of ensureSegments(plan)) {
+    if (segment.kind === 'entry' && segment.entry.label === label) {
+      return segment.entry.owner;
+    }
+    if (segment.kind === 'fresh' && segment.label === label) {
+      return segment.draft.owner;
+    }
+    if (segment.kind === 'existing') {
+      const live = await liveRowIn(access, requireRoot(segment.source), label, {
+        from: segment.from,
+        to: segment.to,
+      });
+      if (live !== undefined) return live.entry.owner;
+    }
+  }
+  throw new JournalFormatError(
+    `Row ${label} is not live, so its owner cannot be inherited`,
+  );
 }
 
 /** Where a synthetic row goes: before segment `at`, with the label of the next live row (or `nextLabel`) above it. */
@@ -206,6 +271,23 @@ async function slotInExisting(
   return { split, upper: (await entryAt(access, root, split)).label };
 }
 
+/** The slot inside an existing range at `found.split`, splitting the range when the slot is not at its start. */
+function splitAt(
+  segments: Segment[],
+  index: number,
+  segment: ExistingSegment,
+  found: { readonly split: number; readonly upper: bigint },
+): InsertSlot {
+  if (found.split === segment.from) return { at: index, upper: found.upper };
+  segments.splice(
+    index,
+    1,
+    { ...segment, to: found.split },
+    { ...segment, from: found.split },
+  );
+  return { at: index + 1, upper: found.upper };
+}
+
 async function findInsertSlot(
   access: RecordAccess,
   plan: GroupPlan,
@@ -215,22 +297,10 @@ async function findInsertSlot(
   for (const [index, segment] of segments.entries()) {
     if (segment.kind === 'existing') {
       const found = await slotInExisting(access, segment, afterLabel);
-      if (found === undefined) continue;
-      if (found.split === segment.from) {
-        return { at: index, upper: found.upper };
-      }
-      segments.splice(
-        index,
-        1,
-        { ...segment, to: found.split },
-        { ...segment, from: found.split },
-      );
-      return { at: index + 1, upper: found.upper };
-    }
-    const label = segment.kind === 'entry' ? segment.entry.label : undefined;
-    const own = segment.kind === 'fresh' ? segment.label : label;
-    if (own !== undefined && own > afterLabel) {
-      return { at: index, upper: own };
+      if (found !== undefined) return splitAt(segments, index, segment, found);
+    } else if (!isStream(segment)) {
+      const own = singleLabel(segment);
+      if (own > afterLabel) return { at: index, upper: own };
     }
   }
   return { at: segments.length, upper: plan.nextLabel };
@@ -268,10 +338,6 @@ interface TrimStep {
 
 const TRIM_DONE: TrimStep = { removed: 0, more: false };
 
-function labelOfSingle(segment: EntrySegment | FreshSegment): bigint {
-  return segment.kind === 'entry' ? segment.entry.label : segment.label;
-}
-
 async function trimLastSegment(
   access: RecordAccess,
   segments: Segment[],
@@ -279,9 +345,9 @@ async function trimLastSegment(
 ): Promise<TrimStep> {
   const at = segments.length - 1;
   const segment = segments[at];
-  if (segment.kind === 'stream') return TRIM_DONE;
+  if (isStream(segment)) return TRIM_DONE;
   if (segment.kind !== 'existing') {
-    if (labelOfSingle(segment) < cut) return TRIM_DONE;
+    if (singleLabel(segment) < cut) return TRIM_DONE;
     segments.pop();
     return { removed: 1, more: true };
   }
@@ -321,9 +387,9 @@ async function trimFirstSegment(
   cut: bigint,
 ): Promise<TrimStep> {
   const segment = segments[0];
-  if (segment.kind === 'stream') return TRIM_DONE;
+  if (isStream(segment)) return TRIM_DONE;
   if (segment.kind !== 'existing') {
-    if (labelOfSingle(segment) >= cut) return TRIM_DONE;
+    if (singleLabel(segment) >= cut) return TRIM_DONE;
     segments.shift();
     return { removed: 1, more: true };
   }
@@ -373,7 +439,10 @@ export async function firstLabelOf(
       return (
         await entryAt(requireAccess(ctx), requireRoot(first.source), first.from)
       ).label;
+    case 'foreign':
+      return first.row.entry.label;
     case 'stream':
+    case 'foreignStream':
       throw new JournalFormatError('A replace has no label before it runs');
     default: {
       const unknown: never = first;

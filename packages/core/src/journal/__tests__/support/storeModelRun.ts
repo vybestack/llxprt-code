@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
+import type { VersionEdit } from '../../groupEdits.js';
 import { JournalStore } from '../../journalStore.js';
 import { SeededRandom } from './seededRandom.js';
 import { expectStoreMatchesModel } from './storeModelChecks.js';
@@ -118,6 +119,11 @@ export async function runModelSequence(
     model: StoreModel,
     index: number,
   ) => Promise<void>,
+  /** Commits the edits of a step; the store's own `commit` unless a test routes them through something else (a mirror fan-out). */
+  commitStep: (
+    store: JournalStore,
+    edits: VersionEdit[],
+  ) => Promise<unknown> = (target, edits) => target.commit(edits),
 ): Promise<SequenceResult> {
   const random = new SeededRandom(seed);
   const model = new StoreModel(random);
@@ -131,7 +137,7 @@ export async function runModelSequence(
         ? 'append'
         : chooseOperation(random, model.rows.length, saved.length);
     const step = stepFor(name, model, saved, random, index);
-    await store.commit(step.edits);
+    await commitStep(store, step.edits);
     model.endGroup(step);
     if (name === 'checkpoint') checkpoints += 1;
     counts.set(step.name, (counts.get(step.name) ?? 0) + 1);

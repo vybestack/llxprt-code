@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ownerBloomBit } from '../../ownerRules.js';
 import type { Aggregate } from '../../aggregate.js';
 import {
   EMPTY_AGGREGATE,
@@ -127,7 +128,7 @@ export function testAggregateOf(entry: RowEntry): Aggregate {
     lastCacheable: labelIf(flags, ROW_FLAG.hasCacheableBlock, label),
     firstAnchor: labelIf(flags, ROW_FLAG.cacheAnchor, label),
     firstImage: labelIf(flags, ROW_FLAG.hasImage, label),
-    ownerBloom: 1n << BigInt(entry.owner % 64),
+    ownerBloom: ownerBloomBit(entry.owner),
     missingBase: [
       missing(entry.summary[0]),
       missing(entry.summary[1]),

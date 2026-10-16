@@ -250,6 +250,23 @@ function isLineageRewrite(
 }
 
 /**
+ * The edit kind that decides the mutation code: a copy of rows from another
+ * journal is named for what it does to the history (design 5.2).
+ */
+function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
+  switch (edit.kind) {
+    case 'adopt':
+      return edit.placement === 'end' ? 'append' : 'insert';
+    case 'adoptAll':
+      return 'replace';
+    case 'trimHead':
+      return 'compress';
+    default:
+      return edit.kind;
+  }
+}
+
+/**
  * The mutation the trailer names. A clear or a restore decides the group.
  * Otherwise the first edit that starts a lineage by changing rows does (a
  * compression, replace, density, purge, insert or owner change), then the
@@ -260,7 +277,7 @@ export function mutationOf(edits: readonly VersionEdit[]): MutationCode {
   if (edits.length === 0) {
     throw new JournalFormatError('A commit group needs at least one edit');
   }
-  const kinds = edits.map((edit) => edit.kind);
+  const kinds = edits.map(mutationKind);
   const clears = kinds.includes('clear');
   const restores = kinds.includes('restore');
   if (clears && restores) {
