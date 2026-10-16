@@ -69,6 +69,7 @@ export { parseZedAuthMethodId } from './zed-helpers.js';
 export class Session {
   private pendingPrompt: AbortController | null = null;
   private closing: Promise<void> | undefined;
+  private readonly acceptedWork = new Set<Promise<void>>();
   private readonly logger = new DebugLogger('llxprt:zed-integration');
   private pathResolver: ZedPathResolver;
   private activeConfirmations = new Map<
@@ -112,10 +113,12 @@ export class Session {
           (update) => this.sendUpdateStrict(update),
           (error) => this.logger.debug(() => `Config update failed: ${error}`),
           this.config.subscribeModelChanges,
+          (refresh) => this.joinWork(refresh),
         )
       : () => undefined;
   }
   setMode(modeId: acp.SessionModeId): acp.SetSessionModeResponse {
+    this.assertOpen();
     this.agent.setApprovalMode(resolveZedMode(modeId));
     return {};
   }
@@ -123,17 +126,21 @@ export class Session {
     return this.agent.getApprovalMode();
   }
   setConfigOption(configId: string, value: string) {
-    return setZedConfigOption(
-      projectZedModelSelection(this.agent),
-      projectZedOptionSettings(this.config),
-      configId,
-      value,
+    return this.admitWork(() =>
+      setZedConfigOption(
+        projectZedModelSelection(this.agent),
+        projectZedOptionSettings(this.config),
+        configId,
+        value,
+      ),
     );
   }
   getConfigOptions = () =>
-    buildZedConfigOptions(
-      projectZedModelReads(this.agent),
-      projectZedOptionSettings(this.config),
+    this.admitWork(() =>
+      buildZedConfigOptions(
+        projectZedModelReads(this.agent),
+        projectZedOptionSettings(this.config),
+      ),
     );
   getLifecycleInfo(): LifecycleSession {
     return presentLifecycleSession(
@@ -143,15 +150,13 @@ export class Session {
       this.sessionInfo,
     );
   }
-  async cancelPendingPrompt(): Promise<void> {
-    this.settleActiveConfirmation();
-    this.pendingPrompt?.abort();
-    this.pendingPrompt = null;
-    await this.terminals
-      ?.settleAll()
-      .catch((e: unknown) =>
-        this.logger.debug(() => `Terminal settleAll failed: ${e}`),
-      );
+  cancelPendingPrompt(): Promise<void> {
+    return this.admitWork(async () => {
+      this.settleActiveConfirmation();
+      this.pendingPrompt?.abort();
+      this.pendingPrompt = null;
+      await this.terminals?.settleAll();
+    });
   }
   private settleActiveConfirmation(): void {
     for (const confirmationId of [...this.activeConfirmations.keys()]) {
@@ -175,14 +180,22 @@ export class Session {
       state.cancelWaiter();
     }
   }
-  async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
+  prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
+    return this.admitWork(() => this.runPrompt(params));
+  }
+  private async runPrompt(
+    params: acp.PromptRequest,
+  ): Promise<acp.PromptResponse> {
+    this.assertOpen();
     await this.cancelPendingPrompt();
+    this.assertOpen();
     const eligibility = this.sessionInfo.consumeTitleEligibility(params.prompt);
     try {
       await this.agent.session.recordRecordingTitle(eligibility.title ?? null);
     } catch (error) {
       this.logger.debug(() => `Session metadata recording failed: ${error}`);
     }
+    this.assertOpen();
     try {
       const commandResult = await tryHandleZedCommand(
         params.prompt,
@@ -386,10 +399,14 @@ export class Session {
     }
   }
   private sendUpdateStrict(update: acp.SessionUpdate): Promise<void> {
-    return sendZedSessionUpdate(this.connection, this.id, update, this.logger);
+    return this.joinWork(() =>
+      sendZedSessionUpdate(this.connection, this.id, update, this.logger),
+    );
   }
   sendAvailableCommands(): Promise<void> {
-    return this.sendUpdateStrict(buildAvailableCommandsUpdate());
+    return this.admitWork(() =>
+      this.sendUpdateStrict(buildAvailableCommandsUpdate()),
+    );
   }
   private async sendUpdate(update: acp.SessionUpdate): Promise<void> {
     try {
@@ -404,24 +421,70 @@ export class Session {
   debug(msg: string) {
     if (this.config.getDebugMode()) debugLogger.warn(msg);
   }
-  async streamHistory(items: readonly IContent[]): Promise<void> {
+  streamHistory(items: readonly IContent[]): Promise<void> {
+    return this.admitWork(() => this.replayHistory(items));
+  }
+  private async replayHistory(items: readonly IContent[]): Promise<void> {
     await streamZedHistory(this.id, items, (update) =>
       this.sendUpdateStrict(update),
     );
     this.sessionInfo.hydrateFromHistory(items);
   }
-  async replayLiveHistory(): Promise<void> {
-    await this.streamHistory(
-      await readAgentHistoryForReplay(this.agent, this.id),
-    );
+  replayLiveHistory(): Promise<void> {
+    return this.admitWork(async () => {
+      await this.replayHistory(
+        await readAgentHistoryForReplay(this.agent, this.id),
+      );
+    });
+  }
+  private assertOpen(): void {
+    if (this.closing !== undefined) throw new Error('ACP session is disposed');
+  }
+  private async admitWork<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertOpen();
+    return this.joinWork(operation);
+  }
+  private async joinWork<T>(operation: () => Promise<T>): Promise<T> {
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.acceptedWork.add(completed);
+    try {
+      return await operation();
+    } finally {
+      this.acceptedWork.delete(completed);
+      complete();
+    }
+  }
+  private detachObservers(): void {
+    const failures: unknown[] = [];
+    for (const stop of [
+      this.stopTodoUpdates,
+      this.stopConfigUpdates,
+      () => this.settleActiveConfirmation(),
+    ]) {
+      try {
+        stop();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'ACP session observer release failed');
   }
   dispose(): Promise<void> {
-    this.closing ??= disposeZedSession(
-      () => {
-        this.stopTodoUpdates();
-        this.stopConfigUpdates();
-        this.settleActiveConfirmation();
-      },
+    if (this.closing !== undefined) return this.closing;
+    let complete!: () => void;
+    let fail!: (reason: unknown) => void;
+    this.closing = new Promise<void>((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    const accepted = [...this.acceptedWork];
+    const release = disposeZedSession(
+      () => this.detachObservers(),
       this.terminals,
       this.logger,
       () => {
@@ -430,6 +493,10 @@ export class Session {
       },
       this.agent,
     );
+    void Promise.allSettled([release, ...accepted]).then(([result]) => {
+      if (result.status === 'rejected') fail(result.reason);
+      else complete();
+    });
     return this.closing;
   }
 }

@@ -21,8 +21,8 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import {
-  configureProviderRuntimeFactories,
   loadRuntimePlugins,
+  configureProviderTokenizer,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
@@ -119,7 +119,7 @@ describe('foreground MCP plugin ownership', () => {
       new FakeProvider(process.env.LLXPRT_FAKE_RESPONSES, directory),
     );
     providerManager.setActiveProvider('fake');
-    configureProviderRuntimeFactories(config, providerManager);
+    configureProviderTokenizer(providerManager);
     configs.push(config);
     return {
       credentialAuthority,

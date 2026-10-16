@@ -30,8 +30,8 @@ import type { OAuthManager } from '../auth/oauth-manager.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-policy';
 import {
   populateProviderManager,
-  configureProviderRuntimeFactories,
   NodeFileSystem,
+  configureProviderTokenizer,
 } from '../composition/index.js';
 
 describe('provider manager runtime OAuth MessageBus composition', () => {
@@ -126,7 +126,7 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
           profileId ? { profileId } : undefined,
         ),
       );
-      configureProviderRuntimeFactories(config, manager);
+      configureProviderTokenizer(manager);
       manager.setConfig(config);
       acquisitionComplete = true;
     } catch (primary) {

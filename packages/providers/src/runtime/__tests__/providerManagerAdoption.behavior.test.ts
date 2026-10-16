@@ -25,7 +25,7 @@ import {
 } from '../../index.js';
 import type { IProvider } from '../../IProvider.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';
-import { configureProviderRuntimeFactories } from '../../composition/index.js';
+import { configureProviderTokenizer } from '../../composition/index.js';
 import {
   acquireAdoptedProviderManager,
   acquireAdoptedOAuth,
@@ -217,8 +217,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       selectedOAuth,
       selectedRuntimeId,
       false,
-      configureProviderRuntimeFactories(selectedConfig, selectedManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(selectedManager),
     );
   }
   async function closeSelected(): Promise<void> {

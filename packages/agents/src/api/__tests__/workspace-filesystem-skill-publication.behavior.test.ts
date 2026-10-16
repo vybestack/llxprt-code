@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -92,12 +95,10 @@ describe('failed production skill publication', () => {
   let builtCallerFiles: ProviderFileLifecycle;
   let builtCallerRuntimeId: string;
   let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let builtCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
   let builtCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function openbuiltCaller(
     fixture: string,
@@ -241,12 +242,10 @@ describe('failed production skill publication', () => {
       builtCredentials().authority,
       builtCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      builtCallerConfig,
-      builtCallerManager,
-    );
-    builtCallerTokenizer = factories.tokenizerFactory;
-    builtCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    builtCallerTokenizer = factoriesTokenizer;
+    builtCallerContent = factoriesContent;
     builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       builtCallerPolicy.session.messageBus,

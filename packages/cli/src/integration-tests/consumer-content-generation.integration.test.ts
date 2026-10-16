@@ -14,8 +14,9 @@ import {
   populateProviderManager,
   createOwnedOAuthManager,
   createOwnedTokenStoreClose,
-  configureProviderRuntimeFactories,
   NodeFileSystem,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -212,16 +213,14 @@ describe('explicit provider primitive owners', () => {
           settingsService,
           settingsOwner,
         );
-        const selectedFactories = configureProviderRuntimeFactories(
-          config,
-          manager,
-        );
+        configureProviderTokenizer(manager);
+        const selectedFactoriesContent = createRuntimeContentGeneratorFactory();
         manager.setActiveProvider('test-provider');
         await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
           ...createContentGeneratorConfig({ model: owner.getModel() }),
-          contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
+          contentGeneratorFactory: selectedFactoriesContent,
         };
         expect(contentGenConfig).toBeDefined();
         const { createContentGenerator } = await import(
@@ -329,16 +328,14 @@ describe('explicit provider primitive owners', () => {
           settingsService,
           settingsOwner,
         );
-        const selectedFactories = configureProviderRuntimeFactories(
-          config,
-          manager,
-        );
+        configureProviderTokenizer(manager);
+        const selectedFactoriesContent = createRuntimeContentGeneratorFactory();
         manager.setActiveProvider('test-provider');
         await owner.sessionClient.refreshAuth();
 
         const contentGenConfig = {
           ...createContentGeneratorConfig({ model: owner.getModel() }),
-          contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
+          contentGeneratorFactory: selectedFactoriesContent,
         };
         expect(contentGenConfig.model).toBe('test-model');
         // Inject the factory into the config

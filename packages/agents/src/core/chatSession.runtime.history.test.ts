@@ -1,6 +1,6 @@
 import { createHistoryChat } from './chatSession-runtime-helpers.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { configureHistoryProviderSettings } from './chatSession-runtime-helpers.js';
 /**
@@ -60,7 +60,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('commits tool call/response even when model returns only thinking after tool results', async () => {

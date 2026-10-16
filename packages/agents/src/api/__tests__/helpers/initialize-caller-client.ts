@@ -6,7 +6,7 @@
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 import type { ProviderActivationIntent } from '../../config-types.js';
@@ -27,9 +27,7 @@ export async function initializeCallerClient(
   manager: ReturnType<typeof acquirePreferredProviderManager>,
   oauth: ReturnType<typeof acquirePreferredOAuth>,
   runtimeId: string,
-  tokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'],
+  tokenizer: RuntimeTokenizerFactory,
   mcp: McpRuntimeOwner,
   owner: SessionClientOwner,
   intent: ProviderActivationIntent,

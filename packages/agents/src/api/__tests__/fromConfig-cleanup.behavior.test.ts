@@ -19,7 +19,10 @@ import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
@@ -125,8 +128,8 @@ describe('adoption cleanup with explicit close operations', () => {
       providerFileLifecycle: files,
       credentialAuthority: credentials().authority,
     });
-    const { tokenizerFactory, contentGeneratorFactory } =
-      configureProviderRuntimeFactories(config, agent.providerManager);
+    const tokenizerFactory = configureProviderTokenizer(agent.providerManager);
+    const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const media = new SessionMediaOwner(config.projectTempDir, 1024);
     const owner = await SessionClientOwner.create(
       config,

@@ -20,8 +20,9 @@ import { describe, expect, it } from 'bun:test';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
-  configureProviderRuntimeFactories,
   createSessionAuthPolicyReader,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   activateAdoptedSession,
@@ -142,8 +143,8 @@ describe('adopted session explicit collaborators', () => {
     await agent.sessionClient.refreshAuth();
     await agent.agentClient.startChat();
     const manager = agent.providerManager;
-    const { tokenizerFactory, contentGeneratorFactory } =
-      configureProviderRuntimeFactories(config, manager);
+    const tokenizerFactory = configureProviderTokenizer(manager);
+    const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const activation: ProviderActivationIntent = {
       provider: 'fake',
       model: 'adopted-model',

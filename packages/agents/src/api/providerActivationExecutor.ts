@@ -53,7 +53,7 @@ import {
   setProviderApiKey,
   setProviderBaseUrl,
 } from './providerConfigUtils.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderActivationIntent } from './config-types.js';
 import {
   hasProfileAuthEphemerals,
@@ -356,7 +356,7 @@ async function ensureProviderManagerOnConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): Promise<void> {
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 }
 
 /**
@@ -368,7 +368,7 @@ function attachProviderManagerToContentConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): void {
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 }
 
 // ─── authMode: 'auto' (CLI path) ────────────────────────────────────────────

@@ -288,7 +288,7 @@ describe('integration: full session recording lifecycle', () => {
       );
       assertReplayOk(result);
       expect(result.history).toHaveLength(turnCount * 2);
-      void result.recording.dispose();
+      await result.recording.dispose();
     },
   );
 
@@ -531,7 +531,7 @@ describe('integration: full session recording lifecycle', () => {
         svc2.recordContent(makeContent(`add-${i}`, alternatingSpeaker(i)));
       }
       await svc2.flush();
-      void svc2.dispose();
+      await svc2.dispose();
 
       const replay2 = await replaySession(filePath, PROJECT_HASH);
       assertReplayOk(replay2);
@@ -744,7 +744,7 @@ describe('integration: full session recording lifecycle', () => {
     svc2.recordContent(makeContent('new message after resume', 'human'));
     svc2.recordContent(makeContent('new response', 'ai'));
     await svc2.flush();
-    void svc2.dispose();
+    await svc2.dispose();
 
     // Re-replay to verify continuation
     const replay2 = await replaySession(fp, PROJECT_HASH);
@@ -858,7 +858,7 @@ describe('integration: full session recording lifecycle', () => {
     interactiveSvc.recordContent(makeContent('world', 'ai'));
     await interactiveSvc.flush();
     const interactivePath = interactiveSvc.getFilePath()!;
-    void interactiveSvc.dispose();
+    await interactiveSvc.dispose();
 
     // "--prompt" path: same content through same service (different instance)
     const promptSvc = new SessionRecordingService(
@@ -872,7 +872,7 @@ describe('integration: full session recording lifecycle', () => {
     promptSvc.recordContent(makeContent('world', 'ai'));
     await promptSvc.flush();
     const promptPath = promptSvc.getFilePath()!;
-    void promptSvc.dispose();
+    await promptSvc.dispose();
 
     // Both should replay identically
     const replay1 = await replaySession(interactivePath, PROJECT_HASH);

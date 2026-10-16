@@ -216,6 +216,7 @@ describe('Zed config options', () => {
       sendUpdate,
       vi.fn(),
       (listener) => owner.subscribeModelChanges(listener),
+      (refresh) => refresh(),
     );
 
     try {

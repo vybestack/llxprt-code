@@ -21,7 +21,7 @@ import {
 } from '../../../agents/src/core/subagent-cleanup.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
-import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { configureProviderTokenizer } from '../composition/index.js';
 import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
@@ -126,8 +126,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       firstManager,
       firstOauth,
       firstConfig.getSessionId(),
-      configureProviderRuntimeFactories(firstConfig, firstManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(firstManager),
       undefined,
     );
   }
@@ -224,8 +223,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       secondManager,
       secondOauth,
       secondConfig.getSessionId(),
-      configureProviderRuntimeFactories(secondConfig, secondManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(secondManager),
       undefined,
     );
   }

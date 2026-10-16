@@ -15,7 +15,7 @@ import {
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -118,7 +118,7 @@ describe('provider switch assembly', () => {
         settings,
         config,
       );
-      configureProviderRuntimeFactories(config, manager);
+      configureProviderTokenizer(manager);
       manager.setConfig(config);
       const result = await switchProvider('claudecode');
       expect(result.infoMessages.join(' ')).toContain(

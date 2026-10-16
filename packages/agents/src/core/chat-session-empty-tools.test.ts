@@ -27,7 +27,7 @@ import {
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { describe, expect, it } from 'bun:test';
@@ -132,7 +132,7 @@ async function send(
   });
   const manager = new TestRuntimeProviderManager(runtime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   const provider: IProvider = {
     name: 'stub',
     getModels: async () => [],

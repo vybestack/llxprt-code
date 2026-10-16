@@ -243,7 +243,7 @@ describe('integration: full session recording lifecycle', () => {
     svc2.recordContent(makeContent('turn5-h', 'human'));
     svc2.recordContent(makeContent('turn5-a', 'ai'));
     await svc2.flush();
-    void svc2.dispose();
+    await svc2.dispose();
 
     const replay2 = await replaySession(filePath, PROJECT_HASH);
     assertReplayOk(replay2);
@@ -278,7 +278,7 @@ describe('integration: full session recording lifecycle', () => {
     svc2.recordContent(makeContent('m4', 'human'));
     svc2.recordContent(makeContent('m5', 'ai'));
     await svc2.flush();
-    void svc2.dispose();
+    await svc2.dispose();
 
     const lines = await readJsonlLines(filePath);
     const seqs = lines.map((l) => l.seq);
@@ -503,7 +503,7 @@ describe('integration: full session recording lifecycle', () => {
     expect((result.history[0].blocks[0] as { text: string }).text).toBe(
       'first-session',
     );
-    void result.recording.dispose();
+    await result.recording.dispose();
   });
 
   // =========================================================================
@@ -545,7 +545,7 @@ describe('integration: full session recording lifecycle', () => {
     assertReplayError(result2);
     expect(result2.error).toContain('in use');
 
-    void result1.recording.dispose();
+    await result1.recording.dispose();
   });
 
   // =========================================================================

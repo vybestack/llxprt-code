@@ -12,11 +12,12 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import {
-  configureProviderRuntimeFactories,
   NodeFileSystem,
   populateProviderManager,
   createOwnedOAuthManager,
   createOwnedTokenStoreClose,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
@@ -220,13 +221,8 @@ describe('interactive runtime owner bridge', () => {
       firstCredentials().authority,
       firstCallerRelease,
     );
-    const {
-      tokenizerFactory: firstCallerTokenizer,
-      contentGeneratorFactory: firstCallerContent,
-    } = configureProviderRuntimeFactories(
-      firstCallerConfig,
-      firstCallerManager,
-    );
+    const firstCallerTokenizer = configureProviderTokenizer(firstCallerManager);
+    const firstCallerContent = createRuntimeContentGeneratorFactory();
     const firstCallerOAuth = acquirePreferredOAuth(
       undefined,
       firstCallerPolicy.session.messageBus,
@@ -397,13 +393,9 @@ describe('interactive runtime owner bridge', () => {
       secondCredentials().authority,
       secondCallerRelease,
     );
-    const {
-      tokenizerFactory: secondCallerTokenizer,
-      contentGeneratorFactory: secondCallerContent,
-    } = configureProviderRuntimeFactories(
-      secondCallerConfig,
-      secondCallerManager,
-    );
+    const secondCallerTokenizer =
+      configureProviderTokenizer(secondCallerManager);
+    const secondCallerContent = createRuntimeContentGeneratorFactory();
     const secondCallerOAuth = acquirePreferredOAuth(
       undefined,
       secondCallerPolicy.session.messageBus,
@@ -578,8 +570,8 @@ describe('interactive runtime owner bridge', () => {
       false,
       process.env.LLXPRT_FAKE_RESPONSES,
     );
-    configureProviderRuntimeFactories(firstCallerConfig, firstManager);
-    configureProviderRuntimeFactories(secondCallerConfig, secondManager);
+    configureProviderTokenizer(firstManager);
+    configureProviderTokenizer(secondManager);
     firstManager.setActiveProvider('openai');
     secondManager.setActiveProvider('openai');
     firstCallerSettingsOwner.writeUserParameter(

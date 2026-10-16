@@ -23,7 +23,7 @@ import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
   ensureOAuthProviderRegistered,
-  configureProviderRuntimeFactories,
+  configureProviderTokenizer,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   executeProviderSwitch,
@@ -108,7 +108,7 @@ function switchActivationOperations(
     resetFailover: () => oauth?.clearRetryHandlers(),
     activate: async (name) => {
       await manager.setActiveProvider(name);
-      configureProviderRuntimeFactories(config, manager);
+      configureProviderTokenizer(manager);
       return manager.getActiveProvider()?.getDefaultModel?.();
     },
     setModel: owner.chooseModel.bind(owner),

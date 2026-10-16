@@ -6,7 +6,7 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  */
 import { instructionFixture } from './__tests__/instruction-fixture.js';
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
@@ -145,7 +145,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
     manager.registerProvider(provider);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     Object.defineProperties(config, {
       getModel: { value: () => SUBAGENT_MODEL },
       getConversationLoggingEnabled: { value: () => false },

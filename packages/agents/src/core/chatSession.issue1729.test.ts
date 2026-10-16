@@ -16,7 +16,7 @@ import type {
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -63,7 +63,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
 
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',

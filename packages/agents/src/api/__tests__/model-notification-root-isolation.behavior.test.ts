@@ -13,7 +13,10 @@ import {
   FakeProvider,
   type GenerateChatOptions,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -108,12 +111,8 @@ describe('session-owned model notifications', () => {
   let aCallerFiles: ProviderFileLifecycle;
   let aCallerRuntimeId: string;
   let aCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let aCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  let aCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  let aCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let aCallerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   async function openACaller(fixture: string): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
@@ -221,12 +220,10 @@ describe('session-owned model notifications', () => {
       aCredentials().authority,
       aCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      aCallerConfig,
-      aCallerManager,
-    );
-    aCallerTokenizer = factories.tokenizerFactory;
-    aCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(aCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    aCallerTokenizer = factoriesTokenizer;
+    aCallerContent = factoriesContent;
     aCallerOAuth = acquirePreferredOAuth(
       undefined,
       aCallerPolicy.session.messageBus,
@@ -344,12 +341,8 @@ describe('session-owned model notifications', () => {
   let bCallerFiles: ProviderFileLifecycle;
   let bCallerRuntimeId: string;
   let bCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let bCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  let bCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  let bCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let bCallerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   async function openBCaller(fixture: string): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
@@ -457,12 +450,10 @@ describe('session-owned model notifications', () => {
       bCredentials().authority,
       bCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      bCallerConfig,
-      bCallerManager,
-    );
-    bCallerTokenizer = factories.tokenizerFactory;
-    bCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(bCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    bCallerTokenizer = factoriesTokenizer;
+    bCallerContent = factoriesContent;
     bCallerOAuth = acquirePreferredOAuth(
       undefined,
       bCallerPolicy.session.messageBus,

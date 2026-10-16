@@ -14,8 +14,9 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import {
-  configureProviderRuntimeFactories,
   writeProviderAliasConfig,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -102,12 +103,8 @@ describe('Profile cascade workflow at the owner', () => {
   let callerFiles: ProviderFileLifecycle;
   let callerRuntimeId: string;
   let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  let callerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   async function openCaller(fixture: string): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
@@ -215,12 +212,10 @@ describe('Profile cascade workflow at the owner', () => {
       credentials().authority,
       callerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      callerConfig,
-      callerManager,
-    );
-    callerTokenizer = factories.tokenizerFactory;
-    callerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    callerTokenizer = factoriesTokenizer;
+    callerContent = factoriesContent;
     callerOAuth = acquirePreferredOAuth(
       undefined,
       callerPolicy.session.messageBus,
@@ -588,7 +583,6 @@ describe('Profile cascade workflow at the owner', () => {
   });
 
   it('rejects a missing model when neither the provider nor config supplies a default', async () => {
-    const config = callerConfig;
     const settings = callerSettings;
     const store = profileStore;
     const providers = profileProviders;
@@ -605,7 +599,7 @@ describe('Profile cascade workflow at the owner', () => {
     );
     manager.registerProvider(provider);
     manager.setActiveProvider('no-default');
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     callerSettingsOwner.chooseModel('');
     await expect(
       applyProfileCascade(

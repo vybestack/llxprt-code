@@ -1,10 +1,11 @@
 import { FileOAuthSettingsProvider } from '../../../../providers/src/auth/file-oauth-settings.js';
 import {
   createOwnerOAuthManager,
-  configureProviderRuntimeFactories,
   createOwnedTokenStoreClose,
   createSessionAuthPolicyReader,
   createOwnerAuthCacheInvalidator,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -185,13 +186,8 @@ describe('interactive runtime owner bridge', () => {
       firstCredentials().authority,
       firstCallerRelease,
     );
-    const {
-      tokenizerFactory: firstCallerTokenizer,
-      contentGeneratorFactory: firstCallerContent,
-    } = configureProviderRuntimeFactories(
-      firstCallerConfig,
-      firstCallerManager,
-    );
+    const firstCallerTokenizer = configureProviderTokenizer(firstCallerManager);
+    const firstCallerContent = createRuntimeContentGeneratorFactory();
     await writeFile(
       join(firstCallerDirectory, 'oauth-settings.json'),
       JSON.stringify({ oauthEnabledProviders: {} }),
@@ -371,13 +367,9 @@ describe('interactive runtime owner bridge', () => {
       secondCredentials().authority,
       secondCallerRelease,
     );
-    const {
-      tokenizerFactory: secondCallerTokenizer,
-      contentGeneratorFactory: secondCallerContent,
-    } = configureProviderRuntimeFactories(
-      secondCallerConfig,
-      secondCallerManager,
-    );
+    const secondCallerTokenizer =
+      configureProviderTokenizer(secondCallerManager);
+    const secondCallerContent = createRuntimeContentGeneratorFactory();
     await writeFile(
       join(secondCallerDirectory, 'oauth-settings.json'),
       JSON.stringify({ oauthEnabledProviders: {} }),

@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -87,12 +90,8 @@ describe('session executable tool ownership', () => {
   let callerFiles: ProviderFileLifecycle;
   let callerRuntimeId: string;
   let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  let callerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   async function openCaller(
     fixture: string,
@@ -231,12 +230,10 @@ describe('session executable tool ownership', () => {
       credentials().authority,
       callerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      callerConfig,
-      callerManager,
-    );
-    callerTokenizer = factories.tokenizerFactory;
-    callerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    callerTokenizer = factoriesTokenizer;
+    callerContent = factoriesContent;
     callerOAuth = acquirePreferredOAuth(
       undefined,
       callerPolicy.session.messageBus,

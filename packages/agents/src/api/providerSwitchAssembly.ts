@@ -8,7 +8,10 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import { assembleSessionImages } from './session-image-assembly.js';
 import { assembleModelSelection } from './model-selection.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
@@ -298,10 +301,8 @@ async function completeActivationAcquisition(
   memoryOwnership: 'borrowed' | 'transferred',
   release: AcquisitionRelease,
 ): Promise<AgentActivationOperation> {
-  const factories = configureProviderRuntimeFactories(config, manager, {
-    tokenizerFactory: tokenizer,
-    contentGeneratorFactory: content,
-  });
+  const factoriesTokenizer = configureProviderTokenizer(manager, tokenizer);
+  const factoriesContent = content ?? createRuntimeContentGeneratorFactory();
   const client = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settings),
@@ -311,8 +312,8 @@ async function completeActivationAcquisition(
     mcp?.readInstructions ?? (() => undefined),
     filesystem.paths,
     owner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
+    factoriesContent,
+    factoriesTokenizer,
     supplied,
     bus,
   );

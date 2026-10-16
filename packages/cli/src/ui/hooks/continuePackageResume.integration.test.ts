@@ -25,7 +25,10 @@ const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
@@ -200,7 +203,8 @@ async function createConfig(
     config,
   );
   const client = createAgentClient(history, store, config, manager);
-  const factories = configureProviderRuntimeFactories(config, manager);
+  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesContent = createRuntimeContentGeneratorFactory();
   const sessionClient = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settingsService),
@@ -210,8 +214,8 @@ async function createConfig(
     () => undefined,
     fixturePaths(),
     settingsOwner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
+    factoriesContent,
+    factoriesTokenizer,
     client,
   );
 

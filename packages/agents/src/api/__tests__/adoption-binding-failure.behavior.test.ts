@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import {
   OwnedCredentialFixture,
@@ -125,10 +128,8 @@ describe('failed adopted session binding', () => {
       callerCredentials.authority,
       callerRelease,
     );
-    const {
-      tokenizerFactory: callerTokenizer,
-      contentGeneratorFactory: callerContent,
-    } = configureProviderRuntimeFactories(callerConfig, callerManager);
+    const callerTokenizer = configureProviderTokenizer(callerManager);
+    const callerContent = createRuntimeContentGeneratorFactory();
     const callerOAuth = acquirePreferredOAuth(
       undefined,
       callerMessageBus,

@@ -9,7 +9,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { OwnedCredentialFixture } from './owned-credential-fixture.js';
 import {
@@ -442,12 +445,8 @@ class ExtensionDisposalOwner {
   private oauth!: ReturnType<typeof acquirePreferredOAuth>;
   private owner!: SessionClientOwner;
   private media!: SessionMediaOwner;
-  private tokenizer!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  private content!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  private tokenizer!: ReturnType<typeof configureProviderTokenizer>;
+  private content!: ReturnType<typeof createRuntimeContentGeneratorFactory>;
   private readonly release = new AcquisitionRelease();
   private readonly runtimeId = 'extension-' + randomUUID();
   private readonly files = new ProviderFileLifecycle({
@@ -546,12 +545,10 @@ class ExtensionDisposalOwner {
       this.credentials.authority,
       this.release,
     );
-    const factories = configureProviderRuntimeFactories(
-      this.config,
-      this.manager,
-    );
-    this.tokenizer = factories.tokenizerFactory;
-    this.content = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(this.manager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    this.tokenizer = factoriesTokenizer;
+    this.content = factoriesContent;
     this.oauth = acquirePreferredOAuth(
       undefined,
       this.policy.session.messageBus,

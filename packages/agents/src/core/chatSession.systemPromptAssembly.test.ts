@@ -1,6 +1,6 @@
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -113,7 +113,7 @@ function buildFixture(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   manager.registerProvider(provider);
 
   // Minimal hook stubs so sendMessage does not crash on hook lookups.
@@ -397,7 +397,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     };
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     manager.registerProvider(provider);
     Object.defineProperties(config, {
       getConversationLoggingEnabled: { value: () => false },

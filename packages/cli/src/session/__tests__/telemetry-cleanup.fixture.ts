@@ -13,7 +13,10 @@ import {
   ProviderFileLifecycle,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { OwnedCredentialFixture } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -105,12 +108,8 @@ class TelemetryCleanup {
   #files!: ProviderFileLifecycle;
   #runtimeId!: string;
   #oAuth!: ReturnType<typeof acquirePreferredOAuth>;
-  #tokenizer!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  #content!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  #tokenizer!: ReturnType<typeof configureProviderTokenizer>;
+  #content!: ReturnType<typeof createRuntimeContentGeneratorFactory>;
   constructor(private readonly credentials: OwnedCredentialFixture) {}
   private async openCaller(
     fixture: string,
@@ -268,12 +267,10 @@ class TelemetryCleanup {
       this.credentials.authority,
       this.#release,
     );
-    const factories = configureProviderRuntimeFactories(
-      this.#config,
-      this.#manager,
-    );
-    this.#tokenizer = factories.tokenizerFactory;
-    this.#content = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(this.#manager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    this.#tokenizer = factoriesTokenizer;
+    this.#content = factoriesContent;
     this.#oAuth = acquirePreferredOAuth(
       undefined,
       this.#policy.session.messageBus,

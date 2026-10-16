@@ -11,7 +11,10 @@ import {
   ProviderFileLifecycle,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -174,13 +177,10 @@ describe('activation bootstrap ownership and queued work', () => {
       builtCredentials().authority,
       blocked_builtCallerRelease,
     );
-    const {
-      tokenizerFactory: blocked_builtCallerTokenizer,
-      contentGeneratorFactory: blocked_builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      blocked_builtCallerConfig,
+    const blocked_builtCallerTokenizer = configureProviderTokenizer(
       blocked_builtCallerManager,
     );
+    const blocked_builtCallerContent = createRuntimeContentGeneratorFactory();
     const blocked_builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       blocked_builtCallerPolicy.session.messageBus,
@@ -381,13 +381,11 @@ describe('activation bootstrap ownership and queued work', () => {
       builtCredentials().authority,
       independent_builtCallerRelease,
     );
-    const {
-      tokenizerFactory: independent_builtCallerTokenizer,
-      contentGeneratorFactory: independent_builtCallerContent,
-    } = configureProviderRuntimeFactories(
-      independent_builtCallerConfig,
+    const independent_builtCallerTokenizer = configureProviderTokenizer(
       independent_builtCallerManager,
     );
+    const independent_builtCallerContent =
+      createRuntimeContentGeneratorFactory();
     const independent_builtCallerOAuth = acquirePreferredOAuth(
       undefined,
       independent_builtCallerPolicy.session.messageBus,

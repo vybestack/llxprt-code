@@ -13,9 +13,10 @@ import {
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
 import {
-  configureProviderRuntimeFactories,
   writeProviderAliasConfig,
   loadProviderAliasEntries,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -101,12 +102,8 @@ describe('Profile alias default ownership', () => {
   let callerFiles: ProviderFileLifecycle;
   let callerRuntimeId: string;
   let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  let callerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   async function openCaller(fixture: string): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
@@ -214,12 +211,10 @@ describe('Profile alias default ownership', () => {
       credentials().authority,
       callerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      callerConfig,
-      callerManager,
-    );
-    callerTokenizer = factories.tokenizerFactory;
-    callerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    callerTokenizer = factoriesTokenizer;
+    callerContent = factoriesContent;
     callerOAuth = acquirePreferredOAuth(
       undefined,
       callerPolicy.session.messageBus,

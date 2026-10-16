@@ -18,11 +18,12 @@ import {
   type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
-  configureProviderRuntimeFactories,
   createOwnerOAuthManager,
   createOwnedTokenStoreClose,
   createSessionAuthPolicyReader,
   createOwnerAuthCacheInvalidator,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService, Profile } from '@vybestack/llxprt-code-settings';
@@ -239,10 +240,8 @@ export class ChildAgentAssembly {
     const keys = this.authority.createProviderKeyStorage();
     this.providers.acquire('manager', () => keys.close());
     this.manager.bindProviderKeyStorage(keys);
-    ({
-      tokenizerFactory: this.tokenizer,
-      contentGeneratorFactory: this.content,
-    } = configureProviderRuntimeFactories(this.config, this.manager));
+    this.tokenizer = configureProviderTokenizer(this.manager);
+    this.content = createRuntimeContentGeneratorFactory();
     const tokens = this.authority.createTokenStore();
     this.providers.acquire('tokens', createOwnedTokenStoreClose(tokens));
     this.oauth = createOwnerOAuthManager(

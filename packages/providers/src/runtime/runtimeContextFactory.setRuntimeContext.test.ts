@@ -11,7 +11,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { type ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { configureProviderRuntimeFactories } from '../composition/index.js';
+import { configureProviderTokenizer } from '../composition/index.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -96,7 +96,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       oauth,
       runtimeId,
       false,
-      configureProviderRuntimeFactories(config, manager).tokenizerFactory,
+      configureProviderTokenizer(manager),
     );
   }
 
@@ -214,8 +214,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       oauth,
       'setRuntimeContext-adopted',
       false,
-      configureProviderRuntimeFactories(config, adoptedManager)
-        .tokenizerFactory,
+      configureProviderTokenizer(adoptedManager),
     );
     expect(selected).toBe(adoptedManager);
     expect(() =>

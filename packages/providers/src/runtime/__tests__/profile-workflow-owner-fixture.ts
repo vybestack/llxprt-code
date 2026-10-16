@@ -6,7 +6,7 @@ import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.j
  */
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { afterEach, beforeEach } from 'bun:test';
 import {
   Config,
@@ -115,7 +115,7 @@ function createWorkflowOwner(
     providers.set(name, provider);
   }
   const store = new ProfileManager(join(directory, 'profiles'));
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   const switchProvider: ProviderSwitcher = (name, options = {}) =>
     switchActiveProvider(
       name,

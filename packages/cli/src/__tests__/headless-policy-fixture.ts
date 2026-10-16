@@ -12,7 +12,7 @@ import {
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from '../nonInteractiveCli.js';
 
@@ -49,7 +49,7 @@ export function makeHeadlessConfig(sessionId: string): {
   );
   manager.registerProvider(new OpenAIProvider(undefined));
   manager.setActiveProvider('openai');
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   return {
     credentialAuthority,
     config,

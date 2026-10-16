@@ -23,7 +23,10 @@ import {
   FakeProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
@@ -120,13 +123,11 @@ describe('public Agent workspace definition lifetime', () => {
 
   let callerCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
 
-  let callerCallerTokenizer: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  let callerCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
 
   let callerCallerContent: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+    typeof createRuntimeContentGeneratorFactory
+  >;
 
   async function opencallerCaller(
     fixture: string,
@@ -271,12 +272,10 @@ describe('public Agent workspace definition lifetime', () => {
       callerCredentials().authority,
       callerCallerRelease,
     );
-    const factories = configureProviderRuntimeFactories(
-      callerCallerConfig,
-      callerCallerManager,
-    );
-    callerCallerTokenizer = factories.tokenizerFactory;
-    callerCallerContent = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(callerCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    callerCallerTokenizer = factoriesTokenizer;
+    callerCallerContent = factoriesContent;
     callerCallerOAuth = acquirePreferredOAuth(
       undefined,
       callerCallerPolicy.session.messageBus,

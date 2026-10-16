@@ -15,7 +15,10 @@ import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { OwnedCredentialFixture } from './owned-credential-fixture.js';
 import {
@@ -96,12 +99,8 @@ class RecordingLifetime {
   #files!: ProviderFileLifecycle;
   #runtimeId!: string;
   #oAuth!: ReturnType<typeof acquirePreferredOAuth>;
-  #tokenizer!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
-  #content!: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['contentGeneratorFactory'];
+  #tokenizer!: ReturnType<typeof configureProviderTokenizer>;
+  #content!: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
   private async open(
     fixture: string,
@@ -256,12 +255,10 @@ class RecordingLifetime {
       this.credentials.authority,
       this.#release,
     );
-    const factories = configureProviderRuntimeFactories(
-      this.#config,
-      this.#manager,
-    );
-    this.#tokenizer = factories.tokenizerFactory;
-    this.#content = factories.contentGeneratorFactory;
+    const factoriesTokenizer = configureProviderTokenizer(this.#manager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    this.#tokenizer = factoriesTokenizer;
+    this.#content = factoriesContent;
     this.#oAuth = acquirePreferredOAuth(
       undefined,
       this.#policy.session.messageBus,

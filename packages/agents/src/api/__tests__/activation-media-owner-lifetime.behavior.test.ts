@@ -26,7 +26,10 @@ import { assembleWorkspaceMemory } from '@vybestack/llxprt-code-core';
 
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { describe, expect, it } from 'bun:test';
@@ -111,10 +114,8 @@ describe('activation media owner lifetime', () => {
       builtFactorylessSettings,
     );
     const entered = gate();
-    const factories = configureProviderRuntimeFactories(
-      builtFactorylessConfig,
-      manager,
-    );
+    const factoriesTokenizer = configureProviderTokenizer(manager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
     const released = gate();
     const settingsOwner = builtFactorylessSettingsOwner;
     const operation = new AgentActivationBootstrap(
@@ -140,8 +141,8 @@ describe('activation media owner lifetime', () => {
         () => undefined,
         filesystem.paths,
         settingsOwner,
-        factories.contentGeneratorFactory,
-        factories.tokenizerFactory,
+        factoriesContent,
+        factoriesTokenizer,
       ),
       filesystem,
       assembleWorkspaceMemory(
