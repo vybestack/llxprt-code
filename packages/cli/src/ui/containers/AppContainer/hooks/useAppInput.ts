@@ -80,14 +80,14 @@ import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { useInputKeybindings } from './useInputKeybindings.js';
 import type {
   SlashCommandRuntime,
+  StreamRuntime,
   UiRuntime,
   UiSubagentManager,
 } from '../../../cliUiRuntime.js';
 
 export interface AppInputParams {
   uiRuntime: UiRuntime;
-  // From bootstrap
-  streamRuntime: AppBootstrapResult['streamRuntime'];
+  streamRuntime: StreamRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   agent: Agent;
   settings: AppBootstrapResult['settings'];
