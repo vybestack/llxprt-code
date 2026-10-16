@@ -59,7 +59,19 @@ describe('policiesCommand', () => {
       },
     } as unknown as CommandOwnerFixture;
     policiesCommand = createPoliciesCommand(
-      bindPoliciesCommand(() => mockContext.services.agent ?? null),
+      bindPoliciesCommand(
+        () => mockContext.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = mockContext.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = mockContext.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
     );
   });
 

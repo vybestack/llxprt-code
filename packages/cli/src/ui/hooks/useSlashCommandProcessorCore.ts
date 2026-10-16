@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useWorkspaceCommandOwners } from './useWorkspaceCommandOwners.js';
+
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
 import {
   resumeOwnerSession,
@@ -11,15 +19,8 @@ import { bindCommandRawResume } from './commandRawResumeHost.js';
 import { performResume } from '../../services/performResume.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
-/**
- * @license
- * Copyright 2025 Google LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
-
 import { useCommandRuntimeState } from './useCommandRuntimeState.js';
 import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
 import { useHostCommands } from './useHostCommands.js';
@@ -40,24 +41,6 @@ import { bindContinueCommandOperations } from '../commands/continueCommandHost.j
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
-import { createHooksCommand } from '../commands/hooksCommand.js';
-import { createTaskCommand } from '../commands/tasksCommand.js';
-import {
-  bindHooksCommand,
-  bindTaskCommand,
-} from '../commands/hookTaskCommandHost.js';
-import { createToolsCommand } from '../commands/toolsCommand.js';
-import { bindToolsCommand } from '../commands/toolsCommandHost.js';
-import { createDirectoryCommand } from '../commands/directoryCommand.js';
-import { bindDirectoryCommand } from '../commands/directoryCommandHost.js';
-import { createMemoryCommand } from '../commands/memoryCommand.js';
-import { bindMemoryCommand } from '../commands/memoryCommandHost.js';
-import { createImageCommand } from '../commands/imageCommand.js';
-import { bindImageCommand } from '../commands/imageCommandHost.js';
-import { createBugCommand } from '../commands/bugCommand.js';
-import { bindBugCommand } from '../commands/bugCommandHost.js';
-import { createPoliciesCommand } from '../commands/policiesCommand.js';
-import { bindPoliciesCommand } from '../commands/policiesCommandHost.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -251,37 +234,6 @@ function useCommandState(
   return { builtins, ...useRegistryState(builtins, config) };
 }
 
-function useDirectoryCommandOwner(
-  config: CliUiRuntime | null,
-  agent: Agent | null,
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recordingIntegration: RecordingIntegration | undefined,
-  addItem: UseHistoryManagerReturn['addItem'],
-  setMemoryFileCount: (count: number) => void,
-): SlashCommand {
-  return useMemo(
-    () =>
-      createDirectoryCommand(
-        bindDirectoryCommand(
-          config,
-          agent,
-          recordingOwner,
-          recordingIntegration,
-          addItem,
-          setMemoryFileCount,
-        ),
-      ),
-    [
-      config,
-      agent,
-      recordingOwner,
-      recordingIntegration,
-      addItem,
-      setMemoryFileCount,
-    ],
-  );
-}
-
 type BuiltinCommandOwnerParts = Pick<
   BuiltinCommandOwners,
   | 'chatCommand'
@@ -377,105 +329,6 @@ function useBuiltinCommandOwners(
       extensionsCommand,
       subagentCommand,
     ],
-  );
-}
-
-function useBugCommandOwner(
-  config: CliUiRuntime | null,
-  agent: Agent | null,
-  addItem: UseHistoryManagerReturn['addItem'],
-): SlashCommand {
-  return useMemo(
-    () => createBugCommand(bindBugCommand(config, agent, addItem)),
-    [config, agent, addItem],
-  );
-}
-
-function useMemoryCommandOwner(
-  config: CliUiRuntime | null,
-  addItem: UseHistoryManagerReturn['addItem'],
-  setMemoryFileCount: (count: number) => void,
-): SlashCommand {
-  return useMemo(
-    () =>
-      createMemoryCommand(
-        bindMemoryCommand(config, addItem, setMemoryFileCount),
-      ),
-    [config, addItem, setMemoryFileCount],
-  );
-}
-
-function useWorkspaceCommandOwners(
-  config: CliUiRuntime | null,
-  agent: Agent | null,
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recordingIntegration: RecordingIntegration | undefined,
-  addItem: UseHistoryManagerReturn['addItem'],
-  setMemoryFileCount: (count: number) => void,
-): {
-  memoryCommand: SlashCommand;
-  bugCommand: SlashCommand;
-  policiesCommand: SlashCommand;
-  toolsCommand: SlashCommand;
-  directoryCommand: SlashCommand;
-  imageCommand: SlashCommand;
-  hooksCommand: SlashCommand;
-  taskCommand: SlashCommand;
-} {
-  const memoryCommand = useMemoryCommandOwner(
-    config,
-    addItem,
-    setMemoryFileCount,
-  );
-  const bugCommand = useBugCommandOwner(config, agent, addItem);
-  const policiesCommand = useMemo(
-    () => createPoliciesCommand(bindPoliciesCommand(() => agent)),
-    [agent],
-  );
-  return {
-    memoryCommand,
-    bugCommand,
-    policiesCommand,
-    hooksCommand: useMemo(
-      () =>
-        createHooksCommand(bindHooksCommand(agent, config !== null), addItem),
-      [agent, config, addItem],
-    ),
-    taskCommand: useMemo(
-      () => createTaskCommand(bindTaskCommand(agent), addItem),
-      [agent, addItem],
-    ),
-    toolsCommand: useToolsCommandOwner(agent, addItem),
-    directoryCommand: useDirectoryCommandOwner(
-      config,
-      agent,
-      recordingOwner,
-      recordingIntegration,
-      addItem,
-      setMemoryFileCount,
-    ),
-    imageCommand: useImageCommandOwner(config, agent, addItem),
-  };
-}
-
-function useImageCommandOwner(
-  config: CliUiRuntime | null,
-  agent: Agent | null,
-  addItem: UseHistoryManagerReturn['addItem'],
-): SlashCommand {
-  return useMemo(
-    () => createImageCommand(bindImageCommand(config, agent, addItem)),
-    [config, agent, addItem],
-  );
-}
-
-function useToolsCommandOwner(
-  agent: Agent | null,
-  addItem: UseHistoryManagerReturn['addItem'],
-): SlashCommand {
-  return useMemo(
-    () => createToolsCommand(bindToolsCommand(agent), addItem),
-    [agent, addItem],
   );
 }
 

@@ -109,7 +109,19 @@ describe('policiesCommand — agent surface', () => {
     });
 
     const command = createPoliciesCommand(
-      bindPoliciesCommand(() => context.services.agent ?? null),
+      bindPoliciesCommand(
+        () => context.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
     );
     const result = command.action!(context, '') as {
       type: string;
@@ -131,7 +143,19 @@ describe('policiesCommand — agent surface', () => {
     });
 
     const command = createPoliciesCommand(
-      bindPoliciesCommand(() => context.services.agent ?? null),
+      bindPoliciesCommand(
+        () => context.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
     );
     const result = command.action!(context, 'menu') as {
       type: string;

@@ -11,7 +11,6 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createHooksCommand } from './hooksCommand.js';
 import { createTaskCommand } from './tasksCommand.js';
-import { bindHooksCommand, bindTaskCommand } from './hookTaskCommandHost.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
 describe('registered hook and task command owners', () => {
@@ -36,10 +35,25 @@ describe('registered hook and task command owners', () => {
       {
         ...createUnconfiguredBuiltinOwners(),
         hooksCommand: createHooksCommand(
-          bindHooksCommand(owner, true),
+          {
+            listHooks: owner.hooks.listHooks.bind(owner.hooks),
+            isConfigured: true,
+            isAvailable: true,
+            enable: owner.hooks.enable.bind(owner.hooks),
+            disable: owner.hooks.disable.bind(owner.hooks),
+            setDisabledHooks: owner.hooks.setDisabledHooks.bind(owner.hooks),
+          },
           addItem,
         ),
-        taskCommand: createTaskCommand(bindTaskCommand(owner), addItem),
+        taskCommand: createTaskCommand(
+          {
+            list: () => owner.tasks.list(),
+            listRunning: () => owner.tasks.listRunning(),
+            get: (id) => owner.tasks.get(id),
+            cancel: (id) => owner.tasks.cancel(id),
+          },
+          addItem,
+        ),
       },
       config,
     );
@@ -65,7 +79,15 @@ describe('registered hook and task command owners', () => {
       text: 'No hooks registered.',
     });
     await owner.dispose();
-    const siblingTask = createTaskCommand(bindTaskCommand(sibling), addItem);
+    const siblingTask = createTaskCommand(
+      {
+        list: () => sibling.tasks.list(),
+        listRunning: () => sibling.tasks.listRunning(),
+        get: (id) => sibling.tasks.get(id),
+        cancel: (id) => sibling.tasks.cancel(id),
+      },
+      addItem,
+    );
     await siblingTask.subCommands
       ?.find((entry) => entry.name === 'list')
       ?.action?.(invocation, '');
