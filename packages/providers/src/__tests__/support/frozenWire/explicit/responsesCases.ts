@@ -17,7 +17,12 @@ import type { MediaBinding } from '../../wireBodyCapture.js';
 import { formatById } from '../frozenCases.js';
 import type { ExplicitCase, Observation } from './explicitCase.js';
 import { bodyOf, observeForms } from './explicitObserve.js';
-import { sendFresh, sendThrough, type Observed } from './explicitSend.js';
+import {
+  sendFresh,
+  sendThrough,
+  type ExplicitSend,
+  type Observed,
+} from './explicitSend.js';
 import {
   ai,
   callBlock,
@@ -30,6 +35,16 @@ import {
 const BOTH_ROUTES = ['openai-responses', 'openai-responses-via-openai'];
 const STATEFUL = { 'responses-stateful': true };
 const REQUEST_URL = 'https://api.openai.com/v1';
+
+/** A counterexample that sends the same rows on both Responses routes. */
+export interface ResponsesScenario {
+  readonly name: string;
+  /** The design's wording of the counterexample, for the reader. */
+  readonly review: string;
+  readonly formatIds: readonly string[];
+  readonly send: ExplicitSend;
+  readonly expectation?: (observation: Observation) => void;
+}
 
 function parented(
   row: IContent,
@@ -70,84 +85,84 @@ function checkParent(parent: string | undefined) {
   };
 }
 
-function idCases(): ExplicitCase[] {
+function idScenarios(): ResponsesScenario[] {
   return [
     {
       name: 'responses ids: call ids "" and "call_" in one unit',
       review: 'call ids "" and "call_" in one unit (263 bytes)',
-      observe: () =>
-        observeForms(BOTH_ROUTES, {
-          rows: [
-            human(textBlock('q')),
-            ai(callBlock(''), callBlock('call_')),
-            tool(responseBlock('call_')),
-          ],
-        }),
+      formatIds: BOTH_ROUTES,
+      send: {
+        rows: [
+          human(textBlock('q')),
+          ai(callBlock(''), callBlock('call_')),
+          tool(responseBlock('call_')),
+        ],
+      },
     },
   ];
 }
 
-function parentCases(): ExplicitCase[] {
+function parentScenarios(): ResponsesScenario[] {
   const question = human(textBlock('second question'));
   return [
     {
       name: 'responses parent: a wildcard endpoint is selected',
       review: 'a parent with a wildcard endpoint',
-      observe: () =>
-        observeForms(BOTH_ROUTES, {
-          rows: [
-            human(textBlock('first question')),
-            parented(ai(textBlock('stored answer')), 'resp_wildcard'),
-            question,
-          ],
-          ephemerals: STATEFUL,
-        }),
+      formatIds: BOTH_ROUTES,
+      send: {
+        rows: [
+          human(textBlock('first question')),
+          parented(ai(textBlock('stored answer')), 'resp_wildcard'),
+          question,
+        ],
+        ephemerals: STATEFUL,
+      },
       expectation: checkParent('resp_wildcard'),
     },
     {
       name: 'responses parent: a trailing-slash endpoint is selected',
       review: 'a parent with a trailing-slash URL',
-      observe: () =>
-        observeForms(BOTH_ROUTES, {
-          rows: [
-            human(textBlock('first question')),
-            parented(
-              ai(textBlock('stored answer')),
-              'resp_slash',
-              `${REQUEST_URL}/`,
-            ),
-            question,
-          ],
-          ephemerals: STATEFUL,
-        }),
+      formatIds: BOTH_ROUTES,
+      send: {
+        rows: [
+          human(textBlock('first question')),
+          parented(
+            ai(textBlock('stored answer')),
+            'resp_slash',
+            `${REQUEST_URL}/`,
+          ),
+          question,
+        ],
+        ephemerals: STATEFUL,
+      },
       expectation: checkParent('resp_slash'),
     },
     {
       name: 'responses parent: an adjacent result is sent after the parent unit',
       review: 'a parent with an adjacent result (cursor after the unit)',
-      observe: () =>
-        observeForms(BOTH_ROUTES, {
-          rows: [
-            human(textBlock('first question')),
-            parented(ai(callBlock('call_x')), 'resp_call', REQUEST_URL),
-            tool(responseBlock('call_x', 'ADJACENT-RESULT')),
-            question,
-          ],
-          ephemerals: STATEFUL,
-        }),
+      formatIds: BOTH_ROUTES,
+      send: {
+        rows: [
+          human(textBlock('first question')),
+          parented(ai(callBlock('call_x')), 'resp_call', REQUEST_URL),
+          tool(responseBlock('call_x', 'ADJACENT-RESULT')),
+          question,
+        ],
+        ephemerals: STATEFUL,
+      },
       expectation: checkParent('resp_call'),
     },
     {
       name: 'responses parent: no following content sends the full history',
       review: 'a parent with no following content',
-      observe: () =>
-        observeForms(BOTH_ROUTES, {
-          rows: [
-            human(textBlock('first question')),
-            parented(ai(textBlock('stored answer')), 'resp_last', REQUEST_URL),
-          ],
-          ephemerals: STATEFUL,
-        }),
+      formatIds: BOTH_ROUTES,
+      send: {
+        rows: [
+          human(textBlock('first question')),
+          parented(ai(textBlock('stored answer')), 'resp_last', REQUEST_URL),
+        ],
+        ephemerals: STATEFUL,
+      },
       expectation: checkParent(undefined),
     },
   ];
@@ -161,23 +176,35 @@ const REJECTION = (): Response =>
     { status: 400, headers: { 'content-type': 'application/json' } },
   );
 
-async function rejectedParent(): Promise<Observation> {
-  const format = formatById('openai-responses');
-  const provider = format.route.createProvider();
-  const base = [
+/** The rows of the two sources of the rejected-parent case. */
+export function rejectedParentRows(): {
+  first: IContent[];
+  second: IContent[];
+} {
+  const first = [
     human(textBlock('q0')),
     parented(ai(textBlock('a0')), 'resp_ok', REQUEST_URL),
     human(textBlock('q1')),
     parented(ai(textBlock('a1')), 'resp_dead', REQUEST_URL),
     human(textBlock('q2')),
   ];
+  return {
+    first,
+    second: [...first, ai(textBlock('a2')), human(textBlock('q3'))],
+  };
+}
+
+async function rejectedParent(): Promise<Observation> {
+  const format = formatById('openai-responses');
+  const provider = format.route.createProvider();
+  const rows = rejectedParentRows();
   const first = await sendThrough(format, provider, {
-    rows: base,
+    rows: rows.first,
     ephemerals: STATEFUL,
     respond: (index) => (index === 0 ? REJECTION() : format.route.respond()),
   });
   const second = await sendThrough(format, provider, {
-    rows: [...base, ai(textBlock('a2')), human(textBlock('q3'))],
+    rows: rows.second,
     ephemerals: STATEFUL,
   });
   return { 'first source': first, 'second source, same provider': second };
@@ -209,11 +236,20 @@ const pdfBlock = (bytes: number): IContent['blocks'][number] => ({
   filename: 'x.pdf',
 });
 
+/** The rows of a PDF case: one document of half the limit, one of `secondBytes`. */
+export function pdfRows(secondBytes: number): IContent[] {
+  const half = Math.floor(PDF_AGGREGATE_MAX_BYTES / 2);
+  return [
+    human(pdfBlock(half)),
+    human(pdfBlock(secondBytes)),
+    human(textBlock('summarize')),
+  ];
+}
+
 async function pdfSend(
   secondBytes: number,
   pdfEnabled: boolean,
 ): Promise<Observation> {
-  const half = Math.floor(PDF_AGGREGATE_MAX_BYTES / 2);
   const directory = await mkdtemp(join(tmpdir(), 'frozen-wire-pdf-'));
   const binding: MediaBinding = {
     resolver: new RequestMediaResolver(
@@ -225,11 +261,7 @@ async function pdfSend(
     const sent: Observed[] = await sendFresh(
       formatById('openai-responses'),
       {
-        rows: [
-          human(pdfBlock(half)),
-          human(pdfBlock(secondBytes)),
-          human(textBlock('summarize')),
-        ],
+        rows: pdfRows(secondBytes),
         ephemerals: { 'media.pdf.enabled': pdfEnabled },
       },
       binding,
@@ -266,6 +298,21 @@ function pdfCases(): ExplicitCase[] {
   ];
 }
 
+export function responsesScenarios(): ResponsesScenario[] {
+  return [...idScenarios(), ...parentScenarios()];
+}
+
+function scenarioCases(): ExplicitCase[] {
+  return responsesScenarios().map((scenario) => ({
+    name: scenario.name,
+    review: scenario.review,
+    observe: () => observeForms(scenario.formatIds, scenario.send),
+    ...(scenario.expectation === undefined
+      ? {}
+      : { expectation: scenario.expectation }),
+  }));
+}
+
 export function responsesCases(): ExplicitCase[] {
-  return [...idCases(), ...parentCases(), ...rejectedCases(), ...pdfCases()];
+  return [...scenarioCases(), ...rejectedCases(), ...pdfCases()];
 }
