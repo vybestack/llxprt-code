@@ -6,7 +6,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
-import { FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { FatalSandboxError } from '@vybestack/llxprt-code-core/utils/errors.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   SshAgentResult,
