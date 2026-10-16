@@ -13,12 +13,14 @@ import {
   type Agent,
   type AgentConfig,
 } from '@vybestack/llxprt-code-agents';
+import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 export function useCommandOwners(): (
   label: string,
   mcpServers?: AgentConfig['mcpServers'],
   hooks?: AgentConfig['hooks'],
+  isolatedDefinitions?: boolean,
 ) => Promise<Agent> {
   const credentials = useOwnedCredentials();
   let root: string;
@@ -66,11 +68,19 @@ export function useCommandOwners(): (
     }
   });
 
-  return async (label, mcpServers, hooks) => {
+  return async (label, mcpServers, hooks, isolatedDefinitions) => {
     const workingDir = join(root, label);
     await mkdir(workingDir);
     const agent = await createAgent({
       credentialAuthority: credentials().authority,
+      definitionOwner:
+        isolatedDefinitions === true
+          ? new WorkspaceDefinitionOwner(
+              join(workingDir, 'profiles'),
+              join(workingDir, 'subagents'),
+            )
+          : undefined,
+      definitionOwnership: 'agent',
       provider: 'fake',
       model: `${label}-initial`,
       workingDir,
