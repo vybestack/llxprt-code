@@ -422,7 +422,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     return new SnapshotCompensationMark(this, previous, input, replacements);
   }
 
-  compensate(mark: HistoryCompensationMark): Promise<void> {
+  compensate(mark: HistoryCompensationMark, _failure: unknown): Promise<void> {
     if (!(mark instanceof SnapshotCompensationMark) || mark.store !== this)
       throw new Error('The compensation mark was not captured by this store');
     return compensateMutation(

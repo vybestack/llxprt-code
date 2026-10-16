@@ -189,7 +189,7 @@ describe('journal history store publication and compensation', () => {
     const mark = store.captureCompensation();
     const before = store.lastAck?.commitSeq;
 
-    await store.compensate(mark);
+    await store.compensate(mark, undefined);
 
     expect(store.lastAck?.commitSeq).toBe(before);
     expect(texts(await store.materialize())).toStrictEqual([
@@ -212,7 +212,7 @@ describe('journal history store publication and compensation', () => {
     expect(() => store.apply({ kind: 'content', content: NEW[0] })).toThrow(
       failure,
     );
-    await store.compensate(mark);
+    await store.compensate(mark, failure);
 
     expect(store.getLength()).toBe(2);
     store.apply({ kind: 'content', content: NEW[0] });
@@ -224,12 +224,65 @@ describe('journal history store publication and compensation', () => {
     ]);
   });
 
+  it('compensate keeps a failure the caller does not hold, and resolves the one it holds', async () => {
+    const { store } = await withOld('unheld.llxj');
+    const mark = store.captureCompensation();
+    store.apply({
+      kind: 'syntheticInsert',
+      payload: { content: row('ai', 'x', 9), chronologySeq: 9, afterSeq: 5 },
+    });
+    const queued = await store.waitForDurable().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(queued).toBeInstanceOf(Error);
+
+    await expect(
+      store.compensate(mark, new Error('some other failure')),
+    ).rejects.toBe(queued);
+    await expect(store.waitForDurable()).rejects.toBe(queued);
+    expect(() => store.apply({ kind: 'content', content: NEW[0] })).toThrow(
+      /anchor/,
+    );
+    await expect(store.compensate(mark, undefined)).rejects.toBe(queued);
+
+    await store.compensate(mark, queued);
+
+    expect(store.getLength()).toBe(2);
+    store.apply({ kind: 'content', content: NEW[0] });
+    await store.waitForDurable();
+    expect(texts(await store.materialize())).toStrictEqual([
+      'old one',
+      'old two',
+      'new one',
+    ]);
+  });
+
+  it('a publication whose group failed compensates that failure and leaves the store usable', async () => {
+    const { store } = await withOld('publication-failed.llxj');
+    const publication = new JournalDetachedPublication(store);
+    const failure = new Error('candidate could not be read');
+    const broken = Object.assign([NEW[0], NEW[1], NEW[2]], {
+      [Symbol.iterator]: (): Iterator<IContent> => {
+        throw failure;
+      },
+    });
+
+    await expect(publication.publish(OLD, broken)).rejects.toBe(failure);
+    await publication.compensate();
+
+    expect(store.getLength()).toBe(2);
+    store.apply({ kind: 'content', content: NEW[0] });
+    await store.waitForDurable();
+    expect(texts(await store.materialize())).toHaveLength(3);
+  });
+
   it('refuses a mark that another store captured', async () => {
     const first = await created('first.llxj');
     const second = await created('second.llxj');
 
     await expect(
-      second.store.compensate(first.store.captureCompensation()),
+      second.store.compensate(first.store.captureCompensation(), undefined),
     ).rejects.toThrow('not captured by this store');
   });
 

@@ -24,6 +24,8 @@ export class JournalDetachedPublication {
   /** The ack of the last group of this publication; undefined until a trailer is acked. */
   lastAck: CommitAck | undefined;
   private readonly mark: JournalCompensationMark;
+  /** The failure this publication's own groups reported; compensation resolves exactly that one. */
+  private failure: unknown;
 
   constructor(private readonly store: JournalHistoryStore) {
     this.mark = store.captureCompensation();
@@ -40,18 +42,24 @@ export class JournalDetachedPublication {
     signal?: AbortSignal,
     appendOnly = false,
   ): Promise<void> {
-    signal?.throwIfAborted();
-    if (appendOnly) {
-      await this.appendRows(previous, next, signal);
-    } else if (!rowsUnchanged(previous, next)) {
-      await this.replaceRows(previous, next, signal);
+    try {
+      signal?.throwIfAborted();
+      if (appendOnly) {
+        await this.appendRows(previous, next, signal);
+      } else if (!rowsUnchanged(previous, next)) {
+        await this.replaceRows(previous, next, signal);
+      }
+      signal?.throwIfAborted();
+    } catch (error) {
+      this.failure = error;
+      throw error;
     }
-    signal?.throwIfAborted();
   }
 
   /** Puts the version captured at construction back; nothing is written when no group was acked. */
   async compensate(): Promise<void> {
-    await this.store.compensate(this.mark);
+    await this.store.compensate(this.mark, this.failure);
+    this.failure = undefined;
     this.lastAck = undefined;
   }
 

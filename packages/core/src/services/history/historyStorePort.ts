@@ -214,8 +214,13 @@ export interface HistoryStorePort {
     input: HistoryMutationInput,
     replacements: OpenReplaceTracker,
   ): HistoryCompensationMark;
-  /** Undoes the admitted prefix of a failed mutation published after `mark`. */
-  compensate(mark: HistoryCompensationMark): Promise<void>;
+  /**
+   * Undoes the admitted prefix of a failed mutation published after `mark`.
+   * `failure` is the error the caller is handling. A store whose queue holds
+   * a different failure keeps it and rejects with it, because nobody was told
+   * about that one.
+   */
+  compensate(mark: HistoryCompensationMark, failure: unknown): Promise<void>;
   /** Copies the current rows and their origins into `previous` once they are durable. */
   captureDetached(
     previous: DetachedHistoryJournal,

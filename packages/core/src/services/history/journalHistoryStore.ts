@@ -440,19 +440,28 @@ export class JournalHistoryStore {
 
   /**
    * Undoes everything admitted since `mark` with `restore(version)`. When no
-   * group was acked since, nothing is written. The store is at a known
-   * version afterwards, so a failure of the queue is cleared; if the restore
+   * group was acked since, nothing is written. `held` is the failure the
+   * caller received from its own groups, or undefined when it received none
+   * from the store. Only that failure is cleared: a failure the queue holds
+   * that the caller does not hold was never reported to anyone, so it stays
+   * sticky and is thrown from here instead of being lost. If the restore
    * itself fails the store keeps that failure.
    */
-  async compensate(mark: JournalCompensationMark): Promise<void> {
+  async compensate(
+    mark: JournalCompensationMark,
+    held: unknown,
+  ): Promise<void> {
     if (mark.store !== this) {
       throw new Error('The compensation mark was not captured by this store');
     }
     const saved = await mark.saved;
     await this.queue;
+    if (this.failure !== undefined) {
+      if (this.failure.error !== held) throw this.failure.error;
+      this.failure = undefined;
+    }
     const unchanged =
       this.session.store.published?.commitSeq === saved.version?.commitSeq;
-    this.failure = undefined;
     if (unchanged) {
       this.tentativeRows = saved.rows;
       return;

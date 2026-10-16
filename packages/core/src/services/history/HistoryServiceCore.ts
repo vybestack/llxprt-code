@@ -990,6 +990,7 @@ export abstract class HistoryServiceCore
       const compensated = await this.compensateAdmittedMutation(
         publication,
         failures,
+        error,
       );
       this.totalTokens = compensated
         ? previousTokens
@@ -1013,11 +1014,12 @@ export abstract class HistoryServiceCore
   private async compensateAdmittedMutation(
     publication: HistoryMutationPublication,
     failures: unknown[],
+    failure: unknown,
   ): Promise<boolean> {
     if (publication.admittedCount === 0) return true;
     this.invalidatePendingSyncs();
     try {
-      await this.journal.compensate(publication.compensationMark);
+      await this.journal.compensate(publication.compensationMark, failure);
       return true;
     } catch (compensationError: unknown) {
       failures.push(compensationError);
