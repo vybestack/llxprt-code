@@ -1,3 +1,4 @@
+import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -71,7 +72,12 @@ describe('registered continue command owner', () => {
     const destination = join(exportRoot, 'package');
     try {
       const command = createContinueCommand(
-        bindContinueCommandOperations(owner, null, 'agent'),
+        bindContinueCommandOperations(
+          owner.session.exportSession.bind(owner.session),
+          () => false,
+          async () => [...(await owner.session.listBrowserTargets())],
+          validateSessionMediaPackage,
+        ),
       );
       const registry = await CommandService.create(
         [

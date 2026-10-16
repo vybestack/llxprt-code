@@ -1,3 +1,4 @@
+import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
 /**
  * @license
@@ -82,7 +83,12 @@ describe('registered command resume owner', () => {
             {
               ...createUnconfiguredBuiltinOwners(),
               continueCommand: createContinueCommand(
-                bindContinueCommandOperations(owner, runtime, 'agent'),
+                bindContinueCommandOperations(
+                  owner.session.exportSession.bind(owner.session),
+                  () => runtime.isInteractive(),
+                  async () => [...(await owner.session.listBrowserTargets())],
+                  validateSessionMediaPackage,
+                ),
               ),
             },
             null,

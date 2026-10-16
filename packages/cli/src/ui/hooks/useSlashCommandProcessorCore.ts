@@ -1,3 +1,11 @@
+import {
+  useOwnedChatOperations,
+  useRawChatOperations,
+  useRawChatHistory,
+  useCurrentChatRecording,
+  useChatProjectHash,
+} from './useChatOperations.js';
+import { useContinueCommand } from './useContinueCommand.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -28,26 +36,21 @@ import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
-import { createToolFormatCommand } from '../commands/toolformatCommand.js';
-import { createModelCommand } from '../commands/modelCommand.js';
 import { useSetCommand } from './useSetCommand.js';
-import { createProviderCommand } from '../commands/providerCommand.js';
-import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { useCredentialCommands } from './useCredentialCommands.js';
 import { useChatCommand } from './useChatCommand.js';
-import { createContinueCommand } from '../commands/continueCommand.js';
-import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
+import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
+import { basename } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
-  ModelChangeResult,
   Todo,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import type { Agent, ToolFormatState } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
@@ -76,8 +79,6 @@ import {
   type usePendingHistory,
 } from './slashCommandProcessorSupport.js';
 import { type SlashCommandCancellation } from './useSlashCommandCancellation.js';
-
-type WriteToolFormat = Parameters<typeof createToolFormatCommand>[1];
 
 interface TodoContextValue {
   todos: Todo[];
@@ -150,13 +151,6 @@ function useTodoCommandOwner(
     [todos, addItem],
   );
 }
-
-type RegisteredPresentationCommands = ReturnType<
-  typeof usePresentationCommands
-> &
-  ReturnType<typeof useUtilityCommands> &
-  ReturnType<typeof useResourceCommands> &
-  ReturnType<typeof useHostCommands>;
 
 function useWorkspaceRegistration(
   agent: Agent | null,
@@ -277,142 +271,6 @@ function unavailableSessionOwner(): never {
   throw new Error('Session agent is unavailable');
 }
 
-type BuiltinCommandOwnerParts = Pick<
-  BuiltinCommandOwners,
-  | 'chatCommand'
-  | 'continueCommand'
-  | 'modelCommand'
-  | 'toolFormatCommand'
-  | 'setCommand'
-  | 'extensionsCommand'
-  | 'subagentCommand'
-> & {
-  presentationCommands: RegisteredPresentationCommands;
-  historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
-  provider: SlashCommand;
-  toolsCommand: SlashCommand;
-  directoryCommand: SlashCommand;
-  memoryCommand: SlashCommand;
-  imageCommand: SlashCommand;
-  bugCommand: SlashCommand;
-  policiesCommand: SlashCommand;
-  hooksCommand: SlashCommand;
-  taskCommand: SlashCommand;
-  todoCommand: SlashCommand;
-  credentialCommands: ReturnType<typeof useCredentialCommands>;
-};
-
-function useBuiltinCommandOwners(
-  parts: BuiltinCommandOwnerParts,
-): BuiltinCommandOwners {
-  const {
-    chatCommand,
-    continueCommand,
-    historyCommandOwners,
-    presentationCommands,
-    modelCommand,
-    toolFormatCommand,
-    setCommand,
-    provider,
-    toolsCommand,
-    directoryCommand,
-    memoryCommand,
-    imageCommand,
-    bugCommand,
-    policiesCommand,
-    hooksCommand,
-    taskCommand,
-    todoCommand,
-    credentialCommands,
-    extensionsCommand,
-    subagentCommand,
-  } = parts;
-  return useMemo(
-    () => ({
-      chatCommand,
-      continueCommand,
-      ...historyCommandOwners,
-      ...presentationCommands,
-      modelCommand,
-      toolFormatCommand,
-      setCommand,
-      providerCommand: provider,
-      toolsCommand,
-      directoryCommand,
-      memoryCommand,
-      imageCommand,
-      bugCommand,
-      policiesCommand,
-      hooksCommand,
-      taskCommand,
-      todoCommand,
-      extensionsCommand,
-      subagentCommand,
-      ...credentialCommands,
-    }),
-    [
-      chatCommand,
-      continueCommand,
-      historyCommandOwners,
-      presentationCommands,
-      modelCommand,
-      toolFormatCommand,
-      setCommand,
-      provider,
-      toolsCommand,
-      directoryCommand,
-      memoryCommand,
-      imageCommand,
-      bugCommand,
-      policiesCommand,
-      hooksCommand,
-      taskCommand,
-      todoCommand,
-      credentialCommands,
-      extensionsCommand,
-      subagentCommand,
-    ],
-  );
-}
-
-function useContinueCommandOwner(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
-  recordingOwner: 'agent' | 'raw' | undefined,
-): SlashCommand {
-  return useMemo(
-    () =>
-      createContinueCommand(
-        bindContinueCommandOperations(
-          agent,
-          config,
-          recordingOwner === 'agent' ? 'agent' : undefined,
-        ),
-      ),
-    [agent, config, recordingOwner],
-  );
-}
-
-function useModelCommand(
-  selectModel: (model: string) => Promise<ModelChangeResult>,
-  recordProviderSwitch: ReturnType<typeof useSwitch>,
-): SlashCommand {
-  return useMemo(
-    () => createModelCommand(selectModel, recordProviderSwitch),
-    [selectModel, recordProviderSwitch],
-  );
-}
-
-function useToolFormatCommand(
-  readToolFormat: () => Promise<ToolFormatState>,
-  writeToolFormat: WriteToolFormat,
-): SlashCommand {
-  return useMemo(
-    () => createToolFormatCommand(readToolFormat, writeToolFormat),
-    [readToolFormat, writeToolFormat],
-  );
-}
-
 function useRegistryState(
   builtins: BuiltinCommandOwners,
   config: CliUiRuntime | null,
@@ -531,58 +389,6 @@ function buildHandlerDeps(
   };
 }
 
-function useSwitch(
-  ownedRecording:
-    | Pick<Agent['session'], 'recordRecordingEvent'>
-    | null
-    | undefined,
-  rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
-  recordingOwner: 'agent' | 'raw' | undefined,
-): (provider: string, model: string) => Promise<void> {
-  return useCallback(
-    async (provider, model) => {
-      if (recordingOwner === 'agent') {
-        if (ownedRecording == null)
-          throw new Error('Session agent is unavailable');
-        await ownedRecording.recordRecordingEvent({
-          type: 'provider_switch',
-          provider,
-          model,
-        });
-      } else {
-        rawRecording?.recordProviderSwitch(provider, model);
-      }
-    },
-    [ownedRecording, rawRecording, recordingOwner],
-  );
-}
-
-function useProviderCommand(
-  agent: Agent | null,
-  refreshProviderAliases: () => Promise<void>,
-  recordProviderSwitch: (provider: string, model: string) => Promise<void>,
-): SlashCommand {
-  const api = useRuntimeApi();
-  return useMemo(
-    () =>
-      createProviderCommand(
-        bindProviderCommandOperations(
-          api,
-          async (name, options) => {
-            if (agent === null)
-              throw new Error(
-                'Cannot switch provider: the interactive Agent is not available. Restart the session.',
-              );
-            return agent.setProvider(name, undefined, options);
-          },
-          refreshProviderAliases,
-          recordProviderSwitch,
-        ),
-      ),
-    [api, agent, recordProviderSwitch, refreshProviderAliases],
-  );
-}
-
 function useStaticBuiltinCommands(
   config: CliUiRuntime | null,
   settings: LoadedSettings,
@@ -610,18 +416,6 @@ function useBound<Owner, Args extends unknown[], Result>(
   return useMemo(() => operation.bind(owner), [owner, operation]);
 }
 
-function useModelSelectionCommands(
-  selectModel: Parameters<typeof useModelCommand>[0],
-  readFormat: Parameters<typeof useToolFormatCommand>[0],
-  writeFormat: Parameters<typeof useToolFormatCommand>[1],
-  record: Parameters<typeof useModelCommand>[1],
-) {
-  return {
-    modelCommand: useModelCommand(selectModel, record),
-    toolFormatCommand: useToolFormatCommand(readFormat, writeFormat),
-  };
-}
-
 function useBoundRegistry(
   builtins: BuiltinCommandOwners,
   config: CliUiRuntime | null,
@@ -634,72 +428,80 @@ function useBoundRegistry(
 
 function useRegisteredCommands(
   args: UseSlashCommandProcessorCoreArgs,
-  runtimeApi: ReturnType<typeof useRuntimeApi>,
-  refreshProviderAliases: () => Promise<void>,
-  setPendingItem: (item: HistoryItemWithoutId | null) => void,
   presentationCommands: ReturnType<typeof usePresentationCommands>,
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>,
+  providerCommands: ReturnType<typeof useCredentialCommands>,
+  setPendingItem: (item: HistoryItemWithoutId | null) => void,
+  reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
-  const { agent, config, settings, addItem, recordingOwner } = args;
-  const { reloadCommandsRef, reloadRegisteredCommands } =
-    useRegisteredCommandReload();
+  const { agent, config, settings, recordingOwner } = args;
   const { extensionsCommand, ...staticCommands } = useStaticBuiltinCommands(
     config,
     settings,
-    addItem,
+    args.addItem,
     setPendingItem,
     args.actions.dispatchExtensionStateUpdate,
   );
-  const rec = useSwitch(
-    agent?.session,
-    args.recordingIntegration,
-    recordingOwner,
+
+  const { session, agentClient: chatClient } = agent ?? {};
+  const raw = args.recordingIntegration;
+  const swaps = args.recordingSwapCallbacks;
+  const ownerChat = useOwnedChatOperations(
+    session,
+    useBound(agent, agent?.getModel ?? missingChatOwner),
+    useCallback(() => resolveEmojiFilterMode(config), [config]),
   );
-  const { modelCommand, toolFormatCommand } = useModelSelectionCommands(
-    useBound(runtimeApi, runtimeApi.setActiveModel),
-    useBound(runtimeApi, runtimeApi.getActiveToolFormatState),
-    useBound(runtimeApi, runtimeApi.setActiveToolFormatOverride),
-    rec,
-  );
-  const provider = useProviderCommand(agent, refreshProviderAliases, rec);
-  const credentialCommands = useCredentialCommands(
-    agent,
-    settings,
-    config,
-    rec,
-    addItem,
-    reloadRegisteredCommands,
-  );
-  const chatCommand = useChatCommand(
-    agent,
-    config,
-    recordingOwner,
-    args.recordingIntegration,
-    args.recordingSwapCallbacks,
-    useCallback(() => settings.merged.enableFuzzyFiltering ?? true, [settings]),
+  const history = useRawChatHistory(chatClient);
+  const rawChat = useRawChatOperations(
+    useCurrentChatRecording(
+      useBound(swaps, swaps?.getCurrentRecording ?? readNull),
+      useBound(raw, raw?.getRecordingService ?? readNull),
+    ),
+    useChatProjectHash(useBound(config, config?.getProjectRoot ?? readNull)),
+    useCallback(() => config?.projectChatsDir ?? null, [config]),
+    history.getMediaStore,
+    history.getChatHistory,
+    history.replaceChatHistory,
+    useCallback(() => (config ? config.getModel() : null), [config]),
   );
   const workspaceCommands = useWorkspaceRegistration(
     agent,
     config,
-    addItem,
+    args.addItem,
     args.setLlxprtMdFileCount,
     recordingOwner,
     args.recordingIntegration,
   );
   const builtins = useBuiltinCommandOwners({
-    chatCommand,
-    continueCommand: useContinueCommandOwner(agent, config, recordingOwner),
+    chatCommand: useChatCommand(
+      ownerChat,
+      rawChat,
+      recordingOwner,
+      useCallback(
+        () => settings.merged.enableFuzzyFiltering ?? true,
+        [settings],
+      ),
+    ),
+    continueCommand: useContinueCommand(
+      useBound(session, session?.exportSession ?? missingSession),
+      useCallback(() => config?.isInteractive() === true, [config]),
+      useBound(session, session?.listBrowserTargets ?? missingSession),
+      useCallback(() => config?.projectChatsDir ?? null, [config]),
+      useCallback(
+        () => (config ? basename(config.projectTempDir) : null),
+        [config],
+      ),
+      chatClient?.mediaStore,
+      recordingOwner,
+    ),
     historyCommandOwners,
-    modelCommand,
-    toolFormatCommand,
     setCommand: useSetCommand(settings),
-    provider,
-    todoCommand: useTodoCommandOwner(args.todoContext, addItem),
-    subagentCommand: useSubagentCommand(agent, config, settings, addItem),
+    todoCommand: useTodoCommandOwner(args.todoContext, args.addItem),
+    subagentCommand: useSubagentCommand(agent, config, settings, args.addItem),
     extensionsCommand,
     presentationCommands: { ...staticCommands, ...presentationCommands },
     ...workspaceCommands,
-    credentialCommands,
+    credentialCommands: providerCommands,
   });
   return useBoundRegistry(builtins, config, (reload) => {
     reloadCommandsRef.current = reload;
@@ -715,8 +517,16 @@ function useCommandHandler(
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
+  const {
+    agent,
+    config,
+    settings,
+    recordingIntegration,
+    recordingOwner,
+    recordingSwapCallbacks: _recordingSwapCallbacks,
+    ...invocation
+  } = args;
   const api = useRuntimeApi();
-  const refreshProviderAliases = useProviderAliasRefresh();
   const { cancellation, pending, session } = useCommandRuntimeState(
     args.addItem,
   );
@@ -745,33 +555,26 @@ export function useSlashCommandProcessorCore(
     args.loadHistory,
     args.addItem,
   );
+  const { reloadCommandsRef, reloadRegisteredCommands } =
+    useRegisteredCommandReload();
+  const providerCommands = useCredentialCommands(
+    agent,
+    settings,
+    config,
+    recordingIntegration,
+    recordingOwner,
+    invocation.addItem,
+    reloadRegisteredCommands,
+    useProviderAliasRefresh(),
+  );
   const state = useRegisteredCommands(
     args,
-    api,
-    refreshProviderAliases,
-    pending.setPendingItem,
     presentationCommands,
     historyCommandOwners,
+    providerCommands,
+    pending.setPendingItem,
+    reloadCommandsRef,
   );
-  const commandContext = useCommandContext({
-    addItem: args.addItem,
-    clearItems: args.clearItems,
-    loadHistory: args.loadHistory,
-    refreshStatic: args.refreshStatic,
-    toggleVimEnabled: args.toggleVimEnabled,
-    setLlxprtMdFileCount: args.setLlxprtMdFileCount,
-    actions: args.actions,
-    alternateBuffer:
-      args.settings.merged.ui.useAlternateBuffer === true &&
-      !(args.config?.getScreenReader() ?? false),
-    ...pending,
-    sessionShellAllowlist: state.sessionShellAllowlist,
-    localIsProcessing: state.localIsProcessing,
-    reloadCommands: state.reloadCommands,
-    extensionsUpdateState: args.extensionsUpdateState,
-    todoContext: args.todoContext,
-    stats: session,
-  });
   useCommandReload(
     state.builtins,
     args.config,
@@ -781,9 +584,82 @@ export function useSlashCommandProcessorCore(
     state.setCommands,
     args.agent,
   );
-  const handleSlashCommand = useCommandHandler(
-    buildHandlerDeps(args, state, pending, commandContext, cancellation),
+  return useCommandView(
+    invocation,
+    settings.merged.ui.useAlternateBuffer === true &&
+      !(config?.getScreenReader() ?? false),
+    state,
+    pending,
+    session,
+    cancellation,
+    (context) => buildHandlerDeps(args, state, pending, context, cancellation),
   );
+}
+
+function missingChatOwner(): never {
+  throw new Error('No session owner available');
+}
+
+function missingSession(): never {
+  throw new Error('Session agent is unavailable');
+}
+
+function useInvocationContext(
+  input: Pick<
+    UseSlashCommandProcessorCoreArgs,
+    | 'addItem'
+    | 'clearItems'
+    | 'loadHistory'
+    | 'refreshStatic'
+    | 'toggleVimEnabled'
+    | 'setLlxprtMdFileCount'
+    | 'actions'
+    | 'extensionsUpdateState'
+    | 'todoContext'
+  >,
+  alternateBuffer: boolean,
+  state: SlashCommandProcessorState,
+  pending: ReturnType<typeof usePendingHistory>,
+  session: ReturnType<typeof useCommandRuntimeState>['session'],
+) {
+  return useCommandContext({
+    addItem: input.addItem,
+    clearItems: input.clearItems,
+    loadHistory: input.loadHistory,
+    refreshStatic: input.refreshStatic,
+    toggleVimEnabled: input.toggleVimEnabled,
+    setLlxprtMdFileCount: input.setLlxprtMdFileCount,
+    actions: input.actions,
+    alternateBuffer,
+    ...pending,
+    sessionShellAllowlist: state.sessionShellAllowlist,
+    localIsProcessing: state.localIsProcessing,
+    reloadCommands: state.reloadCommands,
+    extensionsUpdateState: input.extensionsUpdateState,
+    todoContext: input.todoContext,
+    stats: session,
+  });
+}
+
+function useCommandView(
+  invocation: Parameters<typeof useInvocationContext>[0],
+  alternateBuffer: boolean,
+  state: SlashCommandProcessorState,
+  pending: ReturnType<typeof usePendingHistory>,
+  session: ReturnType<typeof useCommandRuntimeState>['session'],
+  cancellation: SlashCommandCancellation,
+  createHandlers: (
+    context: ReturnType<typeof useCommandContext>,
+  ) => SlashCommandHandlerDeps,
+): SlashCommandProcessorCoreResult {
+  const commandContext = useInvocationContext(
+    invocation,
+    alternateBuffer,
+    state,
+    pending,
+    session,
+  );
+  const handleSlashCommand = useCommandHandler(createHandlers(commandContext));
   return {
     handleSlashCommand,
     slashCommands: state.commands,
@@ -791,4 +667,8 @@ export function useSlashCommandProcessorCore(
     commandContext,
     cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
   };
+}
+
+function readNull(): null {
+  return null;
 }
