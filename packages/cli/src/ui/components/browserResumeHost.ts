@@ -10,7 +10,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { resumeOwnerSession } from '../utils/ownerSessionUi.js';
+import type { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import {

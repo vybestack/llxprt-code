@@ -41,13 +41,13 @@ function agentStatus(
 }
 
 export function bindCompressCommand(
-  agent: Pick<Agent, 'compress'> | null,
+  compress: Agent['compress'] | null,
 ): (promptId: string) => Promise<HistoryItemCompression> {
   return async (promptId) => {
-    if (agent === null) {
+    if (compress === null) {
       throw new Error('Chat instance not available for compression.');
     }
-    const result = await agent.compress({ promptId });
+    const result = await compress({ promptId });
     return finalItem(
       result.originalTokenCount ?? null,
       result.newTokenCount ?? null,

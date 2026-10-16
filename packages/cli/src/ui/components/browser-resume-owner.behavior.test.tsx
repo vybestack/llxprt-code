@@ -7,7 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { bindOwnerBrowserResume } from './browserResumeHost.js';
-import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 
 describe('session browser owned resume', () => {
   it('restores its application session and UI despite a closed invocation decoy', async () => {
@@ -45,11 +45,12 @@ describe('session browser owned resume', () => {
         const resume = bindOwnerBrowserResume(
           (item) =>
             resumeOwnerSession(
-              owner,
+              owner.session.resume.bind(owner.session),
               item.kind === 'session'
                 ? item.session.sessionId
                 : item.checkpointId,
               'allowed',
+              owner.session.listBrowserTargetsDetailed.bind(owner.session),
             ),
           ui.commands.loadHistory,
           ui.commands.addItem,

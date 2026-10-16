@@ -142,9 +142,10 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         await writeFile(brokenPath, '', 'utf-8');
         const next = await borrow();
         const failure = await resumeOwnerSession(
-          next,
+          next.session.resume.bind(next.session),
           BROKEN_NAME,
           'allowed',
+          next.session.listBrowserTargetsDetailed.bind(next.session),
         ).then(
           () => null,
           (error: unknown) => error,

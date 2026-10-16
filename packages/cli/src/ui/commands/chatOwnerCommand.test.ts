@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
+
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
@@ -28,7 +30,21 @@ const ai = (text: string) => ({
 // Registers /chat the way the session host does: bound to this one owner.
 function ownerActions(agent: Agent) {
   const chat = createChatOwnerCommand(
-    bindChatOwnerOperations(agent, null),
+    bindChatOwnerOperations(
+      () => agent.session.listCheckpoints(),
+      (name, options) => agent.session.createCheckpoint(name, options),
+      (tag) => agent.session.resume(tag),
+      (checkpointId) => agent.session.deleteCheckpoint(checkpointId),
+      (checkpointId, name, options) =>
+        agent.session.renameCheckpoint(checkpointId, name, options),
+      () => agent.session.getHistory(),
+      () => agent.session.clearHistory(),
+      (turns) => agent.session.restoreTurns(turns),
+      (name, options) => agent.session.nameCurrentSession(name, options),
+      () => agent.session.getRecording().path,
+      () => agent.getModel(),
+      () => resolveEmojiFilterMode(null),
+    ),
     () => true,
   );
   return (name: string) => {

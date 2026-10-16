@@ -74,17 +74,28 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
           {
             ...createUnconfiguredBuiltinOwners(),
             chatCommand: createChatCommand(
-              bindChatRecordingOperations({
-                agent: owner,
-                config: context.services.config,
-                recordingIntegration: undefined,
-                recordingSwapCallbacks: {
-                  getCurrentRecording: () => recording,
-                  getCurrentIntegration: () => null,
-                  getCurrentLockHandle: () => null,
-                  setRecording: unused,
+              bindChatRecordingOperations(
+                () => recording,
+                () =>
+                  context.services.config
+                    ? getProjectHash(context.services.config.getProjectRoot())
+                    : null,
+                () => context.services.config?.projectChatsDir ?? null,
+                () => owner.agentClient.mediaStore,
+                () => {
+                  const client = owner.agentClient;
+                  return client.hasChatInitialized() === true
+                    ? client.getChat().getHistory()
+                    : null;
                 },
-              }),
+                async (history) => {
+                  await owner.agentClient.getChat().setHistory(history);
+                },
+                () =>
+                  context.services.config
+                    ? context.services.config.getModel()
+                    : null,
+              ),
               () => true,
             ),
           },

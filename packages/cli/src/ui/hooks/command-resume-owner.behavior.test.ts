@@ -14,7 +14,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
-import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
+import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { processSlashCommand } from './slashCommandHandlers.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import type { HistoryItem } from '../types.js';
@@ -128,7 +128,12 @@ describe('registered command resume owner', () => {
               (action) => {
                 if (action.sessionRef === undefined)
                   throw new Error('Unexpected package import');
-                return resumeOwnerSession(owner, action.sessionRef, 'allowed');
+                return resumeOwnerSession(
+                  owner.session.resume.bind(owner.session),
+                  action.sessionRef,
+                  'allowed',
+                  owner.session.listBrowserTargetsDetailed.bind(owner.session),
+                );
               },
               (history) => {
                 loaded = history;
