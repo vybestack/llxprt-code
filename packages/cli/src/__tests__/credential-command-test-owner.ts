@@ -49,7 +49,14 @@ export function registerKeyfileCommand(
   },
 ): SlashCommand {
   return createKeyfileCommand(
-    bindKeyfileCommandOperations(owners.runtimeApi, owners.services.settings),
+    bindKeyfileCommandOperations(
+      () => owners.runtimeApi.providerStatus().providerName ?? null,
+      (key) => owners.runtimeApi.updateActiveProviderApiKey(key),
+      (key, value) => owners.runtimeApi.setEphemeralSetting(key, value),
+      (provider, path) =>
+        owners.services.settings.setProviderKeyfile(provider, path),
+      (provider) => owners.services.settings.removeProviderKeyfile(provider),
+    ),
   );
 }
 

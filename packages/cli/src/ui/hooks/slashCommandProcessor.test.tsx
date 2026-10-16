@@ -11,6 +11,9 @@ const refreshAliases = vi.fn(async () => {});
 function unavailableOAuth(): never {
   throw new Error('OAuth is unavailable in this command fixture');
 }
+function unavailableSettings(): never {
+  throw new Error('Settings writes are unavailable in this command fixture');
+}
 const oauthControl = {
   isAvailable: () => false,
   getSupportedProviders: unavailableOAuth,
@@ -137,6 +140,8 @@ describe('useSlashCommandProcessor', () => {
   let mockConfig: Config;
   const mockSettings = {
     merged: { ui: {} },
+    setProviderKeyfile: unavailableSettings,
+    removeProviderKeyfile: unavailableSettings,
   } as LoadedSettings;
   let addItem: ReturnType<typeof vi.fn>;
   let clearItems: ReturnType<typeof vi.fn>;

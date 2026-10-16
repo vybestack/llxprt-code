@@ -5,7 +5,6 @@
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LoadedSettings } from '../../config/settings.js';
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -68,20 +67,18 @@ function schedulePaymentModeCheck(): void {
 }
 
 export function bindKeyfileCommandOperations(
-  api: RuntimeApi,
-  settings: Pick<
-    LoadedSettings,
-    'setProviderKeyfile' | 'removeProviderKeyfile'
-  >,
+  activeProviderName: KeyfileCommandOperations['activeProviderName'],
+  updateActiveProviderApiKey: KeyfileCommandOperations['updateActiveProviderApiKey'],
+  setEphemeralSetting: KeyfileCommandOperations['setEphemeralSetting'],
+  rememberProviderKeyfile: KeyfileCommandOperations['rememberProviderKeyfile'],
+  forgetProviderKeyfile: KeyfileCommandOperations['forgetProviderKeyfile'],
 ): KeyfileCommandOperations {
   return {
-    activeProviderName: () => api.providerStatus().providerName ?? null,
-    updateActiveProviderApiKey: (key) => api.updateActiveProviderApiKey(key),
-    setEphemeralSetting: (key, value) => api.setEphemeralSetting(key, value),
-    rememberProviderKeyfile: (providerName, keyfilePath) =>
-      settings.setProviderKeyfile(providerName, keyfilePath),
-    forgetProviderKeyfile: (providerName) =>
-      settings.removeProviderKeyfile(providerName),
+    activeProviderName,
+    updateActiveProviderApiKey,
+    setEphemeralSetting,
+    rememberProviderKeyfile,
+    forgetProviderKeyfile,
     schedulePaymentModeCheck,
   };
 }

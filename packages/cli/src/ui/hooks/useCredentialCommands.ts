@@ -101,7 +101,7 @@ export function useCredentialCommands(
   recordingOwner: 'agent' | 'raw' | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
   reloadCommands: () => void,
-  refreshProviderAliases: () => Promise<void>,
+  refreshAliases: () => Promise<void>,
 ): CredentialCommands {
   const api = useRuntimeApi();
   const oauthControl = useOAuthControl();
@@ -116,11 +116,7 @@ export function useCredentialCommands(
       useBound(api, api.setActiveToolFormatOverride),
       recordSwitch,
     ),
-    providerCommand: useProviderCommand(
-      agent,
-      refreshProviderAliases,
-      recordSwitch,
-    ),
+    providerCommand: useProviderCommand(agent, refreshAliases, recordSwitch),
     baseurlCommand: useBaseurlRegistration(
       useBound(agent, agent?.getProvider ?? unavailableProvider),
       useBound(agent?.auth, agent?.auth.setBaseUrl ?? unavailableProvider),
@@ -137,9 +133,12 @@ export function useCredentialCommands(
       useBound(oauthControl, oauthControl.getSupportedProviders),
       useBound(oauthControl, oauthControl.isAuthenticated),
     ),
-    keyfileCommand: useMemo(
-      () => createKeyfileCommand(bindKeyfileCommandOperations(api, settings)),
-      [api, settings],
+    keyfileCommand: useKeyfileRegistration(
+      useBound(api, api.providerStatus),
+      useBound(api, api.updateActiveProviderApiKey),
+      useBound(api, api.setEphemeralSetting),
+      useBound(settings, settings.setProviderKeyfile),
+      useBound(settings, settings.removeProviderKeyfile),
     ),
     keyCommand: useMemo(
       () => createKeyCommand(bindKeyCommandOperations(api, config)),
@@ -373,5 +372,27 @@ function useMcpAuthRegistration(
         reloadCommands,
       ),
     [operations, settings, addItem, reloadCommands],
+  );
+}
+
+function useKeyfileRegistration(
+  readStatus: ReturnType<typeof useRuntimeApi>['providerStatus'],
+  updateKey: Parameters<typeof bindKeyfileCommandOperations>[1],
+  writeSetting: Parameters<typeof bindKeyfileCommandOperations>[2],
+  remember: Parameters<typeof bindKeyfileCommandOperations>[3],
+  forget: Parameters<typeof bindKeyfileCommandOperations>[4],
+): SlashCommand {
+  return useMemo(
+    () =>
+      createKeyfileCommand(
+        bindKeyfileCommandOperations(
+          () => readStatus().providerName ?? null,
+          updateKey,
+          writeSetting,
+          remember,
+          forget,
+        ),
+      ),
+    [readStatus, updateKey, writeSetting, remember, forget],
   );
 }
