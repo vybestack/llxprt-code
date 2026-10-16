@@ -218,7 +218,24 @@ function useAppInputRuntime(
   settingsStore: SettingsProfileStore,
 ): AppInputResult {
   return useAppInput({
-    uiRuntime: props.uiRuntime,
+    projectTempDir: props.uiRuntime.projectTempDir,
+    readInitialPrompt: useBound(
+      props.uiRuntime.app,
+      props.uiRuntime.app.getQuestion,
+    ),
+    isAgentClientPresent: useCallback(
+      () => Boolean(props.uiRuntime.agentClientSource.getAgentClient()),
+      [props.uiRuntime],
+    ),
+    readIdeMode: useBound(props.uiRuntime.ide, props.uiRuntime.ide.getIdeMode),
+    readInteractiveShellEnabled: useBound(
+      props.uiRuntime.shell,
+      props.uiRuntime.shell.getEnableInteractiveShell,
+    ),
+    readMcpServers: useBound(
+      props.uiRuntime.mcp,
+      props.uiRuntime.mcp.getMcpServers,
+    ),
     streamRuntime: props.uiRuntime,
     slashCommandRuntime: props.slashCommandRuntime,
     agent: props.agent,
