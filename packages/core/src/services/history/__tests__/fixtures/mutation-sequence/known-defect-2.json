@@ -1,0 +1,170 @@
+{
+  "name": "known-defect-2",
+  "description": "self-merge then pop: merged rows repeat chronology seqs 1 and 2, so a pop addressed by chronology marker cuts at the first duplicate (design 13.5 defect 2)",
+  "steps": [
+    {
+      "step": {
+        "op": "fill",
+        "count": 3,
+        "prefix": "row"
+      },
+      "observed": {
+        "live": {
+          "length": 3,
+          "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+        },
+        "resumed": {
+          "length": 3,
+          "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+          "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "merge",
+        "rows": [
+          {
+            "speaker": "human",
+            "text": "other-1"
+          },
+          {
+            "speaker": "ai",
+            "text": "other-2"
+          }
+        ]
+      },
+      "observed": {
+        "live": {
+          "length": 5,
+          "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77"
+          ]
+        },
+        "resumed": {
+          "length": 5,
+          "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+          "tags": [
+            "bda346ed0c238faf",
+            "21ceaa072194aeb9",
+            "2fe521d61900adad",
+            "9adaf351256ac0eb",
+            "720e9eb72ddfee77"
+          ]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 1,
+          "digest": "d698c0ab184e4a37a29a3d3e092576fc9b37715ec39e861cf51a214919e859f1",
+          "tags": ["bda346ed0c238faf"]
+        },
+        "resumed": {
+          "length": 1,
+          "digest": "d698c0ab184e4a37a29a3d3e092576fc9b37715ec39e861cf51a214919e859f1",
+          "tags": ["bda346ed0c238faf"]
+        }
+      }
+    },
+    {
+      "step": {
+        "op": "pop"
+      },
+      "observed": {
+        "live": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        },
+        "resumed": {
+          "length": 0,
+          "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "tags": []
+        }
+      }
+    }
+  ],
+  "corrected": [
+    {
+      "live": {
+        "length": 3,
+        "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+        "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+      },
+      "resumed": {
+        "length": 3,
+        "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+        "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+      }
+    },
+    {
+      "live": {
+        "length": 5,
+        "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+        "tags": [
+          "bda346ed0c238faf",
+          "21ceaa072194aeb9",
+          "2fe521d61900adad",
+          "9adaf351256ac0eb",
+          "720e9eb72ddfee77"
+        ]
+      },
+      "resumed": {
+        "length": 5,
+        "digest": "1494d379128d59becc084d8b9c745610bf18c19da4c32bcefc625bbf021e1eba",
+        "tags": [
+          "bda346ed0c238faf",
+          "21ceaa072194aeb9",
+          "2fe521d61900adad",
+          "9adaf351256ac0eb",
+          "720e9eb72ddfee77"
+        ]
+      }
+    },
+    {
+      "live": {
+        "length": 4,
+        "digest": "e534749fcdec818c352df9385b72110fbe0f026a077cb7095837f1ebb4d51c34",
+        "tags": [
+          "bda346ed0c238faf",
+          "21ceaa072194aeb9",
+          "2fe521d61900adad",
+          "9adaf351256ac0eb"
+        ]
+      },
+      "resumed": {
+        "length": 4,
+        "digest": "e534749fcdec818c352df9385b72110fbe0f026a077cb7095837f1ebb4d51c34",
+        "tags": [
+          "bda346ed0c238faf",
+          "21ceaa072194aeb9",
+          "2fe521d61900adad",
+          "9adaf351256ac0eb"
+        ]
+      }
+    },
+    {
+      "live": {
+        "length": 3,
+        "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+        "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+      },
+      "resumed": {
+        "length": 3,
+        "digest": "e9d155801963ef95e9d85b9e9175aa77faf676e9660c495f1ee67ea77e447b10",
+        "tags": ["bda346ed0c238faf", "21ceaa072194aeb9", "2fe521d61900adad"]
+      }
+    }
+  ]
+}
