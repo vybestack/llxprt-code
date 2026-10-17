@@ -1,9 +1,12 @@
-import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { MemoryTokenStore } from '../../../providers/src/auth/__tests__/behavioral/test-utils.js';
+import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
+
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type {
   Config,
@@ -34,6 +37,7 @@ export function handoffCliConfig(
     owner.initializeProviderSelection(config.getProvider(), config.getModel());
     const operation = await createOperation(store, owner);
     overrides.onProviderManagerReady?.(providerManager);
+    overrides.onOAuthManagerReady?.(new OAuthManager(new MemoryTokenStore()));
     overrides.onProviderSwitchReady?.(async (name) => ({
       changed: false,
       previousProvider: name,

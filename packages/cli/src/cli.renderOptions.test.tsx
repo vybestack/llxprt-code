@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
 import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
 const makeRenderAgent = installCommandOwners();
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -112,7 +113,9 @@ describe('startInteractiveUI ink render options', () => {
   });
 
   it('passes computed Ink render options to ink.render()', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
@@ -156,7 +159,9 @@ describe('startInteractiveUI ink render options', () => {
   }, 120_000);
 
   it('forces alternate buffer off when screen reader mode is enabled', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,

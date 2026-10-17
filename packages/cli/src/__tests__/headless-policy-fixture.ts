@@ -14,7 +14,7 @@ import {
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import { runNonInteractive } from '../nonInteractiveCli.js';
+import { runNonInteractive } from '../__tests__/noninteractive-run-fixture.js';
 
 export function makeHeadlessConfig(sessionId: string): {
   credentialAuthority: CredentialAuthority;

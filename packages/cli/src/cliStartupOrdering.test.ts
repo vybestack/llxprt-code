@@ -20,6 +20,15 @@ import {
   mock,
 } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { makeConfig } from './__tests__/startup-config-fixture.js';
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeStartupOwner = installCommandOwners();
+const actualErrorReporting = {
+  ...(await import('./session/errorReporting.js')),
+};
+const actualProviderGuard = {
+  ...(await import('./unconfiguredProviderGuard.js')),
+};
 import * as credentialModule from '@vybestack/llxprt-code-providers/auth.js';
 import fs from 'node:fs';
 const credentialExports = { ...credentialModule };
@@ -30,16 +39,6 @@ import {
   UNCONFIGURED_PROVIDER_MESSAGE,
 } from './unconfiguredProviderGuard.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
-
-function makeConfig(hasActive: boolean, interactive: boolean): Config {
-  return {
-    getProvider: () => (hasActive ? 'fake' : undefined),
-    isInteractive: () => interactive,
-    getOutputFormat: () => 'text',
-    getListExtensions: () => false,
-    getExperimentalZedIntegration: () => false,
-  } as unknown as Config;
-}
 
 /**
  * Arguments the real `main()` passed to the ACP client's `runZedIntegration`.
@@ -78,7 +77,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliTerminalSession.js', () => ({
     constructAgentWithSpinner: async () => {
       callOrder.push('agent-construction');
-      return {};
+      return makeStartupOwner('startup-order-owner');
     },
     prepareTerminalSession: async () => {},
   }));
@@ -100,6 +99,9 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     setupOwnerSessionRecording: async () => null,
   }));
   void mock.module('./session/nonInteractiveSession.js', () => ({
+    runPipedOrPromptSession: async () => {
+      throw new Error('Unexpected headless launch');
+    },
     dispatchInteractiveOrNonInteractive: async () => {
       callOrder.push('dispatch');
     },
@@ -157,6 +159,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     reportStartupResult: () => ({ messages: [], needsLegacyFallback: false }),
   }));
   void mock.module('./session/errorReporting.js', () => ({
+    ...actualErrorReporting,
     formatNonInteractiveError: () => '',
   }));
   void mock.module('./session/outputListeners.js', () => ({
@@ -277,6 +280,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     // reference itself (not the namespace) before registration.
     const realGuard = guardUnconfiguredProvider;
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async (
         cfg: Config,
         runCleanup: () => Promise<void>,
@@ -319,10 +323,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: ensureAcpProviderActivated is reached without passing the general guard', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -334,10 +335,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: the host injects its own exit cleanup into the ACP client', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -360,10 +358,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: sessions use the CLI-loaded provider contributions and OAuth settings', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -405,6 +400,7 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
       },
     }));
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -496,6 +492,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       applySandboxBashrc: () => {},
     }));
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -527,6 +524,9 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       setupOwnerSessionRecording: async () => null,
     }));
     void mock.module('./session/nonInteractiveSession.js', () => ({
+      runPipedOrPromptSession: async () => {
+        throw new Error('Unexpected headless launch');
+      },
       dispatchInteractiveOrNonInteractive: async () => {},
     }));
     void mock.module('./cliSandbox.js', () => ({
@@ -582,6 +582,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       }),
     }));
     void mock.module('./session/errorReporting.js', () => ({
+      ...actualErrorReporting,
       formatNonInteractiveError: () => '',
     }));
     void mock.module('./session/outputListeners.js', () => ({

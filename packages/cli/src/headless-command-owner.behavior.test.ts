@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core';
 import { useCommandOwners } from './__tests__/command-owner-fixture.js';
-import { handleSlashCommand } from './nonInteractiveCliCommands.js';
+import { handleSlashCommand } from './__tests__/headless-command-fixture.js';
 
 describe('headless custom command authority', () => {
   const makeOwner = useCommandOwners();

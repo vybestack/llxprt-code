@@ -5,14 +5,12 @@
  */
 import {
   FatalInputError,
-  type Config,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 
 import { parseSlashCommand } from './utils/commands.js';
 import { CommandService } from './services/CommandService.js';
-import { bindShellPromptOperations } from './services/prompt-processors/shellPromptHost.js';
-import { FileCommandLoader } from './services/FileCommandLoader.js';
+import type { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext, SlashCommand } from './ui/commands/types.js';
 import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
@@ -29,31 +27,16 @@ import { firstNonEmptyString } from './utils/coalesce.js';
 export const handleSlashCommand = async (
   rawQuery: string,
   abortController: AbortController,
-  config: Config,
+  createLoader: () => FileCommandLoader,
+  readSessionId: () => string,
   readMetrics: () => SessionStatsState['metrics'],
-  isTrustedFolder: (() => boolean) | undefined,
 ): Promise<AgentRequestInput | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
     return undefined;
   }
 
-  // Only custom commands are supported for now.
-  if (isTrustedFolder === undefined)
-    throw new Error('File commands require the workspace trust authority');
-  const loaders = [
-    new FileCommandLoader(
-      {
-        userCommandsDir: config.userCommandsDir,
-        projectCommandsDir: config.projectCommandsDir,
-        getProjectRoot: () => config.getProjectRoot(),
-        getExtensions: () => config.getExtensions(),
-        getFolderTrust: () => config.getFolderTrust(),
-        isTrustedFolder,
-      },
-      bindShellPromptOperations(config),
-    ),
-  ];
+  const loaders = [createLoader()];
   const commandService = await CommandService.create(
     loaders,
     abortController.signal,
@@ -64,7 +47,7 @@ export const handleSlashCommand = async (
 
   if (commandToExecute?.action) {
     const context = buildHeadlessCommandContext(
-      config,
+      readSessionId,
       readMetrics,
       abortController.signal,
       trimmed,
@@ -107,7 +90,7 @@ function commandPrompt(
 }
 
 function buildHeadlessCommandContext(
-  config: Config,
+  readSessionId: () => string,
   readMetrics: () => SessionStatsState['metrics'],
   signal: AbortSignal,
   trimmed: string,
@@ -115,7 +98,7 @@ function buildHeadlessCommandContext(
   args: string,
 ): CommandContext {
   const sessionStats: SessionStatsState = {
-    sessionId: firstNonEmptyString(config.getSessionId(), 'unknown'),
+    sessionId: firstNonEmptyString(readSessionId(), 'unknown'),
     sessionStartTime: new Date(),
     metrics: readMetrics(),
     lastPromptTokenCount: 0,

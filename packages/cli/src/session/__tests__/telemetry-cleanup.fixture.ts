@@ -22,7 +22,7 @@ import { MemoryTokenStore } from '../../../../agents/src/api/__tests__/helpers/p
 import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { fixturesDir } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { runNonInteractive } from '../../nonInteractiveCli.js';
+import { runNonInteractive } from '../../__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from '../../config/settings.js';
 
 class FailingOAuthRelease extends OAuthManager {

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
@@ -15,11 +16,12 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
+import { validateDnsResolutionOrder } from './cli.js';
+import { startInteractiveUI } from './__tests__/raw-interactive-startup-fixture.js';
 import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
 import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
 const makeStartupAgent = installCommandOwners();
-import type { LoadedSettings } from './config/settings.js';
+import { createLoadedSettings } from './__tests__/loaded-settings-fixture.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 // Mock writeToStdout for exit-handler tests
@@ -153,13 +155,7 @@ describe('startInteractiveUI', () => {
     debugMode: false,
   });
   let mockAgent: Awaited<ReturnType<typeof makeStartupAgent>>;
-  const mockSettings = {
-    merged: {
-      ui: {
-        hideWindowTitle: false,
-      },
-    },
-  } as unknown as LoadedSettings;
+  const mockSettings = createLoadedSettings({ ui: { hideWindowTitle: false } });
   const mockStartupWarnings = ['warning1'];
   const mockWorkspaceRoot = '/root';
 
@@ -203,6 +199,7 @@ describe('startInteractiveUI', () => {
   });
 
   it('should perform all startup tasks in correct order', async () => {
+    await injectRenderSpy();
     const { getCliVersion } = await import('./utils/version.js');
     const { checkForUpdates } = await import('./ui/utils/updateCheck.js');
     const { registerCleanup } = await import('./utils/cleanup.js');
@@ -264,18 +261,16 @@ describe('startInteractiveUI', () => {
     });
 
     const mouseEnabledConfig = mockConfig;
-    const mouseEnabledSettings = {
-      merged: {
-        ui: {
-          hideWindowTitle: true,
-          useAlternateBuffer: true,
-          enableMouseEvents: true,
-        },
+    const mouseEnabledSettings = createLoadedSettings({
+      ui: {
+        hideWindowTitle: true,
+        useAlternateBuffer: true,
+        enableMouseEvents: true,
       },
-    } as unknown as LoadedSettings;
+    });
 
     try {
-      await startInteractiveUI(
+      const instance = await startInteractiveUI(
         mouseEnabledConfig,
         mockAgent,
         mouseEnabledSettings,
@@ -299,7 +294,10 @@ describe('startInteractiveUI', () => {
       return {
         restoreProtocols: restoreTerminalProtocolsSync,
         disableMouse: disableMouseEvents,
-        cleanup: () => processOnSpy.mockRestore(),
+        cleanup: () => {
+          instance.unmount();
+          processOnSpy.mockRestore();
+        },
       };
     } catch (error) {
       processOnSpy.mockRestore();
@@ -330,15 +328,13 @@ describe('startInteractiveUI', () => {
     });
 
     const mouseEnabledConfig = mockConfig;
-    const mouseEnabledSettings = {
-      merged: {
-        ui: {
-          hideWindowTitle: true,
-          useAlternateBuffer: true,
-          enableMouseEvents: true,
-        },
+    const mouseEnabledSettings = createLoadedSettings({
+      ui: {
+        hideWindowTitle: true,
+        useAlternateBuffer: true,
+        enableMouseEvents: true,
       },
-    } as unknown as LoadedSettings;
+    });
 
     await expect(
       startInteractiveUI(
@@ -429,15 +425,13 @@ describe('startInteractiveUI', () => {
     });
 
     const mouseEnabledConfig = mockConfig;
-    const mouseEnabledSettings = {
-      merged: {
-        ui: {
-          hideWindowTitle: true,
-          useAlternateBuffer: true,
-          enableMouseEvents: true,
-        },
+    const mouseEnabledSettings = createLoadedSettings({
+      ui: {
+        hideWindowTitle: true,
+        useAlternateBuffer: true,
+        enableMouseEvents: true,
       },
-    } as unknown as LoadedSettings;
+    });
 
     try {
       mockWriteToStdout.mockClear();

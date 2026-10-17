@@ -409,74 +409,40 @@ export interface OwnerInteractiveStartup {
   readonly suppressStartupWelcome?: boolean;
 }
 
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  startup: OwnerInteractiveStartup,
-): Promise<InteractiveInstanceCapability>;
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  runtimeMessageBus?: MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
+export interface RawInteractiveStartup {
+  readonly recordingOwner: 'raw';
+  readonly oauthManager: OAuthManager;
+  readonly runtimeSettings: {
     readonly owner: SessionSettingsOwner;
     readonly store: SettingsService;
-  },
-): Promise<InteractiveInstanceCapability>;
+  };
+  readonly sessionPersistence: CliSessionPersistencePort | undefined;
+  readonly runtimeMessageBus?: MessageBus;
+  readonly recordingIntegration?: RecordingIntegration;
+  readonly resumedHistory?: IContent[];
+  readonly initialRecordingService?: SessionRecordingService;
+  readonly initialLockHandle?: LockHandle | null;
+  readonly suppressStartupWelcome?: boolean;
+}
 export async function startInteractiveUI(
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
-  startup?: OwnerInteractiveStartup | MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
-) {
-  const ownerStartup =
-    startup && 'recordingOwner' in startup ? startup : undefined;
-  const runtimeMessageBus =
-    startup && 'recordingOwner' in startup
-      ? startup.runtimeMessageBus
-      : startup;
-
-  if (!ownerStartup && !sessionPersistence) {
+  startup: OwnerInteractiveStartup | RawInteractiveStartup,
+): Promise<InteractiveInstanceCapability> {
+  if (
+    startup.recordingOwner === 'raw' &&
+    startup.sessionPersistence === undefined
+  )
     throw new Error(
       'Raw interactive startup requires its own CLI session persistence',
     );
-  }
-
   const version = await initializeInteractivePresentation(
     workspaceRoot,
     settings,
   );
-
-  // Deterministic pre-start replacement: tear down any previous instance and
-  // perf owner BEFORE constructing/starting a new owner. This prevents
-  // observer-conflict: a new owner's installObservers() must not collide with
-  // a previous owner's still-installed observers.
   await replacePreviousInstanceAndOwner();
   const perfOwner = await buildAndStartPerfOwner(
     config,
@@ -484,30 +450,14 @@ export async function startInteractiveUI(
     settings,
     version,
   );
-  const selectedSettings = ownerStartup?.runtimeSettings ?? runtimeSettings;
-  if (selectedSettings === undefined)
-    throw new Error(
-      'Interactive startup requires explicit session settings ownership',
-    );
   return commitInteractiveStartup({
-    oauthManager: ownerStartup?.oauthManager,
     config,
     agent,
     settings,
     perfOwner,
     version,
     startupWarnings,
-    runtimeMessageBus,
-    ...(ownerStartup ?? {
-      runtimeSettings: selectedSettings,
-      recordingOwner,
-      recordingIntegration,
-      resumedHistory,
-      initialRecordingService,
-      initialLockHandle,
-      suppressStartupWelcome,
-      sessionPersistence,
-    }),
+    ...startup,
   });
 }
 

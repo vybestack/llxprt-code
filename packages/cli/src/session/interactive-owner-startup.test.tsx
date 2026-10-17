@@ -19,7 +19,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { LoadedSettings } from '../config/settings.js';
 import { setupOwnerSessionRecording } from '../cliSessionBootstrap.js';
-import { dispatchInteractiveOrNonInteractive } from './nonInteractiveSession.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
   __setRenderForTesting,
   __resetInteractiveUIStateForTesting,

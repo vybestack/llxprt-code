@@ -60,7 +60,7 @@ import {
   setupUnhandledRejectionHandler,
 } from '../session/signalHandlers.js';
 import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
-import { dispatchInteractiveOrNonInteractive } from '../session/nonInteractiveSession.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
   startInteractiveUI,
   __resetInteractiveUIStateForTesting,
@@ -117,11 +117,10 @@ void vi.mock('../utils/userStartupWarnings.js', () => ({
   getUserStartupWarnings: vi.fn(async () => []),
 }));
 
-void vi.mock('../nonInteractiveCli.js', () => ({
-  runNonInteractive: vi.fn(async () => {
+void vi.mock('../nonInteractiveBindings.js', () => ({
+  createNonInteractiveRun: () => async () => {
     dispatchTrace.push('runNonInteractive');
-    return 0;
-  }),
+  },
 }));
 
 void vi.mock('../validateNonInteractiveAuth.js', () => ({
