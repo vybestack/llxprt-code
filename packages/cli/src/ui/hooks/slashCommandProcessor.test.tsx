@@ -1,4 +1,7 @@
-import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -29,6 +32,63 @@ const oauthControl = {
   discoverBuckets: unavailableOAuth,
 };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
+  useGetActiveProviderDetails: () =>
+    (() => runtimeApi)().getActiveProviderDetails,
+  useGetProviderDumpMetadata: () =>
+    (() => runtimeApi)().getProviderDumpMetadata,
+  useGetActiveProviderAliasConfig: () =>
+    (() => runtimeApi)().getActiveProviderAliasConfig,
+  useDetectProviderQuota: () => (() => runtimeApi)().detectProviderQuota,
+  useGetLoadBalancerStats: () => (() => runtimeApi)().getLoadBalancerStats,
+  useGetLoadBalancerTokenAccounting: () =>
+    (() => runtimeApi)().getLoadBalancerTokenAccounting,
+  useListSavedProfiles: () => (() => runtimeApi)().listSavedProfiles,
+  useGetProfileByName: () => (() => runtimeApi)().getProfileByName,
+  useSaveProfileDefinition: () => (() => runtimeApi)().saveProfileDefinition,
+  useSaveLoadBalancerProfile: () =>
+    (() => runtimeApi)().saveLoadBalancerProfile,
+  useListProviders: () => (() => runtimeApi)().listProviders,
+  useGetActiveProviderName: () => (() => runtimeApi)().getActiveProviderName,
+  useListAvailableModels: () => (() => runtimeApi)().listAvailableModels,
+  useGetActiveModelName: () => (() => runtimeApi)().getActiveModelName,
+  useProviderStatus: () => (() => runtimeApi)().providerStatus,
+  useGetUnallowedParametersForActiveModel: () =>
+    (() => runtimeApi)().getUnallowedParametersForActiveModel,
+  useGetActiveProviderMetrics: () =>
+    (() => runtimeApi)().getActiveProviderMetrics,
+  useGetSessionTokenUsage: () => (() => runtimeApi)().getSessionTokenUsage,
+  useGetEphemeralSettings: () => (() => runtimeApi)().getEphemeralSettings,
+  useSetEphemeralSetting: () => (() => runtimeApi)().setEphemeralSetting,
+  useGetActiveToolFormatState: () =>
+    (() => runtimeApi)().getActiveToolFormatState,
+  useSetActiveToolFormatOverride: () =>
+    (() => runtimeApi)().setActiveToolFormatOverride,
+  useGetEphemeralSetting: () => (() => runtimeApi)().getEphemeralSetting,
+  useGetSessionSetting: () => (() => runtimeApi)().getSessionSetting,
+  useSetSessionSetting: () => (() => runtimeApi)().setSessionSetting,
+  useClearSessionSetting: () => (() => runtimeApi)().clearSessionSetting,
+  useSetActiveModel: () => (() => runtimeApi)().setActiveModel,
+  useGetActiveModelParams: () => (() => runtimeApi)().getActiveModelParams,
+  useSetActiveModelParam: () => (() => runtimeApi)().setActiveModelParam,
+  useClearActiveModelParam: () => (() => runtimeApi)().clearActiveModelParam,
+  useUpdateActiveProviderApiKey: () =>
+    (() => runtimeApi)().updateActiveProviderApiKey,
+  useGetWorkspaceDirectories: () =>
+    (() => runtimeApi)().getWorkspaceDirectories,
+  useGetDefaultProfileName: () => (() => runtimeApi)().getDefaultProfileName,
+  useGetOpenAIProviderInfo: () => (() => runtimeApi)().getOpenAIProviderInfo,
+  useGetActiveProfileName: () => (() => runtimeApi)().getActiveProfileName,
+  useSetDefaultProfileName: () => (() => runtimeApi)().setDefaultProfileName,
+  useGetRuntimeDiagnosticsSnapshot: () =>
+    (() => runtimeApi)().getRuntimeDiagnosticsSnapshot,
+  useSaveProfileSnapshot: () => (() => runtimeApi)().saveProfileSnapshot,
+  useDeleteProfileByName: () => (() => runtimeApi)().deleteProfileByName,
+  useFetch: () => (() => runtimeApi)().fetch,
+  useSetProvider: () => (() => runtimeApi)().setProvider,
+  useLoadProfileByName: () => (() => runtimeApi)().loadProfileByName,
+  useUpdateActiveProviderBaseUrl: () =>
+    (() => runtimeApi)().updateActiveProviderBaseUrl,
+
   useRuntimeApi: () => runtimeApi,
 }));
 void vi.mock('../contexts/ProviderAliasRefreshContext.js', () => ({
@@ -239,6 +299,7 @@ describe('useSlashCommandProcessor', () => {
     const { result, unmount } = renderHook(() =>
       useSlashCommandProcessor(
         () => createUnconfiguredCredentialRegistry(),
+        createUnconfiguredHistoryReaders(),
         config,
         null,
         mockSettings,

@@ -11,7 +11,7 @@ import type { NetworkFetch } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../__tests__/render.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { RuntimeContextProvider } from '../contexts/RuntimeContext.js';
+import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
 import { useQuotaReader } from './useQuotaReader.js';
 

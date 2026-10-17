@@ -48,7 +48,11 @@ describe('registered diagnostic session owner', () => {
         registration.services.config,
         registration.services.settings,
         owner.tools.list.bind(owner.tools),
-        registration.runtimeApi,
+        registration.runtimeApi.getLoadBalancerStats,
+        registration.runtimeApi.getLoadBalancerTokenAccounting,
+        registration.runtimeApi.getRuntimeDiagnosticsSnapshot,
+        registration.runtimeApi.getSessionTokenUsage,
+        registration.runtimeApi.providerStatus,
         registration.oauthControl,
       ),
     );

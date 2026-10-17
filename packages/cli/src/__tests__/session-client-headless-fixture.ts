@@ -20,7 +20,7 @@ import {
 } from '../cliSessionBootstrap.js';
 import { activateConfiguredProvider } from '../cliProviderInit.js';
 import { createForegroundAgent } from '../cliAgentBootstrap.js';
-import { createRuntimeOwnerFeatures } from '../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from './runtime-owner-features-fixture.js';
 import { loadSettings } from '../config/settings.js';
 import { parseArguments } from '../config/cliArgParser.js';
 import {

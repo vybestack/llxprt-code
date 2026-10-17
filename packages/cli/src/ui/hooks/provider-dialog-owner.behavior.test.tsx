@@ -17,14 +17,31 @@ function requireAmbientAgent(): Agent {
   if (!ambientAgent) throw new Error('Missing conflicting provider owner');
   return ambientAgent;
 }
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    listProviders: () => [requireAmbientAgent().getProvider()],
-    getActiveProviderName: () => requireAmbientAgent().getProvider(),
-    getActiveModelName: () => requireAmbientAgent().getModel(),
-    setProvider: (name: string) => requireAmbientAgent().setProvider(name),
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      listProviders: () => [requireAmbientAgent().getProvider()],
+      getActiveProviderName: () => requireAmbientAgent().getProvider(),
+      getActiveModelName: () => requireAmbientAgent().getModel(),
+      setProvider: (name: string) => requireAmbientAgent().setProvider(name),
+    });
+    return {
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { useProviderDialog } = await import('./useProviderDialog.js');
 
 async function beginRecording(agent: Agent): Promise<string> {

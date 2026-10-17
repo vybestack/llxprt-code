@@ -12,12 +12,24 @@ const ink = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => ink);
 // Provider status is unrelated to trust; keep the real footer and trust lifecycle.
 const runtimeContext = await import('../contexts/RuntimeContext.js');
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...runtimeContext,
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'test' }),
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'test' }),
+    });
+    return {
+      ...runtimeContext,
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { renderWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );

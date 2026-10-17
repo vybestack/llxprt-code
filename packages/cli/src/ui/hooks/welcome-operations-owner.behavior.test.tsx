@@ -16,9 +16,24 @@ const conflictingRuntime = {
   setActiveModel: (model: string) => conflictingOwner.setModel(model),
   providerStatus: () => ({ providerName: conflictingOwner.getProvider() }),
 };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => conflictingRuntime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => conflictingRuntime;
+    return {
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 void vi.mock('../contexts/OAuthControlContext.js', () => ({
   useOAuthControl: () => ({ authenticate: async () => {} }),
 }));

@@ -6,7 +6,7 @@
 
 import { vi } from 'bun:test';
 import type { SessionMetrics } from '../../contexts/SessionContext.js';
-import type { RuntimeApi } from '../../contexts/RuntimeContext.js';
+import type { RuntimeApi } from '../../../__tests__/runtime-context-fixture.js';
 
 export const defaultTokenTracking = {
   tokensPerMinute: 0,

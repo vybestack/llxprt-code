@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RegisteredHistoryReads } from '../ui/hooks/useRegisteredHistoryCommands.js';
 import type { CredentialCommands } from '../ui/hooks/credentialCommandTypes.js';
 
 import { createDocsCommand } from '../ui/commands/docsCommand.js';
@@ -598,5 +599,18 @@ export function createUnconfiguredCredentialRegistry(): CredentialCommands {
     quotaCommand: commands.quotaCommand,
     mcpCommand: commands.mcpCommand,
     profileCommand: commands.profileCommand,
+  };
+}
+
+export function createUnconfiguredHistoryReaders(): RegisteredHistoryReads {
+  return {
+    compressHistory: null,
+    readRawHistory: () => null,
+    isHistoryInitialized: () => false,
+    readHistory: async () => [],
+    replaceHistory: async () => {
+      throw new Error('Session agent is unavailable');
+    },
+    readDumpHistory: () => null,
   };
 }

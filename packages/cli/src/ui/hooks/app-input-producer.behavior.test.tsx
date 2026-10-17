@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { runtimeAppFixture } from '../../__tests__/runtime-context-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -152,7 +153,7 @@ function renderApplication(
           ui: { theme: 'Default' },
         })}
         version="test"
-        runtimeOwner={{ create: () => runtimeApi }}
+        {...runtimeAppFixture(owner, runtimeApi, owner.sessionClient.fetch)}
         providerAliasRefresh={async () => {}}
         oauthControl={oauthControl}
         suppressStartupWelcome

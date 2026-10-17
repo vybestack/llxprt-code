@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { type ProviderStatusOperation } from '../contexts/RuntimeContext.js';
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
@@ -30,7 +31,6 @@ import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../commands/toolkeyfileCommand.js';
 import type { useOAuthControl } from '../contexts/OAuthControlContext.js';
-import type { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export function createMcpOwnerCommand(
   listServers: Agent['mcp']['listServers'] | null,
@@ -135,7 +135,7 @@ export function createLogoutRegistration(
 }
 
 export function createKeyfileRegistration(
-  readStatus: ReturnType<typeof useRuntimeApi>['providerStatus'],
+  readStatus: ProviderStatusOperation,
   updateKey: Parameters<typeof bindKeyfileCommandOperations>[1],
   writeSetting: Parameters<typeof bindKeyfileCommandOperations>[2],
   remember: Parameters<typeof bindKeyfileCommandOperations>[3],
@@ -157,7 +157,7 @@ export function createKeyRegistration(
   listNames: KeyCommandOperations['listKeyCompletionNames'],
   invalidate: KeyCommandOperations['invalidateKeyCompletion'],
   isInteractive: KeyCommandOperations['isInteractive'],
-  readStatus: ReturnType<typeof useRuntimeApi>['providerStatus'],
+  readStatus: ProviderStatusOperation,
   updateKey: KeyCommandOperations['updateActiveProviderApiKey'],
   setEphemeral: KeyCommandOperations['setEphemeralSetting'],
 ): SlashCommand {

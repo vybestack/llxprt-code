@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { runtimeAppFixture } from '../__tests__/runtime-context-fixture.js';
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
 import { afterEach as afterFixtureTest, describe, expect, it } from 'bun:test';
@@ -27,10 +28,8 @@ import {
   buildUiRuntimeFromSource,
 } from './cliUiRuntime.js';
 import { AppWrapper } from './App.js';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../__tests__/runtime-owner-features-fixture.js';
+import { createProviderAliasRefresh } from '../runtime/createRuntimeOwnerFeatures.js';
 import { createOAuthControl } from '../runtime/createOAuthControl.js';
 
 describe('interactive Agent owner AppWrapper', () => {
@@ -56,23 +55,24 @@ describe('interactive Agent owner AppWrapper', () => {
             uiRuntime={buildUiRuntimeFromSource(config, agent)}
             slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
             agent={agent}
-            runtimeOwner={{
-              create: () =>
-                createRuntimeOwnerFeatures(
-                  config,
-                  agent.providerManager,
-                  fixturePaths().directories,
-                  createSessionModelCommand(agent),
-                  settingsOwner,
-                  settingsService,
-                  agent.workspace,
-                  agent.modelParameters,
-                  agent.settings,
-                  agent.toolFormat,
-                  agent.providerReads,
-                  agent.auth.keys,
-                ),
-            }}
+            {...runtimeAppFixture(
+              agent,
+              createRuntimeOwnerFeatures(
+                config,
+                agent.providerManager,
+                fixturePaths().directories,
+                createSessionModelCommand(agent),
+                settingsOwner,
+                settingsService,
+                agent.workspace,
+                agent.modelParameters,
+                agent.settings,
+                agent.toolFormat,
+                agent.providerReads,
+                agent.auth.keys,
+              ),
+              agent.sessionClient.fetch,
+            )}
             providerAliasRefresh={createProviderAliasRefresh(
               agent.providerManager,
             )}

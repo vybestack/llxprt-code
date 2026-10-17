@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useListAvailableModels } from '../../contexts/RuntimeContext.js';
 
 import type React from 'react';
 import { useState, useCallback, useEffect } from 'react';
@@ -14,7 +15,7 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 import { PROVIDER_OPTIONS } from './constants.js';
 import { getStepPosition } from './utils.js';
 import type { WizardState } from './types.js';
-import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
+
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 const buildModelItems = (models: string[]) => [
@@ -88,7 +89,7 @@ const CustomModelInput: React.FC<{
 );
 
 const useProviderModels = (provider: string | null) => {
-  const runtime = useRuntimeApi();
+  const runtimeListAvailableModels = useListAvailableModels();
   const [models, setModels] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -101,7 +102,7 @@ const useProviderModels = (provider: string | null) => {
       setIsLoading(true);
       try {
         const hydratedModels: HydratedModel[] =
-          await runtime.listAvailableModels(provider);
+          await runtimeListAvailableModels(provider);
         const modelIds = hydratedModels
           .filter((m) => m.metadata?.status !== 'deprecated')
           .map((m) => m.id);
@@ -112,7 +113,7 @@ const useProviderModels = (provider: string | null) => {
       setIsLoading(false);
     };
     void loadModels();
-  }, [runtime, provider]);
+  }, [runtimeListAvailableModels, provider]);
 
   return { models, isLoading };
 };

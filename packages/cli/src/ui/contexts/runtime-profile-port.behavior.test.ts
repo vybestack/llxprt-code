@@ -19,9 +19,9 @@ function fixturePaths() {
 
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
-import { createRuntimeApi } from './RuntimeContext.js';
-import { projectRuntimeAgent } from './runtimeProfileAgent.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
+import { projectRuntimeAgent } from '../../__tests__/runtime-profile-agent-fixture.js';
 
 describe('CLI profile operation projection', () => {
   afterFixtureTest(() => {

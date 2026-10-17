@@ -102,9 +102,27 @@ let fakeRuntime: ReturnType<typeof createFakeRuntime>;
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => fakeRuntime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => fakeRuntime;
+    return {
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 function makeModel(provider: string, id: string): HydratedModel {
   return {

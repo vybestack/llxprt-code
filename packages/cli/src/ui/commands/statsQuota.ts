@@ -3,9 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type DetectProviderQuotaOperation,
+  type GetActiveProviderNameOperation,
+  type GetEphemeralSettingOperation,
+} from '../contexts/RuntimeContext.js';
 
 import type { NetworkFetch } from '@vybestack/llxprt-code-core';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -61,7 +66,7 @@ async function readKeyFile(filePath: string): Promise<string | null> {
  * Checks ephemeral settings for auth-keyfile first, then falls back to auth-key.
  */
 async function resolveApiKey(
-  readSetting: RuntimeApi['getEphemeralSetting'],
+  readSetting: GetEphemeralSettingOperation,
 ): Promise<string | null> {
   const keyfilePath = readSetting('auth-keyfile');
   if (typeof keyfilePath === 'string' && keyfilePath.trim() !== '') {
@@ -84,9 +89,9 @@ async function resolveApiKey(
  * Returns null if the profile doesn't use a supported API-key provider.
  */
 async function fetchApiKeyProviderQuota(
-  readSetting: RuntimeApi['getEphemeralSetting'],
-  readProvider: RuntimeApi['getActiveProviderName'],
-  detectQuota: RuntimeApi['detectProviderQuota'],
+  readSetting: GetEphemeralSettingOperation,
+  readProvider: GetActiveProviderNameOperation,
+  detectQuota: DetectProviderQuotaOperation,
   requestFetch: NetworkFetch,
 ): Promise<{ provider: string; lines: string[] } | null> {
   let provider: 'zai' | 'synthetic' | 'chutes' | 'kimi' | null = null;
@@ -279,9 +284,9 @@ async function fetchOAuthQuotaLines(
  * Returns formatted lines ready for display, or empty array if no quota available.
  */
 export async function fetchAllQuotaInfo(
-  readSetting: RuntimeApi['getEphemeralSetting'],
-  readProvider: RuntimeApi['getActiveProviderName'],
-  detectQuota: RuntimeApi['detectProviderQuota'],
+  readSetting: GetEphemeralSettingOperation,
+  readProvider: GetActiveProviderNameOperation,
+  detectQuota: DetectProviderQuotaOperation,
   requestFetch: NetworkFetch,
   isOAuthAvailable: OAuthControl['isAvailable'],
   readAnthropic: OAuthControl['getAllAnthropicUsageInfo'],

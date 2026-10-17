@@ -56,13 +56,29 @@ void vi.mock('is-in-ci', () => ({ default: false }));
 const realInk: typeof import('ink') = await import(import.meta.resolve('ink'));
 void vi.mock('ink', () => realInk);
 const runtimeContext = await import('../contexts/RuntimeContext.js');
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...runtimeContext,
-  useRuntimeApi: () => ({
-    getEphemeralSetting: () => undefined,
-    getWorkspaceDirectories: () => [],
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      getEphemeralSetting: () => undefined,
+      getWorkspaceDirectories: () => [],
+    });
+    return {
+      ...runtimeContext,
+
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { Config } = await import('@vybestack/llxprt-code-core');
 const { createUiSessionOwner } = await import(
   '../../__tests__/uiSessionOwner.js'

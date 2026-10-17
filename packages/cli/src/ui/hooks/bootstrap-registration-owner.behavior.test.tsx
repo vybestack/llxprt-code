@@ -24,7 +24,7 @@ import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
-import { RuntimeContextProvider } from '../contexts/RuntimeContext.js';
+import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
 import { initialAppState } from '../reducers/appReducer.js';

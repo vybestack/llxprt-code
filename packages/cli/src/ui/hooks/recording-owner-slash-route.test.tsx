@@ -3,16 +3,103 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 const metrics = new UiTelemetryService();
 
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => createMockRuntimeApi(),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => createMockRuntimeApi();
+    return {
+      useGetActiveProviderDetails: () =>
+        useSelectedTestRuntime().getActiveProviderDetails,
+      useGetProviderDumpMetadata: () =>
+        useSelectedTestRuntime().getProviderDumpMetadata,
+      useGetActiveProviderAliasConfig: () =>
+        useSelectedTestRuntime().getActiveProviderAliasConfig,
+      useDetectProviderQuota: () =>
+        useSelectedTestRuntime().detectProviderQuota,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+      useGetLoadBalancerTokenAccounting: () =>
+        useSelectedTestRuntime().getLoadBalancerTokenAccounting,
+      useListSavedProfiles: () => useSelectedTestRuntime().listSavedProfiles,
+      useGetProfileByName: () => useSelectedTestRuntime().getProfileByName,
+      useSaveProfileDefinition: () =>
+        useSelectedTestRuntime().saveProfileDefinition,
+      useSaveLoadBalancerProfile: () =>
+        useSelectedTestRuntime().saveLoadBalancerProfile,
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetUnallowedParametersForActiveModel: () =>
+        useSelectedTestRuntime().getUnallowedParametersForActiveModel,
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+      useGetEphemeralSettings: () =>
+        useSelectedTestRuntime().getEphemeralSettings,
+      useSetEphemeralSetting: () =>
+        useSelectedTestRuntime().setEphemeralSetting,
+      useGetActiveToolFormatState: () =>
+        useSelectedTestRuntime().getActiveToolFormatState,
+      useSetActiveToolFormatOverride: () =>
+        useSelectedTestRuntime().setActiveToolFormatOverride,
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+      useGetSessionSetting: () => useSelectedTestRuntime().getSessionSetting,
+      useSetSessionSetting: () => useSelectedTestRuntime().setSessionSetting,
+      useClearSessionSetting: () =>
+        useSelectedTestRuntime().clearSessionSetting,
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+      useGetActiveModelParams: () =>
+        useSelectedTestRuntime().getActiveModelParams,
+      useSetActiveModelParam: () =>
+        useSelectedTestRuntime().setActiveModelParam,
+      useClearActiveModelParam: () =>
+        useSelectedTestRuntime().clearActiveModelParam,
+      useUpdateActiveProviderApiKey: () =>
+        useSelectedTestRuntime().updateActiveProviderApiKey,
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+      useGetDefaultProfileName: () =>
+        useSelectedTestRuntime().getDefaultProfileName,
+      useGetOpenAIProviderInfo: () =>
+        useSelectedTestRuntime().getOpenAIProviderInfo,
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+      useSetDefaultProfileName: () =>
+        useSelectedTestRuntime().setDefaultProfileName,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        useSelectedTestRuntime().getRuntimeDiagnosticsSnapshot,
+      useSaveProfileSnapshot: () =>
+        useSelectedTestRuntime().saveProfileSnapshot,
+      useDeleteProfileByName: () =>
+        useSelectedTestRuntime().deleteProfileByName,
+      useFetch: () => useSelectedTestRuntime().fetch,
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+      useLoadProfileByName: () => useSelectedTestRuntime().loadProfileByName,
+      useUpdateActiveProviderBaseUrl: () =>
+        useSelectedTestRuntime().updateActiveProviderBaseUrl,
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 import { readFile } from 'node:fs/promises';
 import React, { act } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -50,6 +137,7 @@ function slashInputs(
 ): UseSlashCommandProcessorCoreArgs {
   return {
     registerCredentials: () => createUnconfiguredCredentialRegistry(),
+    ...createUnconfiguredHistoryReaders(),
     config: null,
     agent,
     settings: createMockSettings({}),

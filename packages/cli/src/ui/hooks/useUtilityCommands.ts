@@ -3,8 +3,15 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  useDetectProviderQuota,
+  useFetch,
+  useGetActiveProviderName,
+  useGetEphemeralSetting,
+} from '../contexts/RuntimeContext.js';
+
 import { useQuotaReader } from './useQuotaReader.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import { useBound } from './agentStream/useStreamOwnerCallbacks.js';
 
 import { useCallback, useMemo } from 'react';
@@ -37,15 +44,18 @@ export function useUtilityCommands(
   | 'helpCommand'
   | 'quitCommand'
 > {
-  const api = useRuntimeApi();
+  const apiDetectProviderQuota = useDetectProviderQuota();
+  const apiFetch = useFetch();
+  const apiGetActiveProviderName = useGetActiveProviderName();
+  const apiGetEphemeralSetting = useGetEphemeralSetting();
   const oauth = useOAuthControl();
   const available = useBound(oauth, oauth.isAvailable);
   const discover = useBound(oauth, oauth.discoverBuckets);
   const readQuota = useQuotaReader(
-    useBound(api, api.getEphemeralSetting),
-    useBound(api, api.getActiveProviderName),
-    useBound(api, api.detectProviderQuota),
-    api.fetch,
+    apiGetEphemeralSetting,
+    apiGetActiveProviderName,
+    apiDetectProviderQuota,
+    apiFetch,
     available,
     useBound(oauth, oauth.getAllAnthropicUsageInfo),
     useBound(oauth, oauth.getAllCodexUsageInfo),

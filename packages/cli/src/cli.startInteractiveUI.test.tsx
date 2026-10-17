@@ -1,10 +1,10 @@
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import {
   describe,
@@ -17,7 +17,8 @@ import {
 } from 'bun:test';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
 import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
-import { createMockAgent } from './__tests__/mockAgent.js';
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeStartupAgent = installCommandOwners();
 import type { LoadedSettings } from './config/settings.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
@@ -129,7 +130,7 @@ describe('startInteractiveUI', () => {
     for (const owner of startupOwners.splice(0)) await owner.dispose();
   });
   beforeEach(async () => {
-    mockAgent = await createMockAgent(mockConfig);
+    mockAgent = await makeStartupAgent(crypto.randomUUID());
     const { __resetInteractiveUIStateForTesting } = await import(
       './session/interactiveUI.js'
     );
@@ -151,7 +152,7 @@ describe('startInteractiveUI', () => {
     model: 'test-model',
     debugMode: false,
   });
-  let mockAgent: Awaited<ReturnType<typeof createMockAgent>>;
+  let mockAgent: Awaited<ReturnType<typeof makeStartupAgent>>;
   const mockSettings = {
     merged: {
       ui: {

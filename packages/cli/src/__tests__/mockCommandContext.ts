@@ -12,7 +12,7 @@ import type { CommandContext } from '../ui/commands/types.js';
 import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { CliUiRuntime } from '../ui/cliUiRuntime.js';
-import type { RuntimeApi } from '../ui/contexts/RuntimeContext.js';
+import type { RuntimeApi } from './runtime-context-fixture.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
 import type { OAuthControl } from '../ui/contexts/OAuthControlContext.js';
 import type {

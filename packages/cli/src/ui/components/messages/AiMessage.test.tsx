@@ -15,28 +15,41 @@ import { Colors } from '../../colors.js';
 
 let mockGetEphemeralSetting = vi.fn().mockReturnValue(true);
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    getEphemeralSetting: mockGetEphemeralSetting,
-  }),
-  useRuntimeBridge: () => ({
-    runtimeId: 'test',
-    metadata: {},
-    api: { getEphemeralSetting: mockGetEphemeralSetting },
-    runWithScope: <T,>(cb: () => T) => cb(),
-    enterScope: () => {},
-  }),
-  RuntimeContextProvider: ({ children }: { children: React.ReactNode }) =>
-    children,
-  getRuntimeBridge: () => ({
-    runtimeId: 'test',
-    metadata: {},
-    api: { getEphemeralSetting: mockGetEphemeralSetting },
-    runWithScope: <T,>(cb: () => T) => cb(),
-    enterScope: () => {},
-  }),
-  getRuntimeApi: () => ({ getEphemeralSetting: mockGetEphemeralSetting }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      getEphemeralSetting: mockGetEphemeralSetting,
+    });
+    return {
+      useGetWorkspaceDirectories: () => () => [],
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+
+      useRuntimeApi: useSelectedTestRuntime,
+      useRuntimeBridge: () => ({
+        runtimeId: 'test',
+        metadata: {},
+        api: { getEphemeralSetting: mockGetEphemeralSetting },
+        runWithScope: <T,>(cb: () => T) => cb(),
+        enterScope: () => {},
+      }),
+      RuntimeContextProvider: ({ children }: { children: React.ReactNode }) =>
+        children,
+      getRuntimeBridge: () => ({
+        runtimeId: 'test',
+        metadata: {},
+        api: { getEphemeralSetting: mockGetEphemeralSetting },
+        runWithScope: <T,>(cb: () => T) => cb(),
+        enterScope: () => {},
+      }),
+      getRuntimeApi: () => ({ getEphemeralSetting: mockGetEphemeralSetting }),
+    };
+  })())();
+void vi.mock('../../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({

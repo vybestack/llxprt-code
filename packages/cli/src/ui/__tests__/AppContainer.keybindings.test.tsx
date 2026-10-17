@@ -3,7 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
 
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
@@ -367,14 +370,30 @@ void vi.mock('../contexts/VimModeContext.js', () => ({
   })),
 }));
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: vi.fn(() => ({
-    oauthManager: vi.fn(),
-    getActiveModelName: vi.fn(() => 'test-model'),
-    getActiveProviderMetrics: vi.fn(() => ({})),
-    getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
-  })),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = vi.fn(() => ({
+      oauthManager: vi.fn(),
+      getActiveModelName: vi.fn(() => 'test-model'),
+      getActiveProviderMetrics: vi.fn(() => ({})),
+      getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
+    }));
+    return {
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('../utils/mouse.js', () => ({
   isMouseEventsActive: vi.fn(() => false),
@@ -508,6 +527,7 @@ describe('AppContainer.keybindings', () => {
     it('should mount component with keybinding handlers active', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -534,6 +554,7 @@ describe('AppContainer.keybindings', () => {
     it('should have copy mode toggle available when using alternate buffer', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -565,6 +586,7 @@ describe('AppContainer.keybindings', () => {
 
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

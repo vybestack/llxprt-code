@@ -29,7 +29,11 @@ describe('history registration ownership', () => {
       null,
       context.services.settings,
       () => [],
-      context.runtimeApi,
+      context.runtimeApi.getLoadBalancerStats,
+      context.runtimeApi.getLoadBalancerTokenAccounting,
+      context.runtimeApi.getRuntimeDiagnosticsSnapshot,
+      context.runtimeApi.getSessionTokenUsage,
+      context.runtimeApi.providerStatus,
       context.oauthControl,
     );
     const hook = renderHook(

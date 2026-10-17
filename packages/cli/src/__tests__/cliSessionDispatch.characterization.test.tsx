@@ -1,4 +1,5 @@
-import { createUiSessionOwner } from './uiSessionOwner.js';
+import { useCommandOwners as installCommandOwners } from './command-owner-fixture.js';
+const makeDispatchAgent = installCommandOwners();
 /**
  * @plan PLAN-20260629-ISSUE2285.P11
  * @requirement REQ-006
@@ -92,7 +93,7 @@ const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true, workspace: (await createUiSessionOwner()).workspace };
+    return makeDispatchAgent(crypto.randomUUID());
   }),
 }));
 
@@ -214,16 +215,8 @@ function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
-async function createFakeAgent(): Promise<unknown> {
-  return {
-    workspace: (await createUiSessionOwner()).workspace,
-    getMessageBus: () => ({}) as never,
-    hooks: {
-      triggerSessionStart: vi.fn(async () => ({})),
-    },
-    tools: { get: () => undefined },
-    dispose: vi.fn(async () => {}),
-  };
+async function createFakeAgent() {
+  return makeDispatchAgent(crypto.randomUUID());
 }
 
 // ---------------------------------------------------------------------------

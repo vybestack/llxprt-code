@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
+
 import { SettingScope } from '../config/settings.js';
 import {
   createCredentialRegistration,
@@ -39,11 +41,24 @@ import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
 import { VimModeProvider } from './contexts/VimModeContext.js';
 import { TodoProvider } from './contexts/TodoProvider.js';
-import {
-  RuntimeContextProvider,
-  createRuntimeApi,
-  type RuntimeContextProviderProps,
+import type {
+  DetectProviderQuotaOperation,
+  FetchOperation,
+  GetActiveModelNameOperation,
+  GetActiveProviderAliasConfigOperation,
+  GetActiveProviderNameOperation,
+  GetActiveToolFormatStateOperation,
+  GetEphemeralSettingOperation,
+  GetEphemeralSettingsOperation,
+  ListSavedProfilesOperation,
+  ProviderStatusOperation,
+  SaveLoadBalancerProfileOperation,
+  SetActiveModelOperation,
+  SetActiveToolFormatOverrideOperation,
+  SetEphemeralSettingOperation,
+  UpdateActiveProviderApiKeyOperation,
 } from './contexts/RuntimeContext.js';
+import type { ReactNode } from 'react';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import {
   ProviderAliasRefreshProvider,
@@ -60,7 +75,6 @@ import { inkRenderOptions } from './inkRenderOptions.js';
 import { isMouseEventsEnabled } from './mouseEventsEnabled.js';
 import { appReducer, initialAppState } from './reducers/appReducer.js';
 import { AppContainer } from './AppContainer.js';
-import { projectRuntimeAgent } from './contexts/runtimeProfileAgent.js';
 
 interface AppProps {
   uiRuntime: UiRuntime;
@@ -69,7 +83,22 @@ interface AppProps {
    * The single interactive Agent created at the CLI composition root.
    */
   agent: Agent;
-  runtimeOwner: { create: () => RuntimeContextProviderProps['owner'] };
+  renderRuntime: (children: ReactNode) => ReactNode;
+  detectProviderQuota: DetectProviderQuotaOperation;
+  fetch: FetchOperation;
+  getActiveModelName: GetActiveModelNameOperation;
+  getActiveProviderAliasConfig: GetActiveProviderAliasConfigOperation;
+  getActiveProviderName: GetActiveProviderNameOperation;
+  getActiveToolFormatState: GetActiveToolFormatStateOperation;
+  getEphemeralSetting: GetEphemeralSettingOperation;
+  getEphemeralSettings: GetEphemeralSettingsOperation;
+  listSavedProfiles: ListSavedProfilesOperation;
+  providerStatus: ProviderStatusOperation;
+  saveLoadBalancerProfile: SaveLoadBalancerProfileOperation;
+  setActiveModel: SetActiveModelOperation;
+  setActiveToolFormatOverride: SetActiveToolFormatOverrideOperation;
+  setEphemeralSetting: SetEphemeralSettingOperation;
+  updateActiveProviderApiKey: UpdateActiveProviderApiKeyOperation;
   providerAliasRefresh: ProviderAliasRefresh;
   oauthControl: OAuthControl;
   settings: LoadedSettings;
@@ -108,67 +137,83 @@ interface AppProps {
  */
 export class AppWrapper extends Component<AppProps> {
   #captured: AppProps | undefined;
-  #ownerFactory: AppProps['runtimeOwner'] | undefined;
-  #runtimeOwner: RuntimeContextProviderProps['owner'] | undefined;
-  #runtimeAgent: ReturnType<typeof projectRuntimeAgent> | undefined;
+  #history: RegisteredHistoryReads | undefined;
   #registration: CredentialCommandRegistration | undefined;
   readonly #toolkeys = createToolkeyCommands();
 
   private capture() {
     const props = this.props;
     if (this.#captured?.agent !== props.agent)
-      this.#runtimeAgent = projectRuntimeAgent(props.agent);
-    if (this.#ownerFactory !== props.runtimeOwner) {
-      this.#runtimeOwner = props.runtimeOwner.create();
-      this.#ownerFactory = props.runtimeOwner;
-    }
-    if (this.#runtimeAgent === undefined || this.#runtimeOwner === undefined)
-      throw new Error('Application runtime was not captured');
+      this.#history = this.bindHistory();
     const keys = [
       'agent',
       'slashCommandRuntime',
       'oauthControl',
       'settings',
       'providerAliasRefresh',
-      'runtimeOwner',
+      'renderRuntime',
+      'detectProviderQuota',
+      'fetch',
+      'getActiveModelName',
+      'getActiveProviderAliasConfig',
+      'getActiveProviderName',
+      'getActiveToolFormatState',
+      'getEphemeralSetting',
+      'getEphemeralSettings',
+      'listSavedProfiles',
+      'providerStatus',
+      'saveLoadBalancerProfile',
+      'setActiveModel',
+      'setActiveToolFormatOverride',
+      'setEphemeralSetting',
+      'updateActiveProviderApiKey',
     ] satisfies Array<keyof AppProps>;
     if (keys.some((key) => this.#captured?.[key] !== props[key])) {
-      const api = createRuntimeApi(
-        this.#runtimeAgent,
-        this.#runtimeOwner,
-        props.agent.sessionClient.fetch,
-      );
-      this.#registration = this.register(api);
+      this.#registration = this.register();
       this.#captured = props;
     }
     if (this.#registration === undefined)
       throw new Error('Application commands were not registered');
-    return {
-      runtimeAgent: this.#runtimeAgent,
-      runtimeOwner: this.#runtimeOwner,
-      registerCredentials: this.#registration,
-    };
+    return this.#registration;
   }
 
-  private models(api: ReturnType<typeof createRuntimeApi>) {
+  private bindHistory(): RegisteredHistoryReads {
+    const a = this.props.agent;
+    return {
+      compressHistory: (...args) => a.compress(...args),
+      readRawHistory: () =>
+        a.agentClient.getHistoryService()?.getRawHistory() ?? null,
+      isHistoryInitialized: () => a.agentClient.hasChatInitialized(),
+      readHistory: () => a.getHistory(),
+      replaceHistory: async (items) => {
+        await a.setHistory(items);
+      },
+      readDumpHistory: () => {
+        const service = a.agentClient.getHistoryService();
+        return service == null
+          ? null
+          : {
+              messages: service.getAll(),
+              chronology: service.getChronologyTrace(),
+            };
+      },
+    };
+  }
+  private models() {
     const { agent: a } = this.props;
-    const b = <O, A extends unknown[], R>(
-      owner: O,
-      op: (this: O, ...args: A) => R,
-    ): ((...args: A) => R) => op.bind(owner);
     return createModelRegistration(
-      b(api, api.setActiveModel),
-      b(api, api.getActiveToolFormatState),
-      b(api, api.setActiveToolFormatOverride),
-      b(api, api.getActiveProviderName),
-      b(api, api.providerStatus),
-      b(api, api.getActiveModelName),
-      b(api, api.getActiveProviderAliasConfig),
+      this.props.setActiveModel,
+      this.props.getActiveToolFormatState,
+      this.props.setActiveToolFormatOverride,
+      this.props.getActiveProviderName,
+      this.props.providerStatus,
+      this.props.getActiveModelName,
+      this.props.getActiveProviderAliasConfig,
       (name, options) => a.setProvider(name, undefined, options),
       this.props.providerAliasRefresh,
     );
   }
-  private profiles(api: ReturnType<typeof createRuntimeApi>) {
+  private profiles() {
     const { agent: a, oauthControl: oauth, settings } = this.props;
     const b = <O, A extends unknown[], R>(
       owner: O,
@@ -182,17 +227,17 @@ export class AppWrapper extends Component<AppProps> {
       () => a.getProvider(),
       b(oauth, oauth.listBuckets),
       () => settings.merged.enableFuzzyFiltering ?? true,
-      b(a, a.saveProfileSnapshot),
-      b(api, api.listSavedProfiles),
-      b(api, api.getEphemeralSettings),
-      b(api, api.saveLoadBalancerProfile),
+      (name, additional) => a.saveProfileSnapshot(name, additional),
+      this.props.listSavedProfiles,
+      this.props.getEphemeralSettings,
+      this.props.saveLoadBalancerProfile,
       b(a.profiles, a.profiles.load),
       async () => {
         await a.mcp.refresh();
       },
-      b(a, a.getProvider),
-      b(a, a.getModel),
-      b(a, a.deleteProfileByName),
+      () => a.getProvider(),
+      () => a.getModel(),
+      (name) => a.deleteProfileByName(name),
       async (name) => {
         a.setDefaultProfileName(name);
         settings.setValue(
@@ -203,17 +248,17 @@ export class AppWrapper extends Component<AppProps> {
       },
     );
   }
-  private quota(api: ReturnType<typeof createRuntimeApi>) {
+  private quota() {
     const oauth = this.props.oauthControl;
     const b = <O, A extends unknown[], R>(
       owner: O,
       op: (this: O, ...args: A) => R,
     ): ((...args: A) => R) => op.bind(owner);
     return createQuotaRegistration(
-      b(api, api.getEphemeralSetting),
-      b(api, api.getActiveProviderName),
-      b(api, api.detectProviderQuota),
-      api.fetch,
+      this.props.getEphemeralSetting,
+      this.props.getActiveProviderName,
+      this.props.detectProviderQuota,
+      this.props.fetch,
       b(oauth, oauth.isAvailable),
       b(oauth, oauth.getAllAnthropicUsageInfo),
       b(oauth, oauth.getAllCodexUsageInfo),
@@ -247,9 +292,7 @@ export class AppWrapper extends Component<AppProps> {
         reload,
       );
   }
-  private register(
-    api: ReturnType<typeof createRuntimeApi>,
-  ): CredentialCommandRegistration {
+  private register(): CredentialCommandRegistration {
     const {
       agent: a,
       slashCommandRuntime: c,
@@ -261,21 +304,21 @@ export class AppWrapper extends Component<AppProps> {
       op: (this: O, ...args: A) => R,
     ): ((...args: A) => R) => op.bind(owner);
     return createCredentialRegistration(
-      this.models(api),
-      this.profiles(api),
+      this.models(),
+      this.profiles(),
       createBaseurlRegistration(
-        b(a, a.getProvider),
+        () => a.getProvider(),
         b(a.auth, a.auth.setBaseUrl),
       ),
       createLogoutRegistration(
-        b(a, a.listProviders),
+        () => a.listProviders(),
         b(a.auth, a.auth.status),
         b(a.auth, a.auth.logout),
       ),
       createKeyfileRegistration(
-        b(api, api.providerStatus),
-        b(api, api.updateActiveProviderApiKey),
-        b(api, api.setEphemeralSetting),
+        this.props.providerStatus,
+        this.props.updateActiveProviderApiKey,
+        this.props.setEphemeralSetting,
         b(settings, settings.setProviderKeyfile),
         b(settings, settings.removeProviderKeyfile),
       ),
@@ -284,12 +327,12 @@ export class AppWrapper extends Component<AppProps> {
         b(c, c.listKeyCompletionNames),
         b(c, c.invalidateKeyCompletion),
         b(c, c.isInteractive),
-        b(api, api.providerStatus),
-        b(api, api.updateActiveProviderApiKey),
+        this.props.providerStatus,
+        this.props.updateActiveProviderApiKey,
         b(c, c.setEphemeralSetting),
       ),
       createAuthOwnerCommand(oauth, settings),
-      this.quota(api),
+      this.quota(),
       this.mcp(),
       this.#toolkeys,
       b(a.session, a.session.recordRecordingEvent),
@@ -298,7 +341,9 @@ export class AppWrapper extends Component<AppProps> {
 
   override render() {
     const props = this.props;
-    const { runtimeAgent, runtimeOwner, registerCredentials } = this.capture();
+    const registerCredentials = this.capture();
+    if (this.#history === undefined)
+      throw new Error('Application history was not registered');
     const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
     const mouseEventsEnabled = isMouseEventsEnabled(
       renderOptions,
@@ -320,11 +365,7 @@ export class AppWrapper extends Component<AppProps> {
                   <TodoProvider
                     sessionId={props.uiRuntime.session.getSessionId()}
                   >
-                    <RuntimeContextProvider
-                      requestFetch={props.agent.sessionClient.fetch}
-                      agent={runtimeAgent}
-                      owner={runtimeOwner}
-                    >
+                    {props.renderRuntime(
                       <OAuthControlProvider control={props.oauthControl}>
                         <ProviderAliasRefreshProvider
                           refresh={props.providerAliasRefresh}
@@ -332,12 +373,13 @@ export class AppWrapper extends Component<AppProps> {
                           <OverflowProvider>
                             <AppWithState
                               {...props}
+                              historyReads={this.#history}
                               registerCredentials={registerCredentials}
                             />
                           </OverflowProvider>
                         </ProviderAliasRefreshProvider>
-                      </OAuthControlProvider>
-                    </RuntimeContextProvider>
+                      </OAuthControlProvider>,
+                    )}
                   </TodoProvider>
                 </ShellCommandDisplayProvider>
               </VimModeProvider>
@@ -353,7 +395,9 @@ export class AppWrapper extends Component<AppProps> {
  * AppWithState manages the app reducer state and wraps AppContainer.
  */
 const AppWithState = (
-  props: AppProps & { registerCredentials: CredentialCommandRegistration },
+  props: AppProps & { historyReads: RegisteredHistoryReads } & {
+    registerCredentials: CredentialCommandRegistration;
+  },
 ) => {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
 

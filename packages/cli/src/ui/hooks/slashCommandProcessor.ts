@@ -3,6 +3,8 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RegisteredHistoryReads } from './useRegisteredHistoryCommands.js';
+
 import type { CredentialCommandRegistration } from './credentialCommandRegistration.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -72,6 +74,7 @@ interface TodoContextValue {
  */
 export const useSlashCommandProcessor = (
   registerCredentials: CredentialCommandRegistration,
+  history: RegisteredHistoryReads,
   config: CliUiRuntime | null,
   agent: Agent | null,
   settings: LoadedSettings,
@@ -93,6 +96,7 @@ export const useSlashCommandProcessor = (
 ) =>
   useSlashCommandProcessorCore({
     registerCredentials,
+    ...history,
     config,
     agent,
     settings,

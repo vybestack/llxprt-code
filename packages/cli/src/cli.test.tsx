@@ -3,7 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeForegroundAgent = installCommandOwners();
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -166,17 +167,9 @@ void vi.mock('./utils/cleanup.js', () => ({
 // fake exposes getMessageBus() because dispatch reads the session bus from the
 // Agent (#2378).
 void vi.mock('./cliAgentBootstrap.js', () => ({
-  createForegroundAgent: vi.fn(async () => ({
-    workspace: (await createUiSessionOwner()).workspace,
-    ide: (await createUiSessionOwner()).ide,
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getMessageBus: vi.fn(() => ({})),
-    session: {
-      setRecording: vi.fn(async () => {}),
-      getRecording: vi.fn(() => ({ enabled: true })),
-    },
-    tools: { get: vi.fn(() => undefined) },
-  })),
+  createForegroundAgent: vi.fn(async () =>
+    makeForegroundAgent(crypto.randomUUID()),
+  ),
 }));
 
 // Mock the public activation preflight so main() does not invoke real provider

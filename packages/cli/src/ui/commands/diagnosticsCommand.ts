@@ -6,10 +6,16 @@
  * @plan PLAN-20250909-TOKTRACK.P16
  * @requirement REQ-INT-001.3
  */
+import {
+  type GetLoadBalancerStatsOperation,
+  type GetLoadBalancerTokenAccountingOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type GetSessionTokenUsageOperation,
+} from '../contexts/RuntimeContext.js';
 
 import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
@@ -41,15 +47,15 @@ interface DiagnosticStaticInfo {
 }
 export interface DiagnosticsCommandReads {
   readonly isConfigured: boolean;
-  readonly readSnapshot: RuntimeApi['getRuntimeDiagnosticsSnapshot'];
+  readonly readSnapshot: GetRuntimeDiagnosticsSnapshotOperation;
   readonly isOAuthAvailable: OAuthControl['isAvailable'];
   readonly readSessionBucket: OAuthControl['getSessionBucket'];
   readonly readFailoverBuckets: () => readonly string[];
   readonly readCurrentBucket: () => string | undefined;
   readonly readProviderName: () => string | undefined;
-  readonly readLoadBalancerStats: RuntimeApi['getLoadBalancerStats'];
-  readonly readTokenAccounting: RuntimeApi['getLoadBalancerTokenAccounting'];
-  readonly readSessionTokens: RuntimeApi['getSessionTokenUsage'];
+  readonly readLoadBalancerStats: GetLoadBalancerStatsOperation;
+  readonly readTokenAccounting: GetLoadBalancerTokenAccountingOperation;
+  readonly readSessionTokens: GetSessionTokenUsageOperation;
   readonly readStaticInfo: () => DiagnosticStaticInfo;
   readonly listTools: () => readonly ToolInfo[];
   readonly appendTokens: (

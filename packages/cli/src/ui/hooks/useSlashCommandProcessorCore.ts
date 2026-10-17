@@ -3,6 +3,32 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  useHistoryRegistration,
+  type RegisteredHistoryReads,
+} from './useRegisteredHistoryCommands.js';
+
+import {
+  type GetLoadBalancerStatsOperation,
+  type GetLoadBalancerTokenAccountingOperation,
+  type GetProviderDumpMetadataOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type GetSessionSettingOperation,
+  type GetSessionTokenUsageOperation,
+  type ProviderStatusOperation,
+  type SetSessionSettingOperation,
+  useGetActiveProviderDetails,
+  useGetActiveProviderName,
+  useGetEphemeralSetting,
+  useGetLoadBalancerStats,
+  useGetLoadBalancerTokenAccounting,
+  useGetProviderDumpMetadata,
+  useGetRuntimeDiagnosticsSnapshot,
+  useGetSessionSetting,
+  useGetSessionTokenUsage,
+  useProviderStatus,
+  useSetSessionSetting,
+} from '../contexts/RuntimeContext.js';
 
 import { useCommandView } from './useCommandView.js';
 import {
@@ -28,7 +54,7 @@ import { bindCommandRawResume } from './commandRawResumeHost.js';
 import { performResume } from '../../services/performResume.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
-import { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
+import type { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { useCommandRuntimeState } from './useCommandRuntimeState.js';
 import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
@@ -37,14 +63,7 @@ import { useResourceCommands } from './useResourceCommands.js';
 import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
 import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
-import type { DumpcontextOwnerBindings } from '../commands/dumpcontextCommandHost.js';
-import type { DiagnosticsCommandReads } from '../commands/diagnosticsCommand.js';
-import { bindDumpcontextCommand } from '../commands/dumpcontextCommandHost.js';
-import { bindRestoreCommand } from '../commands/restoreCommandHost.js';
-import {
-  bindCopyCommandHistoryRead,
-  bindCopyCommandClipboard,
-} from '../commands/copyCommandHost.js';
+
 import { bindAboutDetails } from '../commands/aboutCommandHost.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
@@ -53,7 +72,7 @@ import type { CredentialCommandRegistration } from './credentialCommandRegistrat
 import type { CredentialCommands } from './credentialCommandTypes.js';
 import { useChatCommand } from './useChatCommand.js';
 import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
 import { useSubagentCommand } from './useSubagentCommand.js';
 import { useAutoPromptOperation } from './useAutoPromptOperation.js';
@@ -67,7 +86,7 @@ import type {
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type {
   HistoryItemWithoutId,
   SlashCommandProcessorResult,
@@ -110,7 +129,8 @@ export type SlashCommandProcessorCoreResult = {
   cancelActiveSlashCommand: () => boolean;
 };
 
-export interface UseSlashCommandProcessorCoreArgs {
+export interface UseSlashCommandProcessorCoreArgs
+  extends RegisteredHistoryReads {
   config: CliUiRuntime | null;
   agent: Agent | null;
   registerCredentials: CredentialCommandRegistration;
@@ -539,17 +559,21 @@ function useRegisteredCommands(
 }
 
 function useAboutDetails(
-  api: ReturnType<typeof useRuntimeApi>,
   config: CliUiRuntime | null,
   settings: LoadedSettings,
 ) {
+  const readProviderDetails = useGetActiveProviderDetails();
+  const readProviderName = useGetActiveProviderName();
+  const readEphemeral = useGetEphemeralSetting();
+  const readDiagnostics = useGetRuntimeDiagnosticsSnapshot();
+  const readProviderStatus = useProviderStatus();
   return useMemo(
     () =>
       bindAboutDetails(
-        api.getRuntimeDiagnosticsSnapshot.bind(api),
-        api.getActiveProviderName.bind(api),
-        api.getActiveProviderDetails.bind(api),
-        api.getEphemeralSetting.bind(api),
+        readDiagnostics,
+        readProviderName,
+        readProviderDetails,
+        readEphemeral,
         () => config?.getModel(),
         (key) => config?.getEphemeralSetting(key),
         () => config?.getProvider(),
@@ -557,10 +581,18 @@ function useAboutDetails(
           config?.getIdeMode() === true
             ? (config.getIdeClient()?.getDetectedIdeDisplayName() ?? '')
             : '',
-        api.providerStatus.bind(api),
+        readProviderStatus,
         settings.getProviderKeyfile.bind(settings),
       ),
-    [api, config, settings],
+    [
+      readProviderDetails,
+      readProviderName,
+      readEphemeral,
+      readDiagnostics,
+      readProviderStatus,
+      config,
+      settings,
+    ],
   );
 }
 
@@ -583,13 +615,23 @@ export function useSlashCommandProcessorCore(
     recordingSwapCallbacks: _recordingSwapCallbacks,
     ...invocation
   } = args;
-  const api = useRuntimeApi();
+  const readBalancerStats = useGetLoadBalancerStats();
+  const readBalancerTokens = useGetLoadBalancerTokenAccounting();
+  const readDumpProvider = useGetProviderDumpMetadata();
+  const readDiagnostics = useGetRuntimeDiagnosticsSnapshot();
+  const readSessionSetting = useGetSessionSetting();
+  const readSessionTokens = useGetSessionTokenUsage();
+  const readProviderStatus = useProviderStatus();
+  const writeSessionSetting = useSetSessionSetting();
   const oauth = useOAuthControl();
+  const alternateBuffer =
+    settings.merged.ui.useAlternateBuffer === true &&
+    !(config?.getScreenReader() ?? false);
   const { cancellation, pending, session } = useCommandRuntimeState(
     args.addItem,
   );
   const presentationCommands = usePresentationCommands(
-    useAboutDetails(api, config, settings),
+    useAboutDetails(config, settings),
     config?.getTargetDir(),
     useOptionalBound(agent?.hooks, agent?.hooks.triggerSessionEnd),
     useBound(agent?.session, agent?.session.startNewSession ?? missingSession),
@@ -599,15 +641,21 @@ export function useSlashCommandProcessorCore(
     session.updateHistoryTokenCount,
     args.clearItems,
     args.refreshStatic,
-    args.settings.merged.ui.useAlternateBuffer === true &&
-      !(args.config?.getScreenReader() ?? false),
+    alternateBuffer,
     args.toggleVimEnabled,
     args.actions.toggleDebugProfiler,
   );
 
   const state = useProcessorRegistration(
     args,
-    api,
+    readBalancerStats,
+    readBalancerTokens,
+    readDumpProvider,
+    readDiagnostics,
+    readSessionSetting,
+    readSessionTokens,
+    readProviderStatus,
+    writeSessionSetting,
     oauth,
     presentationCommands,
     pending.setPendingItem,
@@ -623,8 +671,7 @@ export function useSlashCommandProcessorCore(
   );
   return useCommandView(
     invocation,
-    settings.merged.ui.useAlternateBuffer === true &&
-      !(config?.getScreenReader() ?? false),
+    alternateBuffer,
     state,
     pending,
     session,
@@ -666,70 +713,20 @@ function useSubagentProfileCatalog(
 function readNoConfig(): undefined {
   return undefined;
 }
-
-function useHistoryRegistration(
-  diagnostics: DiagnosticsCommandReads,
-  config: CliUiRuntime | null,
-  settings: LoadedSettings,
-  loadHistory: UseHistoryManagerReturn['loadHistory'],
-  addItem: UseHistoryManagerReturn['addItem'],
-  compress: Agent['compress'] | null,
-  readRawHistory: Parameters<typeof useHistoryCommandOwners>[3],
-  hasChatInitialized: () => boolean,
-  readHistory: Parameters<typeof bindCopyCommandHistoryRead>[1],
-  setHistory: Agent['setHistory'],
-  readSetting: ReturnType<typeof useRuntimeApi>['getSessionSetting'],
-  writeSetting: ReturnType<typeof useRuntimeApi>['setSessionSetting'],
-  readDumpHistory: DumpcontextOwnerBindings['readHistory'],
-  readDumpProvider: DumpcontextOwnerBindings['readProvider'],
-) {
-  const dumpcontext = useMemo(
-    () =>
-      bindDumpcontextCommand({
-        readMode: () => readSetting('dumpcontext'),
-        writeMode: (mode) => writeSetting('dumpcontext', mode),
-        readHistory: readDumpHistory,
-        readProvider: readDumpProvider,
-        readOutputSettings: () => config?.getEphemeralSettings() ?? {},
-        readRuntimeConfig: () => config,
-      }),
-    [readSetting, writeSetting, readDumpHistory, readDumpProvider, config],
-  );
-  return useHistoryCommandOwners(
-    diagnostics,
-    config?.getPerfSnapshotCapability?.() ?? null,
-    config ? join(config.getProjectTempDir(), 'token-usage') : undefined,
-    readRawHistory,
-    useMemo(
-      () => bindCopyCommandHistoryRead(hasChatInitialized, readHistory),
-      [hasChatInitialized, readHistory],
-    ),
-    useMemo(() => bindCopyCommandClipboard(), []),
-    compress,
-    dumpcontext,
-    useMemo(
-      () =>
-        bindRestoreCommand(
-          config,
-          setHistory,
-          config?.getCheckpointingEnabled() === true
-            ? config.checkpoints
-            : undefined,
-          () => settings.merged.enableFuzzyFiltering ?? true,
-          loadHistory,
-          addItem,
-        ),
-      [setHistory, config, settings, loadHistory, addItem],
-    ),
-  );
-}
 function missingHistoryTools(): never {
   throw new Error('agent not available');
 }
 
 function useProcessorRegistration(
   args: UseSlashCommandProcessorCoreArgs,
-  api: ReturnType<typeof useRuntimeApi>,
+  readBalancerStats: GetLoadBalancerStatsOperation,
+  readBalancerTokens: GetLoadBalancerTokenAccountingOperation,
+  readDumpProvider: GetProviderDumpMetadataOperation,
+  readDiagnostics: GetRuntimeDiagnosticsSnapshotOperation,
+  readSessionSetting: GetSessionSettingOperation,
+  readSessionTokens: GetSessionTokenUsageOperation,
+  readProviderStatus: ProviderStatusOperation,
+  writeSessionSetting: SetSessionSettingOperation,
   oauth: ReturnType<typeof useOAuthControl>,
   presentationCommands: ReturnType<typeof usePresentationCommands>,
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
@@ -746,35 +743,35 @@ function useProcessorRegistration(
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
   const tools = agent?.tools;
-  const history = useCommandHistoryReaders(agent);
+
   return useRegisteredCommands(
     args,
     presentationCommands,
     useHistoryRegistration(
-      useMemo(
-        () =>
-          bindDiagnosticsReads(
-            config,
-            settings,
-            tools === undefined ? missingHistoryTools : () => tools.list(),
-            api,
-            oauth,
-          ),
-        [tools, config, settings, api, oauth],
+      useDiagnosticsRegistration(
+        tools,
+        config,
+        settings,
+        readBalancerStats,
+        readBalancerTokens,
+        readDiagnostics,
+        readSessionTokens,
+        readProviderStatus,
+        oauth,
       ),
       config,
       settings,
       args.loadHistory,
       args.addItem,
-      history.compress,
-      history.readRaw,
-      history.isInitialized,
-      history.read,
-      history.replace,
-      useBound(api, api.getSessionSetting),
-      useBound(api, api.setSessionSetting),
-      history.dump,
-      useBound(api, api.getProviderDumpMetadata),
+      args.compressHistory,
+      args.readRawHistory,
+      args.isHistoryInitialized,
+      args.readHistory,
+      args.replaceHistory,
+      readSessionSetting,
+      writeSessionSetting,
+      args.readDumpHistory,
+      readDumpProvider,
     ),
     useCredentialRegistry(
       registerCredentials,
@@ -801,29 +798,40 @@ function useCredentialRegistry(
   );
 }
 
-function useCommandHistoryReaders(agent: Agent | null) {
-  const history = useMemo(
-    () => ({
-      compress: agent === null ? null : agent.compress.bind(agent),
-      readRaw: () =>
-        agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
-      isInitialized: () => agent?.agentClient.hasChatInitialized() ?? false,
-      read: () => agent?.getHistory() ?? Promise.resolve([]),
-      replace: async (items: Parameters<Agent['setHistory']>[0]) => {
-        if (agent === null) throw new Error('Session agent is unavailable');
-        await agent.setHistory(items);
-      },
-      dump: () => {
-        const service = agent?.agentClient.getHistoryService();
-        return service == null
-          ? null
-          : {
-              messages: service.getAll(),
-              chronology: service.getChronologyTrace(),
-            };
-      },
-    }),
-    [agent],
+function useDiagnosticsRegistration(
+  tools: Agent['tools'] | undefined,
+  config: CliUiRuntime | null,
+  settings: LoadedSettings,
+  readBalancerStats: GetLoadBalancerStatsOperation,
+  readBalancerTokens: GetLoadBalancerTokenAccountingOperation,
+  readDiagnostics: GetRuntimeDiagnosticsSnapshotOperation,
+  readSessionTokens: GetSessionTokenUsageOperation,
+  readProviderStatus: ProviderStatusOperation,
+  oauth: ReturnType<typeof useOAuthControl>,
+) {
+  return useMemo(
+    () =>
+      bindDiagnosticsReads(
+        config,
+        settings,
+        tools === undefined ? missingHistoryTools : () => tools.list(),
+        readBalancerStats,
+        readBalancerTokens,
+        readDiagnostics,
+        readSessionTokens,
+        readProviderStatus,
+        oauth,
+      ),
+    [
+      tools,
+      config,
+      settings,
+      readBalancerStats,
+      readBalancerTokens,
+      readDiagnostics,
+      readSessionTokens,
+      readProviderStatus,
+      oauth,
+    ],
   );
-  return history;
 }

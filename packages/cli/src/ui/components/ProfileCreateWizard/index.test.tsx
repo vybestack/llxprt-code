@@ -23,9 +23,21 @@ const runtimeHolder: {
   listAvailableModels: () => Promise.resolve([]),
 };
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtimeHolder,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtimeHolder;
+    return {
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 import { ProfileCreateWizard } from './index.js';
 

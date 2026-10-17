@@ -3,9 +3,26 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
+
 import type { CredentialCommandRegistration } from './hooks/credentialCommandRegistration.js';
 
-import { useRuntimeApi } from './contexts/RuntimeContext.js';
+import {
+  useGetActiveModelName,
+  useGetActiveProfileName,
+  useGetActiveProviderName,
+  useGetLoadBalancerStats,
+  useListAvailableModels,
+  useListProviders,
+  useListSavedProfiles,
+  useLoadProfileByName,
+  useProviderStatus,
+  useSaveProfileSnapshot,
+  useSetActiveModel,
+  useSetDefaultProfileName,
+  useSetProvider,
+  useUpdateActiveProviderApiKey,
+} from './contexts/RuntimeContext.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import { registerCleanup } from '../utils/cleanup.js';
 import {
@@ -98,6 +115,7 @@ import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 export interface AppContainerRuntimeProps {
+  historyReads: RegisteredHistoryReads;
   registerCredentials: CredentialCommandRegistration;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
@@ -228,7 +246,20 @@ function useAppDialogsRuntime(
     recordingIntegration: bootstrap.recordingIntegration,
     recordingOwner: bootstrap.recordingOwner,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    runtime: useRuntimeApi(),
+    getActiveModelName: useGetActiveModelName(),
+    getActiveProfileName: useGetActiveProfileName(),
+    getActiveProviderName: useGetActiveProviderName(),
+    getLoadBalancerStats: useGetLoadBalancerStats(),
+    listAvailableModels: useListAvailableModels(),
+    listProviders: useListProviders(),
+    listSavedProfiles: useListSavedProfiles(),
+    loadProfileByName: useLoadProfileByName(),
+    providerStatus: useProviderStatus(),
+    saveProfileSnapshot: useSaveProfileSnapshot(),
+    setActiveModel: useSetActiveModel(),
+    setDefaultProfileName: useSetDefaultProfileName(),
+    setProvider: useSetProvider(),
+    updateActiveProviderApiKey: useUpdateActiveProviderApiKey(),
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
     currentIDE: bootstrap.currentIDE,
@@ -410,6 +441,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   );
   const commands = useSlashCommandProcessorCore({
     registerCredentials: props.registerCredentials,
+    ...props.historyReads,
     config: props.slashCommandRuntime,
     agent: props.agent,
     ...view,

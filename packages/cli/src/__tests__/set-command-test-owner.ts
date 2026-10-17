@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeApi } from '../ui/contexts/RuntimeContext.js';
+import type { RuntimeApi } from './runtime-context-fixture.js';
 import { createSetCommand } from '../ui/commands/setCommand.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';

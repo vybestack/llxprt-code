@@ -26,7 +26,6 @@ import { render as inkRender } from 'ink';
  * which is unsupported under Bun's native test runner) can replace this
  * via the exported __setRenderForTesting seam.
  */
-import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
 let render: typeof inkRender = inkRender;
 
@@ -70,10 +69,8 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
+import { createProviderAliasRefresh } from '../runtime/createRuntimeOwnerFeatures.js';
+import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
 import { createOAuthControl } from '../runtime/createOAuthControl.js';
 import {
   buildUiRuntimeFromSource,
@@ -319,58 +316,57 @@ function buildRenderElement(
   recordingOwner?: 'agent' | 'raw',
   oauthManager?: OAuthManager,
 ): React.ReactElement {
-  const runtimeOwnerFeatures = () =>
-    createRuntimeOwnerFeatures(
-      runtimeOwner,
-      agent.providerManager,
-      () => agent.workspace.getDirectories(),
-      createSessionModelCommand(agent),
-      runtimeSettings.owner,
-      runtimeSettings.store,
-      agent.workspace,
-      agent.modelParameters,
-      agent.settings,
-      agent.toolFormat,
-      agent.providerReads,
-      agent.auth.keys,
-    );
-  return (
-    <React.StrictMode>
-      <ErrorBoundary onError={handleError}>
-        <SettingsContext.Provider value={settings}>
-          <AppWrapper
-            uiRuntime={uiRuntime}
-            slashCommandRuntime={slashCommandRuntime}
-            agent={agent}
-            runtimeOwner={{ create: runtimeOwnerFeatures }}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
-            settings={settings}
-            runtimeMessageBus={runtimeMessageBus}
-            startupWarnings={startupWarnings}
-            version={version}
-            terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
-            {...(recordingOwner === 'agent'
-              ? { recordingOwner, resumedHistory, suppressStartupWelcome }
-              : {
-                  recordingIntegration,
-                  recordingOwner,
-                  resumedHistory,
-                  initialRecordingService,
-                  initialLockHandle,
-                  suppressStartupWelcome,
-                })}
-            operationLifecycle={perfOwner?.registry}
-            memoryController={perfOwner?.memoryController ?? undefined}
-          />
-        </SettingsContext.Provider>
-      </ErrorBoundary>
-    </React.StrictMode>
+  const contextHost = new InteractiveContextHost(
+    runtimeOwner,
+    agent,
+    runtimeSettings.owner,
+    runtimeSettings.store,
+  );
+  return renderInteractiveShell(
+    <AppWrapper
+      uiRuntime={uiRuntime}
+      slashCommandRuntime={slashCommandRuntime}
+      agent={agent}
+      renderRuntime={contextHost.renderRuntime}
+      detectProviderQuota={contextHost.detectProviderQuota}
+      fetch={contextHost.fetch}
+      getActiveModelName={contextHost.getActiveModelName}
+      getActiveProviderAliasConfig={contextHost.getActiveProviderAliasConfig}
+      getActiveProviderName={contextHost.getActiveProviderName}
+      getActiveToolFormatState={contextHost.getActiveToolFormatState}
+      getEphemeralSetting={contextHost.getEphemeralSetting}
+      getEphemeralSettings={contextHost.getEphemeralSettings}
+      listSavedProfiles={contextHost.listSavedProfiles}
+      providerStatus={contextHost.providerStatus}
+      saveLoadBalancerProfile={contextHost.saveLoadBalancerProfile}
+      setActiveModel={contextHost.setActiveModel}
+      setActiveToolFormatOverride={contextHost.setActiveToolFormatOverride}
+      setEphemeralSetting={contextHost.setEphemeralSetting}
+      updateActiveProviderApiKey={contextHost.updateActiveProviderApiKey}
+      providerAliasRefresh={createProviderAliasRefresh(agent.providerManager)}
+      oauthControl={createOAuthControl(
+        () => oauthManager,
+        agent.providerManager,
+      )}
+      settings={settings}
+      runtimeMessageBus={runtimeMessageBus}
+      startupWarnings={startupWarnings}
+      version={version}
+      terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
+      {...(recordingOwner === 'agent'
+        ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+        : {
+            recordingIntegration,
+            recordingOwner,
+            resumedHistory,
+            initialRecordingService,
+            initialLockHandle,
+            suppressStartupWelcome,
+          })}
+      operationLifecycle={perfOwner?.registry}
+      memoryController={perfOwner?.memoryController ?? undefined}
+    />,
+    settings,
   );
 }
 
@@ -868,4 +864,19 @@ async function initializeInteractivePresentation(
   setWindowTitle(basename(workspaceRoot), settings);
 
   return version;
+}
+
+function renderInteractiveShell(
+  element: React.ReactElement,
+  settings: LoadedSettings,
+): React.ReactElement {
+  return (
+    <React.StrictMode>
+      <ErrorBoundary onError={handleError}>
+        <SettingsContext.Provider value={settings}>
+          {element}
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
 }

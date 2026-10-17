@@ -2,7 +2,7 @@ import {
   OwnerView,
   AliasRefreshView,
   ModelEventView,
-} from './runtime-owner-bridge-views.fixture.js';
+} from '../../__tests__/runtime-owner-bridge-views.fixture.js';
 import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
@@ -40,10 +40,8 @@ import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { SessionController } from '../containers/SessionController.js';
 import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { createProviderAliasRefresh } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { createModelCommand } from '../commands/modelCommand.js';
@@ -51,7 +49,10 @@ import { registerKeyCommand } from '../../__tests__/credential-command-test-owne
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
-import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
+import {
+  RuntimeContextProvider,
+  type RuntimeApi,
+} from '../../__tests__/runtime-context-fixture.js';
 
 describe('interactive runtime owner bridge', () => {
   afterFixtureTest(() => {
