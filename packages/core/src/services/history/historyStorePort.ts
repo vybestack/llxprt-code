@@ -25,6 +25,7 @@ import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
+import type { DiskDensityOptimizer } from './historyDiskDensity.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -189,6 +190,20 @@ export interface HistoryMergeRequest {
   ) => Promise<void>;
 }
 
+/**
+ * One density optimization. The optimizer reads the rows by index and decides
+ * which to remove or replace. A store that publishes detached groups (the
+ * journal store) copies the rows once for the optimizer and publishes its
+ * decisions through `host`; a store that publishes through mutation snapshots
+ * (the old store) runs `mutate` over its snapshot.
+ */
+export interface HistoryDensityRequest {
+  readonly optimize: DiskDensityOptimizer;
+  readonly ownership?: RowOwnership;
+  readonly host: DetachedHistoryHost;
+  readonly mutate: (previous: HistoryMutationSnapshot) => Promise<void>;
+}
+
 /** The rows a profile replacement takes over; any store can be the candidate. */
 export type ProfileCandidateRows = Pick<
   HistoryStorePort,
@@ -303,6 +318,12 @@ export interface HistoryStorePort {
    * Publishes and announces nothing when no row is accepted.
    */
   mergeFrom(request: HistoryMergeRequest): Promise<void>;
+  /**
+   * Removes and replaces rows as the optimizer decides, keeping each
+   * replaced row's chronology marker. Publishes and announces nothing when
+   * the optimizer changes nothing.
+   */
+  optimizeDensity(request: HistoryDensityRequest): Promise<void>;
   /**
    * Stages `candidate` as the live rows (decision G3). The old store stages
    * invisibly and `commit` flips the rows; a journal group is atomic and

@@ -3,6 +3,7 @@ import type { IContent } from './IContent.js';
 import { invalidateResponsesStatefulChain } from './IContent.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import { validateDensityResult } from './densityValidation.js';
+import type { DiskDensityResult } from './historyDiskDensity.js';
 import type {
   DetachedHistorySink,
   DetachedHistoryTransform,
@@ -61,6 +62,27 @@ export function densityValueTransform(
       }
     } finally {
       input.result = undefined;
+    }
+  };
+}
+
+/** Applies the decisions of a disk density pass to the rows of the version it read. */
+export function diskDensityTransform(
+  result: DiskDensityResult,
+): DetachedHistoryTransform {
+  return async (source, sink): Promise<void> => {
+    let ordinal = 0;
+    for await (const row of source.streamRows()) {
+      const index = ordinal++;
+      const decision = result.decision(index);
+      if (decision?.kind === 'removed') await sink.removeValue(index);
+      else
+        await appendDensityValue(
+          sink,
+          index,
+          row,
+          decision?.kind === 'replaced' ? decision.row : undefined,
+        );
     }
   };
 }

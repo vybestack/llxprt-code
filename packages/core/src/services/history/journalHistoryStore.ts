@@ -24,6 +24,7 @@ import type {
   HistoryMutationMark,
   HistoryProfileReplacementRequest,
   HistoryPublicationScope,
+  HistoryDensityRequest,
   HistoryMergeRequest,
   HistoryRemoveTailRequest,
   HistoryRepairRequest,
@@ -65,6 +66,7 @@ import {
   withRollbackCheckpointOnJournal,
 } from './journalCheckpoints.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
+import { optimizeDensityOnJournal } from './journalDensity.js';
 import { mergeOnJournal } from './journalMerge.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
 import {
@@ -629,19 +631,12 @@ export class JournalHistoryStore {
    * `restore(version)` (design 4.5) and then undoes the service's changes.
    */
   clear(request: HistoryClearRequest): Promise<void> {
-    return this.withDurableSnapshot((snapshot) =>
-      this.clearOver(snapshot, request),
-    );
-  }
-
-  private async clearOver(
-    snapshot: VersionSnapshot,
-    request: HistoryClearRequest,
-  ): Promise<void> {
-    this.assertSettled(snapshot, 'cleared');
-    const spans = await spansAfterClear(snapshot, request.spans);
-    if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
-    await publishClear(request, spans, () => this.restoreTo(snapshot));
+    return this.withDurableSnapshot(async (snapshot) => {
+      this.assertSettled(snapshot, 'cleared');
+      const spans = await spansAfterClear(snapshot, request.spans);
+      if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
+      await publishClear(request, spans, () => this.restoreTo(snapshot));
+    });
   }
 
   /**
@@ -720,6 +715,11 @@ export class JournalHistoryStore {
   /** Appends the accepted rows of another history as one detached append. */
   mergeFrom(request: HistoryMergeRequest): Promise<void> {
     return mergeOnJournal(this, request);
+  }
+
+  /** Applies the decisions of a density optimizer as one detached transform. */
+  optimizeDensity(request: HistoryDensityRequest): Promise<void> {
+    return optimizeDensityOnJournal(this, request);
   }
 
   /** Writes `candidate` as the live rows at once; `rollback` restores the saved version (decision G3). */

@@ -93,6 +93,7 @@ import type {
   HistoryMutationMark,
   HistoryProfileReplacementRequest,
   HistoryPublicationScope,
+  HistoryDensityRequest,
   HistoryMergeRequest,
   HistoryRemoveTailRequest,
   HistoryRepair,
@@ -449,6 +450,10 @@ export class HistoryJournalStore implements HistoryStorePort {
         ),
       ),
     );
+  }
+
+  optimizeDensity(request: HistoryDensityRequest): Promise<void> {
+    return this.withMutationSnapshot(request.mutate);
   }
 
   stageProfileReplacement(

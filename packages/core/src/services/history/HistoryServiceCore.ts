@@ -1071,18 +1071,23 @@ export abstract class HistoryServiceCore
    * @pseudocode history-service.md lines 20-82
    */
   async optimizeDensityRows(optimize: DiskDensityOptimizer): Promise<void> {
-    await this.enqueueAsynchronousHistoryMutation(async () => {
-      await this.journal.withMutationSnapshot(async (previous) => {
-        await this.waitForTokenUpdates();
-        await withDiskDensityMutation(
-          previous,
-          optimize,
-          (input) => this.commitHistoryMutation(input, previous),
-          (rows) => this.estimateTokensForContents(rows),
-          this.mutationOwnership,
-        );
-      });
-    });
+    await this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.optimizeDensity({
+        optimize,
+        ownership: this.mutationOwnership,
+        host: this.detachedValues.host(),
+        mutate: async (previous) => {
+          await this.waitForTokenUpdates();
+          await withDiskDensityMutation(
+            previous,
+            optimize,
+            (input) => this.commitHistoryMutation(input, previous),
+            (rows) => this.estimateTokensForContents(rows),
+            this.mutationOwnership,
+          );
+        },
+      }),
+    );
   }
 
   applyDensityResult(result: DensityResult): Promise<void> {
