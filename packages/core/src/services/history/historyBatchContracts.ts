@@ -82,6 +82,17 @@ export interface HistoryOwnedMediaReservation {
  * Registered via {@link HistoryService.registerMediaOwner}.
  */
 export interface HistoryMediaOwner {
+  /**
+   * Reserves the media of rows appended to the history, streamed as the rows
+   * are written, without reading the rows already there. `rollback` releases
+   * what `publish` newly reserved; media already held is never released.
+   */
+  prepareReferenceAddition?(
+    references:
+      | AsyncIterable<MediaReferenceBlock>
+      | Iterable<MediaReferenceBlock>,
+    ownership?: RowOwnership,
+  ): PreparedHistoryBatchEffect | Promise<PreparedHistoryBatchEffect>;
   prepareReferenceReplacement?(
     references:
       | AsyncIterable<MediaReferenceBlock>

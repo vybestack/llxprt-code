@@ -138,6 +138,52 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     };
   }
 
+  prepareReferenceAddition(
+    references:
+      | AsyncIterable<MediaReferenceBlock>
+      | Iterable<MediaReferenceBlock>,
+    ownership?: RowOwnership,
+  ): PreparedHistoryBatchEffect {
+    // Only what this effect reserved: media the history already holds is not its to release.
+    const added = new HistoryMediaIndex();
+    return {
+      publish: async () => {
+        for await (const reference of references) {
+          const known = this.owned.has(reference.contentId);
+          if (known || added.has(reference.contentId)) continue;
+          ownership?.retain(reference);
+          try {
+            await this.store.reserve(
+              reference,
+              historyOwnerIdFor(reference.contentId),
+            );
+            added.set(reference);
+          } finally {
+            ownership?.release(reference);
+          }
+        }
+      },
+      rollback: async () => {
+        try {
+          for (const reference of added.values(ownership ?? this.ownership))
+            await this.store.release(
+              reference.contentId,
+              historyOwnerIdFor(reference.contentId),
+            );
+        } finally {
+          added.close();
+        }
+      },
+      finalize: () => {
+        for (const reference of added.values(ownership ?? this.ownership)) {
+          this.reserved.set(reference);
+          this.owned.set(reference);
+        }
+        added.close();
+      },
+    };
+  }
+
   private async releaseDifference(
     from: HistoryMediaIndex,
     keep: HistoryMediaIndex,

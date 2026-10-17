@@ -86,6 +86,9 @@ export async function publishDetachedOnJournal(
         appendOnly,
       });
       scope.close(true);
+    } else {
+      // An append that added nothing: let the media consumer end with no references.
+      await media?.close();
     }
   } catch (error) {
     failure = { error };
@@ -116,14 +119,15 @@ function mediaFeed(
 ): MediaFeed | undefined {
   const owner = host.mediaOwner;
   if (owner === undefined) return undefined;
-  if (appendOnly) {
-    throw new Error(
-      'not implemented: S06 (media ownership of an appended detached batch)',
-    );
-  }
-  const prepare = owner.prepareReferenceReplacement?.bind(owner);
+  const prepare = (
+    appendOnly
+      ? owner.prepareReferenceAddition
+      : owner.prepareReferenceReplacement
+  )?.bind(owner);
   if (prepare === undefined) {
-    throw new Error('History media owner does not support journal replacement');
+    throw new Error(
+      `History media owner does not support journal ${appendOnly ? 'append' : 'replacement'}`,
+    );
   }
   return pullFeed<MediaReferenceBlock, void>(async (references) => {
     const effect = await prepare(references, host.ownership);
