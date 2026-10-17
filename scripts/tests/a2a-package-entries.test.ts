@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { expect, it } from 'bun:test';
+import { expect, it, setDefaultTimeout } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -18,6 +18,7 @@ import {
 } from '../runtime-source-discovery.js';
 import { productionEntryManifest } from '../runtime-entry-manifest.js';
 import { productionPolicy } from '../check-runtime-state-boundary.js';
+import { DEFAULT_PER_TEST_TIMEOUT_MS } from '../lib/bun-test-policy.js';
 
 const workspace = fileURLToPath(new URL('../../', import.meta.url));
 const packageRoot = resolve(workspace, 'packages/a2a-server');
@@ -25,6 +26,16 @@ const build = compilerConfiguration(
   workspace,
   'packages/a2a-server/tsconfig.build.json',
 );
+
+// A cold Node import of a built workspace package, and a TypeScript program
+// over its sources, are CPU-bound work that stretches with host load: about
+// 1 s idle, 6 to 7 s at a load average above 100 on macOS, and up to a minute
+// on a heavily oversubscribed Linux host (#3881). The child limit is a hang
+// guard rather than a performance bound, so it sits just inside the per-test
+// budget the repository runner gives every test, and a direct `bun test` of
+// this file gets that same budget instead of Bun's 5 s default.
+const NODE_CHILD_TIMEOUT_MS = 120_000;
+setDefaultTimeout(DEFAULT_PER_TEST_TIMEOUT_MS);
 
 function outputFor(source: string, extension: string): string {
   expect(build.errors).toEqual([]);
@@ -53,7 +64,7 @@ it('imports the history binding through its typed package export in Node', () =>
       cwd: workspace,
       env: { PATH: process.env.PATH },
       encoding: 'utf8',
-      timeout: 10000,
+      timeout: NODE_CHILD_TIMEOUT_MS,
     },
   );
   expect(imported).toBe('function');
@@ -116,7 +127,7 @@ it('imports the bare package from the root barrel emitted by its build in Node',
       cwd: workspace,
       env: { PATH: process.env.PATH },
       encoding: 'utf8',
-      timeout: 10000,
+      timeout: NODE_CHILD_TIMEOUT_MS,
     },
   );
   expect(resolved).toBe(pathToFileURL(emitted).href);
