@@ -3,6 +3,7 @@ import type {
   HistoryRemoveTailRequest,
   HistoryStorePort,
 } from './historyStorePort.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
@@ -113,7 +114,7 @@ async function rollbackRemoval(
 }
 
 export type RemoveHistoryTailInput = HistoryRemoveTailRequest & {
-  readonly journal: HistoryStorePort;
+  readonly journal: HistoryJournalStore;
 };
 
 export async function removeHistoryTail(

@@ -26,7 +26,7 @@ const PORT_METHODS = [
   'adoptMutationBoundary',
   'waitForDurable',
   'settleFanout',
-  'retireIdleTicketStorage',
+  'waitForCommit',
   'getLength',
   'materialize',
   'streamRows',
@@ -45,9 +45,9 @@ const PORT_METHODS = [
   'publishDetached',
   'withCheckpoint',
   'withRollbackCheckpoint',
-  'withRowSummary',
+  'statistics',
+  'contextRange',
   'openDumpSnapshot',
-  'withMutationSnapshot',
   'dispose',
 ] as const satisfies ReadonlyArray<keyof HistoryStorePort>;
 

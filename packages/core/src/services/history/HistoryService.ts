@@ -638,8 +638,6 @@ export class HistoryService extends HistoryServiceReads {
     return this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.mergeFrom({
         source: other.journal,
-        withSourceSnapshot: (execute) =>
-          other.journal.withMutationSnapshot(execute),
         ownership: this.mutationOwnership,
         host: this.detachedValues.host(),
         publish: (nextHistory, previous) =>
@@ -750,7 +748,7 @@ export class HistoryService extends HistoryServiceReads {
    * Get conversation statistics
    */
   getStatistics(): ConversationStatistics {
-    return this.journal.withRowSummary((summary) => summary.statistics());
+    return this.journal.statistics();
   }
 
   /**

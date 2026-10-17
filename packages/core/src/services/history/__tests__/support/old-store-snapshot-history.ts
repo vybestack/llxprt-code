@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '../../HistoryService.js';
+import { HistoryJournalStore } from '../../historyJournalStore.js';
 import type { HistoryMutationSnapshot } from '../../historyMutationSnapshot.js';
 
 /**
@@ -13,6 +14,8 @@ export class SnapshotProbeHistory extends HistoryService {
     execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T> {
+    if (!(this.journal instanceof HistoryJournalStore))
+      throw new Error('The snapshot probe needs the old store');
     return this.journal.withMutationSnapshot(execute, signal);
   }
 }

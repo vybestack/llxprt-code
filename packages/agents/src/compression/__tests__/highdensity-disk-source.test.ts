@@ -7,6 +7,7 @@ import {
   expectedCheckpointState,
 } from './checkpoint-source-fault-helpers.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
@@ -69,7 +70,10 @@ async function sourceFailure(size: number, mode: string): Promise<number> {
     highdensityRow,
     undefined,
     (options) => {
-      recording = options.recording;
+      recording =
+        options.recording === undefined
+          ? undefined
+          : requireJsonlRecorder(options.recording);
       created = new FailingSourceHistory(options);
       return created;
     },

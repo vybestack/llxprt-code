@@ -9,6 +9,7 @@ import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/ch
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 
@@ -129,7 +130,10 @@ async function verifyProduction(size: number): Promise<number> {
     imageRow,
     ownership,
     (options) => {
-      recording = options.recording;
+      recording =
+        options.recording === undefined
+          ? undefined
+          : requireJsonlRecorder(options.recording);
       return new StreamOnlyHistory(options);
     },
   );

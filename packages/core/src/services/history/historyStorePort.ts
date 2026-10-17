@@ -19,7 +19,8 @@ import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
-import type { HistoryRowSummary } from './historySummaryTracker.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
+import type { ContextRange } from './historyEventTypes.js';
 import type { ResumeDerivedState } from './historyResumeAdoption.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
@@ -38,10 +39,7 @@ import type {
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { OpenReplaceTracker } from './historyReplaceOps.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type {
-  RecordingPort,
-  SessionRecordingPort,
-} from '../../recording/recordingPort.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type {
   CompressionDetailPayload,
   DensityMutationPayload,
@@ -170,16 +168,14 @@ export interface HistoryRemoveTailRequest {
  * One merge of another history's rows onto the end of this one. A store that
  * publishes detached groups (the journal store) reads `source` and publishes
  * through `host`; a store that publishes through mutation snapshots (the old
- * store) reads `withSourceSnapshot` and hands its candidate to `publish`.
+ * store) snapshots `source` itself, which must be a store of its own kind,
+ * and hands its candidate to `publish`.
  */
 export interface HistoryMergeRequest {
   /** The history whose accepted rows are appended; it is only read. */
   readonly source: Pick<HistoryStorePort, 'streamRows'>;
   readonly ownership?: RowOwnership;
   readonly host: DetachedHistoryHost;
-  readonly withSourceSnapshot: <T>(
-    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
-  ) => Promise<T>;
   /**
    * The service's commit of one candidate over the rows it was built from
    * (tokens, spans, chronology, events).
@@ -240,18 +236,18 @@ export interface HistoryCompensationMark {
 export interface HistoryStorePort {
   // Recorder binding, fan-out and late attach.
   onRetired(listener: () => void): () => void;
-  isRecorder(recorder: RecordingPort): boolean;
-  isAdoptingRecorder(recorder: RecordingPort): boolean;
+  isRecorder(recorder: SessionRecordingPort): boolean;
+  isAdoptingRecorder(recorder: SessionRecordingPort): boolean;
   primaryOriginId(): string | undefined;
   adoptedOrigin(origin: string | undefined): void;
   journalPath(): string | null;
   attachJournal(
-    recorder: RecordingPort,
+    recorder: SessionRecordingPort,
     replace?: boolean,
     onAttached?: () => void,
     origin?: string,
   ): Promise<void>;
-  detachJournal(recorder: RecordingPort): Promise<void>;
+  detachJournal(recorder: SessionRecordingPort): Promise<void>;
   /**
    * Resumes this history onto `recording`. Resolves with the warnings of the
    * cleanup after the swap; a failure rolls everything back and rejects.
@@ -270,7 +266,11 @@ export interface HistoryStorePort {
   // Durability.
   waitForDurable(): Promise<void>;
   settleFanout(): Promise<void>;
-  retireIdleTicketStorage(): void;
+  /**
+   * Resolves once every mutation accepted so far is durable and the storage
+   * that only held them in flight is released.
+   */
+  waitForCommit(): Promise<void>;
 
   // Reads.
   getLength(): number;
@@ -289,12 +289,14 @@ export interface HistoryStorePort {
     execute: (view: HistoryRowView) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T>;
-  withRowSummary<T>(read: (summary: HistoryRowSummary) => T): T;
+  /** The conversation counters of the rows the store holds; no row is read by the journal store. */
+  statistics(): ConversationStatistics;
+  /**
+   * The chronology boundary of the rows the store holds, joined with the
+   * interior spans `accumulated` by the service's mutations.
+   */
+  contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
-  withMutationSnapshot<T>(
-    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T>;
 
   // Whole operations. Each one reads the rows it needs itself, so the caller
   // holds no cursor. They run inside HistoryService's synchronous mutation

@@ -8,6 +8,7 @@ import {
   expectedCheckpointState,
 } from './checkpoint-source-fault-helpers.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import {
   withSuffixFixture,
   rowIndex,
@@ -114,7 +115,10 @@ async function producerFailure(size: number): Promise<number> {
     truncationRow,
     undefined,
     (options) => {
-      recording = options.recording;
+      recording =
+        options.recording === undefined
+          ? undefined
+          : requireJsonlRecorder(options.recording);
       created = new FaultHistory(options);
       return created;
     },

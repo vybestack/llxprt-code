@@ -85,7 +85,13 @@ import {
   HistoryPublicationOrdinals,
   readHistoryLength,
 } from './historyScalarLength.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
+import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
+import type {
+  RecordingPort,
+  SessionRecordingPort,
+} from '../../recording/recordingPort.js';
+import { requireJsonlRecorder } from './recorderBackend.js';
 import type {
   HistoryClearRequest,
   HistoryCompensationMark,
@@ -103,7 +109,6 @@ import type {
   ProfileCandidateRows,
   StagedProfileAdoption,
 } from './historyStorePort.js';
-import { withMergedHistoryRows } from './historyMergeRows.js';
 import { StagedProfileReplacement } from './historyProfileReplacement.js';
 import { clearHistoryRows } from './historyClearRows.js';
 import {
@@ -164,10 +169,14 @@ import {
 import {
   withSynchronousHistoryCursor,
   executePinnedCursor,
-  executePinnedCursorAsync,
   type HistoryReadCursor,
 } from '../../recording/synchronousHistoryCursor.js';
-import { rowViewOfCursor, type HistoryRowView } from './historyRowView.js';
+import type { HistoryRowView } from './historyRowView.js';
+import {
+  mergeOldStores,
+  readOldStoreRows,
+  summarizeOldStore,
+} from './historyOldStoreOps.js';
 
 // ---------------------------------------------------------------------------
 // The store
@@ -213,8 +222,8 @@ export class HistoryJournalStore implements HistoryStorePort {
     return () => binding.retired.delete(listener);
   }
 
-  isRecorder(recorder: RecordingPort): boolean {
-    return this.binding.recorder === recorder;
+  isRecorder(recorder: SessionRecordingPort): boolean {
+    return this.binding.recorder === requireJsonlRecorder(recorder);
   }
 
   /**
@@ -245,8 +254,8 @@ export class HistoryJournalStore implements HistoryStorePort {
     this.primaryOrigin = origin;
   }
 
-  isAdoptingRecorder(recorder: RecordingPort): boolean {
-    return this.adoptionPending && this.isRecorder(recorder);
+  isAdoptingRecorder(recorder: SessionRecordingPort): boolean {
+    return this.isRecorder(recorder) && this.adoptionPending;
   }
 
   journalPath(): string | null {
@@ -395,7 +404,8 @@ export class HistoryJournalStore implements HistoryStorePort {
     absorbHistoryPending(binding, seq, watermark);
   }
 
-  retireIdleTicketStorage(): void {
+  async waitForCommit(): Promise<void> {
+    await this.waitForDurable();
     this.binding.pending.retireIdleStorage();
     this.binding.recorder?.retireIdleTicketStorage();
   }
@@ -440,16 +450,7 @@ export class HistoryJournalStore implements HistoryStorePort {
   }
 
   mergeFrom(request: HistoryMergeRequest): Promise<void> {
-    return this.withMutationSnapshot((previous) =>
-      request.withSourceSnapshot((incoming) =>
-        withMergedHistoryRows(
-          previous,
-          incoming,
-          (candidate) => request.publish(candidate, previous),
-          request.ownership,
-        ),
-      ),
-    );
+    return mergeOldStores(this, request);
   }
 
   optimizeDensity(request: HistoryDensityRequest): Promise<void> {
@@ -551,14 +552,20 @@ export class HistoryJournalStore implements HistoryStorePort {
    * {@link HistorySummaryTracker}. The summary is valid only inside `read`.
    */
   withRowSummary<T>(read: (summary: HistoryRowSummary) => T): T {
-    const snapshot = this.capturePendingFold();
-    try {
-      return read(
-        this.summaryTracker.summarize(snapshot, this.attachmentCounters),
-      );
-    } finally {
-      snapshot.release();
-    }
+    return summarizeOldStore(
+      this.capturePendingFold(),
+      this.summaryTracker,
+      this.attachmentCounters,
+      read,
+    );
+  }
+
+  statistics(): ConversationStatistics {
+    return this.withRowSummary((summary) => summary.statistics());
+  }
+
+  contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange {
+    return this.withRowSummary((summary) => summary.contextRange(accumulated));
   }
 
   /** The newest row, optionally of one speaker, read from a pinned fold. */
@@ -568,21 +575,16 @@ export class HistoryJournalStore implements HistoryStorePort {
     return this.withRowSummary((summary) => summary.lastContent(speaker));
   }
 
-  async readRows<T>(
+  readRows<T>(
     execute: (view: HistoryRowView) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T> {
-    const snapshot = this.capturePendingFold();
-    try {
-      return await executePinnedCursorAsync(
-        snapshot,
-        (cursor) => execute(rowViewOfCursor(cursor)),
-        this.attachmentCounters,
-        signal,
-      );
-    } finally {
-      snapshot.release();
-    }
+    return readOldStoreRows(
+      this.capturePendingFold(),
+      this.attachmentCounters,
+      execute,
+      signal,
+    );
   }
 
   getLength(): number {
@@ -764,7 +766,8 @@ export class HistoryJournalStore implements HistoryStorePort {
    * Late attach: copy live rows onto a new recorder when foreground history
    * was built before recording started. Resume must use adoptJournal instead.
    */
-  async detachJournal(recorder: RecordingPort): Promise<void> {
+  async detachJournal(session: SessionRecordingPort): Promise<void> {
+    const recorder = requireJsonlRecorder(session);
     if (this.disposed) return;
     if (this.fanout.has(recorder)) {
       this.assertNoAdoption();
@@ -801,11 +804,12 @@ export class HistoryJournalStore implements HistoryStorePort {
   }
 
   attachJournal(
-    recorder: RecordingPort,
+    session: SessionRecordingPort,
     replace = false,
     onAttached?: () => void,
     origin?: string,
   ): Promise<void> {
+    const recorder = requireJsonlRecorder(session);
     this.assertNoAdoption();
     if (this.disposed)
       return Promise.reject(new Error('History journal store is disposed'));

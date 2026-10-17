@@ -87,7 +87,6 @@ describe('JournalHistoryStore.mergeFrom', () => {
     return {
       source,
       host: hostFor(batches),
-      withSourceSnapshot: reject,
       publish: reject,
     };
   }

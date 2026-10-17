@@ -3,7 +3,9 @@ import type { Aggregate } from '../../journal/aggregate.js';
 import { EMPTY_AGGREGATE } from '../../journal/aggregateComposition.js';
 import { CHRONOLOGY_SEQ_NONE } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
+import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { IContent } from './IContent.js';
 import type { JournalOwners } from './journalOwners.js';
@@ -49,6 +51,17 @@ export function contextBoundaryOf(
     lastSeq: empty ? 0 : seqOrZero(aggregate.lastSeq),
     totalEntries: aggregate.rows,
     approximate: aggregate.noChronologyRows > 0,
+  };
+}
+
+/** The boundary of a version joined with the spans accumulated by the service's mutations. */
+export function contextRangeOf(
+  boundary: ContextBoundary,
+  accumulated: readonly RemovedInteriorSpan[],
+): ContextRange {
+  return {
+    ...boundary,
+    removedInterior: mergeRemovedInteriorSpans(accumulated),
   };
 }
 
@@ -137,5 +150,20 @@ export class JournalRowView implements HistoryRowView {
 
   private assertOpen(): void {
     if (this.closed) throw new Error('The row view is closed');
+  }
+}
+
+/** Hands `execute` the row view of `snapshot`; the view is closed once `execute` has settled. */
+export async function withRowView<T>(
+  snapshot: VersionSnapshot,
+  owners: JournalOwners,
+  boundary: bigint | undefined,
+  execute: (view: HistoryRowView) => Promise<T>,
+): Promise<T> {
+  const view = new JournalRowView(snapshot, owners, boundary);
+  try {
+    return await execute(view);
+  } finally {
+    view.close();
   }
 }

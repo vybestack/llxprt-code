@@ -4,7 +4,11 @@ import { existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { foldDurableRows } from '../../recording/durableRowFold.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
+import type {
+  RecordingPort,
+  SessionRecordingPort,
+} from '../../recording/recordingPort.js';
+import { requireJsonlRecorder } from './recorderBackend.js';
 import {
   HistoryService,
   type HistoryServiceJournalOptions,
@@ -132,10 +136,12 @@ describe('source graph failure cleanup', () => {
 
 class FactoryHistory extends HistoryService {}
 
-function sourceRecorder(recording: RecordingPort | undefined): RecordingPort {
+function sourceRecorder(
+  recording: SessionRecordingPort | undefined,
+): RecordingPort {
   if (recording === undefined)
     throw new Error('Source factory was not invoked');
-  return recording;
+  return requireJsonlRecorder(recording);
 }
 
 async function verifySourceJournal(
@@ -162,7 +168,7 @@ async function verifySourceJournal(
 
 describe('source factory record and flush', () => {
   it('uses source factory options for durable seeds, queued recording and typed results', async () => {
-    let captured: RecordingPort | undefined;
+    let captured: SessionRecordingPort | undefined;
     const transaction = new RowOwnership();
     const result = await withCoreSuffixFixture(
       2,
@@ -206,7 +212,7 @@ describe('source factory record and flush', () => {
 
 describe('source factory history publication', () => {
   it('publishes an append in the same turn and reopens it after the durability barrier', async () => {
-    let captured: RecordingPort | undefined;
+    let captured: SessionRecordingPort | undefined;
     await withCoreSuffixFixture(
       2,
       async (history: HistoryService, previous: RowOwnership) => {
@@ -242,7 +248,7 @@ describe('source factory history publication', () => {
 
 describe('source factory writer failure', () => {
   it('surfaces a real append failure through flush and poisoned commit and releases queue bytes', async () => {
-    let captured: RecordingPort | undefined;
+    let captured: SessionRecordingPort | undefined;
     await withCoreSuffixFixture(
       1,
       async (history: HistoryService, previous: RowOwnership) => {
@@ -278,7 +284,7 @@ describe('source factory writer failure', () => {
 
 describe('source factory seed failure cleanup', () => {
   it('preserves a row-generation failure and closes the source recorder before the callback', async () => {
-    let captured: RecordingPort | undefined;
+    let captured: SessionRecordingPort | undefined;
     let root = '';
     let seedBytes = 0;
     const failure = new Error('source factory row generation failure');
@@ -320,7 +326,7 @@ describe('source factory graph construction', () => {
     await withSuffixFixtureGraph(
       1,
       (root) => {
-        let captured: RecordingPort | undefined;
+        let captured: SessionRecordingPort | undefined;
         const graph = createCoreSuffixFixtureGraph(
           root,
           transaction,

@@ -34,11 +34,13 @@ import type {
 } from './historyStorePort.js';
 import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
+import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistoryRowView } from './historyRowView.js';
 import {
   contextBoundaryOf,
-  JournalRowView,
+  contextRangeOf,
+  withRowView,
   lastContentOf,
   statisticsOf,
   type ContextBoundary,
@@ -90,10 +92,12 @@ import {
   type JournalCompensationMark,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import { requireJournalRecorder } from './recorderBackend.js';
 import { adoptResumeOnJournal } from '../../recording/journalResumeAdoption.js';
 import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 import { PendingRecorderWrites } from './pendingRecorderWrites.js';
-import { SessionPreviews, recorderAcceptsRow } from './sessionPreviews.js';
+import { SessionPreviews } from './sessionPreviews.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
@@ -176,8 +180,8 @@ export class JournalHistoryStore {
     return adoptResumeOnJournal(this, request);
   }
 
-  isAdoptingRecorder(recorder: JournalRecordingService): boolean {
-    return this.adopted === recorder;
+  isAdoptingRecorder(recorder: SessionRecordingPort): boolean {
+    return this.adopted === requireJournalRecorder(recorder);
   }
 
   /** Rows with a label below this were written by an earlier process; every reader applies it (D-S08-3). */
@@ -458,30 +462,23 @@ export class JournalHistoryStore {
    * it (design 5.3).
    */
   attachJournal(
-    recorder: JournalRecordingService,
+    session: SessionRecordingPort,
     replace = false,
     onAttached?: () => void,
     origin?: string,
   ): Promise<void> {
+    const recorder = requireJournalRecorder(session);
     return this.mirrors
       .attachRecorder(recorder, replace, onAttached, origin)
-      .then(async () => {
-        const preview = this.previews.first((rowOrigin) =>
-          recorderAcceptsRow(origin, rowOrigin),
-        );
-        if (preview === undefined) return;
-        recorder.recordFirstUserPreview(preview);
-        // The attach returns with the preview written, so no write of it is still in flight.
-        await recorder.flush();
-      });
+      .then(() => this.previews.recordFirstFor(recorder, origin));
   }
 
-  detachJournal(recorder: JournalRecordingService): Promise<void> {
-    return this.mirrors.detachRecorder(recorder);
+  detachJournal(recorder: SessionRecordingPort): Promise<void> {
+    return this.mirrors.detachRecorder(requireJournalRecorder(recorder));
   }
 
-  isRecorder(recorder: JournalRecordingService): boolean {
-    return this.mirrors.isRecorder(recorder);
+  isRecorder(recorder: SessionRecordingPort): boolean {
+    return this.mirrors.isRecorder(requireJournalRecorder(recorder));
   }
 
   /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */
@@ -567,6 +564,16 @@ export class JournalHistoryStore {
     return contextBoundaryOf(this.session.store.published?.aggregate);
   }
 
+  /** The boundary joined with the interior spans the service accumulated (WIRING G2). */
+  contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange {
+    return contextRangeOf(this.contextBoundary(), accumulated);
+  }
+
+  /** Durable once the queue is acked; this store holds no storage that only held rows in flight. */
+  waitForCommit(): Promise<void> {
+    return this.waitForDurable();
+  }
+
   /** The newest row, or the newest of `speaker`, once the queue is durable; nothing is kept. */
   lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
     return this.withDurableSnapshot((snapshot) =>
@@ -583,14 +590,9 @@ export class JournalHistoryStore {
     signal?: AbortSignal,
   ): Promise<T> {
     signal?.throwIfAborted();
-    return this.withDurableSnapshot(async (snapshot) => {
-      const view = new JournalRowView(snapshot, this.owners, this.boundary);
-      try {
-        return await execute(view);
-      } finally {
-        view.close();
-      }
-    });
+    return this.withDurableSnapshot((snapshot) =>
+      withRowView(snapshot, this.owners, this.boundary, execute),
+    );
   }
 
   private async withDurableSnapshot<T>(

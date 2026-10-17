@@ -78,7 +78,7 @@ import {
 import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 import { createHistoryStore } from './historyBackend.js';
 import type { HistoryStorePort } from './historyStorePort.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { SpanWindow } from './historySpanWindow.js';
 import { HistoryMutationFifo } from './historyMutationFifo.js';
 import { HistoryMutationPublication } from './historyMutationPublication.js';
@@ -280,7 +280,7 @@ export abstract class HistoryServiceCore
 
   /** Attach the journal store after construction (foreground wiring order). */
   attachJournal(
-    recorder: RecordingPort,
+    recorder: SessionRecordingPort,
     replace = false,
     onAttached?: () => void,
     origin?: object,
@@ -296,7 +296,7 @@ export abstract class HistoryServiceCore
     );
   }
 
-  detachJournal(recorder: RecordingPort): Promise<void> {
+  detachJournal(recorder: SessionRecordingPort): Promise<void> {
     return this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.detachJournal(recorder),
     );
@@ -317,10 +317,9 @@ export abstract class HistoryServiceCore
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   async waitForCommit(): Promise<void> {
-    await this.enqueueAsynchronousHistoryMutation(async () => {
-      await this.journal.waitForDurable();
-      this.journal.retireIdleTicketStorage();
-    });
+    await this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.waitForCommit(),
+    );
   }
 
   /**
@@ -839,9 +838,7 @@ export abstract class HistoryServiceCore
    * @requirement REQ-854-004
    */
   getContextRange(): ContextRange {
-    return this.journal.withRowSummary((summary) =>
-      summary.contextRange(this.spanWindow.get()),
-    );
+    return this.journal.contextRange(this.spanWindow.get());
   }
 
   /**

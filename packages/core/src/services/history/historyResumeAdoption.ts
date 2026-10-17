@@ -1,11 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { isJsonlRecorder } from './recorderBackend.js';
 import type { HistoryResumeRequest } from './historyStorePort.js';
 import type { CommitWatermark } from '../../recording/types.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
-import type {
-  RecordingPort,
-  SessionRecordingPort,
-} from '../../recording/recordingPort.js';
+import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import type {
   HistoryMediaOwner,
@@ -96,13 +94,6 @@ export interface JsonlAdoptionHost {
     stripResumeMarkers: boolean,
     projection: ResumeProjection,
   ): HistoryJournalAdoption;
-}
-
-/** The JSONL recorder is the only kind with a commit watermark. */
-function isJsonlRecorder(
-  recording: SessionRecordingPort,
-): recording is RecordingPort {
-  return 'onCommitWatermark' in recording;
 }
 
 /**

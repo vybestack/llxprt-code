@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 
 /**
  * Whether the recorder bound for `recorderOrigin` holds a row written under
@@ -34,6 +35,23 @@ export class SessionPreviews {
     if (this.firsts.has(origin)) return;
     this.firsts.set(origin, { text, order: this.offered });
     this.offered += 1;
+  }
+
+  /**
+   * Writes into `recorder` the earliest first user row it accepts, if any. The
+   * attach that calls it returns with the preview written, so no write of it
+   * is still in flight.
+   */
+  async recordFirstFor(
+    recorder: JournalRecordingService,
+    origin: string | undefined,
+  ): Promise<void> {
+    const preview = this.first((rowOrigin) =>
+      recorderAcceptsRow(origin, rowOrigin),
+    );
+    if (preview === undefined) return;
+    recorder.recordFirstUserPreview(preview);
+    await recorder.flush();
   }
 
   /** The earliest first user row among the origins `accepts` selects. */
