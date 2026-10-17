@@ -35,6 +35,8 @@ const PORT_METHODS = [
   'clear',
   'validateAndFix',
   'adoptMediaOwner',
+  'removeTail',
+  'reconcileMedia',
   'captureCompensation',
   'compensate',
   'publishDetached',

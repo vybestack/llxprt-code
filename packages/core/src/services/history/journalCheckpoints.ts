@@ -7,13 +7,15 @@ import type {
 } from './detachedHistoryMutation.js';
 import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
-import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
 import {
   historyMutationFailure,
   rollbackMutationEffects,
 } from './historyMutationEffects.js';
 import { finalizeMutationEffects } from './historyMutationFailure.js';
-import type { MediaReferenceBlock } from './IContent.js';
+import {
+  prepareMediaReplacement,
+  snapshotReferences,
+} from './journalMediaReferences.js';
 import { snapshotRows } from './journalDetachedCapture.js';
 
 type Enqueue = (execute: () => Promise<void>) => Promise<void>;
@@ -117,11 +119,11 @@ async function restoreVersion(
     await store.compensate(mark, undefined);
     return;
   }
-  const prepare = owner.prepareReferenceReplacement?.bind(owner);
-  if (prepare === undefined) {
-    throw new Error('History media owner does not support journal replacement');
-  }
-  const effect = await prepare(referencesOf(await mark.saved), host.ownership);
+  const effect = await prepareMediaReplacement(
+    owner,
+    snapshotReferences(await mark.saved),
+    host.ownership,
+  );
   try {
     await effect.publish();
     await store.compensate(mark, undefined);
@@ -132,13 +134,6 @@ async function restoreVersion(
     );
   }
   await finalizeMutationEffects([effect]);
-}
-
-async function* referencesOf(
-  snapshot: VersionSnapshot,
-): AsyncGenerator<MediaReferenceBlock, void, unknown> {
-  for await (const row of snapshotRows(snapshot))
-    yield* collectMediaReferences([row]);
 }
 
 type JournalMark = ReturnType<JournalHistoryStore['captureCompensation']>;

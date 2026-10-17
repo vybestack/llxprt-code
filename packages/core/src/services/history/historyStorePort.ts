@@ -132,6 +132,21 @@ export interface HistoryRepair {
   close(): void;
 }
 
+/** One tail removal: the policy of HistoryService, the rows and their restore are the store's. */
+export interface HistoryRemoveTailRequest {
+  /** The media owner whose holdings follow the removal. */
+  readonly owner?: HistoryMediaOwner;
+  readonly ownership?: RowOwnership;
+  /** Removes the tail only when it equals this row by value. */
+  readonly match?: IContent;
+  /**
+   * Runs once the removal is published (the token recount). Throwing a
+   * `RemovalObserverFailure` takes the removal back and rejects with its
+   * cause; any other error leaves the removal in place and is rethrown.
+   */
+  readonly recalculate?: () => Promise<void>;
+}
+
 /** Opaque proof that a store captured what its own compensation needs; see {@link HistoryStorePort.captureCompensation}. */
 export interface HistoryCompensationMark {
   readonly store: HistoryStorePort;
@@ -210,6 +225,14 @@ export interface HistoryStorePort {
   clear(request: HistoryClearRequest): void;
   validateAndFix(request: HistoryRepairRequest): HistoryRepair;
   adoptMediaOwner(owner: HistoryMediaOwner): void;
+  /**
+   * Removes the newest row (when it equals `request.match`, if given) and
+   * returns it; undefined when there is none or it does not match. A failure
+   * of the removal, of the media effect or of the observer puts the row back.
+   */
+  removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined>;
+  /** Makes what `owner` holds equal to the media the current rows reference. */
+  reconcileMedia(owner: HistoryMediaOwner): Promise<void>;
   /**
    * Called before a publication admits anything: captures what
    * {@link compensate} needs to put the previous rows back.

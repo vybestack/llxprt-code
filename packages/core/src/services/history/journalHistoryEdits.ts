@@ -10,6 +10,8 @@ import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import { historyMutationFailure } from './historyMutationEffects.js';
+import type { HistoryClearRequest } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
 import { encodeContentRow, UNOWNED_ROW } from './journalRowCodec.js';
 
@@ -177,4 +179,29 @@ export async function spansAfterClear(
     ...earlier.filter((span) => span.start > end),
     { start, end, reason: 'cleared' },
   ]);
+}
+
+/**
+ * Hands the spans of a clear to the service. When that fails and the request
+ * asks for a rollback, the rows are put back first and then the service's own
+ * changes are undone; a failure of either is reported with the original.
+ */
+export async function publishClear(
+  request: HistoryClearRequest,
+  spans: RemovedInteriorSpan[],
+  restoreRows: () => Promise<void>,
+): Promise<void> {
+  try {
+    request.publish(spans);
+  } catch (error) {
+    if (!request.rollbackOnFailure) throw error;
+    const failures: unknown[] = [];
+    try {
+      await restoreRows();
+    } catch (restoreError) {
+      failures.push(restoreError);
+    }
+    request.restore();
+    throw historyMutationFailure(error, failures);
+  }
 }

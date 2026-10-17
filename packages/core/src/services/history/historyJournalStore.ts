@@ -60,13 +60,12 @@ import {
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { cloneHistoryJournal, removeTempDir } from './cloneHistoryJournal.js';
-import { randomUUID } from 'crypto';
 import {
   captureHistoryMutationSnapshot,
   type HistoryMutationSnapshot,
 } from './historyMutationSnapshot.js';
 import { DisposalSteps } from './historyJournalDisposal.js';
-import { createScratchDirSync } from '../../storage/scratch-root.js';
+import { createScratchRecorder } from './historyScratchRecorder.js';
 export {
   planHistoryMutation,
   planDensityMutation,
@@ -86,7 +85,6 @@ import {
   HistoryPublicationOrdinals,
   readHistoryLength,
 } from './historyScalarLength.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
   HistoryClearRequest,
@@ -95,11 +93,13 @@ import type {
   HistoryJournalOp,
   HistoryMutationMark,
   HistoryPublicationScope,
+  HistoryRemoveTailRequest,
   HistoryRepair,
   HistoryRepairRequest,
   HistoryStorePort,
 } from './historyStorePort.js';
 import { clearHistoryRows } from './historyClearRows.js';
+import { removeHistoryTail } from './historyRemoveTail.js';
 import { repairHistoryRows } from './historyValidationRepair.js';
 import { withDetachedHistoryCheckpoint } from './detachedHistoryCheckpoint.js';
 import { withDetachedRollbackCheckpoint } from './detachedRollbackCheckpoint.js';
@@ -417,6 +417,16 @@ export class HistoryJournalStore implements HistoryStorePort {
 
   adoptMediaOwner(owner: HistoryMediaOwner): void {
     this.withReadRows((cursor) => owner.adopt(cursor.rows()));
+  }
+
+  removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {
+    return removeHistoryTail({ journal: this, ...request });
+  }
+
+  reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
+    return this.withMutationSnapshot((previous) =>
+      owner.reconcile(previous, () => previous),
+    );
   }
 
   /** Reads the origin of every row of `previous` now, before the mutation admits anything. */
@@ -931,16 +941,9 @@ export class HistoryJournalStore implements HistoryStorePort {
 
   private ensureRecorder(): RecordingPort {
     if (this.binding.recorder === undefined) {
-      const dir = createScratchDirSync('llxprt-history-');
-      this.binding.tempDir = dir;
-      this.binding.recorder = new SessionRecordingService({
-        sessionId: `history-${randomUUID()}`,
-        projectHash: 'llxprt-history-service',
-        chatsDir: dir,
-        workspaceDirs: [dir],
-        provider: 'history-service',
-        model: 'local',
-      });
+      const scratch = createScratchRecorder();
+      this.binding.tempDir = scratch.directory;
+      this.binding.recorder = scratch.recorder;
     }
     return this.binding.recorder;
   }

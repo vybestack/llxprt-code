@@ -17,10 +17,7 @@
 import { rewriteToolResponse } from './historyToolRewrite.js';
 import { StagedProfileReplacement } from './historyProfileReplacement.js';
 import type { HistoryRepair } from './historyStorePort.js';
-import {
-  removeHistoryTail,
-  RemovalObserverFailure,
-} from './historyRemoveTail.js';
+import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
 import { withFallbackRestoreRows } from './historyFallbackRows.js';
 import {
   withMergedHistoryRows,
@@ -568,11 +565,8 @@ export class HistoryService extends HistoryServiceReads {
   private async removeLastIfMatchesInternal(
     content: IContent,
   ): Promise<boolean> {
-    const tail = await this.getLastContent();
-    if (tail === undefined || !isDeepStrictEqual(tail, content)) return false;
     return (
-      (await removeHistoryTail({
-        journal: this.journal,
+      (await this.journal.removeTail({
         owner: this.mediaOwner,
         ownership: this.mutationOwnership,
         match: content,
@@ -590,8 +584,7 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   private popInternal(): Promise<IContent | undefined> {
-    return removeHistoryTail({
-      journal: this.journal,
+    return this.journal.removeTail({
       owner: this.mediaOwner,
       ownership: this.mutationOwnership,
       recalculate: () =>

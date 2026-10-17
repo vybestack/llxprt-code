@@ -827,9 +827,7 @@ export abstract class HistoryServiceCore
     return this.enqueueAsynchronousHistoryMutation(async () => {
       const owner = this.mediaOwner;
       if (owner === undefined) return;
-      await this.journal.withMutationSnapshot((previous) =>
-        owner.reconcile(previous, () => previous),
-      );
+      await this.journal.reconcileMedia(owner);
     });
   }
 

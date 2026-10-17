@@ -10,6 +10,7 @@ import {
   inheritingDraft,
   labelsAt,
   planDensity,
+  publishClear,
   spansAfterClear,
   type PositionedContent,
   type PositionedOrigin,
@@ -22,9 +23,9 @@ import type {
   HistoryJournalOp,
   HistoryMutationMark,
   HistoryPublicationScope,
+  HistoryRemoveTailRequest,
   HistoryRepairRequest,
 } from './historyStorePort.js';
-import { historyMutationFailure } from './historyMutationEffects.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistoryRowView } from './historyRowView.js';
@@ -54,6 +55,10 @@ import {
 } from './journalCheckpoints.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
+import {
+  reconcileMediaOnJournal,
+  removeTailOnJournal,
+} from './journalMediaMutations.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -645,19 +650,7 @@ export class JournalHistoryStore {
     this.assertSettled(snapshot, 'cleared');
     const spans = await spansAfterClear(snapshot, request.spans);
     if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
-    try {
-      request.publish(spans);
-    } catch (error) {
-      if (!request.rollbackOnFailure) throw error;
-      const failures: unknown[] = [];
-      try {
-        await this.restoreTo(snapshot);
-      } catch (restoreError) {
-        failures.push(restoreError);
-      }
-      request.restore();
-      throw historyMutationFailure(error, failures);
-    }
+    await publishClear(request, spans, () => this.restoreTo(snapshot));
   }
 
   /**
@@ -721,6 +714,16 @@ export class JournalHistoryStore {
     owner: Pick<HistoryMediaOwner, 'adopt'>,
   ): Promise<void> {
     for await (const row of this.streamRows()) owner.adopt([row]);
+  }
+
+  /** Removes the newest row (design 4.3) and takes it back if the media effect or the observer fails. */
+  removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {
+    return removeTailOnJournal(this, request);
+  }
+
+  /** Makes the owner hold the media of the current rows, one streamed pass. */
+  reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
+    return reconcileMediaOnJournal(this, owner);
   }
 
   /**

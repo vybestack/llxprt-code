@@ -1,20 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryStorePort } from './historyStorePort.js';
+import type {
+  HistoryRemoveTailRequest,
+  HistoryStorePort,
+} from './historyStorePort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
-import type {
-  HistoryMediaOwner,
-  PreparedHistoryBatchEffect,
-} from './historyBatchContracts.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { PreparedHistoryBatchEffect } from './historyBatchContracts.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
-
-export class RemovalObserverFailure extends Error {
-  constructor(readonly failure: unknown) {
-    super('History removal observer failed', { cause: failure });
-  }
-}
+import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
 
 function prefixOf(
   previous: HistoryMutationSnapshot,
@@ -118,13 +112,13 @@ async function rollbackRemoval(
   throw historyMutationFailure(primary, failures);
 }
 
-export async function removeHistoryTail(input: {
+export type RemoveHistoryTailInput = HistoryRemoveTailRequest & {
   readonly journal: HistoryStorePort;
-  readonly owner?: HistoryMediaOwner;
-  readonly ownership?: RowOwnership;
-  readonly match?: IContent;
-  readonly recalculate?: () => Promise<void>;
-}): Promise<IContent | undefined> {
+};
+
+export async function removeHistoryTail(
+  input: RemoveHistoryTailInput,
+): Promise<IContent | undefined> {
   return input.journal.withMutationSnapshot(async (previous) => {
     if (previous.length === 0) return undefined;
     const removed = previous.readRow(previous.length - 1);
@@ -139,7 +133,7 @@ export async function removeHistoryTail(input: {
   });
 }
 
-type RemovalInput = Parameters<typeof removeHistoryTail>[0];
+type RemovalInput = RemoveHistoryTailInput;
 
 async function publishRemoval(
   input: RemovalInput,
