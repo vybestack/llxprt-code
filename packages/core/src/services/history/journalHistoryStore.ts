@@ -62,6 +62,8 @@ import {
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { previewOfContent } from '../../recording/sessionMetaKeys.js';
+import { PendingRecorderWrites } from './pendingRecorderWrites.js';
+import { SessionPreviews, recorderAcceptsRow } from './sessionPreviews.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
 /** A swap of the primary journal that can still be taken back; see {@link JournalHistoryStore.adoptJournal}. */
@@ -101,7 +103,8 @@ export class JournalHistoryStore {
   private owners: JournalOwners;
   private mirrorSet: JournalMirrors;
   private adopted: JournalRecordingService | undefined;
-  private preview: string | undefined;
+  private previews = new SessionPreviews();
+  private readonly adoptedWrites = new PendingRecorderWrites();
 
   constructor(private session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
@@ -172,14 +175,14 @@ export class JournalHistoryStore {
       mirrors: this.mirrorSet,
       rows: this.tentativeRows,
       adopted: this.adopted,
-      preview: this.preview,
+      previews: this.previews,
     };
     this.session = next;
     this.owners = new JournalOwners(next.store);
     this.mirrorSet = this.mirrorsOf(next, this.owners);
     this.tentativeRows = next.store.published?.rows ?? 0;
     this.adopted = recorder;
-    this.preview = undefined;
+    this.previews = new SessionPreviews();
     let settled = false;
     const settle = (action: string): void => {
       if (settled) throw new Error(`The adoption was already ${action}`);
@@ -194,7 +197,7 @@ export class JournalHistoryStore {
         this.mirrorSet = previous.mirrors;
         this.tentativeRows = previous.rows;
         this.adopted = previous.adopted;
-        this.preview = previous.preview;
+        this.previews = previous.previews;
       },
       commit: async () => {
         settle('settled');
@@ -453,8 +456,11 @@ export class JournalHistoryStore {
     return this.mirrors
       .attachRecorder(recorder, replace, onAttached, origin)
       .then(async () => {
-        if (this.preview === undefined) return;
-        recorder.recordFirstUserPreview(this.preview);
+        const preview = this.previews.first((rowOrigin) =>
+          recorderAcceptsRow(origin, rowOrigin),
+        );
+        if (preview === undefined) return;
+        recorder.recordFirstUserPreview(preview);
         // The attach returns with the preview written, so no write of it is still in flight.
         await recorder.flush();
       });
@@ -489,6 +495,7 @@ export class JournalHistoryStore {
   /** Resolves when every operation applied so far is acked; throws the first failure of the queue. */
   async waitForDurable(): Promise<void> {
     await this.queue;
+    await this.adoptedWrites.settle();
     if (this.failure !== undefined) throw this.failure.error;
   }
 
@@ -734,7 +741,7 @@ export class JournalHistoryStore {
     }
     // Encoded now: the chronology stamper writes the entry's metadata in place after the call.
     const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
-    this.offerPreview(content);
+    this.offerPreview(content, origin);
     this.enqueue(this.tentativeRows + 1, async () => {
       const owner = await this.owners.resolve(origin);
       return [
@@ -744,14 +751,21 @@ export class JournalHistoryStore {
     });
   }
 
-  /** The first user message becomes the session preview of every recorder (decision G7). */
-  private offerPreview(content: IContent): void {
-    if (this.preview !== undefined) return;
+  /**
+   * The first user row of an origin is the session preview of the recorders
+   * that hold it (decision G7): the adopted file holds every row, a bound
+   * recorder its own origin's and the unowned ones.
+   */
+  private offerPreview(content: IContent, origin: string | undefined): void {
+    if (this.previews.has(origin)) return;
     const text = previewOfContent(content);
     if (text === undefined) return;
-    this.preview = text;
-    this.adopted?.recordFirstUserPreview(text);
-    this.mirrorSet.announcePreview(text);
+    this.previews.offer(origin, text);
+    if (this.adopted !== undefined) {
+      this.adopted.recordFirstUserPreview(text);
+      this.adoptedWrites.track(this.adopted.flush());
+    }
+    this.mirrorSet.announcePreview(origin, text);
   }
 
   private applyDensity(payload: DensityMutationPayload): void {

@@ -1,11 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { JournalRecordingConfig } from '../../recording/journalRecordingService.js';
+import { readJournalFileFacts } from '../../recording/journalSessionListing.js';
 import { SESSION_KEYS } from '../../recording/sessionMetaKeys.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -30,6 +31,23 @@ async function texts(recorder: JournalRecordingService): Promise<string[]> {
     rows.push(textOf(content));
   }
   return rows;
+}
+
+/** The `session:preview` fact that is in the recorder's file now. */
+async function previewOfFile(
+  recorder: JournalRecordingService,
+): Promise<string | undefined> {
+  const filePath = recorder.getFilePath();
+  if (filePath === null) throw new Error('the recorder wrote no file');
+  return (await readJournalFileFacts(filePath))?.preview;
+}
+
+/** The preview a recorder holds once its own queue has drained. */
+async function previewOfRecorder(
+  recorder: JournalRecordingService,
+): Promise<string | undefined> {
+  await recorder.flush();
+  return previewOfFile(recorder);
 }
 
 describe('journal history store over a journal recorder', () => {
@@ -251,6 +269,44 @@ describe('journal history store over a journal recorder', () => {
       expect(await texts(rec)).toStrictEqual(['a1', 'a2']);
     });
 
+    it('holds the mutation boundary until the preview write of a recorder has landed', async () => {
+      const store = await newStore();
+      const rec = recorder();
+      await store.attachJournal(rec, true, undefined, 'agent-a');
+      await boundary(store);
+      // The recorder reports its queue as drained only when the test lets it.
+      const drained = rec.flush.bind(rec);
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const flushing = spyOn(rec, 'flush').mockImplementation(async () => {
+        await drained();
+        await gate;
+      });
+
+      let waiting: Promise<void> | undefined;
+      let settled = false;
+      try {
+        store.apply({
+          kind: 'content',
+          content: row('the first question'),
+          origin: 'agent-a',
+        });
+        waiting = boundary(store).then(() => {
+          settled = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(flushing).toHaveBeenCalled();
+        expect(settled).toBe(false);
+      } finally {
+        release();
+      }
+      await waiting;
+      flushing.mockRestore();
+      expect(await previewOfFile(rec)).toBe('the first question');
+    });
+
     it('flushes every row and fact queued through the store and the recorder', async () => {
       const store = await newStore();
       const rec = recorder();
@@ -282,6 +338,94 @@ describe('journal history store over a journal recorder', () => {
       expect(held[0]).toBe('row 0');
       expect(held[49]).toBe('row 98');
       expect(reopened.getSessionMetadataTitle()).toBe('Flushed');
+    });
+  });
+
+  describe('the session preview of a recorder', () => {
+    it('is the first user row the recorder accepts, not the first of the whole history, when it attaches late', async () => {
+      const store = await newStore();
+      store.apply({
+        kind: 'content',
+        content: row('b question'),
+        origin: 'agent-b',
+      });
+      store.apply({
+        kind: 'content',
+        content: row('a question'),
+        origin: 'agent-a',
+      });
+      store.apply({ kind: 'content', content: row('shared question') });
+      const recA = recorder(FIRST_SESSION);
+      const recB = recorder(SECOND_SESSION);
+
+      await store.attachJournal(recA, true, undefined, 'agent-a');
+      await store.attachJournal(recB, true, undefined, 'agent-b');
+      await boundary(store);
+
+      expect(await previewOfRecorder(recA)).toBe('a question');
+      expect(await previewOfRecorder(recB)).toBe('b question');
+    });
+
+    it('is the first user row the recorder accepts when the rows arrive after it is bound', async () => {
+      const store = await newStore();
+      const recA = recorder(FIRST_SESSION);
+      const recB = recorder(SECOND_SESSION);
+      await store.attachJournal(recA, true, undefined, 'agent-a');
+      await store.attachJournal(recB, true, undefined, 'agent-b');
+
+      store.apply({
+        kind: 'content',
+        content: row('b first'),
+        origin: 'agent-b',
+      });
+      store.apply({
+        kind: 'content',
+        content: row('a first'),
+        origin: 'agent-a',
+      });
+      store.apply({
+        kind: 'content',
+        content: row('b second'),
+        origin: 'agent-b',
+      });
+      await boundary(store);
+
+      expect(await previewOfRecorder(recA)).toBe('a first');
+      expect(await previewOfRecorder(recB)).toBe('b first');
+    });
+
+    it('counts an unowned user row for every recorder, and a row of another agent for none', async () => {
+      const store = await newStore();
+      const recA = recorder(FIRST_SESSION);
+      const recB = recorder(SECOND_SESSION);
+      await store.attachJournal(recA, true, undefined, 'agent-a');
+      await store.attachJournal(recB, true, undefined, 'agent-b');
+
+      store.apply({ kind: 'content', content: row('shared question') });
+      store.apply({
+        kind: 'content',
+        content: row('a later'),
+        origin: 'agent-a',
+      });
+      await boundary(store);
+
+      expect(await previewOfRecorder(recA)).toBe('shared question');
+      expect(await previewOfRecorder(recB)).toBe('shared question');
+    });
+
+    it('is absent for a recorder whose agent has written no user row', async () => {
+      const store = await newStore();
+      const recB = recorder(SECOND_SESSION);
+      await store.attachJournal(recB, true, undefined, 'agent-b');
+
+      store.apply({
+        kind: 'content',
+        content: row('only a'),
+        origin: 'agent-a',
+      });
+      await boundary(store);
+
+      expect(await previewOfRecorder(recB)).toBeUndefined();
     });
   });
 });

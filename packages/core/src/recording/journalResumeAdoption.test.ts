@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import type { IContent } from '../services/history/IContent.js';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
@@ -14,6 +14,7 @@ import {
   resumeJournalSession,
   type JournalResumeResult,
 } from './journalResume.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
 import {
   PROJECT,
   chatsDirIn,
@@ -138,6 +139,45 @@ describe('adopting a resumed journal on the history store', () => {
     const onDisk: string[] = [];
     for await (const row of session.rows()) onDisk.push(textOf(row.content));
     expect(onDisk).toStrictEqual(['ask', 'answer', 'next']);
+  });
+
+  it('holds waitForDurable until the preview write to the adopted file has landed', async () => {
+    const result = await resumeRecorded([aiRow('answer')]);
+    const store = await freshStore();
+    await adoptResumedJournal(input(store, result));
+    const filePath = result.recording.getFilePath();
+    if (filePath === null) throw new Error('the recorder wrote no file');
+    // The recorder reports its queue as drained only when the test lets it.
+    const drained = result.recording.flush.bind(result.recording);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const flushing = spyOn(result.recording, 'flush').mockImplementation(
+      async () => {
+        await drained();
+        await gate;
+      },
+    );
+
+    let waiting: Promise<void> | undefined;
+    let settled = false;
+    try {
+      store.apply({ kind: 'content', content: userRow('first question') });
+      waiting = store.waitForDurable().then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(flushing).toHaveBeenCalled();
+      expect(settled).toBe(false);
+    } finally {
+      release();
+    }
+    await waiting;
+    flushing.mockRestore();
+    expect((await readJournalFileFacts(filePath))?.preview).toBe(
+      'first question',
+    );
   });
 
   it('reads the resumed history through resumedRows, so the Responses chain marker of earlier rows is gone', async () => {

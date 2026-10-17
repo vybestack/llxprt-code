@@ -8,6 +8,8 @@ import { MirrorFanout } from '../../journal/mirrorFanout.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { JournalOwners } from './journalOwners.js';
 import type { JournalSession } from './journalSession.js';
+import { PendingRecorderWrites } from './pendingRecorderWrites.js';
+import { recorderAcceptsRow } from './sessionPreviews.js';
 
 /** What the mirrors need from the store's operation queue. */
 export interface MirrorQueue {
@@ -30,8 +32,9 @@ export class JournalMirrors {
   private readonly retired = new Set<() => void>();
   private readonly recorders = new Map<
     JournalRecordingService,
-    JournalSession
+    { readonly session: JournalSession; readonly origin: string | undefined }
   >();
+  private readonly previewWrites = new PendingRecorderWrites();
 
   constructor(
     primary: JournalStore,
@@ -108,7 +111,7 @@ export class JournalMirrors {
     }
     const first = this.size === 0;
     await this.attach(session, origin);
-    this.recorders.set(recorder, session);
+    this.recorders.set(recorder, { session, origin });
     if (first && origin !== undefined) this.primaryOrigin ??= origin;
     try {
       onAttached?.();
@@ -120,9 +123,9 @@ export class JournalMirrors {
 
   /** Unbinds a recorder once its file has applied what was delivered; one that is not bound is ignored. */
   async detachRecorder(recorder: JournalRecordingService): Promise<void> {
-    const session = this.recorders.get(recorder);
-    if (session === undefined) return;
-    await this.detach(session);
+    const bound = this.recorders.get(recorder);
+    if (bound === undefined) return;
+    await this.detach(bound.session);
     this.recorders.delete(recorder);
   }
 
@@ -130,10 +133,16 @@ export class JournalMirrors {
     return this.recorders.has(recorder);
   }
 
-  /** Offers the session preview to every bound recorder (decision G7); a recorder that has one ignores it. */
-  announcePreview(text: string): void {
-    for (const recorder of this.recorders.keys()) {
+  /**
+   * Offers the first user row of `rowOrigin` as the session preview of every
+   * bound recorder that holds that row (decision G7); a recorder that has a
+   * preview ignores it. The writes are part of {@link flush}.
+   */
+  announcePreview(rowOrigin: string | undefined, text: string): void {
+    for (const [recorder, bound] of this.recorders) {
+      if (!recorderAcceptsRow(bound.origin, rowOrigin)) continue;
       recorder.recordFirstUserPreview(text);
+      this.previewWrites.track(recorder.flush());
     }
   }
 
@@ -141,9 +150,9 @@ export class JournalMirrors {
     return this.fanout.has(mirror.store);
   }
 
-  /** Waits for every mirror to apply what was delivered; throws every failure. */
-  flush(): Promise<void> {
-    return this.fanout.flush();
+  /** Waits for every mirror to apply what was delivered and for the preview writes of the recorders; throws every failure. */
+  async flush(): Promise<void> {
+    await Promise.all([this.fanout.flush(), this.previewWrites.settle()]);
   }
 
   /** Brings every mirror's recorded primary version up to date, then tells the retirement listeners. */
