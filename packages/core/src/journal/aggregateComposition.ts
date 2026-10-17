@@ -127,7 +127,8 @@ function composeStampsOfRanges(left: Aggregate, right: Aggregate) {
 /**
  * The aggregate of two adjacent ranges of rows, `left` before `right`
  * (design 2.5 and 8.3). Counts and totals add, max labels take the larger,
- * min labels the smaller nonzero, the owner bloom is or-ed, and each summary
+ * min labels the smaller nonzero, the first and last chronology seq come from
+ * the first and last non-empty side, the owner bloom is or-ed, and each summary
  * slot composes by the kind its format slot holds. The empty aggregate is the
  * identity on both sides.
  */
@@ -154,6 +155,16 @@ export function composeAggregates(
     imageContribRows: left.imageContribRows + right.imageContribRows,
     callBlocks: left.callBlocks + right.callBlocks,
     unmappedBlocks: left.unmappedBlocks + right.unmappedBlocks,
+    humanRows: left.humanRows + right.humanRows,
+    aiRows: left.aiRows + right.aiRows,
+    toolCallBlocks: left.toolCallBlocks + right.toolCallBlocks,
+    responseBlocks: left.responseBlocks + right.responseBlocks,
+    noChronologyRows: left.noChronologyRows + right.noChronologyRows,
+    firstSeq: left.rows === 0 ? right.firstSeq : left.firstSeq,
+    lastSeq: right.rows === 0 ? left.lastSeq : right.lastSeq,
+    lastHuman: maxLabel(left.lastHuman, right.lastHuman),
+    lastAi: maxLabel(left.lastAi, right.lastAi),
+    lastTool: maxLabel(left.lastTool, right.lastTool),
     lastThinking: maxLabel(left.lastThinking, right.lastThinking),
     lastInvalidate: maxLabel(left.lastInvalidate, right.lastInvalidate),
     lastCacheable: maxLabel(left.lastCacheable, right.lastCacheable),

@@ -19,6 +19,20 @@ export const ROW_SPEAKER = { human: 0, ai: 1, tool: 2 } as const;
 export const ROW_ID_KIND = { call: 0, response: 1 } as const;
 
 /**
+ * The `type` byte of a block directory entry. The row codec writes these and
+ * the row entry counts `tool_call` and `tool_response` blocks by them
+ * (design 2.7).
+ */
+export const ROW_BLOCK_TYPE = {
+  text: 0,
+  tool_call: 1,
+  tool_response: 2,
+  media: 3,
+  thinking: 4,
+  code: 5,
+} as const;
+
+/**
  * Bits of the `flags` field, in the order the design lists them (2.4). The
  * design names the flags and not their bit positions.
  */

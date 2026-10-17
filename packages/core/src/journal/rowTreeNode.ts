@@ -32,7 +32,7 @@ export const ROW_TREE_ARITY = 8;
 /** Level, entry or child count, and zero bytes. */
 export const ROW_TREE_NODE_HEADER_BYTES = 16;
 /** `{childOffset, maxLabel, count, Aggregate}` is 1,164 bytes, padded to 1,168. */
-export const CHILD_SLOT_BYTES = 1168;
+export const CHILD_SLOT_BYTES = 1232;
 
 /** The largest frame of an `RTNODE` (a full internal node), so one read gets any node. */
 export const ROW_TREE_MAX_FRAME_BYTES =

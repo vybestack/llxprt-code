@@ -5,6 +5,8 @@ import { SLOT_SUMMARY_BYTES, encodeSlotSummary } from '../../slotSummary.js';
 import type { SeededRandom } from './seededRandom.js';
 import { randomValidSummary } from './validSummaries.js';
 
+const NO_SEQ = 0xffff_ffff_ffff_ffffn;
+
 function triple<T>(make: () => T): readonly [T, T, T] {
   return [make(), make(), make()];
 }
@@ -48,6 +50,10 @@ export function randomRowAggregate(
   const small = () => random.int(6);
   const stamp = () =>
     varyStamps ? randomStamp(random) : { gen: 1, imageGen: 1 };
+  const speaker = random.int(3);
+  const label = (own: number): bigint =>
+    speaker === own ? BigInt(1 + random.int(100_000)) : 0n;
+  const seq = random.int(5) === 0 ? NO_SEQ : BigInt(random.int(1000));
   return {
     rows: 1,
     curated: random.int(2),
@@ -66,6 +72,16 @@ export function randomRowAggregate(
     imageContribRows: random.int(2),
     callBlocks: small(),
     unmappedBlocks: small(),
+    humanRows: speaker === 0 ? 1 : 0,
+    aiRows: speaker === 1 ? 1 : 0,
+    toolCallBlocks: small(),
+    responseBlocks: small(),
+    noChronologyRows: seq === NO_SEQ ? 1 : 0,
+    firstSeq: seq,
+    lastSeq: seq,
+    lastHuman: label(0),
+    lastAi: label(1),
+    lastTool: label(2),
     lastThinking: labelOrNone(random),
     lastInvalidate: labelOrNone(random),
     lastCacheable: labelOrNone(random),

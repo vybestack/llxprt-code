@@ -119,7 +119,7 @@ function randomEdits(
 ): { replace: RowEntry[]; insert: RowEntry[] } {
   const replace: RowEntry[] = [];
   const insert: RowEntry[] = [];
-  const taken = new Set<bigint>();
+  const taken = new Set<bigint>(model.map((entry) => entry.label));
   for (const source of model) {
     const roll = random.int(20);
     if (roll === 0) replace.push(changed(source, random));
@@ -136,7 +136,9 @@ function randomEdits(
   const last = model[model.length - 1];
   for (let tail = random.int(12); tail > 0; tail--) {
     const offset = BigInt(100_000 + round * 1000 + tail);
-    insert.push(addedAfter(last, offset, random, kinds));
+    const added = addedAfter(last, offset, random, kinds);
+    if (!taken.has(added.label)) insert.push(added);
+    taken.add(added.label);
   }
   return { replace, insert };
 }

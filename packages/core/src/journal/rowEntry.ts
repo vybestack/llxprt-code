@@ -20,7 +20,7 @@ import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
 import { ROW_SPEAKER } from './rowRecord.js';
 
 /** A leaf entry of the row tree at format version 3 (design 3.2). */
-export const ROW_ENTRY_BYTES = 1104;
+export const ROW_ENTRY_BYTES = 1112;
 
 /** Offsets inside one entry. The design gives the sizes of each group; the order follows its table. */
 export const ROW_ENTRY_LAYOUT = {
@@ -39,11 +39,13 @@ export const ROW_ENTRY_LAYOUT = {
   owner: span(56, 4),
   callBlocks: span(60, 2),
   unmappedBlocks: span(62, 2),
-  lensRef: span(64, 24),
-  summary: span(88, 888),
-  media: span(976, 56),
-  tokens: span(1032, 48),
-  stamp: span(1080, 24),
+  toolCallBlocks: span(64, 4),
+  responseBlocks: span(68, 4),
+  lensRef: span(72, 24),
+  summary: span(96, 888),
+  media: span(984, 56),
+  tokens: span(1040, 48),
+  stamp: span(1088, 24),
 };
 
 /** The same marker the `ROW` record uses for a row without a chronology seq. */
@@ -81,6 +83,9 @@ export interface RowEntry {
   readonly owner: number;
   readonly callBlocks: number;
   readonly unmappedBlocks: number;
+  /** The row's `tool_call` and `tool_response` blocks, counted from its block directory. */
+  readonly toolCallBlocks: number;
+  readonly responseBlocks: number;
   readonly lensRef: Triple<number>;
   /** One slot summary per format slot; the slot table says which layout each holds. */
   readonly summary: Triple<Uint8Array>;
@@ -175,6 +180,8 @@ export function encodeRowEntryInto(
   putU32(view, at('owner'), 'owner', entry.owner);
   putU16(view, at('callBlocks'), 'callBlocks', entry.callBlocks);
   putU16(view, at('unmappedBlocks'), 'unmappedBlocks', entry.unmappedBlocks);
+  putU32(view, at('toolCallBlocks'), 'toolCallBlocks', entry.toolCallBlocks);
+  putU32(view, at('responseBlocks'), 'responseBlocks', entry.responseBlocks);
   entry.lensRef.forEach((ref, slot) =>
     putU64(view, at('lensRef') + 8 * slot, 'lensRef', ref),
   );
@@ -258,6 +265,8 @@ export function decodeRowEntry(source: Uint8Array, offset: number): RowEntry {
     owner: view.getUint32(at('owner'), true),
     callBlocks: view.getUint16(at('callBlocks'), true),
     unmappedBlocks: view.getUint16(at('unmappedBlocks'), true),
+    toolCallBlocks: view.getUint32(at('toolCallBlocks'), true),
+    responseBlocks: view.getUint32(at('responseBlocks'), true),
     lensRef: [
       getU64(view, at('lensRef'), 'lensRef'),
       getU64(view, at('lensRef') + 8, 'lensRef'),

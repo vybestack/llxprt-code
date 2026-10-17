@@ -64,6 +64,8 @@ export function syntheticEntry(
     owner: random.int(4),
     callBlocks: random.int(4),
     unmappedBlocks: random.int(2),
+    toolCallBlocks: random.int(3),
+    responseBlocks: random.int(3),
     lensRef: [random.bits(40), random.bits(40), random.bits(40)],
     summary: summariesFor(random, kinds),
     media: {

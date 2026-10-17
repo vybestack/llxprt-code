@@ -9,6 +9,7 @@ import {
   encodeIdPiece,
   encodeRowHeader,
   hashId,
+  ROW_BLOCK_TYPE,
   type RowBlockEntry,
   type RowHeader,
   type RowIdTuple,
@@ -106,6 +107,13 @@ export function encodeRowDraft(label: bigint, draft: RowDraft): EncodedRow {
   };
 }
 
+function countBlocks(blocks: readonly RowBlockEntry[], type: number): number {
+  return blocks.reduce(
+    (count, block) => count + (block.type === type ? 1 : 0),
+    0,
+  );
+}
+
 const EMPTY_SUMMARY = new Uint8Array(SLOT_SUMMARY_BYTES);
 const UNSTAMPED = { gen: 0, imageGen: 0 };
 
@@ -135,6 +143,8 @@ export function entryForNewRow(
     owner: header.owner,
     callBlocks: 0,
     unmappedBlocks: 0,
+    toolCallBlocks: countBlocks(header.blocks, ROW_BLOCK_TYPE.tool_call),
+    responseBlocks: countBlocks(header.blocks, ROW_BLOCK_TYPE.tool_response),
     lensRef: [0, 0, 0],
     summary: [EMPTY_SUMMARY, EMPTY_SUMMARY, EMPTY_SUMMARY],
     media: { mediaChars: 0, imageChars: [0, 0, 0], pdfBytes: [0, 0, 0] },

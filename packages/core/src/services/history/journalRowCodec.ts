@@ -6,6 +6,7 @@ import type { StoredRow } from '../../journal/rowReads.js';
 import {
   CHRONOLOGY_SEQ_NONE,
   ROW_FLAG,
+  ROW_BLOCK_TYPE,
   ROW_ID_KIND,
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
@@ -19,14 +20,10 @@ import {
 } from './IContent.js';
 
 /** The `type` byte of a block directory entry (design 2.7 leaves the values to the codec). */
-export const BLOCK_TYPE = {
-  text: 0,
-  tool_call: 1,
-  tool_response: 2,
-  media: 3,
-  thinking: 4,
-  code: 5,
-} as const satisfies Record<ContentBlock['type'], number>;
+export const BLOCK_TYPE = ROW_BLOCK_TYPE satisfies Record<
+  ContentBlock['type'],
+  number
+>;
 
 const BLOCK_TYPE_NAME = Object.fromEntries(
   Object.entries(BLOCK_TYPE).map(([name, code]) => [code, name]),

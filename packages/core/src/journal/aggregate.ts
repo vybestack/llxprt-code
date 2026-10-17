@@ -22,10 +22,10 @@ import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
  */
 export const NO_LABEL = 0n;
 
-/** The plain part, 252 bytes of fields and 4 reserved. */
-export const AGGREGATE_PLAIN_BYTES = 256;
-/** 256-byte plain part and three 296-byte summary slots. */
-export const AGGREGATE_BYTES = 1144;
+/** The plain part, 312 bytes of fields and 8 reserved. */
+export const AGGREGATE_PLAIN_BYTES = 320;
+/** 320-byte plain part and three 296-byte summary slots. */
+export const AGGREGATE_BYTES = 1208;
 
 /**
  * Offsets of design section 2.5. Widths are the design's byte counts spread
@@ -59,8 +59,18 @@ export const AGGREGATE_LAYOUT = {
   missingBase: span(204, 12),
   missingImg: span(216, 12),
   stamp: span(228, 24),
-  reserved: span(252, 4),
-  summaries: span(256, 888),
+  humanRows: span(252, 4),
+  aiRows: span(256, 4),
+  toolCallBlocks: span(260, 4),
+  responseBlocks: span(264, 4),
+  noChronologyRows: span(268, 4),
+  firstSeq: span(272, 8),
+  lastSeq: span(280, 8),
+  lastHuman: span(288, 8),
+  lastAi: span(296, 8),
+  lastTool: span(304, 8),
+  reserved: span(312, 8),
+  summaries: span(320, 888),
 };
 
 export interface SlotStamp {
@@ -86,6 +96,21 @@ export interface Aggregate {
   readonly imageContribRows: number;
   readonly callBlocks: number;
   readonly unmappedBlocks: number;
+  /** Rows by speaker; tool rows are `rows - humanRows - aiRows`. */
+  readonly humanRows: number;
+  readonly aiRows: number;
+  /** `tool_call` and `tool_response` blocks, whatever their ids. */
+  readonly toolCallBlocks: number;
+  readonly responseBlocks: number;
+  /** Rows whose chronology seq is the none marker. */
+  readonly noChronologyRows: number;
+  /** Chronology seq of the first and last row; the none marker when that row has none. Meaningless when `rows` is 0. */
+  readonly firstSeq: bigint;
+  readonly lastSeq: bigint;
+  /** Max label of the rows of one speaker, 0 = none. */
+  readonly lastHuman: bigint;
+  readonly lastAi: bigint;
+  readonly lastTool: bigint;
   readonly lastThinking: bigint;
   readonly lastInvalidate: bigint;
   readonly lastCacheable: bigint;
@@ -115,9 +140,19 @@ const U32_FIELDS = [
   'imageContribRows',
   'callBlocks',
   'unmappedBlocks',
+  'humanRows',
+  'aiRows',
+  'toolCallBlocks',
+  'responseBlocks',
+  'noChronologyRows',
 ] as const;
 const U64_NUMBER_FIELDS = ['liveBytes', 'mediaChars'] as const;
 const U64_BIG_FIELDS = [
+  'firstSeq',
+  'lastSeq',
+  'lastHuman',
+  'lastAi',
+  'lastTool',
   'lastThinking',
   'lastInvalidate',
   'lastCacheable',
@@ -265,6 +300,16 @@ export function decodeAggregate(source: Uint8Array, offset = 0): Aggregate {
     imageContribRows: u32('imageContribRows'),
     callBlocks: u32('callBlocks'),
     unmappedBlocks: u32('unmappedBlocks'),
+    humanRows: u32('humanRows'),
+    aiRows: u32('aiRows'),
+    toolCallBlocks: u32('toolCallBlocks'),
+    responseBlocks: u32('responseBlocks'),
+    noChronologyRows: u32('noChronologyRows'),
+    firstSeq: big('firstSeq'),
+    lastSeq: big('lastSeq'),
+    lastHuman: big('lastHuman'),
+    lastAi: big('lastAi'),
+    lastTool: big('lastTool'),
     lastThinking: big('lastThinking'),
     lastInvalidate: big('lastInvalidate'),
     lastCacheable: big('lastCacheable'),

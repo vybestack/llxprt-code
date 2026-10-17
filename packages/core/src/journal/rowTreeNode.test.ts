@@ -51,23 +51,23 @@ function frameBytes(node: RowTreeNode): number {
 }
 
 describe('RTNODE sizes (design 3.2)', () => {
-  it('has arity 8, a 16-byte node header and 1,168-byte child slots', () => {
+  it('has arity 8, a 16-byte node header and 1,232-byte child slots', () => {
     expect(ROW_TREE_ARITY).toBe(8);
     expect(ROW_TREE_NODE_HEADER_BYTES).toBe(16);
-    expect(CHILD_SLOT_BYTES).toBe(1168);
+    expect(CHILD_SLOT_BYTES).toBe(1232);
     expect(8 + 8 + 4 + AGGREGATE_BYTES).toBeLessThanOrEqual(CHILD_SLOT_BYTES);
   });
 
-  it('is 8,872 bytes for a full leaf and 9,384 for a full internal node, with the frame', () => {
-    expect(frameBytes(leaf(8))).toBe(8872);
-    expect(frameBytes(internal(8))).toBe(9384);
-    expect(8 * ROW_ENTRY_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(8848);
-    expect(8 * CHILD_SLOT_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(9360);
+  it('is 8,936 bytes for a full leaf and 9,896 for a full internal node, with the frame', () => {
+    expect(frameBytes(leaf(8))).toBe(8936);
+    expect(frameBytes(internal(8))).toBe(9896);
+    expect(8 * ROW_ENTRY_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(8912);
+    expect(8 * CHILD_SLOT_BYTES + ROW_TREE_NODE_HEADER_BYTES).toBe(9872);
   });
 
   it('takes only the bytes of the entries or slots it holds', () => {
-    expect(frameBytes(leaf(1))).toBe(8872 - 7 * ROW_ENTRY_BYTES);
-    expect(frameBytes(internal(3))).toBe(9384 - 5 * CHILD_SLOT_BYTES);
+    expect(frameBytes(leaf(1))).toBe(8936 - 7 * ROW_ENTRY_BYTES);
+    expect(frameBytes(internal(3))).toBe(9896 - 5 * CHILD_SLOT_BYTES);
   });
 
   it('is an RTNODE record with no body, so the frame CRC covers all of it', () => {
@@ -160,7 +160,7 @@ describe('RTNODE codec', () => {
     expect(() =>
       decodeRowTreeNode(
         corrupt((bytes) => {
-          bytes[ROW_TREE_NODE_HEADER_BYTES + 1164] = 7;
+          bytes[ROW_TREE_NODE_HEADER_BYTES + 1228] = 7;
         }),
       ),
     ).toThrow(JournalFormatError);

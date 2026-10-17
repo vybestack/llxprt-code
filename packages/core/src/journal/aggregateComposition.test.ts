@@ -119,6 +119,16 @@ function naiveFold(rows: readonly Aggregate[]): Aggregate {
     imageContribRows: sumBy(rows, (row) => row.imageContribRows),
     callBlocks: sumBy(rows, (row) => row.callBlocks),
     unmappedBlocks: sumBy(rows, (row) => row.unmappedBlocks),
+    humanRows: sumBy(rows, (row) => row.humanRows),
+    aiRows: sumBy(rows, (row) => row.aiRows),
+    toolCallBlocks: sumBy(rows, (row) => row.toolCallBlocks),
+    responseBlocks: sumBy(rows, (row) => row.responseBlocks),
+    noChronologyRows: sumBy(rows, (row) => row.noChronologyRows),
+    firstSeq: rows[0].firstSeq,
+    lastSeq: rows[rows.length - 1].lastSeq,
+    lastHuman: lastLabel(pick('lastHuman')),
+    lastAi: lastLabel(pick('lastAi')),
+    lastTool: lastLabel(pick('lastTool')),
     lastThinking: lastLabel(pick('lastThinking')),
     lastInvalidate: lastLabel(pick('lastInvalidate')),
     lastCacheable: lastLabel(pick('lastCacheable')),
@@ -186,6 +196,29 @@ describe('aggregate composition', () => {
 
     expect(bytes.length).toBe(AGGREGATE_BYTES);
     expect(decodeAggregate(bytes)).toStrictEqual(folded);
+  });
+
+  it('takes the first seq from the first non-empty side and the last seq from the last one', () => {
+    const random = new SeededRandom(45);
+    const [first, middle, last] = rowsOf(random, 3);
+    const none = 0xffff_ffff_ffff_ffffn;
+    const unstamped = { ...middle, firstSeq: none, lastSeq: none };
+
+    const composed = composeAggregates(
+      composeAggregates(EMPTY_AGGREGATE, first, KINDS),
+      composeAggregates(
+        unstamped,
+        composeAggregates(last, EMPTY_AGGREGATE, KINDS),
+        KINDS,
+      ),
+      KINDS,
+    );
+
+    expect(composed.firstSeq).toBe(first.firstSeq);
+    expect(composed.lastSeq).toBe(last.lastSeq);
+    expect(composeAggregates(unstamped, EMPTY_AGGREGATE, KINDS).lastSeq).toBe(
+      none,
+    );
   });
 
   it('treats the empty aggregate as the identity on either side, summaries included', () => {

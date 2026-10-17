@@ -26,6 +26,8 @@ export function cheapEntry(index: number): RowEntry {
     owner: index % 4,
     callBlocks: 0,
     unmappedBlocks: 0,
+    toolCallBlocks: 0,
+    responseBlocks: 0,
     lensRef: [0, 0, 0],
     summary: [EMPTY_SUMMARY, EMPTY_SUMMARY, EMPTY_SUMMARY],
     media: { mediaChars: 0, imageChars: [0, 0, 0], pdfBytes: [0, 0, 0] },

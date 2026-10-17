@@ -6,8 +6,12 @@ import {
   type SlotKinds,
 } from './aggregateComposition.js';
 import { ownerBloomBit } from './ownerRules.js';
-import { ENTRY_FLAG, type RowEntry } from './rowEntry.js';
-import { ROW_FLAG } from './rowRecord.js';
+import {
+  ENTRY_FLAG,
+  ROW_ENTRY_NO_CHRONOLOGY_SEQ,
+  type RowEntry,
+} from './rowEntry.js';
+import { ROW_FLAG, ROW_SPEAKER } from './rowRecord.js';
 import type { RowTreeAlgebra } from './rowTreeBuilder.js';
 
 function labelIf(flags: number, bit: number, label: bigint): bigint {
@@ -30,6 +34,10 @@ export function entryAggregate(entry: RowEntry): Aggregate {
   const tokenSlot = (slot: 0 | 1 | 2 | 3): number =>
     entry.tokens[0][slot] + entry.tokens[1][slot] + entry.tokens[2][slot];
   const has = (bit: number): number => ((flags & bit) !== 0 ? 1 : 0);
+  const ofSpeaker = (speaker: number): number =>
+    entry.speaker === speaker ? 1 : 0;
+  const labelOfSpeaker = (speaker: number): bigint =>
+    entry.speaker === speaker ? label : 0n;
   return {
     rows: 1,
     curated: has(ROW_FLAG.curated),
@@ -48,6 +56,17 @@ export function entryAggregate(entry: RowEntry): Aggregate {
     imageContribRows: has(ENTRY_FLAG.imageContrib),
     callBlocks: entry.callBlocks,
     unmappedBlocks: entry.unmappedBlocks,
+    humanRows: ofSpeaker(ROW_SPEAKER.human),
+    aiRows: ofSpeaker(ROW_SPEAKER.ai),
+    toolCallBlocks: entry.toolCallBlocks,
+    responseBlocks: entry.responseBlocks,
+    noChronologyRows:
+      entry.chronologySeq === ROW_ENTRY_NO_CHRONOLOGY_SEQ ? 1 : 0,
+    firstSeq: entry.chronologySeq,
+    lastSeq: entry.chronologySeq,
+    lastHuman: labelOfSpeaker(ROW_SPEAKER.human),
+    lastAi: labelOfSpeaker(ROW_SPEAKER.ai),
+    lastTool: labelOfSpeaker(ROW_SPEAKER.tool),
     lastThinking: labelIf(flags, ROW_FLAG.hasThinking, label),
     lastInvalidate: labelIf(flags, ROW_FLAG.invalidateResponses, label),
     lastCacheable: labelIf(flags, ROW_FLAG.hasCacheableBlock, label),

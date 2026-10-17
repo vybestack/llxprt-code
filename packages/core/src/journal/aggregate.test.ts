@@ -20,21 +20,21 @@ function viewOf(bytes: Uint8Array): DataView {
 }
 
 describe('aggregate', () => {
-  it('is 1,144 bytes: a 256-byte plain part and three 296-byte summary slots', () => {
-    expect(AGGREGATE_BYTES).toBe(1144);
-    expect(AGGREGATE_PLAIN_BYTES).toBe(256);
-    expect(AGGREGATE_PLAIN_BYTES + 3 * 296).toBe(1144);
+  it('is 1,208 bytes: a 320-byte plain part and three 296-byte summary slots', () => {
+    expect(AGGREGATE_BYTES).toBe(1208);
+    expect(AGGREGATE_PLAIN_BYTES).toBe(320);
+    expect(AGGREGATE_PLAIN_BYTES + 3 * 296).toBe(1208);
     expect(encodeAggregate(randomAggregate(new SeededRandom(1))).length).toBe(
-      1144,
+      1208,
     );
   });
 
-  it('lays the plain fields out contiguously, 252 bytes plus 4 reserved', () => {
+  it('lays the plain fields out contiguously, 312 bytes plus 8 reserved', () => {
     const { reserved, summaries, ...fields } = AGGREGATE_LAYOUT;
 
-    assertContiguous(fields, 252);
-    expect(reserved).toStrictEqual({ offset: 252, size: 4 });
-    expect(summaries).toStrictEqual({ offset: 256, size: 888 });
+    assertContiguous(fields, 312);
+    expect(reserved).toStrictEqual({ offset: 312, size: 8 });
+    expect(summaries).toStrictEqual({ offset: 320, size: 888 });
   });
 
   it('sizes each field group as the design table does', () => {
@@ -105,6 +105,41 @@ describe('aggregate', () => {
     );
   });
 
+  it('writes the statistics counters and last-row fields at the offsets of design 2.5', () => {
+    const base = randomAggregate(new SeededRandom(5));
+    const aggregate: Aggregate = {
+      ...base,
+      humanRows: 11,
+      aiRows: 12,
+      toolCallBlocks: 13,
+      responseBlocks: 14,
+      noChronologyRows: 15,
+      firstSeq: 0xffff_ffff_ffff_ffffn,
+      lastSeq: 0x0123_4567_89ab_cdefn,
+      lastHuman: 21n,
+      lastAi: 22n,
+      lastTool: 23n,
+    };
+
+    const view = viewOf(encodeAggregate(aggregate));
+
+    const at = AGGREGATE_LAYOUT;
+    expect(view.getUint32(at.humanRows.offset, true)).toBe(11);
+    expect(view.getUint32(at.aiRows.offset, true)).toBe(12);
+    expect(view.getUint32(at.toolCallBlocks.offset, true)).toBe(13);
+    expect(view.getUint32(at.responseBlocks.offset, true)).toBe(14);
+    expect(view.getUint32(at.noChronologyRows.offset, true)).toBe(15);
+    expect(view.getBigUint64(at.firstSeq.offset, true)).toBe(
+      0xffff_ffff_ffff_ffffn,
+    );
+    expect(view.getBigUint64(at.lastSeq.offset, true)).toBe(
+      0x0123_4567_89ab_cdefn,
+    );
+    expect(view.getBigUint64(at.lastHuman.offset, true)).toBe(21n);
+    expect(view.getBigUint64(at.lastAi.offset, true)).toBe(22n);
+    expect(view.getBigUint64(at.lastTool.offset, true)).toBe(23n);
+  });
+
   it('round-trips randomized aggregates, summary slots included', () => {
     const random = new SeededRandom(3);
     for (let round = 0; round < 300; round++) {
@@ -166,6 +201,16 @@ describe('aggregate', () => {
       imageContribRows: 0,
       callBlocks: 0,
       unmappedBlocks: 0,
+      humanRows: 0,
+      aiRows: 0,
+      toolCallBlocks: 0,
+      responseBlocks: 0,
+      noChronologyRows: 0,
+      firstSeq: 0n,
+      lastSeq: 0n,
+      lastHuman: NO_LABEL,
+      lastAi: NO_LABEL,
+      lastTool: NO_LABEL,
       lastThinking: NO_LABEL,
       lastInvalidate: NO_LABEL,
       lastCacheable: NO_LABEL,
@@ -226,9 +271,9 @@ describe('aggregate', () => {
   it('rejects an aggregate that is cut short or whose reserved bytes are not zero', () => {
     const bytes = encodeAggregate(randomAggregate(new SeededRandom(6)));
     const dirty = bytes.slice();
-    dirty[254] = 1;
+    dirty[316] = 1;
 
-    expect(() => decodeAggregate(bytes.subarray(0, 1143))).toThrow(
+    expect(() => decodeAggregate(bytes.subarray(0, 1207))).toThrow(
       JournalFormatError,
     );
     expect(() => decodeAggregate(dirty)).toThrow(/reserved/);

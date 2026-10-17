@@ -25,9 +25,9 @@ function encode(entry: RowEntry): Uint8Array {
 }
 
 describe('row entry (design 3.2)', () => {
-  it('is 1,104 bytes with the fields tiling it', () => {
-    expect(ROW_ENTRY_BYTES).toBe(1104);
-    assertContiguous(ROW_ENTRY_LAYOUT, 1104);
+  it('is 1,112 bytes with the fields tiling it', () => {
+    expect(ROW_ENTRY_BYTES).toBe(1112);
+    assertContiguous(ROW_ENTRY_LAYOUT, 1112);
   });
 
   it('sizes each field group as the design table does', () => {

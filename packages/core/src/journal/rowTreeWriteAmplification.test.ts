@@ -18,8 +18,8 @@ import { useTempDir } from './__tests__/support/useTempDir.js';
 const KIB = 1024;
 /** Design 13.6: a group with one appended row and one id writes at most this much at 100k rows. */
 const ONE_ROW_BUDGET_AT_100K = 72 * KIB;
-/** One path-copied internal node, from design 3.2 (8 slots of 1,168 bytes and a header). */
-const INTERNAL_NODE_BYTES = 9384;
+/** One path-copied internal node, from design 3.2 (8 slots of 1,232 bytes and a header). */
+const INTERNAL_NODE_BYTES = 9896;
 /** The row tree depth the budget is written for: a leaf and five internal levels at 100k rows. */
 const INTERNAL_LEVELS_AT_100K = 5;
 /**

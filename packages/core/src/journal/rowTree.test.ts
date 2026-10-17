@@ -282,7 +282,7 @@ describe('appending path-copies only the right spine', () => {
     // One leaf and one node per internal level: depth 3 here, so four nodes at most.
     const written = ack.durableEnd - lengthBefore;
     expect(before).toBeGreaterThan(0);
-    expect(written).toBeLessThan(5 * 9384 + 1504);
+    expect(written).toBeLessThan(5 * 9896 + 1568);
     expect(written).toBeGreaterThan(ROW_TREE_ARITY);
   });
 });
