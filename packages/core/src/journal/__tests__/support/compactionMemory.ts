@@ -111,14 +111,15 @@ async function strictSettledHeap(label: string): Promise<number> {
 
 /**
  * How long compiled code that nothing runs any more takes to be dropped.
- * JavaScriptCore throws away a code block that is older than about five to ten
- * seconds and was not run since the last collection, whatever the number of
- * collections in between. The fixture builders and the start-up code are such
- * code once the sources are built, and dropping them in the middle of a copy
- * takes megabytes off the heap, which a growth reading would take for a copy
- * that gives memory back.
+ * JavaScriptCore drops it in two waves, measured at about 5 s (several MiB:
+ * the fixture builders and the start-up code) and about 15 s (about 1.2 MiB)
+ * after the last run, with nothing further through 100 s, whatever the number
+ * of collections in between. The wait has to end after the second wave: when
+ * it ended at 12 s the wave landed in one of the measured copies, took a
+ * megabyte off the heap there, and was read as a copy that gives memory back
+ * (a different copy on each run).
  */
-const IDLE_CODE_AGE_OUT_MS = 12_000;
+const IDLE_CODE_AGE_OUT_MS = 20_000;
 
 /** The heap must then stay level for this long, so a drop that is still coming fails the wait. */
 const LEVEL_FOR_MS = 2_000;
