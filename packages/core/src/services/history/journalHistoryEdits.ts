@@ -8,6 +8,8 @@ import {
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
+import { mergeRemovedInteriorSpans } from './contextRange.js';
+import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { IContent } from './IContent.js';
 import { encodeContentRow, UNOWNED_ROW } from './journalRowCodec.js';
 
@@ -157,4 +159,22 @@ export function planDensity(payload: DensityMutationPayload): PlannedDensity {
       ];
     },
   };
+}
+
+/**
+ * The spans a clear leaves behind: `earlier` spans that lie above the cleared
+ * rows, and one `cleared` span from the first to the last chronology number of
+ * the version the clear removes (read from the entries, no row body).
+ */
+export async function spansAfterClear(
+  snapshot: VersionSnapshot,
+  earlier: readonly RemovedInteriorSpan[],
+): Promise<RemovedInteriorSpan[]> {
+  if (snapshot.rows === 0) return mergeRemovedInteriorSpans(earlier);
+  const start = Number((await snapshot.entryAt(0)).chronologySeq);
+  const end = Number((await snapshot.entryAt(snapshot.rows - 1)).chronologySeq);
+  return mergeRemovedInteriorSpans([
+    ...earlier.filter((span) => span.start > end),
+    { start, end, reason: 'cleared' },
+  ]);
 }

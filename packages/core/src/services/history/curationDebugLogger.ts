@@ -120,7 +120,6 @@ export interface ConversationStatistics {
   aiMessages: number;
   toolCalls: number;
   toolResponses: number;
-  totalTokens?: number;
 }
 
 /** Log details about content being added to history. */
@@ -175,8 +174,6 @@ export class StatisticsAccumulator {
   private aiMessages = 0;
   private toolCalls = 0;
   private toolResponses = 0;
-  private totalTokens = 0;
-  private hasTokens = false;
 
   add(content: IContent): void {
     this.totalMessages++;
@@ -193,12 +190,6 @@ export class StatisticsAccumulator {
         this.toolResponses++;
       }
     }
-
-    const usageTokens = content.metadata?.usage?.totalTokens;
-    if (typeof usageTokens === 'number' && Number.isFinite(usageTokens)) {
-      this.totalTokens += usageTokens;
-      this.hasTokens = true;
-    }
   }
 
   clone(): StatisticsAccumulator {
@@ -212,7 +203,6 @@ export class StatisticsAccumulator {
       aiMessages: this.aiMessages,
       toolCalls: this.toolCalls,
       toolResponses: this.toolResponses,
-      totalTokens: this.hasTokens ? this.totalTokens : undefined,
     };
   }
 }

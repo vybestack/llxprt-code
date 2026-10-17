@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { VersionEdit } from '../../journal/groupEdits.js';
+import { INHERIT_OWNER, type VersionEdit } from '../../journal/groupEdits.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
@@ -13,7 +13,7 @@ import {
   type PositionedOwner,
 } from './journalHistoryEdits.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
-import type { JournalOwners } from './journalOwners.js';
+import type { JournalOwners, ResolvedOwner } from './journalOwners.js';
 import { encodeContentRow } from './journalRowCodec.js';
 
 /** Builds the edits of one queued operation against the version the previous operation published. */
@@ -112,5 +112,43 @@ export function originChangeEdits(
       owned.push({ label, owner: resolved.id });
     }
     return [...edits, { kind: 'owner', changes: owned }];
+  };
+}
+
+/**
+ * The edit that inserts `draft` after the row whose chronology number is
+ * `afterSeq`. The row takes the owner of `origin`, else the owner of the row
+ * it follows (design 5.1). `owners` is read when the group is built, because a
+ * resume can replace the store's owners while the operation waits.
+ */
+export function syntheticInsertEdits(
+  draft: RowDraft,
+  afterSeq: number,
+  origin: string | undefined,
+  owners: () => JournalOwners,
+): EditBuilder {
+  return async (snapshot) => {
+    const anchor = BigInt(afterSeq);
+    for await (const entry of snapshot.entries()) {
+      if (entry.chronologySeq !== anchor) continue;
+      const owner: {
+        readonly id: number | typeof INHERIT_OWNER;
+        readonly edits: ResolvedOwner['edits'];
+      } =
+        origin === undefined
+          ? { id: INHERIT_OWNER, edits: [] }
+          : await owners().resolve(origin);
+      return [
+        ...owner.edits,
+        {
+          kind: 'insert',
+          afterLabel: entry.label,
+          draft: { ...draft, owner: owner.id },
+        },
+      ];
+    }
+    throw new Error(
+      `Synthetic insert anchor: no row has chronology number ${afterSeq}`,
+    );
   };
 }

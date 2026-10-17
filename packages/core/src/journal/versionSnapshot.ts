@@ -3,6 +3,7 @@ import { JournalFormatError } from './errors.js';
 import type { PinnedRead } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
 import { readStoredRow, type StoredRow } from './rowReads.js';
+import { entryByLabel } from './rowTreeQueries.js';
 import {
   entryAt,
   iterateRowEntries,
@@ -54,6 +55,11 @@ export class VersionSnapshot {
       throw new JournalFormatError(`Row ${index} of an empty snapshot`);
     }
     return entryAt(this.read.access, root, index);
+  }
+
+  /** The live row `label`, or undefined when no row has it. */
+  entryByLabel(label: bigint): Promise<RowEntry | undefined> {
+    return entryByLabel(this.read.access, this.rootRef(), label);
   }
 
   /** The whole row an entry of this snapshot points at. */

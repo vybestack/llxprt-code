@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
-import { INHERIT_OWNER } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
@@ -11,6 +10,7 @@ import {
   inheritingDraft,
   labelsAt,
   planDensity,
+  spansAfterClear,
   type PositionedContent,
   type PositionedOrigin,
   type PositionedOwner,
@@ -24,10 +24,17 @@ import type {
   HistoryPublicationScope,
   HistoryRepairRequest,
 } from './historyStorePort.js';
-import { mergeRemovedInteriorSpans } from './contextRange.js';
-import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
+import type { HistoryRowView } from './historyRowView.js';
+import {
+  contextBoundaryOf,
+  JournalRowView,
+  lastContentOf,
+  statisticsOf,
+  type ContextBoundary,
+} from './journalScalars.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import { JournalMirrors } from './journalMirrors.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
@@ -59,6 +66,7 @@ import {
   JournalPublication,
   originChangeEdits,
   ownerChangeEdits,
+  syntheticInsertEdits,
   type EditBuilder,
   type JournalCompensationMark,
 } from './journalPublication.js';
@@ -546,6 +554,58 @@ export class JournalHistoryStore {
     }
   }
 
+  /**
+   * The statistics of the last acked version, from its trailer; nothing is
+   * read. Rows still queued are not counted (WIRING G2): a caller that needs
+   * them waits for the queue first.
+   */
+  statistics(): ConversationStatistics {
+    return statisticsOf(this.session.store.published?.aggregate);
+  }
+
+  /** The chronology boundary of the last acked version, from its trailer; see {@link statistics}. */
+  contextBoundary(): ContextBoundary {
+    return contextBoundaryOf(this.session.store.published?.aggregate);
+  }
+
+  /** The newest row, or the newest of `speaker`, once the queue is durable; nothing is kept. */
+  lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
+    return this.withDurableSnapshot((snapshot) =>
+      lastContentOf(snapshot, speaker),
+    );
+  }
+
+  /**
+   * Row facts for a mutation, over the version durable now. The view reads the
+   * file, so it holds no row, and it fails once `execute` has settled.
+   */
+  readRows<T>(
+    execute: (view: HistoryRowView) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    signal?.throwIfAborted();
+    return this.withDurableSnapshot(async (snapshot) => {
+      const view = new JournalRowView(snapshot, this.owners);
+      try {
+        return await execute(view);
+      } finally {
+        view.close();
+      }
+    });
+  }
+
+  private async withDurableSnapshot<T>(
+    read: (snapshot: VersionSnapshot) => Promise<T>,
+  ): Promise<T> {
+    await this.waitForDurable();
+    const snapshot = await this.session.store.snapshot();
+    try {
+      return await read(snapshot);
+    } finally {
+      snapshot.close();
+    }
+  }
+
   /** Every row; for tests and tools that need the whole history, which a send never does. */
   async materialize(): Promise<IContent[]> {
     const rows: IContent[] = [];
@@ -583,7 +643,7 @@ export class JournalHistoryStore {
     request: HistoryClearRequest,
   ): Promise<void> {
     this.assertSettled(snapshot, 'cleared');
-    const spans = await this.spansAfterClear(snapshot, request.spans);
+    const spans = await spansAfterClear(snapshot, request.spans);
     if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
     try {
       request.publish(spans);
@@ -598,21 +658,6 @@ export class JournalHistoryStore {
       request.restore();
       throw historyMutationFailure(error, failures);
     }
-  }
-
-  private async spansAfterClear(
-    snapshot: VersionSnapshot,
-    earlier: readonly RemovedInteriorSpan[],
-  ): Promise<RemovedInteriorSpan[]> {
-    if (snapshot.rows === 0) return mergeRemovedInteriorSpans(earlier);
-    const start = Number((await snapshot.entryAt(0)).chronologySeq);
-    const end = Number(
-      (await snapshot.entryAt(snapshot.rows - 1)).chronologySeq,
-    );
-    return mergeRemovedInteriorSpans([
-      ...earlier.filter((span) => span.start > end),
-      { start, end, reason: 'cleared' },
-    ]);
   }
 
   /**
@@ -864,32 +909,10 @@ export class JournalHistoryStore {
       throw new Error(`Invalid synthetic insert anchor ${afterSeq}`);
     }
     const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
-    this.enqueue(this.tentativeRows + 1, async (snapshot) => {
-      const anchor = BigInt(afterSeq);
-      for await (const entry of snapshot.entries()) {
-        if (entry.chronologySeq === anchor) {
-          // The op's owner, else the owner of the row it follows (design 5.1).
-          const owner: {
-            readonly id: number | typeof INHERIT_OWNER;
-            readonly edits: ResolvedOwner['edits'];
-          } =
-            origin === undefined
-              ? { id: INHERIT_OWNER, edits: [] }
-              : await this.owners.resolve(origin);
-          return [
-            ...owner.edits,
-            {
-              kind: 'insert',
-              afterLabel: entry.label,
-              draft: { ...draft, owner: owner.id },
-            },
-          ];
-        }
-      }
-      throw new Error(
-        `Synthetic insert anchor: no row has chronology number ${afterSeq}`,
-      );
-    });
+    this.enqueue(
+      this.tentativeRows + 1,
+      syntheticInsertEdits(draft, afterSeq, origin, () => this.owners),
+    );
   }
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */

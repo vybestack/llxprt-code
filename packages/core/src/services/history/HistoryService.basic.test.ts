@@ -499,7 +499,6 @@ describe('HistoryService: track conversation statistics', () => {
     expect(stats.aiMessages).toBe(2);
     expect(stats.toolCalls).toBe(1);
     expect(stats.toolResponses).toBe(1);
-    expect(stats.totalTokens).toBe(70); // 30 + 40
   });
 });
 

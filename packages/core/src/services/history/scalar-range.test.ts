@@ -61,7 +61,6 @@ describe('scalar chronology and filter semantics', () => {
           aiMessages: 1,
           toolCalls: 3,
           toolResponses: 3,
-          totalTokens: legacy ? 10 : 15,
         });
         expect(await history.getLastUserContent()).toStrictEqual(first);
         expect(
