@@ -21,7 +21,34 @@ export const SESSION_KEYS = {
   directories: 'session:directories',
   /** The ancestry of a forked child: `SessionForkedPayload`. */
   fork: 'session:fork',
+  /** The first user message, cut to {@link SESSION_PREVIEW_LENGTH}; written once (decision G7). */
+  preview: 'session:preview',
 } as const;
+
+/** Characters of the first user message that discovery shows (decision G7). */
+export const SESSION_PREVIEW_LENGTH = 200;
+
+/** The text a content row offers as the session preview: its text blocks, cut to the preview length. Undefined for a row that is not from the user or has no text. */
+export function previewOfContent(content: {
+  readonly speaker: string;
+  readonly blocks: ReadonlyArray<{
+    readonly type: string;
+    readonly text?: string;
+  }>;
+}): string | undefined {
+  if (content.speaker !== 'human') return undefined;
+  const text = content.blocks
+    .map((block) => (block.type === 'text' ? (block.text ?? '') : ''))
+    .join('');
+  return text.length === 0 ? undefined : text.slice(0, SESSION_PREVIEW_LENGTH);
+}
+
+/** The text a `session:preview` entry holds. */
+export function decodePreviewFact(bytes: Uint8Array): string {
+  const fact = decodeSessionFact(bytes);
+  if (typeof fact !== 'string') throw malformed(SESSION_KEYS.preview);
+  return fact;
+}
 
 const UTF8 = new TextEncoder();
 const UTF8_DECODER = new TextDecoder();

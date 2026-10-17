@@ -55,6 +55,11 @@ import {
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import {
+  listJournalSessions,
+  readJournalFileFacts,
+} from './journalSessionListing.js';
 import { describeUnreadableRecording } from './unreadableRecordings.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
@@ -450,6 +455,10 @@ export class SessionDiscovery {
     filePath: string,
     counters?: JournalReadCounters,
   ): Promise<boolean> {
+    if (selectBackend() === 'journal') {
+      const found = await readJournalFileFacts(filePath).catch(() => undefined);
+      return (found?.rows ?? 0) > 0;
+    }
     try {
       for await (const line of readMetadataJsonLines(filePath)) {
         if (line.parsed === null) continue;
@@ -481,6 +490,10 @@ export class SessionDiscovery {
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
     options: FirstUserMessageScanOptions = {},
   ): Promise<string | null> {
+    if (selectBackend() === 'journal') {
+      const found = await readJournalFileFacts(filePath).catch(() => undefined);
+      return found?.preview?.slice(0, maxLength) ?? null;
+    }
     return scanFirstUserMessage(filePath, maxLength, options);
   }
 
@@ -494,6 +507,10 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
+    if (selectBackend() === 'journal') {
+      const found = await readJournalFileFacts(filePath).catch(() => undefined);
+      return found?.facts.title;
+    }
     let stream: ReturnType<typeof createReadStream> | undefined;
     let reader: readline.Interface | undefined;
     try {
@@ -533,6 +550,9 @@ async function scanSessions(
   projectHash: string,
   options: BoundedDiscoveryOptions = {},
 ): Promise<SessionScan> {
+  if (selectBackend() === 'journal') {
+    return listJournalSessions(chatsDir, projectHash);
+  }
   let entries: string[];
   try {
     entries = await fs.readdir(chatsDir);

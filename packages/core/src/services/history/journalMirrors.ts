@@ -130,6 +130,13 @@ export class JournalMirrors {
     return this.recorders.has(recorder);
   }
 
+  /** Offers the session preview to every bound recorder (decision G7); a recorder that has one ignores it. */
+  announcePreview(text: string): void {
+    for (const recorder of this.recorders.keys()) {
+      recorder.recordFirstUserPreview(text);
+    }
+  }
+
   has(mirror: JournalSession): boolean {
     return this.fanout.has(mirror.store);
   }

@@ -1,10 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
-import {
-  createHistoryStore,
-  HISTORY_BACKEND_ENV,
-  selectBackend,
-} from './historyBackend.js';
+import { createHistoryStore } from './historyBackend.js';
+import { HISTORY_BACKEND_ENV, selectBackend } from './historyBackendSelect.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';

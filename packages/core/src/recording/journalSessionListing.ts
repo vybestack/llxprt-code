@@ -9,7 +9,12 @@ import {
   RETIRED_SESSION_EXTENSION,
   SESSION_FILE_EXTENSION,
 } from './sessionFileName.js';
-import { readSessionFacts } from './sessionMetaKeys.js';
+import {
+  SESSION_KEYS,
+  decodePreviewFact,
+  readSessionFacts,
+  type SessionFacts,
+} from './sessionMetaKeys.js';
 import type { SessionSummary, UnreadableRecording } from './types.js';
 
 export interface JournalSessionListing {
@@ -29,42 +34,69 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** What discovery shows of one journal file: its session facts, preview and row count. No row is read. */
+export interface JournalFileFacts {
+  readonly facts: SessionFacts;
+  readonly preview?: string;
+  readonly rows: number;
+  readonly fileSize: number;
+}
+
 /**
  * Reads the session facts of one journal file through a read-only view: the
- * header, the last trailer and a few state map entries. No row is read.
- * Returns the summary, or the reason the file cannot be listed.
+ * header, the last trailer and a few state map entries. Undefined when the
+ * file holds no committed session.
  */
-async function summarize(
+export async function readJournalFileFacts(
   filePath: string,
-): Promise<SessionSummary | UnreadableRecording> {
+): Promise<JournalFileFacts | undefined> {
   const reader = await openJournalReadOnly(filePath);
   try {
-    const facts = await readSessionFacts(stateReaderOf(reader, sha256KeyHash));
-    if (facts === undefined) {
-      return {
-        filePath,
-        reason: `Session file ${filePath} holds no committed session`,
-      };
-    }
-    const stats = await fsp.stat(filePath);
+    const read = stateReaderOf(reader, sha256KeyHash);
+    const facts = await readSessionFacts(read);
+    if (facts === undefined) return undefined;
+    const preview = await read(SESSION_KEYS.preview);
     return {
-      sessionId: facts.sessionId,
-      filePath,
-      projectHash: facts.start.projectHash,
-      startTime: facts.start.startTime,
-      createdAt: facts.start.startTime,
-      lastModified: stats.mtime,
+      facts,
+      ...(preview === undefined ? {} : { preview: decodePreviewFact(preview) }),
+      rows: reader.trailer?.rootAggregate.rows ?? 0,
       fileSize: reader.fileSize,
-      provider: facts.provider,
-      model: facts.model,
-      kind: facts.start.kind,
-      ...(facts.start.cwd === undefined ? {} : { cwd: facts.start.cwd }),
-      ...(facts.title === undefined ? {} : { title: facts.title }),
-      ...(facts.name === undefined ? {} : { name: facts.name }),
     };
   } finally {
     await reader.close();
   }
+}
+
+/** The summary of one journal file, or the reason the file cannot be listed. */
+async function summarize(
+  filePath: string,
+): Promise<SessionSummary | UnreadableRecording> {
+  const found = await readJournalFileFacts(filePath);
+  if (found === undefined) {
+    return {
+      filePath,
+      reason: `Session file ${filePath} holds no committed session`,
+    };
+  }
+  const { facts } = found;
+  const stats = await fsp.stat(filePath);
+  return {
+    sessionId: facts.sessionId,
+    filePath,
+    projectHash: facts.start.projectHash,
+    startTime: facts.start.startTime,
+    createdAt: facts.start.startTime,
+    lastModified: stats.mtime,
+    fileSize: found.fileSize,
+    provider: facts.provider,
+    model: facts.model,
+    kind: facts.start.kind,
+    messageCount: found.rows,
+    ...(found.preview === undefined ? {} : { preview: found.preview }),
+    ...(facts.start.cwd === undefined ? {} : { cwd: facts.start.cwd }),
+    ...(facts.title === undefined ? {} : { title: facts.title }),
+    ...(facts.name === undefined ? {} : { name: facts.name }),
+  };
 }
 
 function isSummary(

@@ -61,6 +61,7 @@ import {
   type JournalCompensationMark,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
 /** A swap of the primary journal that can still be taken back; see {@link JournalHistoryStore.adoptJournal}. */
@@ -100,6 +101,7 @@ export class JournalHistoryStore {
   private owners: JournalOwners;
   private mirrorSet: JournalMirrors;
   private adopted: JournalRecordingService | undefined;
+  private preview: string | undefined;
 
   constructor(private session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
@@ -170,12 +172,14 @@ export class JournalHistoryStore {
       mirrors: this.mirrorSet,
       rows: this.tentativeRows,
       adopted: this.adopted,
+      preview: this.preview,
     };
     this.session = next;
     this.owners = new JournalOwners(next.store);
     this.mirrorSet = this.mirrorsOf(next, this.owners);
     this.tentativeRows = next.store.published?.rows ?? 0;
     this.adopted = recorder;
+    this.preview = undefined;
     let settled = false;
     const settle = (action: string): void => {
       if (settled) throw new Error(`The adoption was already ${action}`);
@@ -190,6 +194,7 @@ export class JournalHistoryStore {
         this.mirrorSet = previous.mirrors;
         this.tentativeRows = previous.rows;
         this.adopted = previous.adopted;
+        this.preview = previous.preview;
       },
       commit: async () => {
         settle('settled');
@@ -445,7 +450,14 @@ export class JournalHistoryStore {
     onAttached?: () => void,
     origin?: string,
   ): Promise<void> {
-    return this.mirrors.attachRecorder(recorder, replace, onAttached, origin);
+    return this.mirrors
+      .attachRecorder(recorder, replace, onAttached, origin)
+      .then(async () => {
+        if (this.preview === undefined) return;
+        recorder.recordFirstUserPreview(this.preview);
+        // The attach returns with the preview written, so no write of it is still in flight.
+        await recorder.flush();
+      });
   }
 
   detachJournal(recorder: JournalRecordingService): Promise<void> {
@@ -722,6 +734,7 @@ export class JournalHistoryStore {
     }
     // Encoded now: the chronology stamper writes the entry's metadata in place after the call.
     const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
+    this.offerPreview(content);
     this.enqueue(this.tentativeRows + 1, async () => {
       const owner = await this.owners.resolve(origin);
       return [
@@ -729,6 +742,16 @@ export class JournalHistoryStore {
         { kind: 'append', rows: [{ ...draft, owner: owner.id }] },
       ];
     });
+  }
+
+  /** The first user message becomes the session preview of every recorder (decision G7). */
+  private offerPreview(content: IContent): void {
+    if (this.preview !== undefined) return;
+    const text = previewOfContent(content);
+    if (text === undefined) return;
+    this.preview = text;
+    this.adopted?.recordFirstUserPreview(text);
+    this.mirrorSet.announcePreview(text);
   }
 
   private applyDensity(payload: DensityMutationPayload): void {

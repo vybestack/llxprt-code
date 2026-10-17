@@ -549,6 +549,14 @@ export interface SessionSummary {
    * always populates it and excludes `subagent` journals.
    */
   kind?: SessionStartKind;
+  /**
+   * The first user message, read from the `session:preview` entry without
+   * reading any row (journal backend, decision G7). Absent when the session
+   * has no user message yet.
+   */
+  preview?: string;
+  /** The rows of the committed version, from the trailer (journal backend, G7). */
+  messageCount?: number;
 }
 
 export type ContinueTarget =

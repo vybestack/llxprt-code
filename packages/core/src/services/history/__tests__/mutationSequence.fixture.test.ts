@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { selectBackend } from '../historyBackend.js';
+import { selectBackend } from '../historyBackendSelect.js';
 import {
   runMutationSequence,
   type MutationSequenceFixture,

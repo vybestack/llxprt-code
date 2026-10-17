@@ -21,6 +21,7 @@ import {
   decodeDirectoriesFact,
   decodeProviderFact,
   decodeSessionFact,
+  decodePreviewFact,
   decodeTitleFact,
   encodeSessionFact,
 } from './sessionMetaKeys.js';
@@ -81,6 +82,7 @@ export class JournalRecordingService implements SessionRecordingPort {
   private model: string;
   private directories: string[];
   private title: string | null | undefined;
+  private preview: string | undefined;
 
   private constructor(
     private readonly config: JournalRecordingConfig,
@@ -146,6 +148,8 @@ export class JournalRecordingService implements SessionRecordingPort {
     if (title !== undefined) {
       this.title = decodeTitleFact(title);
     }
+    const preview = await store.getState(SESSION_KEYS.preview);
+    if (preview !== undefined) this.preview = decodePreviewFact(preview);
     this.journalSession = session;
     this.materialization = Promise.resolve(session);
   }
@@ -281,6 +285,17 @@ export class JournalRecordingService implements SessionRecordingPort {
     if (!this.isActive()) return;
     this.title = title;
     this.persistFact(SESSION_KEYS.title, title);
+  }
+
+  /**
+   * The first user message of the session (decision G7). Written once: a
+   * recorder that already holds a preview, from this process or an earlier
+   * one, ignores later offers.
+   */
+  recordFirstUserPreview(text: string): void {
+    if (!this.isActive() || this.preview !== undefined) return;
+    this.preview = text;
+    this.writeFact(SESSION_KEYS.preview, text);
   }
 
   getSessionMetadataTitle(): string | null | undefined {
@@ -483,6 +498,9 @@ export class JournalRecordingService implements SessionRecordingPort {
     ];
     if (this.title !== undefined) {
       edits.push(this.factEdit(SESSION_KEYS.title, this.title));
+    }
+    if (this.preview !== undefined) {
+      edits.push(this.factEdit(SESSION_KEYS.preview, this.preview));
     }
     const ack = await session.store.commit(edits);
     this.lastCommitAck = ack;
