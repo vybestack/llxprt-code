@@ -16,7 +16,6 @@ import {
   type PositionedOwner,
 } from './journalHistoryEdits.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import type { HistoryBatchRowSource } from './history-batch-values.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
   HistoryClearRequest,
@@ -38,7 +37,10 @@ import {
   encodeContentRow,
   UNOWNED_ROW,
 } from './journalRowCodec.js';
-import { committedBatchSource } from './journalBatchSource.js';
+import {
+  committedBatchSource,
+  type CommittedBatchRowSource,
+} from './journalBatchSource.js';
 import {
   withCheckpointOnJournal,
   withRollbackCheckpointOnJournal,
@@ -397,18 +399,23 @@ export class JournalHistoryStore {
   /**
    * The version a detached transform reads: the queue is durable, the token
    * updates the caller still owes are settled, and nothing was queued while
-   * they ran.
+   * they ran. The snapshot holds a pin: the caller closes it.
    */
   async settledSnapshot(
     settleTokens: () => Promise<void>,
     signal?: AbortSignal,
   ): Promise<VersionSnapshot> {
     await this.waitForDurable();
-    const snapshot = this.session.store.snapshot();
-    await settleTokens();
-    await this.waitForDurable();
-    this.assertSettled(snapshot, 'captured');
-    signal?.throwIfAborted();
+    const snapshot = await this.session.store.snapshot();
+    try {
+      await settleTokens();
+      await this.waitForDurable();
+      this.assertSettled(snapshot, 'captured');
+      signal?.throwIfAborted();
+    } catch (error) {
+      snapshot.close();
+      throw error;
+    }
     return snapshot;
   }
 
@@ -510,24 +517,33 @@ export class JournalHistoryStore {
   ): AsyncGenerator<IContent, void, unknown> {
     signal?.throwIfAborted();
     await this.waitForDurable();
-    const snapshot = this.session.store.snapshot();
-    signal?.throwIfAborted();
-    const start = await suffixStart(snapshot, query, signal);
-    for await (const entry of snapshot.entries(start)) {
+    const snapshot = await this.session.store.snapshot();
+    try {
       signal?.throwIfAborted();
-      yield decodeStoredRow(await snapshot.readRow(entry));
+      const start = await suffixStart(snapshot, query, signal);
+      for await (const entry of snapshot.entries(start)) {
+        signal?.throwIfAborted();
+        yield decodeStoredRow(await snapshot.readRow(entry));
+      }
+      signal?.throwIfAborted();
+    } finally {
+      snapshot.close();
     }
-    signal?.throwIfAborted();
   }
 
   /**
    * The last `count` rows (all rows when omitted) of the version published
    * now, as the source of a batch event. Call it once the publication it
-   * announces is acked.
+   * announces is acked. The source holds a pin until its dispatcher retires it.
    */
-  committedBatch(count?: number): HistoryBatchRowSource {
-    const snapshot = this.session.store.snapshot();
-    return committedBatchSource(snapshot, count ?? snapshot.rows);
+  async committedBatch(count?: number): Promise<CommittedBatchRowSource> {
+    const snapshot = await this.session.store.snapshot();
+    try {
+      return committedBatchSource(snapshot, count ?? snapshot.rows);
+    } catch (error) {
+      snapshot.close();
+      throw error;
+    }
   }
 
   /** Every row; for tests and tools that need the whole history, which a send never does. */
@@ -540,7 +556,7 @@ export class JournalHistoryStore {
   /** A dump of the rows once the queue is durable; it reads the file, so it holds no row. */
   async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     await this.waitForDurable();
-    return new JournalDumpSnapshot(this.session.store.snapshot());
+    return new JournalDumpSnapshot(await this.session.store.snapshot());
   }
 
   /**
@@ -554,7 +570,18 @@ export class JournalHistoryStore {
    */
   async clear(request: HistoryClearRequest): Promise<void> {
     await this.waitForDurable();
-    const snapshot = this.session.store.snapshot();
+    const snapshot = await this.session.store.snapshot();
+    try {
+      await this.clearOver(snapshot, request);
+    } finally {
+      snapshot.close();
+    }
+  }
+
+  private async clearOver(
+    snapshot: VersionSnapshot,
+    request: HistoryClearRequest,
+  ): Promise<void> {
     this.assertSettled(snapshot, 'cleared');
     const spans = await this.spansAfterClear(snapshot, request.spans);
     if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
@@ -597,14 +624,21 @@ export class JournalHistoryStore {
    */
   async validateAndFix(request: HistoryRepairRequest): Promise<JournalRepair> {
     await this.waitForDurable();
-    const snapshot = this.session.store.snapshot();
-    this.assertSettled(snapshot, 'repaired');
-    const plan = await planToolPairingRepair(
-      this.session.store,
-      snapshot,
-      request.stamp,
-    );
+    const snapshot = await this.session.store.snapshot();
+    let plan: Awaited<ReturnType<typeof planToolPairingRepair>>;
+    try {
+      this.assertSettled(snapshot, 'repaired');
+      plan = await planToolPairingRepair(
+        this.session.store,
+        snapshot,
+        request.stamp,
+      );
+    } catch (error) {
+      snapshot.close();
+      throw error;
+    }
     if (plan.inserts.length === 0 || snapshot.version === undefined) {
+      snapshot.close();
       return {
         inserted: plan.inserted,
         rollback: async () => {},
@@ -633,7 +667,7 @@ export class JournalHistoryStore {
         }
         await this.restoreTo(snapshot);
       },
-      close: () => {},
+      close: () => snapshot.close(),
     };
   }
 
@@ -654,6 +688,11 @@ export class JournalHistoryStore {
       store: this,
       saved: this.queue.then(() => this.session.store.snapshot()),
     };
+  }
+
+  /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */
+  async releaseCompensation(mark: JournalCompensationMark): Promise<void> {
+    (await mark.saved).close();
   }
 
   /**
@@ -929,21 +968,37 @@ export class JournalHistoryStore {
   ): Promise<CommitAck | undefined> {
     if (this.failure !== undefined) return undefined;
     try {
-      const edits = await build(this.session.store.snapshot());
-      const group = await this.mirrors.commit(edits);
-      if (rowsAfter === undefined) {
-        this.tentativeRows = group.after.rows;
-      } else if (group.after.rows !== rowsAfter) {
-        throw new Error(
-          `The journal holds ${group.after.rows} rows after commit ${group.ack.commitSeq}, the history promised ${rowsAfter}`,
-        );
-      }
-      this.ack = group.ack;
-      return group.ack;
+      return await this.commitStep(rowsAfter, build);
     } catch (error) {
       this.failure = { error };
       this.owners.invalidate();
       return undefined;
+    }
+  }
+
+  /** The snapshot the builder reads stays pinned until the group is acked: the edits may stream from it. */
+  private async commitStep(
+    rowsAfter: number | undefined,
+    build: EditBuilder,
+  ): Promise<CommitAck> {
+    const snapshot = await this.session.store.snapshot();
+    try {
+      const group = await this.mirrors.commit(await build(snapshot));
+      try {
+        if (rowsAfter === undefined) {
+          this.tentativeRows = group.after.rows;
+        } else if (group.after.rows !== rowsAfter) {
+          throw new Error(
+            `The journal holds ${group.after.rows} rows after commit ${group.ack.commitSeq}, the history promised ${rowsAfter}`,
+          );
+        }
+        this.ack = group.ack;
+        return group.ack;
+      } finally {
+        group.close();
+      }
+    } finally {
+      snapshot.close();
     }
   }
 

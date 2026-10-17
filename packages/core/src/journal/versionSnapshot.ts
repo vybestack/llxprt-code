@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
-import type { RecordAccess } from './recordAccess.js';
+import type { PinnedRead } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
 import { readStoredRow, type StoredRow } from './rowReads.js';
 import {
@@ -14,25 +14,37 @@ import type { Version } from './version.js';
  * One published version with the reads that reach it. The version and the
  * access are taken together, so every read of a snapshot sees the same rows
  * however many groups commit after it was taken. It holds a trailer and a
- * reader, never a row.
+ * reader, never a row. The snapshot holds the pin of its read until `close`,
+ * so no compaction moves the records under it; a read after `close` throws.
  */
 export class VersionSnapshot {
-  /** `version` is undefined for a journal with no committed group: no rows. */
-  constructor(
-    readonly version: Version | undefined,
-    private readonly access: RecordAccess | undefined,
-  ) {}
+  constructor(private readonly read: PinnedRead) {}
+
+  /** Undefined for a journal with no committed group: no rows. */
+  get version(): Version | undefined {
+    return this.read.version;
+  }
+
+  /** Another hold on the snapshot's pin, for a reader that outlives its opener; the returned function releases it. */
+  hold(): () => void {
+    return this.read.hold();
+  }
+
+  /** Releases the snapshot's pin. */
+  close(): void {
+    this.read.close();
+  }
 
   /** The number of live rows. */
   get rows(): number {
-    return this.version?.rows ?? 0;
+    return this.read.version?.rows ?? 0;
   }
 
   /** The live rows in label order from index `from`. */
   async *entries(from = 0): AsyncGenerator<RowEntry> {
     const root = this.rootRef();
     if (root === undefined) return;
-    yield* iterateRowEntries(this.requireAccess(), root, from);
+    yield* iterateRowEntries(this.read.access, root, from);
   }
 
   /** The `index`-th live row (0-based). */
@@ -41,25 +53,18 @@ export class VersionSnapshot {
     if (root === undefined) {
       throw new JournalFormatError(`Row ${index} of an empty snapshot`);
     }
-    return entryAt(this.requireAccess(), root, index);
+    return entryAt(this.read.access, root, index);
   }
 
   /** The whole row an entry of this snapshot points at. */
   readRow(entry: RowEntry): Promise<StoredRow> {
-    return readStoredRow(this.requireAccess(), entry);
+    return readStoredRow(this.read.access, entry);
   }
 
   private rootRef(): RowTreeRootRef | undefined {
-    const version = this.version;
+    const { version } = this.read;
     return version === undefined || version.roots.rowRoot === 0
       ? undefined
       : { offset: version.roots.rowRoot, rows: version.rows };
-  }
-
-  private requireAccess(): RecordAccess {
-    if (this.access === undefined) {
-      throw new JournalFormatError('The snapshot has no committed group');
-    }
-    return this.access;
   }
 }

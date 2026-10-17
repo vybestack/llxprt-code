@@ -37,6 +37,7 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c1-1', 'c2-0', 'c2-1', 'c2-2'];
 
@@ -73,7 +74,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     const before = new Map<string, Awaited<ReturnType<typeof capture>>>();
     for (const id of ['c1', 'c2']) {
       const restored = await cloneCheckpoint(
-        source.recordAccess(),
+        await accessOf(source),
         current(source),
         id,
         file(`before-${id}.llxj`),
@@ -82,7 +83,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
       before.set(id, await capture(restored.path));
     }
     const compacted = await compactionCopy(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('compacted.llxj'),
       deps,
@@ -93,7 +94,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     const store = await openStore(compacted.path);
     for (const id of ['c1', 'c2']) {
       const restored = await cloneCheckpoint(
-        store.recordAccess(),
+        await accessOf(store),
         current(store),
         id,
         file(`after-${id}.llxj`),
@@ -129,7 +130,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
 
   it('keeps every version its own owner dictionary: each checkpoint and the current version read back the map they had', async () => {
     const source = await sessionWithTwoCheckpoints();
-    const sourceAccess = source.recordAccess();
+    const sourceAccess = await accessOf(source);
     const sourceCurrent = current(source);
     const sourceState = await mapContents(source, 'state');
     const descriptors = new Map(
@@ -187,7 +188,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
       expect(saved.commitSeq).toBe(descriptor.commitSeq);
       expect(saved.roots.stateRoot).not.toBe(0);
       const kept = await mapContentsAt(
-        store.recordAccess(),
+        await accessOf(store),
         saved.roots.stateRoot,
       );
       expect(kept).toStrictEqual(withoutLocalKeys(savedStates.get(id)));
@@ -204,7 +205,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
   it('points every offset of the compacted file, for the current version and for each checkpoint, at a record written earlier in it', async () => {
     const source = await sessionWithTwoCheckpoints();
     const result = await compactionCopy(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('compacted.llxj'),
       copyDeps(),
@@ -212,7 +213,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     await source.close();
     await fsp.rm(file('source.llxj'));
     const store = await openStore(result.path);
-    const audit = new OffsetAudit(store.recordAccess());
+    const audit = new OffsetAudit(await accessOf(store));
     for (const copied of result.versions) {
       await audit.walkVersion(await store.readVersion(copied.offset));
     }
@@ -228,13 +229,13 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
   it('writes no relocation entry for a history with no checkpoint, and the one version equals a clone of it', async () => {
     const source = await populatedSource(file('source.llxj'));
     const result = await compactionCopy(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('compacted.llxj'),
       copyDeps(),
     );
     const clone = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -267,7 +268,7 @@ describe('compaction copy (design 4.11 steps 3 and 4)', () => {
     ]);
     await expect(
       compactionCopy(
-        source.recordAccess(),
+        await accessOf(source),
         current(source),
         file('bad.llxj'),
         copyDeps(),
@@ -320,13 +321,13 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
     const deps = copyDeps();
     const sourceCurrent = current(source);
     const single = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       sourceCurrent,
       file('single.llxj'),
       deps,
     );
     const compacted = await compactionCopy(
-      source.recordAccess(),
+      await accessOf(source),
       sourceCurrent,
       file('compacted.llxj'),
       deps,
@@ -347,7 +348,7 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
     for (const [index, copied] of compacted.versions.entries()) {
       const saved = await source.readVersion(copied.sourceOffset);
       const alone = await cloneVersion(
-        source.recordAccess(),
+        await accessOf(source),
         saved,
         file(`alone-${index}.llxj`),
         deps,
@@ -368,7 +369,7 @@ describe('memoization of shared records (design 4.8, several versions)', () => {
       sourceRows.set(entry.label, entry.recordOffset);
     }
     const result = await compactionCopy(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('compacted.llxj'),
       copyDeps(),

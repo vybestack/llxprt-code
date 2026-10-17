@@ -12,6 +12,7 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { OffsetAudit } from './__tests__/support/offsetAudit.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 function published(store: JournalStore) {
   const version = store.published;
@@ -92,7 +93,7 @@ describe('checkpoint delete (design 4.9, 4.11)', () => {
     const deps = copyDeps();
     await expect(
       cloneCheckpoint(
-        store.recordAccess(),
+        await accessOf(store),
         published(store),
         'a',
         file('child-a.llxj'),
@@ -100,7 +101,7 @@ describe('checkpoint delete (design 4.9, 4.11)', () => {
       ),
     ).rejects.toThrow(/no checkpoint "a"/);
     const child = await cloneCheckpoint(
-      store.recordAccess(),
+      await accessOf(store),
       published(store),
       'b',
       file('child-b.llxj'),
@@ -116,7 +117,7 @@ describe('checkpoint delete (design 4.9, 4.11)', () => {
     const store = await withCheckpoints('compact.llxj');
     await store.commit([{ kind: 'deleteCheckpoint', id: 'a' }]);
     const compacted = await compactionCopy(
-      store.recordAccess(),
+      await accessOf(store),
       published(store),
       file('compacted.llxj'),
       copyDeps(),
@@ -126,7 +127,7 @@ describe('checkpoint delete (design 4.9, 4.11)', () => {
     expect(await checkpointIds(reopened)).toStrictEqual(['b']);
     expect(await reopened.getState('ckpt:a')).toBeUndefined();
     expect(published(reopened).ckptBytes).toBe(published(store).ckptBytes);
-    await new OffsetAudit(reopened.recordAccess()).walkVersion(
+    await new OffsetAudit(await accessOf(reopened)).walkVersion(
       published(reopened),
     );
     await reopened.close();

@@ -29,6 +29,7 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const MIB = 1024 * 1024;
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c2-0'];
@@ -351,7 +352,7 @@ describe('compaction of a live store (design 4.11)', () => {
       const published = store.published;
       if (published === undefined) throw new Error('nothing is published');
       await compactionCopy(
-        store.recordAccess(),
+        await accessOf(store),
         published,
         destination,
         copyDeps(),

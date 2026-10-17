@@ -64,15 +64,19 @@ export async function openOwnedJournal(
     session,
     host,
     originsOfRows: async () => {
-      const snapshot = session.store.snapshot();
-      const dictionary = await OwnerDictionary.load(session.store);
-      const origins: Array<string | undefined> = [];
-      for await (const entry of snapshot.entries()) {
-        origins.push(
-          entry.owner === 0 ? undefined : dictionary.originOf(entry.owner),
-        );
+      const snapshot = await session.store.snapshot();
+      try {
+        const dictionary = await OwnerDictionary.load(session.store);
+        const origins: Array<string | undefined> = [];
+        for await (const entry of snapshot.entries()) {
+          origins.push(
+            entry.owner === 0 ? undefined : dictionary.originOf(entry.owner),
+          );
+        }
+        return origins;
+      } finally {
+        snapshot.close();
       }
-      return origins;
     },
     dispose: () => store.dispose(),
   };

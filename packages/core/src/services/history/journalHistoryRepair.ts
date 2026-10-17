@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { InheritingDraft } from '../../journal/groupEdits.js';
+import type { IdFactQueries } from '../../journal/idFactQueries.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from '../../journal/rowEntry.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
@@ -46,11 +47,11 @@ function markerOnly(entry: RowEntry): IContent {
 /** The call ids of an AI row that no response in the history answers, from the row header and the id facts. */
 async function unansweredCallIds(
   store: JournalStore,
+  facts: IdFactQueries,
   entry: RowEntry,
   repaired: ReadonlySet<string>,
 ): Promise<Set<string>> {
   const { header, rawIds } = await store.readRowIds(entry);
-  const facts = store.idFacts();
   const unanswered = new Set<string>();
   for (const [at, tuple] of header.ids.entries()) {
     const id = rawIds[at];
@@ -63,11 +64,12 @@ async function unansweredCallIds(
 /** The unanswered tool calls of one AI row; the row is read only when it has some. */
 async function missingCalls(
   store: JournalStore,
+  facts: IdFactQueries,
   snapshot: VersionSnapshot,
   entry: RowEntry,
   repaired: ReadonlySet<string>,
 ): Promise<ToolCallBlock[]> {
-  const ids = await unansweredCallIds(store, entry, repaired);
+  const ids = await unansweredCallIds(store, facts, entry, repaired);
   if (ids.size === 0) return [];
   const row = decodeStoredRow(await snapshot.readRow(entry));
   if (!hasValidBlocks(row)) return [];
@@ -93,14 +95,25 @@ export async function planToolPairingRepair(
     readonly afterLabel: bigint;
     readonly missing: ToolCallBlock[];
   }> = [];
-  for await (const entry of snapshot.entries()) {
-    if (entry.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ)
-      stamp(markerOnly(entry));
-    if (entry.speaker !== ROW_SPEAKER.ai) continue;
-    const missing = await missingCalls(store, snapshot, entry, repaired);
-    for (const call of missing) repaired.add(call.id);
-    if (missing.length > 0)
-      unanswered.push({ afterLabel: entry.label, missing });
+  const facts = await store.idFacts();
+  try {
+    for await (const entry of snapshot.entries()) {
+      if (entry.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ)
+        stamp(markerOnly(entry));
+      if (entry.speaker !== ROW_SPEAKER.ai) continue;
+      const missing = await missingCalls(
+        store,
+        facts,
+        snapshot,
+        entry,
+        repaired,
+      );
+      for (const call of missing) repaired.add(call.id);
+      if (missing.length > 0)
+        unanswered.push({ afterLabel: entry.label, missing });
+    }
+  } finally {
+    facts.close();
   }
   // Every existing marker has been seen by now, so a fresh one cannot collide with a later row.
   const plan: PlannedRepair = { inserted: [], inserts: [] };

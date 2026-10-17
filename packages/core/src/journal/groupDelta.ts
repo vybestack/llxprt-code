@@ -16,7 +16,7 @@ export interface GroupDelta {
   readonly identity: PrimaryIdentity;
   readonly before: Version | undefined;
   readonly after: Version;
-  /** Reads bound to `after`. They reach `before`, because a version only points back. */
+  /** Reads bound to `after`, valid while the group's pin is held. They reach `before`, because a version only points back. */
   readonly access: RecordAccess;
   /** A clear, a replace or a restore: the mirror takes the accepted rows of `after` again. */
   readonly resync: boolean;
@@ -85,7 +85,7 @@ export function deltaOf(
     identity: identityOf(group.after),
     before: group.before,
     after: group.after,
-    access: group.access,
+    access: group.read.access,
     resync,
     popFrom: lowest(cuts),
     trimBelow: highest(retains),

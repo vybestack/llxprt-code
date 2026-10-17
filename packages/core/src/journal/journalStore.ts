@@ -23,7 +23,7 @@ import { mutationOf, planGroup } from './groupPlan.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck } from './groupWriter.js';
 import type { JournalGroupWriter } from './groupWriter.js';
-import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
+import type { IdFactDeps } from './idFactQueries.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
 import {
@@ -34,6 +34,8 @@ import {
 import { FIRST_NEXT_LABEL } from './labels.js';
 import { LineageChain, loadChain } from './lineageChain.js';
 import { createRecordAccess, type RecordAccess } from './recordAccess.js';
+import { PinLease, PinnedRead } from './pinLease.js';
+import { PinnedIdFacts } from './pinnedIdFacts.js';
 import type { RowEntry } from './rowEntry.js';
 import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
 import {
@@ -76,14 +78,17 @@ function noop(): void {
  * A group that was acked, with what a reader of the group needs (design 5.2):
  * the version before and after it, reads bound to the version after, which
  * reach the version before too, and the labels of the rows whose records the
- * group wrote.
+ * group wrote. The reads hold a pin from the moment the group is acked, so a
+ * compaction cannot move the group's records before its reader is done;
+ * `close` releases it (and `commit` closes it at once).
  */
 export interface CommittedGroup {
   readonly ack: CommitAck;
   readonly before: Version | undefined;
   readonly after: Version;
-  readonly access: RecordAccess;
+  readonly read: PinnedRead;
   readonly writtenLabels: readonly bigint[];
+  close(): void;
 }
 
 /** The labels of the rows a group writes. A replace streams its rows, so it names none. */
@@ -122,6 +127,8 @@ export class JournalStore {
   private queued = 0;
   /** Readers that hold a version across awaits; a swap waits for none (design 10.1). */
   private pins = 0;
+  /** A compaction was due but a pin held it off; the last pin released evaluates the trigger again. */
+  private deferredByPin = false;
   /** The file size below which the trigger is not evaluated, set after a refused swap. */
   private rearmAt = 0;
   /** The compaction in progress; a pin or a read waits for it (design 10.1). */
@@ -179,10 +186,16 @@ export class JournalStore {
    * group. Groups run one at a time in the order they are submitted.
    */
   commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
-    return this.commitDetailed(edits).then((group) => group.ack);
+    return this.commitDetailed(edits).then((group) => {
+      group.close();
+      return group.ack;
+    });
   }
 
-  /** `commit`, returning the group with the versions around it, for the fan-out to mirrors (design 5.2). */
+  /**
+   * `commit`, returning the group with the versions around it, for the fan-out
+   * to mirrors (design 5.2). The group holds a pin until the caller closes it.
+   */
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     this.queued += 1;
     const turn = this.tail.then(() => this.runCommit(edits));
@@ -210,27 +223,44 @@ export class JournalStore {
    * `snapshot()`, a `recordAccess()` or a `CommittedGroup` across awaits pins.
    */
   async pin(): Promise<() => void> {
+    const read = await this.openRead();
+    return () => read.close();
+  }
+
+  /**
+   * The published version with the reads that reach its records, pinned until
+   * the returned read is closed. This and the reads built on it (`snapshot`,
+   * `idFacts`, a committed group) are the only way to a `RecordAccess`.
+   */
+  async openRead(): Promise<PinnedRead> {
     while (this.compacting !== undefined) {
       await this.compacting.catch(noop);
     }
+    return this.readOfPublished();
+  }
+
+  /** Synchronous so that nothing, not even a compaction, runs between taking the pin and naming the version. */
+  private readOfPublished(): PinnedRead {
+    return new PinnedRead(this.currentVersion, this.access, this.newLease());
+  }
+
+  private newLease(): PinLease {
     this.pins += 1;
-    let released = false;
-    return () => {
-      if (released) throw new Error('A journal pin was released twice');
-      released = true;
+    return new PinLease(() => {
       this.pins -= 1;
-      if (this.pins === 0) {
+      if (this.pins === 0 && this.deferredByPin) {
+        this.deferredByPin = false;
         this.tail = this.tail.then(() => this.compactWhenIdle());
       }
-    };
+    });
   }
 
   private async whilePinned<T>(work: () => Promise<T>): Promise<T> {
-    const release = await this.pin();
+    const read = await this.openRead();
     try {
       return await work();
     } finally {
-      release();
+      read.close();
     }
   }
 
@@ -277,7 +307,7 @@ export class JournalStore {
 
   /** The live checkpoints of the published version (design 4.9). */
   async *checkpoints(): AsyncGenerator<ListedCheckpoint> {
-    const release = await this.pin();
+    const read = await this.openRead();
     try {
       yield* listCheckpoints(
         this.requireAccess(),
@@ -285,7 +315,7 @@ export class JournalStore {
         this.currentVersion?.roots.stateRoot ?? 0,
       );
     } finally {
-      release();
+      read.close();
     }
   }
 
@@ -295,37 +325,41 @@ export class JournalStore {
     return bytes === undefined ? undefined : parseCheckpointEntry(bytes);
   }
 
-  /** Id facts of the published version. */
-  idFacts(): IdFactQueries {
-    const root = this.currentVersion?.roots.idRoot ?? 0;
+  /** Id facts of the published version; close them when the queries are done (they hold a pin). */
+  async idFacts(): Promise<PinnedIdFacts> {
+    const read = await this.openRead();
+    const root = read.version?.roots.idRoot ?? 0;
     const reader =
-      this.access === undefined
+      read.version === undefined
         ? undefined
-        : new IdTrieReader(this.access, this.idCache);
-    return new IdFactQueries(
+        : new IdTrieReader(read.access, this.idCache);
+    return new PinnedIdFacts(
       {
-        get: async (hash) =>
-          reader === undefined ? undefined : reader.lookup(root, hash),
+        get: async (hash) => {
+          read.requireOpen();
+          return reader === undefined ? undefined : reader.lookup(root, hash);
+        },
       },
       this.deps.idDeps,
+      read,
     );
   }
 
   /** The live rows of the published version, in label order. */
   async *rows(from = 0): AsyncGenerator<RowEntry> {
-    const release = await this.pin();
+    const read = await this.openRead();
     try {
       const root = this.rowRootRef();
       if (root === undefined || this.access === undefined) return;
       yield* iterateRowEntries(this.access, root, from);
     } finally {
-      release();
+      read.close();
     }
   }
 
-  /** The published version with the reads that reach it, taken together (see `VersionSnapshot`). */
-  snapshot(): VersionSnapshot {
-    return new VersionSnapshot(this.currentVersion, this.access);
+  /** The published version with the reads that reach it, taken together and pinned until `close` (see `VersionSnapshot`). */
+  async snapshot(): Promise<VersionSnapshot> {
+    return new VersionSnapshot(await this.openRead());
   }
 
   /** The header and raw id strings of the row an entry points at (design 4.6), without its blocks. */
@@ -338,17 +372,13 @@ export class JournalStore {
     return this.whilePinned(() => readStoredRow(this.requireAccess(), entry));
   }
 
-  /**
-   * Reads of the records the published version reaches, for a copy of it
-   * (design 4.8). Bound to the published `durableEnd`: take a new one after
-   * the next commit.
-   */
-  recordAccess(): RecordAccess {
-    return this.requireAccess();
-  }
-
   /** The version a trailer at `offset` carries. */
   readVersion(offset: number): Promise<Version> {
+    return this.whilePinned(() => this.readVersionUnpinned(offset));
+  }
+
+  /** For the commit path, which runs on the tail where no compaction can run. */
+  private readVersionUnpinned(offset: number): Promise<Version> {
     return readVersionAt(this.requireAccess(), offset);
   }
 
@@ -369,13 +399,16 @@ export class JournalStore {
     if (
       version === undefined ||
       this.queued > 0 ||
-      this.pins > 0 ||
       this.compactionFailure !== undefined
     ) {
       return;
     }
     const due = this.deps.compactionDue ?? compactionDue;
     if (!due(version, this.rearmAt)) return;
+    if (this.pins > 0) {
+      this.deferredByPin = true;
+      return;
+    }
     try {
       await this.runCompaction();
     } catch (error) {
@@ -453,12 +486,15 @@ export class JournalStore {
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };
     }
+    // Pinned before anything else can run, so no compaction separates the ack from its reader.
+    const read = this.readOfPublished();
     return {
       ack,
       before,
       after: this.requireVersion(),
-      access: this.requireAccess(),
+      read,
       writtenLabels: writtenLabelsOf(plan),
+      close: () => read.close(),
     };
   }
 
@@ -494,7 +530,7 @@ export class JournalStore {
     return {
       access: this.access,
       published: this.currentVersion,
-      readVersion: (offset) => this.readVersion(offset),
+      readVersion: (offset) => this.readVersionUnpinned(offset),
       firstNextLabel: FIRST_NEXT_LABEL,
       readState: (key) => this.getState(key),
     };
@@ -544,6 +580,6 @@ export class JournalStore {
     if (held?.offsetAtDepth(parent.lineageDepth) === parent.selfOffset) {
       return held;
     }
-    return loadChain((offset) => this.readVersion(offset), parent);
+    return loadChain((offset) => this.readVersionUnpinned(offset), parent);
   }
 }

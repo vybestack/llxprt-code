@@ -6,6 +6,7 @@ import { resyncEdits } from '../../mirrorApply.js';
 import type { RowDraft } from '../../rowDraft.js';
 import { draftRow, storeDeps } from './storeFixtures.js';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import { accessOf } from './pinnedAccess.js';
 
 export const SEED_ROWS = 100_000;
 /** Rows are owned by 0 to 4 in turn; the mirror of owner 2 takes the rows of 2 and of 0. */
@@ -86,7 +87,7 @@ export async function seedWithProbe(
   await warm.commit(
     resyncEdits(
       { store: warm, owner: MIRROR_OWNER },
-      { version, access: primary.recordAccess() },
+      { version, access: await accessOf(primary) },
     ),
   );
   await warm.close();
@@ -99,7 +100,7 @@ export async function seedWithProbe(
   let seen = 0;
   const [edit] = resyncEdits(
     { store: mirror, owner: MIRROR_OWNER },
-    { version, access: primary.recordAccess() },
+    { version, access: await accessOf(primary) },
   );
   if (edit.kind !== 'adoptAll') throw new Error('a seed adopts all rows');
   const source = edit.rows;

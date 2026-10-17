@@ -33,7 +33,10 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   }
 
   close(): Promise<void> {
-    this.closed = true;
+    if (!this.closed) {
+      this.closed = true;
+      this.snapshot.close();
+    }
     return Promise.resolve();
   }
 

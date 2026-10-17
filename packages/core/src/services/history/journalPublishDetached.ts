@@ -46,11 +46,36 @@ export async function publishDetachedOnJournal(
     () => host.waitForTokenUpdates(),
     options.signal,
   );
+  const publication = new JournalDetachedPublication(store);
+  try {
+    await publishOver(
+      snapshot,
+      publication,
+      store,
+      task,
+      host,
+      modelName,
+      options,
+    );
+  } finally {
+    snapshot.close();
+    await publication.release();
+  }
+}
+
+async function publishOver(
+  snapshot: VersionSnapshot,
+  publication: JournalDetachedPublication,
+  store: JournalHistoryStore,
+  task: DetachedHistoryTask,
+  host: DetachedHistoryHost,
+  modelName: string | undefined,
+  options: DetachedHistoryOptions,
+): Promise<void> {
   const state = host.snapshot();
   const appendOnly = task.append === true;
   const effects: PreparedHistoryBatchEffect[] = [];
   const densitySpans = new DensitySpanRows();
-  const publication = new JournalDetachedPublication(store);
   const origin =
     options.origin === undefined ? undefined : historyOriginId(options.origin);
   const owner = await store.resolveOwner(appendOnly ? undefined : origin);
@@ -226,7 +251,7 @@ async function finishPublication(
   if (options.publishBatch === true) {
     // One event, after the ack, over the committed version: observers never hear of rows a failed group dropped.
     host.notifyRows(
-      store.committedBatch(appendOnly ? candidate.count : undefined),
+      await store.committedBatch(appendOnly ? candidate.count : undefined),
     );
     host.notifyTokens(delta);
   } else if (options.publishTokens === true) host.notifyTokens(delta);

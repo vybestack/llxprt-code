@@ -68,7 +68,7 @@ describe('journal session', () => {
       ROW_FLAG.hasToolCall,
     );
     expect(rows[1].entry.chronologySeq).toBe(7n);
-    const fact = await session.store.idFacts().fact('call-1');
+    const fact = await (await session.store.idFacts()).fact('call-1');
     expect(fact?.callCount).toBe(1);
     expect(fact?.respCount).toBe(1);
   });

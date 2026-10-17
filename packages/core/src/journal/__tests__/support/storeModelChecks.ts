@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { ownerBloomBit } from '../../ownerRules.js';
 import { expect } from 'bun:test';
+import type { IdFactQueries } from '../../idFactQueries.js';
 import type { IdOccurrence } from '../../idFactUpdate.js';
 import {
   ID_NS,
@@ -136,14 +137,18 @@ async function expectListMatches(
   [family, kind, normalized]: [NormalizedFamily, OccurrenceKind, string],
   expected: ReadonlyArray<{ label: bigint; part: number; unit: number }>,
 ): Promise<void> {
-  const queries = store.idFacts();
-  expect(await queries.normalizedCount(family, kind, normalized)).toBe(
-    expected.length,
-  );
-  for (const [index, position] of expected.entries()) {
-    expect(
-      await queries.normalizedPosition(family, kind, normalized, index + 1),
-    ).toStrictEqual(position);
+  const queries = await store.idFacts();
+  try {
+    expect(await queries.normalizedCount(family, kind, normalized)).toBe(
+      expected.length,
+    );
+    for (const [index, position] of expected.entries()) {
+      expect(
+        await queries.normalizedPosition(family, kind, normalized, index + 1),
+      ).toStrictEqual(position);
+    }
+  } finally {
+    queries.close();
   }
 }
 
@@ -152,21 +157,14 @@ async function expectFactsMatch(
   rows: readonly ModelRow[],
 ): Promise<void> {
   const naive = naiveState(occurrencesOfModel(rows), normalizeFor);
-  const queries = store.idFacts();
+  const queries = await store.idFacts();
   const ids = new Set<string>([...ID_SHAPES, ...naive.facts.keys()]);
+  try {
+    for (const rawId of ids) await expectIdMatches(queries, naive, rawId);
+  } finally {
+    queries.close();
+  }
   for (const rawId of ids) {
-    expect(await queries.fact(rawId)).toStrictEqual(naive.facts.get(rawId));
-    for (const kind of KINDS) {
-      const chain = naive.chains.get(`${kind}:${rawId}`) ?? [];
-      for (const [index, entry] of chain.entries()) {
-        expect(await queries.occurrence(rawId, kind, index + 1)).toStrictEqual(
-          entry,
-        );
-      }
-      expect(
-        await queries.occurrence(rawId, kind, chain.length + 1),
-      ).toBeUndefined();
-    }
     for (const family of FAMILIES) {
       for (const kind of KINDS) {
         const normalized = normalizeFor(family, rawId);
@@ -181,6 +179,25 @@ async function expectFactsMatch(
   await expectExceptionsMatch(store, naive.exceptions);
 }
 
+async function expectIdMatches(
+  queries: IdFactQueries,
+  naive: ReturnType<typeof naiveState>,
+  rawId: string,
+): Promise<void> {
+  expect(await queries.fact(rawId)).toStrictEqual(naive.facts.get(rawId));
+  for (const kind of KINDS) {
+    const chain = naive.chains.get(`${kind}:${rawId}`) ?? [];
+    for (const [index, entry] of chain.entries()) {
+      expect(await queries.occurrence(rawId, kind, index + 1)).toStrictEqual(
+        entry,
+      );
+    }
+    expect(
+      await queries.occurrence(rawId, kind, chain.length + 1),
+    ).toBeUndefined();
+  }
+}
+
 async function expectExceptionsMatch(
   store: JournalStore,
   exceptions: readonly string[],
@@ -189,14 +206,18 @@ async function expectExceptionsMatch(
   expect(stored === undefined ? 0 : Number(decodeDecimal(stored))).toBe(
     exceptions.length,
   );
-  const queries = store.idFacts();
-  for (const [index, rawId] of exceptions.entries()) {
-    const hash = await queries.exceptionHash(index);
-    expect(hash === undefined ? undefined : hex(hash)).toBe(
-      hex(sha256KeyHash(ID_NS.fact, new TextEncoder().encode(rawId))),
-    );
+  const queries = await store.idFacts();
+  try {
+    for (const [index, rawId] of exceptions.entries()) {
+      const hash = await queries.exceptionHash(index);
+      expect(hash === undefined ? undefined : hex(hash)).toBe(
+        hex(sha256KeyHash(ID_NS.fact, new TextEncoder().encode(rawId))),
+      );
+    }
+    expect(await queries.exceptionHash(exceptions.length)).toBeUndefined();
+  } finally {
+    queries.close();
   }
-  expect(await queries.exceptionHash(exceptions.length)).toBeUndefined();
 }
 
 async function expectParentListsMatch(

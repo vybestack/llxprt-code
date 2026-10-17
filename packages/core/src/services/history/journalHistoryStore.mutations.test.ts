@@ -63,8 +63,7 @@ describe('journal history store mutations', () => {
 
   async function entriesOf(session: JournalSession): Promise<RowEntry[]> {
     const entries: RowEntry[] = [];
-    for await (const entry of session.store.snapshot().entries())
-      entries.push(entry);
+    for await (const entry of session.store.rows()) entries.push(entry);
     return entries;
   }
 

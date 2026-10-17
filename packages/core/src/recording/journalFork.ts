@@ -90,19 +90,23 @@ async function cloneIntoChild(
   childPath: string,
 ): Promise<void> {
   const { target } = request;
-  const descriptor = await source.checkpoint(target.checkpointId);
-  const published = source.published;
-  if (descriptor === undefined || published === undefined) {
-    throw new LiveCheckpointError(target);
+  const read = await source.openRead();
+  try {
+    const descriptor = await source.checkpoint(target.checkpointId);
+    if (descriptor === undefined || read.version === undefined) {
+      throw new LiveCheckpointError(target);
+    }
+    const journal = await resolveJournalDependencies(request.journal?.journal);
+    await cloneCheckpoint(
+      read.access,
+      read.version,
+      target.checkpointId,
+      childPath,
+      { journal, hasher: sha256KeyHash },
+    );
+  } finally {
+    read.close();
   }
-  const journal = await resolveJournalDependencies(request.journal?.journal);
-  await cloneCheckpoint(
-    source.recordAccess(),
-    published,
-    target.checkpointId,
-    childPath,
-    { journal, hasher: sha256KeyHash },
-  );
 }
 
 class LiveCheckpointError extends Error {

@@ -16,6 +16,7 @@ function sourceOf(rows: readonly IContent[]) {
     async *rows() {
       for (const row of rows) yield row;
     },
+    retire: () => undefined,
   };
 }
 

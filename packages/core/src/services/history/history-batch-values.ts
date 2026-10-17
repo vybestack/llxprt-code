@@ -20,6 +20,13 @@ export interface HistoryBatchValues {
 export interface HistoryBatchRowSource {
   readonly length: number;
   rows(): AsyncGenerator<IContent, void, unknown>;
+  /**
+   * The dispatcher calls it once every listener has been handed the source.
+   * The source holds a pin on its version while a listener may read it; after
+   * `retire` the passes already started finish, then the pin is released, and a
+   * pass started later throws.
+   */
+  retire(): void;
 }
 /** What `contentBatchAdded` carries: the scoped values of the old store, or the committed row source of the journal store. */
 export type HistoryBatchEvent = HistoryBatchValues | HistoryBatchRowSource;

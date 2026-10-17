@@ -19,6 +19,7 @@ import { pair, realMapping } from './__tests__/support/mistralFixtures.js';
 import { OffsetAudit } from './__tests__/support/offsetAudit.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const SOURCE_ID = 'toolu_alpha-1';
 const UTF8 = new TextEncoder();
@@ -35,9 +36,9 @@ async function wireIdOf(
   store: JournalStore,
   rawId: string,
 ): Promise<string | undefined> {
-  const fact = await store.idFacts().fact(rawId);
+  const fact = await (await store.idFacts()).fact(rawId);
   if (fact === undefined || fact.mappedRef === 0) return undefined;
-  const access = store.recordAccess();
+  const access = await accessOf(store);
   const head = await access.readRecordHead(fact.mappedRef, 'VALUE', 1024);
   expect(UTF8_DECODER.decode(head.kindHeader)).toBe(`mapped:${rawId}`);
   const body: unknown = JSON.parse(
@@ -78,11 +79,13 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
     expect(sourceWire.get(SOURCE_ID)).toBe(mapping.get(SOURCE_ID));
     const snapshot = await snapshotStore(source, ids);
     const sourceRefs = await Promise.all(
-      ids.map(async (id) => (await source.idFacts().fact(id))?.mappedRef),
+      ids.map(
+        async (id) => (await (await source.idFacts()).fact(id))?.mappedRef,
+      ),
     );
 
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -95,11 +98,15 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
       expect(await wireIdOf(clone, id)).toBe(mapping.get(id));
     }
     const cloneRefs = await Promise.all(
-      ids.map(async (id) => (await clone.idFacts().fact(id))?.mappedRef),
+      ids.map(
+        async (id) => (await (await clone.idFacts()).fact(id))?.mappedRef,
+      ),
     );
     expect(cloneRefs).not.toStrictEqual(sourceRefs);
     for (const [id, mapped] of mapping) {
-      const usedBy = await clone.idFacts().mistralUsedBy(MISTRAL_SLOT, mapped);
+      const usedBy = await (
+        await clone.idFacts()
+      ).mistralUsedBy(MISTRAL_SLOT, mapped);
       expect(usedBy && hex(usedBy)).toBe(
         hex(copyDeps().hasher(ID_NS.fact, UTF8.encode(id))),
       );
@@ -116,7 +123,7 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
     await writeMistralSource(file('source.llxj'), rows, realMapping(rows));
     const source = await openStore(file('source.llxj'));
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -124,7 +131,7 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
     await source.close();
     await removeFile(file('source.llxj'));
     const clone = await openStore(result.path);
-    const audit = new OffsetAudit(clone.recordAccess());
+    const audit = new OffsetAudit(await accessOf(clone));
     await audit.walkVersion(current(clone));
     const met = [...audit.checked].map(
       ([entry]) => `${entry.record}.${entry.field}`,

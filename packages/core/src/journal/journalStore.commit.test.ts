@@ -41,7 +41,7 @@ describe('commit groups', () => {
     expect(version.mutation).toBe(MUTATION.append);
     expect(version.rows).toBe(6);
     expect(version.firstLabel).toBe(model.liveLabels[0]);
-    const fact = await store.idFacts().fact('a');
+    const fact = await (await store.idFacts()).fact('a');
     expect(fact?.callCount).toBe(1);
     expect(fact?.respCount).toBe(1);
     await store.close();

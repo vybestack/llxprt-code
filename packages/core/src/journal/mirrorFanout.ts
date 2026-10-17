@@ -18,6 +18,7 @@ import {
   type PrimaryIdentity,
 } from './mirrorIdentity.js';
 import { OwnerDictionary } from './ownerDictionary.js';
+import type { PinnedRead } from './pinLease.js';
 
 /** One mirror file bound to the fan-out: whose rows it holds and how far it has been brought. */
 interface MirrorLink extends MirrorTarget {
@@ -33,6 +34,13 @@ interface MirrorLink extends MirrorTarget {
 function rethrowAll(failures: readonly unknown[], message: string): void {
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1) throw new AggregateError(failures, message);
+}
+
+/** The primary version of `read` with the reads that reach it, or undefined before its first group. */
+function pinnedVersion(read: PinnedRead): PinnedVersion | undefined {
+  return read.version === undefined
+    ? undefined
+    : { version: read.version, access: read.access };
 }
 
 async function recordedIdentity(
@@ -63,28 +71,24 @@ export class MirrorFanout {
 
   /** Commits to the primary, queues the group's delta for every mirror, and returns when the primary has acked. */
   async commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
-    return (await this.commitDetailed(edits)).ack;
+    const group = await this.commitDetailed(edits);
+    group.close();
+    return group.ack;
   }
 
   /** Like {@link commit}, and returns the group with the versions before and after it. */
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     return this.serial(async () => {
-      // Taken before the commit: a mirror reads the group's records by offset
-      // after the ack, and a compaction in between would move them (design 4.11).
-      const release = await this.primary.pin();
-      let handedOver = false;
-      try {
-        const group = await this.primary.commitDetailed(edits);
-        if (this.links.length === 0) return group;
-        const delta = deltaOf(group, edits);
-        const applied = this.links.map((link) => this.deliver(link, delta));
-        // The pin lasts until every mirror has read the group's records.
-        handedOver = true;
-        void Promise.all(applied).then(release);
-        return group;
-      } finally {
-        if (!handedOver) release();
-      }
+      // The group holds its own pin from the ack; the mirrors take theirs
+      // before the caller can close it, and release it once they have read
+      // the group's records (design 4.11).
+      const group = await this.primary.commitDetailed(edits);
+      if (this.links.length === 0) return group;
+      const delta = deltaOf(group, edits);
+      const release = group.read.hold();
+      const applied = this.links.map((link) => this.deliver(link, delta));
+      void Promise.all(applied).then(release);
+      return group;
     });
   }
 
@@ -117,17 +121,21 @@ export class MirrorFanout {
    */
   attach(store: JournalStore, owner: number): Promise<void> {
     return this.serial(async () => {
-      const release = await this.primary.pin();
+      const read = await this.primary.openRead();
       try {
-        await this.bind(store, owner);
+        await this.bind(store, owner, read);
       } finally {
-        release();
+        read.close();
       }
     });
   }
 
-  private async bind(store: JournalStore, owner: number): Promise<void> {
-    const pin = this.pin();
+  private async bind(
+    store: JournalStore,
+    owner: number,
+    read: PinnedRead,
+  ): Promise<void> {
+    const pin = pinnedVersion(read);
     const current = identityOf(pin?.version);
     const recorded = await recordedIdentity(store);
     const link: MirrorLink = {
@@ -203,13 +211,6 @@ export class MirrorFanout {
       }
     });
     return link.queue;
-  }
-
-  /** The published primary version with reads that reach it, or undefined before its first group. */
-  private pin(): PinnedVersion | undefined {
-    const version = this.primary.published;
-    if (version === undefined) return undefined;
-    return { version, access: this.primary.recordAccess() };
   }
 
   /** One group that replaces the mirror's history with the accepted rows of the primary, the owner dictionary and the primary's identity. */

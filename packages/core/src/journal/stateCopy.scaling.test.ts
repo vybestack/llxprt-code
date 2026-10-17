@@ -12,6 +12,7 @@ import {
 } from './__tests__/support/copyFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 import { compactionCopy } from './versionCopy.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const FEW = 100;
 const MANY = 400;
@@ -64,7 +65,7 @@ describe('compaction copy cost with growing checkpoint counts (design 4.8 severa
     if (current === undefined) throw new Error('nothing is published');
     const reads: HeadReads = new Map();
     const result = await compactionCopy(
-      countingAccess(source.recordAccess(), reads),
+      countingAccess(await accessOf(source), reads),
       current,
       path.join(directory(), `compacted-${checkpoints}-${rowsBetween}.llxj`),
       copyDeps(),

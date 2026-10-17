@@ -130,7 +130,7 @@ async function openJournal(
     notifyRows: (source) => {
       observed.batches.push({
         source,
-        ackedCommitSeq: session.store.snapshot().version?.commitSeq ?? 0,
+        ackedCommitSeq: session.store.published?.commitSeq ?? 0,
       });
     },
     notifyTokens: () => {},

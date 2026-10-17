@@ -8,13 +8,14 @@ import { accepts } from '../../ownerRules.js';
 import type { RowEntry } from '../../rowEntry.js';
 import { testJournalSeams, type Failures } from './journalFixtures.js';
 import { storeDeps } from './storeFixtures.js';
+import { accessOf } from './pinnedAccess.js';
 
 /** A digest of the `ROW` record an entry points at: its kind header and body, which is what must be the same in every file. */
 export async function rowRecordDigest(
   store: JournalStore,
   entry: RowEntry,
 ): Promise<string> {
-  const access = store.recordAccess();
+  const access = await accessOf(store);
   const head = await access.readRecordHead(entry.recordOffset, 'ROW');
   const hash = createHash('sha256').update(head.kindHeader);
   for await (const chunk of access.readRecordBody(head, undefined, 'ROW')) {

@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { SourceRow, VersionEdit } from './groupEdits.js';
 import type { GroupDelta } from './groupDelta.js';
+import type { PinnedRead } from './pinLease.js';
 import type { RecordAccess } from './recordAccess.js';
 import { rootRef } from './groupSegments.js';
 import type { JournalStore } from './journalStore.js';
@@ -50,8 +51,8 @@ interface MirrorState {
   readonly countBelow: (label: bigint) => Promise<number>;
 }
 
-async function stateOf(store: JournalStore): Promise<MirrorState> {
-  const version = store.published;
+async function stateOf(read: PinnedRead): Promise<MirrorState> {
+  const { version } = read;
   const root = version === undefined ? undefined : rootRef(version);
   if (version === undefined || root === undefined) {
     return {
@@ -60,7 +61,7 @@ async function stateOf(store: JournalStore): Promise<MirrorState> {
       countBelow: () => Promise.resolve(0),
     };
   }
-  const access = store.recordAccess();
+  const { access } = read;
   return {
     rows: version.rows,
     lastLabel: (await entryAt(access, root, version.rows - 1)).label,
@@ -171,7 +172,19 @@ export async function mirrorEdits(
   delta: GroupDelta,
   target: MirrorTarget,
 ): Promise<VersionEdit[]> {
-  const mirror = await stateOf(target.store);
+  const read = await target.store.openRead();
+  try {
+    return await editsFor(delta, target, await stateOf(read));
+  } finally {
+    read.close();
+  }
+}
+
+async function editsFor(
+  delta: GroupDelta,
+  target: MirrorTarget,
+  mirror: MirrorState,
+): Promise<VersionEdit[]> {
   if (delta.resync) {
     if (delta.after.rows === 0 && mirror.rows === 0) return [];
     return resyncEdits(target, { version: delta.after, access: delta.access });

@@ -26,6 +26,7 @@ export class JournalDetachedPublication {
   /** The ack of the last group of this publication; undefined until a trailer is acked. */
   lastAck: CommitAck | undefined;
   private readonly mark: JournalCompensationMark;
+  private released = false;
   /** The failure this publication's own groups reported; compensation resolves exactly that one. */
   private failure: unknown;
 
@@ -124,6 +125,13 @@ export class JournalDetachedPublication {
   /** Drops the owner id taken for rows no group was written for. */
   discardOwnerRegistration(): void {
     this.store.discardOwnerRegistration();
+  }
+
+  /** Lets go of the version captured at construction; call it once the publication is over, compensated or not. */
+  async release(): Promise<void> {
+    if (this.released) return;
+    this.released = true;
+    await this.store.releaseCompensation(this.mark);
   }
 
   /** Puts the version captured at construction back; nothing is written when no group was acked. */

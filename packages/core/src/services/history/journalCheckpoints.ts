@@ -48,10 +48,15 @@ export async function withCheckpointOnJournal<T>(
       signal,
     );
   });
-  signal?.throwIfAborted();
-  if (captured.snapshot === undefined)
-    throw new Error('The checkpoint was not captured');
-  return execute(snapshotCheckpoint(captured.snapshot, signal));
+  const { snapshot } = captured;
+  try {
+    signal?.throwIfAborted();
+    if (snapshot === undefined)
+      throw new Error('The checkpoint was not captured');
+    return await execute(snapshotCheckpoint(snapshot, signal));
+  } finally {
+    snapshot?.close();
+  }
 }
 
 /**
@@ -68,7 +73,7 @@ export async function withRollbackCheckpointOnJournal<T>(
 ): Promise<T> {
   const scope: { state?: DetachedState; mark?: JournalMark } = {};
   await enqueue(async () => {
-    await store.settledSnapshot(() => host.waitForTokenUpdates());
+    (await store.settledSnapshot(() => host.waitForTokenUpdates())).close();
     scope.mark = store.captureCompensation();
     scope.state = host.snapshot();
   });
@@ -88,8 +93,10 @@ export async function withRollbackCheckpointOnJournal<T>(
   try {
     return await execute(restore);
   } finally {
+    const { mark } = scope;
     scope.mark = undefined;
     scope.state = undefined;
+    if (mark !== undefined) await store.releaseCompensation(mark);
   }
 }
 

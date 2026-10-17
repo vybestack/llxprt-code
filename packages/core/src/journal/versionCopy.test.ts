@@ -23,6 +23,7 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c1-1', 'c1-2', 'c1-3'];
 
@@ -53,7 +54,7 @@ describe('clone of one version (design 4.8)', () => {
     const sourceMeta = await mapContents(source, 'meta');
     const sourceState = await mapContents(source, 'state');
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -80,7 +81,7 @@ describe('clone of one version (design 4.8)', () => {
     const source = await richSource();
     const before = current(source);
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       before,
       file('clone.llxj'),
       copyDeps(),
@@ -113,7 +114,7 @@ describe('clone of one version (design 4.8)', () => {
   it('points every offset field at a record of the right kind written earlier in the new file, with the source gone', async () => {
     const source = await richSource();
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -121,7 +122,7 @@ describe('clone of one version (design 4.8)', () => {
     await source.close();
     await removeFile(file('source.llxj'));
     const clone = await openStore(result.path);
-    const audit = new OffsetAudit(clone.recordAccess());
+    const audit = new OffsetAudit(await accessOf(clone));
     await audit.walkVersion(current(clone));
     // The fixture has no LENS or mapped-id records; the Mistral test covers those fields.
     const unmet = audit
@@ -145,7 +146,7 @@ describe('clone of one version (design 4.8)', () => {
   it('leaves a new file that takes further commits: an append after the clone reads back with the cloned rows', async () => {
     const source = await richSource();
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('clone.llxj'),
       copyDeps(),
@@ -168,7 +169,7 @@ describe('clone of one version (design 4.8)', () => {
       { kind: 'pop', cutLabel: labels[0], expectedRemoved: labels.length },
     ]);
     const result = await cloneVersion(
-      source.recordAccess(),
+      await accessOf(source),
       current(source),
       file('empty.llxj'),
       copyDeps(),
@@ -194,7 +195,7 @@ describe('clone of one version (design 4.8)', () => {
     };
     await expect(
       cloneVersion(
-        source.recordAccess(),
+        await accessOf(source),
         swapped,
         file('bad.llxj'),
         copyDeps(),

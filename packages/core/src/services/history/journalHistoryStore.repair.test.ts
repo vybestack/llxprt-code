@@ -89,8 +89,7 @@ describe('journal history store repair and media owner', () => {
 
   async function ownersOf(session: JournalSession): Promise<number[]> {
     const entries: RowEntry[] = [];
-    for await (const entry of session.store.snapshot().entries())
-      entries.push(entry);
+    for await (const entry of session.store.rows()) entries.push(entry);
     return entries.map((entry) => entry.owner);
   }
 

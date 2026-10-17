@@ -16,6 +16,7 @@ import { IdTrieReader } from './idTrieReader.js';
 import type { JournalStore } from './journalStore.js';
 import type { RecordAccess } from './recordAccess.js';
 import { cloneVersion, compactionCopy } from './versionCopy.js';
+import { accessOf } from './__tests__/support/pinnedAccess.js';
 
 const CHECKPOINTS = 60;
 const DROPPED_PREFIXES = ['ckpt:', 'mirror:', 'rel:'];
@@ -72,7 +73,7 @@ describe('state map copy keeps the shape of a trie built from the surviving keys
   ] as const) {
     it(`gives every copied version the shape and the entries of its surviving keys: ${name}`, async () => {
       const source = await session(extraKeys);
-      const sourceAccess: RecordAccess = source.recordAccess();
+      const sourceAccess: RecordAccess = await accessOf(source);
       const current = source.published;
       if (current === undefined) throw new Error('nothing is published');
       const result = await compactionCopy(
@@ -105,7 +106,7 @@ describe('state map copy keeps the shape of a trie built from the surviving keys
       let checked = 0;
       for (const copied of result.versions.slice(0, -1)) {
         const version = await compacted.readVersion(copied.offset);
-        const access = compacted.recordAccess();
+        const access = await accessOf(compacted);
         const reader = new IdTrieReader(access, new BoundedIdNodeCache());
         const state = await mapContentsAt(access, version.roots.stateRoot);
         expect(await checkShape(reader, version.roots.stateRoot)).toBe(
@@ -121,7 +122,7 @@ describe('state map copy keeps the shape of a trie built from the surviving keys
       const cloneVersionRecord = cloned.published;
       if (cloneVersionRecord === undefined) throw new Error('no clone');
       const cloneRoot = cloneVersionRecord.roots.stateRoot;
-      const cloneAccess = cloned.recordAccess();
+      const cloneAccess = await accessOf(cloned);
       const cloneState = await mapContentsAt(cloneAccess, cloneRoot);
       expect(cloneState).toStrictEqual(expected);
       expect(

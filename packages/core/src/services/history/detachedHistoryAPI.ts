@@ -72,24 +72,29 @@ export function notifyDetachedRows(
   ownership: RowOwnership | undefined,
   source: HistoryBatchRowSource,
 ): void {
-  history.emit(
-    'contentBatchAdded',
-    ownership === undefined
-      ? source
-      : {
-          length: source.length,
-          async *rows() {
-            for await (const row of source.rows()) {
-              ownership.retain(row);
-              try {
-                yield row;
-              } finally {
-                ownership.release(row);
+  try {
+    history.emit(
+      'contentBatchAdded',
+      ownership === undefined
+        ? source
+        : {
+            length: source.length,
+            async *rows() {
+              for await (const row of source.rows()) {
+                ownership.retain(row);
+                try {
+                  yield row;
+                } finally {
+                  ownership.release(row);
+                }
               }
-            }
+            },
+            retire: () => source.retire(),
           },
-        },
-  );
+    );
+  } finally {
+    source.retire();
+  }
 }
 
 export function createDetachedHistoryAPI(

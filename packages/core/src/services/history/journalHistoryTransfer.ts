@@ -8,6 +8,7 @@ import { resolveJournalDependencies } from '../../journal/journalWriterOpen.js';
 import { acceptedRows } from '../../journal/mirrorSeed.js';
 import { OwnerDictionary } from '../../journal/ownerDictionary.js';
 import { UNOWNED } from '../../journal/ownerRules.js';
+import type { RecordAccess } from '../../journal/recordAccess.js';
 import { cloneVersion } from '../../journal/versionCopy.js';
 import { HistoryAttachmentError } from './attachHistoryJournal.js';
 import {
@@ -35,12 +36,12 @@ export async function cloneJournalHistory(
   isCancelled: () => boolean,
 ): Promise<JournalSession> {
   requireLive(isCancelled);
-  const published = source.store.published;
+  const read = await source.store.openRead();
   try {
-    if (published === undefined) {
+    if (read.version === undefined) {
       return await JournalSession.create(targetPath, options);
     }
-    await cloneVersion(source.store.recordAccess(), published, targetPath, {
+    await cloneVersion(read.access, read.version, targetPath, {
       journal: await resolveJournalDependencies(options?.journal),
       hasher: sha256KeyHash,
     });
@@ -49,6 +50,8 @@ export async function cloneJournalHistory(
   } catch (error) {
     await rm(targetPath, { force: true });
     throw error;
+  } finally {
+    read.close();
   }
 }
 
@@ -128,22 +131,26 @@ async function* liveRows(
   owner: number | undefined,
   ids: ReadonlyMap<number, number>,
 ): AsyncGenerator<SourceRow> {
-  const version = source.published;
-  if (version === undefined) return;
-  const access = source.recordAccess();
-  const rows =
-    owner === undefined
-      ? allRows(source, access)
-      : acceptedRows(access, version, owner);
-  for await (const row of rows) {
-    requireLive(isCancelled);
-    yield ownedByDestination(row, ids);
+  const read = await source.openRead();
+  try {
+    const { version } = read;
+    if (version === undefined) return;
+    const rows =
+      owner === undefined
+        ? allRows(source, read.access)
+        : acceptedRows(read.access, version, owner);
+    for await (const row of rows) {
+      requireLive(isCancelled);
+      yield ownedByDestination(row, ids);
+    }
+  } finally {
+    read.close();
   }
 }
 
 async function* allRows(
   source: JournalStore,
-  access: ReturnType<JournalStore['recordAccess']>,
+  access: RecordAccess,
 ): AsyncGenerator<SourceRow> {
   for await (const entry of source.rows()) yield { source: access, entry };
 }

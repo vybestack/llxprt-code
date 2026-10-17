@@ -20,9 +20,10 @@ describe('version snapshot', () => {
       path.join(directory(), 'empty.llxj'),
       storeDeps(),
     );
-    const snapshot = store.snapshot();
+    const snapshot = await store.snapshot();
     expect(snapshot.rows).toBe(0);
     expect(await labels(snapshot.entries())).toStrictEqual([]);
+    snapshot.close();
     await store.close();
   });
 
@@ -34,7 +35,7 @@ describe('version snapshot', () => {
     await store.commit([
       { kind: 'append', rows: [draftRow(), draftRow(), draftRow()] },
     ]);
-    const snapshot = store.snapshot();
+    const snapshot = await store.snapshot();
     const before = await labels(snapshot.entries());
     expect(before).toHaveLength(3);
 
@@ -48,7 +49,10 @@ describe('version snapshot', () => {
     expect(await labels(snapshot.entries())).toStrictEqual(before);
     expect((await snapshot.entryAt(2)).label).toBe(before[2]);
     expect((await snapshot.readRow(first)).header.label).toBe(before[0]);
-    expect(store.snapshot().rows).toBe(2);
+    snapshot.close();
+    const latest = await store.snapshot();
+    expect(latest.rows).toBe(2);
+    latest.close();
     await store.close();
   });
 });

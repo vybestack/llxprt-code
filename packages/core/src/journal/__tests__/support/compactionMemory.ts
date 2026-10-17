@@ -21,6 +21,7 @@ import {
   mapContentsAt,
   populatedSource,
 } from './copyFixtures.js';
+import { accessOf } from './pinnedAccess.js';
 
 const MIB = 1024 * 1024;
 
@@ -167,7 +168,7 @@ export async function ageOutIdleCode(): Promise<void> {
 }
 
 /** Median of settled readings: one reading can sit on allocator jitter, the median of three does not. */
-async function medianSettledHeap(label: string): Promise<number> {
+export async function medianSettledHeap(label: string): Promise<number> {
   const readings: number[] = [];
   for (let index = 0; index < MEDIAN_READINGS; index++) {
     readings.push(await strictSettledHeap(label));
@@ -211,24 +212,26 @@ export class PerVersionBuilders {
   }
 
   async collect(copied: CopiedVersion): Promise<void> {
-    const version = await this.source.readVersion(copied.sourceOffset);
-    const labels: number[] = [];
-    const owners: number[] = [];
-    for await (const entry of iterateRowEntries(this.source.recordAccess(), {
-      offset: version.roots.rowRoot,
-      rows: version.rows,
-    })) {
-      labels.push(Number(entry.label));
-      owners.push(entry.owner);
+    const read = await this.source.openRead();
+    try {
+      const version = await this.source.readVersion(copied.sourceOffset);
+      const labels: number[] = [];
+      const owners: number[] = [];
+      for await (const entry of iterateRowEntries(read.access, {
+        offset: version.roots.rowRoot,
+        rows: version.rows,
+      })) {
+        labels.push(Number(entry.label));
+        owners.push(entry.owner);
+      }
+      this.builders.push({
+        state: await mapContentsAt(read.access, version.roots.stateRoot),
+        labels,
+        owners,
+      });
+    } finally {
+      read.close();
     }
-    this.builders.push({
-      state: await mapContentsAt(
-        this.source.recordAccess(),
-        version.roots.stateRoot,
-      ),
-      labels,
-      owners,
-    });
   }
 }
 
@@ -240,7 +243,7 @@ export async function warmCompaction(
   const current = source.published;
   if (current === undefined) throw new Error('nothing is published');
   return compactionCopy(
-    source.recordAccess(),
+    await accessOf(source),
     current,
     target,
     copyDepsWithoutEventLog(),
@@ -299,7 +302,7 @@ export async function measureCompaction(
     }
   };
   const result = await compactionCopy(
-    source.recordAccess(),
+    await accessOf(source),
     current,
     target,
     copyDepsWithoutEventLog(),

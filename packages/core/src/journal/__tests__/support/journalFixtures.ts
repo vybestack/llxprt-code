@@ -37,6 +37,8 @@ export interface Failures {
   gateWriteAt?: number;
   /** Counts the positional reads that reach the file. */
   readCounter?: { reads: number };
+  /** Holds every positional read until `promise` settles; `hits` counts the reads that arrived. */
+  readGate?: { promise: Promise<void>; hits: number };
 }
 
 export interface TestJournalSeams {
@@ -64,8 +66,12 @@ function wrapHandle(
   };
   return {
     fd: real.fd,
-    read: (buffer, offset, length, position) => {
+    read: async (buffer, offset, length, position) => {
       if (failures.readCounter !== undefined) failures.readCounter.reads += 1;
+      if (failures.readGate !== undefined) {
+        failures.readGate.hits += 1;
+        await failures.readGate.promise;
+      }
       return real.read(buffer, offset, length, position);
     },
     write: async (buffer, offset, length, position) => {

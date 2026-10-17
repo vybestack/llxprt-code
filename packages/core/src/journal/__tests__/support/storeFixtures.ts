@@ -154,17 +154,21 @@ export async function factSnapshot(
   store: JournalStore,
   ids: readonly string[] = SCENARIO_IDS,
 ): Promise<string[]> {
-  const queries = store.idFacts();
-  const out: string[] = [];
-  for (const id of ids) {
-    const fact = await queries.fact(id);
-    out.push(
-      fact === undefined
-        ? 'none'
-        : Buffer.from(encodeIdFact(fact)).toString('hex'),
-    );
+  const queries = await store.idFacts();
+  try {
+    const out: string[] = [];
+    for (const id of ids) {
+      const fact = await queries.fact(id);
+      out.push(
+        fact === undefined
+          ? 'none'
+          : Buffer.from(encodeIdFact(fact)).toString('hex'),
+      );
+    }
+    return out;
+  } finally {
+    queries.close();
   }
-  return out;
 }
 
 const META_KEYS = [

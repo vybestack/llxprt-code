@@ -16,6 +16,7 @@ import {
   storeDeps,
 } from './storeFixtures.js';
 import type { StoreSnapshot } from './storeSnapshot.js';
+import { accessOf } from './pinnedAccess.js';
 
 const UTF8 = new TextEncoder();
 const UTF8_DECODER = new TextDecoder();
@@ -74,7 +75,7 @@ export async function mapContentsAt(
 }
 
 /** A map of the published version as text: `state` for the state map, `meta` for the versioned meta map. */
-export function mapContents(
+export async function mapContents(
   store: JournalStore,
   which: 'state' | 'meta',
 ): Promise<Map<string, string>> {
@@ -82,7 +83,7 @@ export function mapContents(
   if (version === undefined) throw new Error('nothing is published');
   const root =
     which === 'state' ? version.roots.stateRoot : version.roots.metaRoot;
-  return mapContentsAt(store.recordAccess(), root);
+  return mapContentsAt(await accessOf(store), root);
 }
 
 /** The owner dictionary, start metadata and title a session carries (design 3.5). */
