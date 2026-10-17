@@ -89,12 +89,16 @@ export class JournalHistoryStore {
   private disposed = false;
   private readonly publication = new JournalPublication();
   private readonly owners: JournalOwners;
-  private readonly mirrors: JournalMirrors;
+  /** The per-agent mirror files bound to this history. */
+  readonly mirrors: JournalMirrors;
 
   constructor(private readonly session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
     this.owners = new JournalOwners(session.store);
-    this.mirrors = new JournalMirrors(session.store, this.owners);
+    this.mirrors = new JournalMirrors(session.store, this.owners, {
+      exclusive: (task) => this.exclusive(task),
+      assertUsable: () => this.assertUsable(),
+    });
   }
 
   /** The ack of the last group that became durable. */
@@ -331,21 +335,6 @@ export class JournalHistoryStore {
 
   isCurrentMutationMark(mark: HistoryMutationMark): boolean {
     return this.publication.isCurrent(this, mark);
-  }
-
-  /** Seeds and binds the mirror file of `origin` behind everything queued (late attach, design 5.3). */
-  attachMirror(mirror: JournalSession, origin: string): Promise<void> {
-    this.assertUsable();
-    return this.exclusive(() => this.mirrors.attach(mirror, origin));
-  }
-
-  /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
-  detachMirror(mirror: JournalSession): Promise<boolean> {
-    return this.exclusive(() => this.mirrors.detach(mirror));
-  }
-
-  isMirror(mirror: JournalSession): boolean {
-    return this.mirrors.has(mirror);
   }
 
   /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */

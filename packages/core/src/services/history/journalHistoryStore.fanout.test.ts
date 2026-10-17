@@ -180,8 +180,8 @@ describe('journal history store owners and mirrors', () => {
       const { store } = await newStore('append.llxj');
       const mirrorA = await newSession('append-a.llxj');
       const mirrorB = await newSession('append-b.llxj');
-      await store.attachMirror(mirrorA, 'agent-a');
-      await store.attachMirror(mirrorB, 'agent-b');
+      await store.mirrors.attach(mirrorA, 'agent-a');
+      await store.mirrors.attach(mirrorB, 'agent-b');
 
       store.apply({ kind: 'content', content: row('a1'), origin: 'agent-a' });
       store.apply({ kind: 'content', content: row('shared') });
@@ -201,8 +201,8 @@ describe('journal history store owners and mirrors', () => {
         const { store, primary } = await newStore(`defect3-${changed}.llxj`);
         const mirrorA = await newSession(`defect3-${changed}-a.llxj`);
         const mirrorB = await newSession(`defect3-${changed}-b.llxj`);
-        await store.attachMirror(mirrorA, 'agent-a');
-        await store.attachMirror(mirrorB, 'agent-b');
+        await store.mirrors.attach(mirrorA, 'agent-a');
+        await store.mirrors.attach(mirrorB, 'agent-b');
         const origins = ['agent-a', 'agent-b', undefined] as const;
         for (let index = 0; index < changed; index++) {
           store.apply({
@@ -262,12 +262,12 @@ describe('journal history store owners and mirrors', () => {
         origin: 'agent-a',
       });
       store.apply({ kind: 'content', content: row('shared') });
-      await store.attachMirror(mirrorA, 'agent-a');
+      await store.mirrors.attach(mirrorA, 'agent-a');
       store.changeOwnersOf([{ position: 1, origin: 'agent-b' }]);
       await store.waitForDurable();
 
       const mirrorB = await newSession('defect4-b.llxj');
-      await store.attachMirror(mirrorB, 'agent-b');
+      await store.mirrors.attach(mirrorB, 'agent-b');
       await store.settleFanout();
 
       expect(await texts(mirrorB)).toStrictEqual(['second', 'shared']);
@@ -280,7 +280,7 @@ describe('journal history store owners and mirrors', () => {
       store.apply({ kind: 'content', content: row('b1'), origin: 'agent-b' });
       store.apply({ kind: 'content', content: row('shared') });
       const mirror = await newSession('late-a.llxj');
-      const attached = store.attachMirror(mirror, 'agent-a');
+      const attached = store.mirrors.attach(mirror, 'agent-a');
       store.apply({ kind: 'content', content: row('a2'), origin: 'agent-a' });
       store.apply({ kind: 'content', content: row('b2'), origin: 'agent-b' });
       await attached;
@@ -293,7 +293,7 @@ describe('journal history store owners and mirrors', () => {
     it('follows a compensation: the mirror gets the restored version', async () => {
       const { store } = await newStore('compensate.llxj');
       const mirror = await newSession('compensate-a.llxj');
-      await store.attachMirror(mirror, 'agent-a');
+      await store.mirrors.attach(mirror, 'agent-a');
       store.apply({ kind: 'content', content: row('a1'), origin: 'agent-a' });
       store.apply({ kind: 'content', content: row('shared') });
       await store.waitForDurable();
@@ -311,22 +311,22 @@ describe('journal history store owners and mirrors', () => {
     it('stops delivering to a detached mirror', async () => {
       const { store } = await newStore('detach.llxj');
       const mirror = await newSession('detach-a.llxj');
-      await store.attachMirror(mirror, 'agent-a');
+      await store.mirrors.attach(mirror, 'agent-a');
       store.apply({ kind: 'content', content: row('a1'), origin: 'agent-a' });
-      expect(await store.detachMirror(mirror)).toBe(true);
-      expect(store.isMirror(mirror)).toBe(false);
+      expect(await store.mirrors.detach(mirror)).toBe(true);
+      expect(store.mirrors.has(mirror)).toBe(false);
       store.apply({ kind: 'content', content: row('a2'), origin: 'agent-a' });
       await store.waitForDurable();
       await store.settleFanout();
 
       expect(await texts(mirror)).toStrictEqual(['a1']);
-      expect(await store.detachMirror(mirror)).toBe(false);
+      expect(await store.mirrors.detach(mirror)).toBe(false);
     });
 
     it('reports a mirror that cannot take a group when the fan-out is settled', async () => {
       const { store } = await newStore('failing.llxj');
       const mirror = await newSession('failing-a.llxj');
-      await store.attachMirror(mirror, 'agent-a');
+      await store.mirrors.attach(mirror, 'agent-a');
       await mirror.close();
       store.apply({ kind: 'content', content: row('a1'), origin: 'agent-a' });
       await store.waitForDurable();
@@ -346,7 +346,7 @@ describe('journal history store owners and mirrors', () => {
       store.adoptedOrigin('agent-a');
       expect(store.primaryOriginId()).toBe('agent-a');
 
-      await store.attachMirror(await newSession('adopt-a.llxj'), 'agent-a');
+      await store.mirrors.attach(await newSession('adopt-a.llxj'), 'agent-a');
       expect(() => store.adoptedOrigin(undefined)).toThrow(
         'must name its origin',
       );

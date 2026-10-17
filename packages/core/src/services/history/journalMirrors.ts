@@ -8,6 +8,14 @@ import { MirrorFanout } from '../../journal/mirrorFanout.js';
 import type { JournalOwners } from './journalOwners.js';
 import type { JournalSession } from './journalSession.js';
 
+/** What the mirrors need from the store's operation queue. */
+export interface MirrorQueue {
+  /** Runs `task` after everything queued, ahead of anything queued later. */
+  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  /** Throws when the store is disposed or failed. */
+  assertUsable(): void;
+}
+
 /**
  * The per-agent mirror files of one history and the origin bookkeeping that
  * goes with them (design 5.2 and 5.3). The primary journal keeps every row;
@@ -23,6 +31,7 @@ export class JournalMirrors {
   constructor(
     primary: JournalStore,
     private readonly owners: JournalOwners,
+    private readonly queue: MirrorQueue,
   ) {
     this.fanout = new MirrorFanout(primary);
   }
@@ -36,11 +45,23 @@ export class JournalMirrors {
   }
 
   /**
-   * Seeds and binds the mirror of `origin`. The origin gets its owner id
-   * first, in a state-only group, because the seed filters by the id. The
-   * caller runs this behind the queued groups so the seed sees them.
+   * Seeds and binds the mirror file of `origin` behind everything queued
+   * (late attach, design 5.3).
    */
-  async attach(mirror: JournalSession, origin: string): Promise<void> {
+  attach(mirror: JournalSession, origin: string): Promise<void> {
+    this.queue.assertUsable();
+    return this.queue.exclusive(() => this.seedAndBind(mirror, origin));
+  }
+
+  /**
+   * The origin gets its owner id first, in a state-only group, because the
+   * seed filters by the id. It runs behind the queued groups so the seed sees
+   * them.
+   */
+  private async seedAndBind(
+    mirror: JournalSession,
+    origin: string,
+  ): Promise<void> {
     const owner = await this.owners.resolve(origin);
     try {
       if (owner.edits.length > 0) await this.fanout.commit(owner.edits);
@@ -51,8 +72,9 @@ export class JournalMirrors {
     await this.fanout.attach(mirror.store, owner.id);
   }
 
+  /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
   detach(mirror: JournalSession): Promise<boolean> {
-    return this.fanout.detach(mirror.store);
+    return this.queue.exclusive(() => this.fanout.detach(mirror.store));
   }
 
   has(mirror: JournalSession): boolean {
