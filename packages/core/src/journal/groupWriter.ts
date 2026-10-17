@@ -54,6 +54,7 @@ export interface GroupWriterDependencies {
   readonly random: (length: number) => Uint8Array;
 }
 
+/** The file a writer serves; the compaction swap replaces it as a whole (design 4.11). */
 export interface GroupWriterStart {
   readonly handle: JournalFileHandle;
   readonly syncMarker: Uint8Array;
@@ -84,20 +85,28 @@ function groupTagFrom(random: Uint8Array): bigint {
  * the writer.
  */
 export class JournalGroupWriter {
-  private readonly handle: JournalFileHandle;
-  private readonly syncMarker: Uint8Array;
+  private handle: JournalFileHandle;
+  private syncMarker: Uint8Array;
   private readonly dependencies: GroupWriterDependencies;
-  /** Positional reads on the writer's own descriptor; they never touch its write offset. */
+  /**
+   * Positional reads on the writer's own descriptor; they never touch its
+   * write offset. They follow the descriptor across a compaction swap.
+   */
   readonly reader: PositionalReader;
   private writeOffset: number;
   private publishedTrailer: TrailerHeader | undefined;
   private queue: Promise<void> = Promise.resolve();
   private failure: { readonly error: unknown } | undefined;
   private closed = false;
+  /** True from the moment the swap detaches the descriptor until it attaches one again. */
+  private detached = false;
 
   constructor(start: GroupWriterStart, dependencies: GroupWriterDependencies) {
     this.handle = start.handle;
-    this.reader = createFileHandleReader(start.handle);
+    this.reader = {
+      readAt: (position, length) =>
+        createFileHandleReader(this.requireHandle()).readAt(position, length),
+    };
     this.syncMarker = start.syncMarker;
     this.writeOffset = start.writeOffset;
     this.publishedTrailer = start.published;
@@ -152,7 +161,49 @@ export class JournalGroupWriter {
   async close(): Promise<void> {
     this.closed = true;
     await this.queue;
-    await this.handle.close();
+    if (!this.detached) await this.handle.close();
+  }
+
+  /** What a restore must put back: the file as the writer holds it now. */
+  currentFile(): GroupWriterStart {
+    return {
+      handle: this.requireHandle(),
+      syncMarker: this.syncMarker,
+      writeOffset: this.writeOffset,
+      published: this.publishedTrailer,
+    };
+  }
+
+  /**
+   * Swap step A (design 4.11): gives up the descriptor, which the caller
+   * closes. No read or write is served until `attach`. The caller holds the
+   * commit queue, so no group is in flight.
+   */
+  detach(): JournalFileHandle {
+    const handle = this.requireHandle();
+    this.detached = true;
+    return handle;
+  }
+
+  /** Swap steps C and R: serves the file `next` describes, from its published state and write offset. */
+  attach(next: GroupWriterStart): void {
+    this.handle = next.handle;
+    this.syncMarker = next.syncMarker;
+    this.writeOffset = next.writeOffset;
+    this.publishedTrailer = next.published;
+    this.detached = false;
+  }
+
+  /** The writer accepts nothing more; every later commit throws with `error` as its cause. */
+  poison(error: unknown): void {
+    this.failure = { error };
+  }
+
+  private requireHandle(): JournalFileHandle {
+    if (this.detached) {
+      throw new Error('The journal file is being swapped by a compaction');
+    }
+    return this.handle;
   }
 
   private async runGroup(
@@ -162,6 +213,7 @@ export class JournalGroupWriter {
     if (this.failure !== undefined) {
       throw new JournalWriterPoisonedError({ cause: this.failure.error });
     }
+    this.requireHandle();
     const appender = new VectoredRecordAppender(this.handle, this.writeOffset);
     try {
       const state = await build(appender);

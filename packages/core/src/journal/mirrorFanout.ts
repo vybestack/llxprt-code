@@ -69,11 +69,22 @@ export class MirrorFanout {
   /** Like {@link commit}, and returns the group with the versions before and after it. */
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     return this.serial(async () => {
-      const group = await this.primary.commitDetailed(edits);
-      if (this.links.length === 0) return group;
-      const delta = deltaOf(group, edits);
-      for (const link of this.links) this.deliver(link, delta);
-      return group;
+      // Taken before the commit: a mirror reads the group's records by offset
+      // after the ack, and a compaction in between would move them (design 4.11).
+      const release = await this.primary.pin();
+      let handedOver = false;
+      try {
+        const group = await this.primary.commitDetailed(edits);
+        if (this.links.length === 0) return group;
+        const delta = deltaOf(group, edits);
+        const applied = this.links.map((link) => this.deliver(link, delta));
+        // The pin lasts until every mirror has read the group's records.
+        handedOver = true;
+        void Promise.all(applied).then(release);
+        return group;
+      } finally {
+        if (!handedOver) release();
+      }
     });
   }
 
@@ -106,22 +117,31 @@ export class MirrorFanout {
    */
   attach(store: JournalStore, owner: number): Promise<void> {
     return this.serial(async () => {
-      const pin = this.pin();
-      const current = identityOf(pin?.version);
-      const recorded = await recordedIdentity(store);
-      const link: MirrorLink = {
-        store,
-        owner,
-        queue: Promise.resolve(),
-        recorded: recorded ?? current,
-        failure: undefined,
-      };
-      const empty = pin === undefined && store.published === undefined;
-      const inSync =
-        recorded === undefined ? empty : sameIdentity(recorded, current);
-      if (!inSync) await this.resynchronize(link, pin, current);
-      this.links.push(link);
+      const release = await this.primary.pin();
+      try {
+        await this.bind(store, owner);
+      } finally {
+        release();
+      }
     });
+  }
+
+  private async bind(store: JournalStore, owner: number): Promise<void> {
+    const pin = this.pin();
+    const current = identityOf(pin?.version);
+    const recorded = await recordedIdentity(store);
+    const link: MirrorLink = {
+      store,
+      owner,
+      queue: Promise.resolve(),
+      recorded: recorded ?? current,
+      failure: undefined,
+    };
+    const empty = pin === undefined && store.published === undefined;
+    const inSync =
+      recorded === undefined ? empty : sameIdentity(recorded, current);
+    if (!inSync) await this.resynchronize(link, pin, current);
+    this.links.push(link);
   }
 
   /** Waits for every mirror to apply what was queued, then throws every failure. */
@@ -169,7 +189,8 @@ export class MirrorFanout {
     return turn;
   }
 
-  private deliver(link: MirrorLink, delta: GroupDelta): void {
+  /** Applies `delta` to the mirror; settles when it is applied or has failed (the failure is kept on the link). */
+  private deliver(link: MirrorLink, delta: GroupDelta): Promise<void> {
     link.queue = link.queue.then(async () => {
       if (link.failure !== undefined) return;
       try {
@@ -181,6 +202,7 @@ export class MirrorFanout {
         link.failure = { error };
       }
     });
+    return link.queue;
   }
 
   /** The published primary version with reads that reach it, or undefined before its first group. */

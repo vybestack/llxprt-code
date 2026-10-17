@@ -18,12 +18,15 @@ import { realDeps } from './idFactFixture.js';
 import { testJournalSeams, type TestJournalSeams } from './journalFixtures.js';
 import { testAlgebra } from './rowTreeFixtures.js';
 import type { IdNodeCache } from '../../idTrieCache.js';
+import type { FileOperations } from '../../compactionSwap.js';
 
 export const plainPlanner = planOwnRowOccurrences;
 
 export interface StoreFixtureOptions {
   readonly seams?: TestJournalSeams;
   readonly createCache?: () => IdNodeCache;
+  readonly fileOperations?: FileOperations;
+  readonly compactionDue?: JournalStoreDependencies['compactionDue'];
 }
 
 export function storeDeps(
@@ -36,6 +39,8 @@ export function storeDeps(
     planOccurrences: plainPlanner,
     algebra: testAlgebra,
     createCache: options.createCache,
+    fileOperations: options.fileOperations,
+    compactionDue: options.compactionDue,
   };
 }
 
