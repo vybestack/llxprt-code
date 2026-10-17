@@ -4,10 +4,8 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { CompressionSpanIndex } from '@vybestack/llxprt-code-core/services/history/compression-span-index.js';
-import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import {
   invalidateResponsesStatefulChain,
   type IContent,
@@ -15,6 +13,7 @@ import {
   type ChronologyReplacedSpan,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
+import { appendCandidateRow, curatedCandidate } from './curatedCandidate.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { shouldRetryCompressionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
@@ -64,14 +63,45 @@ export async function replacedSpan(
   }
 }
 
+interface CandidateAnnotation {
+  readonly start: number;
+  readonly top: number;
+  readonly span: ChronologyReplacedSpan;
+  /** The semantic purge frontier the first candidate row takes; undefined when the history has one. */
+  readonly frontier: ContentMetadata['semanticMediaPurgeFrontier'];
+}
+
+function annotateCandidateRow(
+  row: IContent,
+  position: number,
+  { start, top, span, frontier }: CandidateAnnotation,
+): IContent {
+  const metadata = { ...row.metadata };
+  if (
+    span.itemCount > 0 &&
+    metadata.isSummary === true &&
+    metadata.chronologyReplaced === undefined
+  )
+    metadata.chronologyReplaced = span;
+  if (position === start && frontier !== undefined)
+    metadata.semanticMediaPurgeFrontier = frontier;
+  delete metadata.cacheAnchor;
+  if (position === start + top - 1) metadata.cacheAnchor = true;
+  return { ...row, metadata };
+}
+
 export async function publishCandidate(
-  history: HistoryService,
+  history: Pick<
+    HistoryService,
+    'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
+  >,
   previous: HistoryDumpSource,
   curated: HistoryIndexedRows,
   start: number,
   model: string,
   top = 0,
   options: DetachedHistoryOptions = {},
+  sourceOrdinalAt?: (position: number) => number | undefined,
 ): Promise<IContent | undefined> {
   options.signal?.throwIfAborted();
   const anchor =
@@ -95,22 +125,19 @@ export async function publishCandidate(
     async (_source, sink) => {
       for (let position = start; position < curated.length; position++) {
         options.signal?.throwIfAborted();
-        const row = curated.readRow(position);
-        const metadata = { ...row.metadata };
-        if (
-          span.itemCount > 0 &&
-          metadata.isSummary === true &&
-          metadata.chronologyReplaced === undefined
-        )
-          metadata.chronologyReplaced = span;
-        if (position === start && !hasFrontier && frontier !== undefined)
-          metadata.semanticMediaPurgeFrontier = frontier;
-        delete metadata.cacheAnchor;
-        if (position === start + top - 1) metadata.cacheAnchor = true;
         const [clean] = invalidateResponsesStatefulChain([
-          { ...row, metadata },
+          annotateCandidateRow(curated.readRow(position), position, {
+            start,
+            top,
+            span,
+            frontier: hasFrontier ? undefined : frontier,
+          }),
         ]);
-        await sink.appendValue(sanitizeProviderContentForSerialization(clean));
+        await appendCandidateRow(
+          sink,
+          sanitizeProviderContentForSerialization(clean),
+          sourceOrdinalAt?.(position),
+        );
         if (
           !marked &&
           clean.metadata?.reason === 'compression-state-snapshot'
@@ -149,10 +176,8 @@ export async function runDiskTruncation(
   const history = args[2];
   const origin = args[7]?.historyOrigin;
   return history.detachedValues.withCheckpoint(async (previous) => {
-    const curated = new DetachedHistoryJournal();
+    const curated = await curatedCandidate(checkpointRows(previous));
     try {
-      for await (const row of checkpointRows(previous))
-        if (isCuratedContent(row)) curated.append(row);
       const strategy = new TopDownTruncationStrategy();
       const result = await retryWithBackoff(
         () => strategy.compressDisk({ ...metadata, history: curated }),
@@ -176,6 +201,7 @@ export async function runDiskTruncation(
         metadata.runtimeState.model,
         0,
         { origin },
+        (position) => curated.sourceOrdinalAt(position),
       );
       return { outcome: 'applied', summary };
     } finally {

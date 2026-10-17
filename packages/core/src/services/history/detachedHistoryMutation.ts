@@ -185,8 +185,9 @@ async function transformCandidate(
       throw new Error('Detached transform already consumed');
     const sink = detachedHistorySink(previous, next, spans, assertActive);
     if (task.append === true) {
+      let ordinal = 0;
       for await (const row of source.streamRows(signal))
-        await sink.appendValue(row);
+        await sink.appendDerived(ordinal++, row);
     }
     await task.transform(source, sink);
     assertActive();

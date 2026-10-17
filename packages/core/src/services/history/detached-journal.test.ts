@@ -30,7 +30,7 @@ describe('ordinal detached value journal', () => {
     expect(() => journal.readRow(0)).toThrow('closed');
   });
 
-  it('records the history ordinal a row was derived from and fails for a row without one', () => {
+  it('records the history ordinal a row was derived from and reports none for a row appended without one', () => {
     const journal = new DetachedHistoryJournal();
     try {
       journal.append(detachedRow(0), 7);
@@ -38,7 +38,7 @@ describe('ordinal detached value journal', () => {
       journal.append(detachedRow(2));
       expect(journal.sourceOrdinalAt(0)).toBe(7);
       expect(journal.sourceOrdinalAt(1)).toBe(0);
-      expect(() => journal.sourceOrdinalAt(2)).toThrow('no source ordinal');
+      expect(journal.sourceOrdinalAt(2)).toBeUndefined();
     } finally {
       journal.close();
     }

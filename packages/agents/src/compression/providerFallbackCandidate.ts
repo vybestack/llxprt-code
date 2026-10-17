@@ -3,21 +3,28 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
+import { appendCandidateRow } from './curatedCandidate.js';
 
 export interface ProviderFallbackCandidate {
   readonly rows: HistoryIndexedRows;
   readonly start: number;
   readonly hasPendingRows: boolean;
+  /**
+   * The ordinal in the history of the row at `index`; such a row keeps that
+   * row's owner. A row with none (or a candidate without this) comes from no
+   * history row and is written under the operation's origin.
+   */
+  readonly sourceOrdinalAt?: (index: number) => number | undefined;
 }
 
 export class ProviderFallbackInvariantError extends Error {}
 
 export async function publishProviderFallbackCandidate(
-  history: HistoryService,
+  history: Pick<HistoryService, 'detachedValues'>,
   candidate: ProviderFallbackCandidate,
   model: string,
 ): Promise<void> {
-  const { rows, start } = candidate;
+  const { rows, start, sourceOrdinalAt } = candidate;
   if (!Number.isInteger(start) || start < 0 || start > rows.length)
     throw new ProviderFallbackInvariantError(
       'Invalid provider fallback candidate range',
@@ -27,7 +34,11 @@ export async function publishProviderFallbackCandidate(
       const original = rows.readRow(index);
       if (original.blocks.length === 0) continue;
       const [row] = invalidateResponsesStatefulChain([original]);
-      await sink.appendValue(sanitizeProviderContentForSerialization(row));
+      await appendCandidateRow(
+        sink,
+        sanitizeProviderContentForSerialization(row),
+        sourceOrdinalAt?.(index),
+      );
     }
   }, model);
 }

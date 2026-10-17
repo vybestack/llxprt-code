@@ -95,6 +95,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
    * Appends `row`. `sourceOrdinal` is the position, in the history the
    * candidate is built from, of the row this one is derived from; a publisher
    * reads it back with {@link sourceOrdinalAt} so the row keeps that row's owner.
+   * A row appended without one is written under the operation's origin.
    */
   append(row: IContent, sourceOrdinal?: number): void {
     this.assertOpen();
@@ -184,12 +185,12 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     };
   }
 
-  /** The history ordinal row `index` was derived from; fails when its writer recorded none. */
-  sourceOrdinalAt(index: number): number {
-    const { sourceOrdinal } = this.readOriginalMarker(index);
-    if (sourceOrdinal === undefined)
-      throw new Error(`Detached journal row ${index} has no source ordinal`);
-    return sourceOrdinal;
+  /**
+   * The history ordinal row `index` was derived from; undefined for a row its
+   * writer appended without one (a row no history row produced, such as a summary).
+   */
+  sourceOrdinalAt(index: number): number | undefined {
+    return this.readOriginalMarker(index).sourceOrdinal;
   }
 
   *[Symbol.iterator](): Generator<IContent, void, unknown> {

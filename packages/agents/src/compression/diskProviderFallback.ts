@@ -1,9 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
+import { curatedCandidate } from './curatedCandidate.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
 import { selectCompressionSummary } from './compressionSummary.js';
 import type { ProviderFallbackCandidate } from './providerFallbackCandidate.js';
@@ -17,12 +16,8 @@ export async function runDiskProviderFallback(
 }> {
   const metadata = await buildCompressionMetadata(...args);
   return args[2].detachedValues.withCheckpoint(async (snapshot) => {
-    const rows = new DetachedHistoryJournal();
+    const rows = await curatedCandidate(checkpointRows(snapshot));
     try {
-      for await (const row of checkpointRows(snapshot)) {
-        if (!isCuratedContent(row)) continue;
-        rows.append(row);
-      }
       const result = await new TopDownTruncationStrategy().compressDisk({
         ...metadata,
         history: rows,
@@ -42,6 +37,7 @@ export async function runDiskProviderFallback(
         rows,
         start: result.start,
         hasPendingRows: false,
+        sourceOrdinalAt: (index) => rows.sourceOrdinalAt(index),
       });
       return { outcome: 'applied', summary };
     } finally {

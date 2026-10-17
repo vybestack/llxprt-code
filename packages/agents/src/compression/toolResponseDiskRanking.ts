@@ -85,7 +85,7 @@ export class ToolResponseDiskRanking implements Iterable<DiskRankedCandidate> {
   }
 
   async capture(
-    history: HistoryService,
+    history: Pick<HistoryService, 'streamRawHistory'>,
     estimate: (block: ContentBlock) => Promise<number>,
     saving?: StubSaving,
   ): Promise<void> {
@@ -341,7 +341,7 @@ function matchesResponse(
 }
 
 export async function replaceRankedToolResponse(
-  history: HistoryService,
+  history: Pick<HistoryService, 'detachedValues'>,
   candidate: DiskRankedCandidate,
   replacement: ToolResponseBlock,
   model: string,
@@ -375,7 +375,9 @@ export async function replaceRankedToolResponse(
         if (probeIndex !== candidate.historyLength || !matchesTarget)
           throw staleTarget;
         let entryIndex = 0;
+        let sourceOrdinal = 0;
         for await (let row of source.streamRows(signal)) {
+          const ordinal = sourceOrdinal++;
           if (isEmptyAiRow(row)) continue;
           if (entryIndex === candidate.entryIndex) {
             const blocks = [...row.blocks];
@@ -384,7 +386,10 @@ export async function replaceRankedToolResponse(
             replaced = true;
           }
           if (invalidatesChain) [row] = invalidateResponsesStatefulChain([row]);
-          await sink.appendValue(sanitizeProviderContentForSerialization(row));
+          await sink.appendDerived(
+            ordinal,
+            sanitizeProviderContentForSerialization(row),
+          );
           entryIndex++;
         }
       },
@@ -471,7 +476,7 @@ async function probeJournal(
  * undefined without writing when the journal no longer matches the ranking.
  */
 export async function publishSelectedToolResponses(
-  history: HistoryService,
+  history: Pick<HistoryService, 'detachedValues'>,
   ranked: ToolResponseDiskRanking,
   makeStub: StubFactory,
   model: string,
@@ -490,7 +495,9 @@ export async function publishSelectedToolResponses(
         if (probe.count !== ranked.historyLength) throw stale;
         const invalidatesChain = probe.lastStoredParent >= firstTarget;
         let entryIndex = 0;
+        let sourceOrdinal = 0;
         for await (let row of source.streamRows(signal)) {
+          const ordinal = sourceOrdinal++;
           if (isEmptyAiRow(row)) continue;
           const targets = cursor.takeAt(entryIndex);
           if (targets.length > 0) {
@@ -498,7 +505,10 @@ export async function publishSelectedToolResponses(
             replaced += targets.length;
           }
           if (invalidatesChain) [row] = invalidateResponsesStatefulChain([row]);
-          await sink.appendValue(sanitizeProviderContentForSerialization(row));
+          await sink.appendDerived(
+            ordinal,
+            sanitizeProviderContentForSerialization(row),
+          );
           entryIndex++;
         }
       },
