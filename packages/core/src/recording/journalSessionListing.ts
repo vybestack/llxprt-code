@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { sha256KeyHash } from '../journal/idKeys.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { openJournalReadOnly } from '../journal/journalReader.js';
-import { stateReaderOf } from '../journal/journalReaderState.js';
+import { checkpointsOf, stateReaderOf } from '../journal/journalReaderState.js';
 import {
   RETIRED_SESSION_EXTENSION,
   SESSION_FILE_EXTENSION,
@@ -66,6 +66,34 @@ export async function readJournalFileFacts(
       rows: reader.trailer?.rootAggregate.rows ?? 0,
       fileSize: reader.fileSize,
     };
+  } finally {
+    await reader.close();
+  }
+}
+
+/** A live checkpoint of one journal file, as continue targets list it (design 4.9). */
+export interface JournalCheckpointFact {
+  readonly checkpointId: string;
+  readonly name: string;
+  /** The `commitSeq` of the version the checkpoint names. */
+  readonly sequence: number;
+}
+
+/** The live checkpoints of one journal file, from its last trailer's state map; no row is read. */
+export async function readJournalCheckpoints(
+  filePath: string,
+): Promise<readonly JournalCheckpointFact[]> {
+  const reader = await openJournalReadOnly(filePath);
+  try {
+    const found: JournalCheckpointFact[] = [];
+    for await (const { id, descriptor } of checkpointsOf(reader)) {
+      found.push({
+        checkpointId: id,
+        name: descriptor.name,
+        sequence: descriptor.commitSeq,
+      });
+    }
+    return found;
   } finally {
     await reader.close();
   }

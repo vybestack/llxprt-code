@@ -101,4 +101,40 @@ describe('the bounded discovery scans on the journal backend', () => {
     ]);
     expect(found.skippedCount).toBe(1);
   });
+
+  it('lists the live checkpoints of each journal session as continue targets', async () => {
+    setBackend('journal');
+    const chats = chatsDirIn(directory());
+    const recorded = await recordJournal(chats, 'sess-c', {
+      rows: [userRow('one'), userRow('two')],
+      checkpoints: ['keep-a', 'drop-b', 'keep-c'],
+      deleteCheckpoints: ['drop-b'],
+    });
+    await recordJournal(chats, 'sess-q', { rows: [userRow('quiet')] });
+
+    const found = await SessionDiscovery.listContinueTargetsDetailedBounded(
+      chats,
+      PROJECT,
+    );
+
+    const checkpoints = found.targets.flatMap((t) =>
+      t.kind === 'checkpoint' ? [t] : [],
+    );
+    expect(
+      checkpoints.map((t) => [t.checkpointName, t.source.sessionId]).sort(),
+    ).toStrictEqual([
+      ['keep-a', 'sess-c'],
+      ['keep-c', 'sess-c'],
+    ]);
+    const keepA = recorded.checkpoints.find((c) => c.name === 'keep-a');
+    const target = checkpoints.find((t) => t.checkpointName === 'keep-a');
+    expect(target?.checkpointId).toBe(keepA?.checkpointId);
+    expect(target?.sequence).toBe(keepA?.sequence);
+    expect(found.targets.filter((t) => t.kind === 'session')).toHaveLength(2);
+    const resolved = SessionDiscovery.resolveContinueRef(
+      'keep-c',
+      found.targets,
+    );
+    expect('target' in resolved && resolved.target.kind).toBe('checkpoint');
+  });
 });

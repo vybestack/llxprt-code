@@ -59,6 +59,7 @@ import { selectBackend } from '../services/history/historyBackendSelect.js';
 import {
   listJournalSessions,
   readJournalSessionHeader,
+  readJournalCheckpoints,
   readJournalFileFacts,
 } from './journalSessionListing.js';
 import { describeUnreadableRecording } from './unreadableRecordings.js';
@@ -249,12 +250,26 @@ export class SessionDiscovery {
       ...detailed.unreadableRecordings,
     ];
     if (selectBackend() === 'journal') {
-      // A journal summary carries the session name; its checkpoints are not
-      // listed here yet (S10), and no row is scanned.
+      // A journal summary carries the session name, and the live checkpoints
+      // come from the state map of the last trailer; no row is scanned.
+      const journalTargets: ContinueTarget[] = detailed.sessions.map(
+        (session): ContinueTarget => ({ kind: 'session', session }),
+      );
+      for (const session of detailed.sessions) {
+        for (const checkpoint of await readJournalCheckpoints(
+          session.filePath,
+        )) {
+          journalTargets.push({
+            kind: 'checkpoint',
+            source: session,
+            checkpointId: checkpoint.checkpointId,
+            checkpointName: checkpoint.name,
+            sequence: checkpoint.sequence,
+          });
+        }
+      }
       return {
-        targets: detailed.sessions.map(
-          (session): ContinueTarget => ({ kind: 'session', session }),
-        ),
+        targets: journalTargets,
         skippedCount: unreadable.length,
         recordingErrors: unreadable.map(describeUnreadableRecording),
         unreadableRecordings: unreadable,
