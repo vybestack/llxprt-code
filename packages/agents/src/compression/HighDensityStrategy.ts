@@ -24,7 +24,6 @@ import { optimizeDiskDensity } from './diskDensityOptimization.js';
 import { compressHighDensityDisk } from './highDensityDiskPlan.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import type { DiskTruncationContext } from './TopDownTruncationStrategy.js';
 import type {
   IContent,
   ContentBlock,
@@ -627,7 +626,7 @@ export class HighDensityStrategy implements CompressionStrategy {
   readonly optimizeRows = optimizeDiskDensity;
   readonly diskCompressionOwnership = new RowOwnership();
   readonly compressDisk = (
-    context: DiskTruncationContext,
+    context: Parameters<typeof compressHighDensityDisk>[0],
     candidate: HistoryDensityRows,
   ): ReturnType<typeof compressHighDensityDisk> =>
     compressHighDensityDisk(context, candidate, this.diskCompressionOwnership);

@@ -2,23 +2,30 @@
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
+import type {
+  DetachedHistoryOptions,
+  DetachedHistorySink,
+} from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
+import { validateHistoryEntry } from '@vybestack/llxprt-code-core/services/history/historyBatchContracts.js';
 import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { appendCandidateRow } from './curatedCandidate.js';
 import { replacedSpan } from './diskTruncation.js';
 
 type Span = Awaited<ReturnType<typeof replacedSpan>>;
 
-function* compressionValues(
+async function writeCompressionValues(
+  sink: DetachedHistorySink,
   candidate: HistoryDensityRows,
   start: number,
   top: number,
   annotation: Span,
   selectSummary: (row: IContent) => void,
   signal?: AbortSignal,
-): Generator<IContent, void, unknown> {
+): Promise<void> {
+  let index = 0;
   for (let position = start; position < candidate.length; position++) {
     signal?.throwIfAborted();
     const row = candidate.readRow(position);
@@ -39,13 +46,17 @@ function* compressionValues(
     delete metadata.cacheAnchor;
     if (position === start + top - 1) metadata.cacheAnchor = true;
     const [clean] = invalidateResponsesStatefulChain([{ ...row, metadata }]);
+    validateHistoryEntry(clean, index++);
     selectSummary(clean);
-    yield clean;
+    await appendCandidateRow(sink, clean, candidate.sourceOrdinalAt(position));
   }
 }
 
 export async function applyCompressionValuesWithAnchor(
-  history: HistoryService,
+  history: Pick<
+    HistoryService,
+    'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
+  >,
   previous: HistoryDumpSource,
   candidate: HistoryDensityRows,
   start: number,
@@ -83,15 +94,20 @@ export async function applyCompressionValuesWithAnchor(
     )
       summary = row;
   };
-  const rows = compressionValues(
-    candidate,
-    start,
-    top,
-    annotation,
-    selectSummary,
-    options.signal,
+  await history.detachedValues.transform(
+    (_source, sink) =>
+      writeCompressionValues(
+        sink,
+        candidate,
+        start,
+        top,
+        annotation,
+        selectSummary,
+        options.signal,
+      ),
+    model,
+    options,
   );
-  await history.detachedValues.replace(rows, model, options);
   if (anchor === undefined) history.resetCacheAnchorSeq();
   else history.setCacheAnchorSeq(anchor);
   return summary;

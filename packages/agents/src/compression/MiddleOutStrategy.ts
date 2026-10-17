@@ -115,7 +115,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
       providerResult,
     );
     for (let index = 0; index < plan.top; index++)
-      candidate.append(context.history.readRow(index));
+      candidate.append(
+        context.history.readRow(index),
+        context.history.sourceOrdinalAt(index),
+      );
     for (const row of this.summaryRows(
       finalSummary,
       context.activeTodos,
@@ -124,7 +127,10 @@ export class MiddleOutStrategy implements CompressionStrategy {
     ))
       candidate.append(row);
     for (let index = plan.bottom; index < context.history.length; index++)
-      candidate.append(context.history.readRow(index));
+      candidate.append(
+        context.history.readRow(index),
+        context.history.sourceOrdinalAt(index),
+      );
     return { kind: 'applied', top: plan.top };
   }
 

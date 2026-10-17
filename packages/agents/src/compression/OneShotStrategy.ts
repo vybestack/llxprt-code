@@ -143,7 +143,10 @@ export class OneShotStrategy implements CompressionStrategy {
     ))
       candidate.append(row);
     for (let index = bottom; index < context.history.length; index++)
-      candidate.append(context.history.readRow(index));
+      candidate.append(
+        context.history.readRow(index),
+        context.history.sourceOrdinalAt(index),
+      );
     return { kind: 'applied', top: 0 };
   }
 

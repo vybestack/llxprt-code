@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -12,6 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
+import { curatedDensityRows } from './curatedCandidate.js';
 import { publishCandidate } from './diskTruncation.js';
 import { fallbackDisk } from './diskMiddleOut.js';
 
@@ -58,27 +58,21 @@ async function compressPinned(
     if (result.kind === 'noop') return { outcome: 'noop' };
     if (candidate === undefined)
       throw new Error('Missing high-density disk candidate');
+    const rows = candidate;
     const summary = await publishCandidate(
       history,
       previous,
-      candidate,
+      rows,
       result.start,
       context.runtimeState.model,
       0,
       { origin },
+      (position) => rows.sourceOrdinalAt(position),
     );
     return { outcome: 'applied', summary };
   } finally {
     candidate?.close();
   }
-}
-
-async function prepareCurated(
-  previous: HistoryDumpSource,
-  curated: HistoryDensityRows,
-): Promise<void> {
-  for await (const row of previous.rows())
-    if (isCuratedContent(row)) curated.append(row);
 }
 
 export async function runDiskHighDensity(
@@ -92,9 +86,8 @@ export async function runDiskHighDensity(
         yield* checkpointRows(checkpoint);
       },
     };
-    const curated = new HistoryDensityRows();
+    const curated = await curatedDensityRows(previous.rows());
     try {
-      await prepareCurated(previous, curated);
       return await compressPinned(
         { ...metadata, history: curated },
         history,

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { DetachedHistoryAPI } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
 import { detachedValueSubmission } from '@vybestack/llxprt-code-core/services/history/detachedHistoryMutation.js';
 import type { OwnedJournal } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
@@ -47,4 +48,26 @@ export function journalBackedHistory(
     setCacheAnchorSeq: () => {},
     resetCacheAnchorSeq: () => {},
   };
+}
+
+/**
+ * A HistoryService whose detached API and dump snapshot are served by the
+ * journal store of `owned`, for the compression routes (`runDiskHighDensity`,
+ * `runDiskMiddleOut`, `runDiskOneShot`), which take a whole HistoryService. The
+ * service's own store stays empty; it supplies the tokenizer and cache anchor.
+ */
+export function journalRoutedHistory(owned: OwnedJournal): HistoryService {
+  const history = new HistoryService();
+  const snapshot = (): HistoryDumpSnapshot => ({
+    rows: () => owned.store.streamRows(),
+    async *chronology() {},
+    close: async () => {},
+  });
+  Object.defineProperty(history, 'detachedValues', {
+    value: journalBackedHistory(owned).detachedValues,
+  });
+  Object.defineProperty(history, 'openDumpSnapshot', {
+    value: async () => snapshot(),
+  });
+  return history;
 }

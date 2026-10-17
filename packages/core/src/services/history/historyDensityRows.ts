@@ -7,6 +7,10 @@ import { isSpeakerContent } from './historyJournalGuards.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
 
+/** Per row: offset and length in the rows file, then the source ordinal (or NO_ORDINAL). */
+const INDEX_RECORD_BYTES = 24;
+const NO_ORDINAL = -1;
+
 export class HistoryDensityRows implements Iterable<IContent> {
   private readonly root: string;
   private readonly rows: number;
@@ -50,9 +54,36 @@ export class HistoryDensityRows implements Iterable<IContent> {
     return this.count;
   }
 
-  append(row: IContent): void {
+  /**
+   * Appends `row`. `sourceOrdinal` is the position, in the history the
+   * candidate is built from, of the row this one is derived from; a publisher
+   * reads it back with {@link sourceOrdinalAt} so the row keeps that row's owner.
+   * A row appended without one comes from no history row (a summary, say).
+   */
+  append(row: IContent, sourceOrdinal?: number): void {
     this.writeRow(this.count, row);
+    this.writeOrdinal(this.count, sourceOrdinal);
     this.count++;
+  }
+
+  /**
+   * The history ordinal row `index` was derived from; undefined for a row its
+   * writer appended without one.
+   */
+  sourceOrdinalAt(index: number): number | undefined {
+    this.assertOpen();
+    if (!Number.isInteger(index) || index < 0 || index >= this.count)
+      throw new Error('Density candidate ordinal is invalid');
+    const bytes = Buffer.alloc(8);
+    transfer(this.index, bytes, index * INDEX_RECORD_BYTES + 16, false);
+    const ordinal = bytes.readDoubleLE(0);
+    return ordinal === NO_ORDINAL ? undefined : ordinal;
+  }
+
+  private writeOrdinal(index: number, sourceOrdinal: number | undefined): void {
+    const bytes = Buffer.alloc(8);
+    bytes.writeDoubleLE(sourceOrdinal ?? NO_ORDINAL, 0);
+    transfer(this.index, bytes, index * INDEX_RECORD_BYTES + 16, true);
   }
 
   /** Serialize a sanitized value of a caller-owned row; the caller's row is never retained. */
@@ -77,14 +108,14 @@ export class HistoryDensityRows implements Iterable<IContent> {
     position.writeDoubleLE(this.offset, 0);
     position.writeDoubleLE(bytes.length, 8);
     transfer(this.rows, bytes, this.offset, true);
-    transfer(this.index, position, index * 16, true);
+    transfer(this.index, position, index * INDEX_RECORD_BYTES, true);
     this.offset += bytes.length;
   }
 
   readRow(index: number): IContent {
     this.assertOpen();
     const position = Buffer.alloc(16);
-    transfer(this.index, position, index * 16, false);
+    transfer(this.index, position, index * INDEX_RECORD_BYTES, false);
     const bytes = Buffer.alloc(position.readDoubleLE(8));
     transfer(this.rows, bytes, position.readDoubleLE(0), false);
     const row: unknown = JSON.parse(bytes.toString('utf8'));

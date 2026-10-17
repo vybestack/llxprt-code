@@ -118,7 +118,7 @@ function toolSummary(
 }
 
 function summarize(
-  rows: HistoryIndexedRows,
+  rows: HistoryDensityRows,
   candidate: HistoryDensityRows,
   tail: number,
   index: DensityDiskIndex,
@@ -127,28 +127,33 @@ function summarize(
   for (let position = 0; position < rows.length; position++) {
     withRow(rows, position, owner, (row) => {
       if (position >= tail || row.speaker === 'human' || row.speaker === 'ai')
-        candidate.append(row);
+        candidate.append(row, rows.sourceOrdinalAt(position));
       else
-        candidate.append({
-          ...row,
-          blocks: row.blocks.map((block) =>
-            block.type === 'tool_response'
-              ? {
-                  ...block,
-                  result: toolSummary(
-                    block,
-                    keyParam(rows, index, block.callId, owner),
-                  ),
-                }
-              : block,
-          ),
-        });
+        candidate.append(
+          {
+            ...row,
+            blocks: row.blocks.map((block) =>
+              block.type === 'tool_response'
+                ? {
+                    ...block,
+                    result: toolSummary(
+                      block,
+                      keyParam(rows, index, block.callId, owner),
+                    ),
+                  }
+                : block,
+            ),
+          },
+          rows.sourceOrdinalAt(position),
+        );
     });
   }
 }
 
 export async function compressHighDensityDisk(
-  context: DiskTruncationContext,
+  context: Omit<DiskTruncationContext, 'history'> & {
+    readonly history: HistoryDensityRows;
+  },
   candidate: HistoryDensityRows,
   owner: RowOwnership,
 ): Promise<

@@ -14,7 +14,13 @@ import {
   openOwnedJournal,
   type OwnedJournal,
 } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
-import { curatedCandidate } from '../curatedCandidate.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { applyCompressionValuesWithAnchor } from '../cache-anchor-values.js';
+import { buildCompressionMetadata } from '../compressionContextBuilder.js';
+import { curatedCandidate, curatedDensityRows } from '../curatedCandidate.js';
+import { runDiskHighDensity } from '../diskHighDensity.js';
+import { runDiskMiddleOut, runDiskOneShot } from '../diskMiddleOut.js';
 import { publishCandidate } from '../diskTruncation.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 import {
@@ -22,10 +28,17 @@ import {
   replaceRankedToolResponse,
   ToolResponseDiskRanking,
 } from '../toolResponseDiskRanking.js';
-import { journalBackedHistory } from './support/journal-detached-history.js';
+import {
+  journalBackedHistory,
+  journalRoutedHistory,
+} from './support/journal-detached-history.js';
+import { highdensitySetup } from './highdensity-disk-helpers.js';
+import { middleoutSetup } from './middleout-disk-helpers.js';
 
 const OWNERS = ['agent-a', 'agent-b'] as const;
 const SIZES: number[] = [3, 64, 65];
+// The middle-out and one-shot strategies leave a history of fewer than a dozen rows alone.
+const SUMMARY_SIZES: number[] = [12, 64, 65];
 
 let directory: string;
 const opened: OwnedJournal[] = [];
@@ -53,11 +66,54 @@ function toolHistoryRow(index: number, response: ToolResponseBlock): IContent {
   return detachedRow(index, 64);
 }
 
+/** Every fourth row, from the second, is a tool response; the rest alternate between human and ai text. The test tokenizer counts one token per row. */
+function densityHistoryRow(
+  index: number,
+  response: ToolResponseBlock,
+): IContent {
+  if (index % 4 === 1) return { speaker: 'tool', blocks: [response] };
+  return {
+    speaker: index % 2 === 0 ? 'human' : 'ai',
+    blocks: [{ type: 'text', text: `row ${index}` }],
+  };
+}
+
+/**
+ * A context limit that makes high-density drop about the first 40% of
+ * `count` rows: the test tokenizer counts one token per row and the target is
+ * 0.48 of the limit.
+ */
+function densityLimit(count: number): number {
+  return Math.ceil(Math.ceil(count * 0.6) / 0.48);
+}
+
 function ownersFrom(start: number, count: number): string[] {
   return Array.from(
     { length: count - start },
     (_, offset) => OWNERS[(start + offset) % OWNERS.length],
   );
+}
+
+/** The arguments of a compression route, summarizing through the setup's transport and naming `origin`. */
+function routeArguments(
+  history: HistoryService,
+  { runtime, transport }: ReturnType<typeof middleoutSetup>,
+  origin: object,
+): Parameters<typeof buildCompressionMetadata> {
+  return [
+    'owners',
+    runtime,
+    history,
+    async () => ({
+      provider: transport,
+      runtime: runtime.providerRuntime,
+      invocation: runtime.prepareProviderInvocation(transport.name),
+    }),
+    undefined,
+    undefined,
+    new DebugLogger('test:journal-owners'),
+    { historyOrigin: origin },
+  ];
 }
 
 describe('compression modules on the journal store keep the owner of every row they retain', () => {
@@ -296,4 +352,117 @@ describe('compression modules on the journal store keep the owner of every row t
       );
     },
   );
+  it.each(SIZES)(
+    'a candidate built from %i curated rows keeps their owners through the cache-anchor publication',
+    async (count) => {
+      const owned = await ownedHistory(count, 'anchor');
+      const origin = {};
+      const history = journalBackedHistory(owned);
+      const previous = { rows: () => owned.store.streamRows() };
+      const candidate = await curatedDensityRows(owned.store.streamRows());
+      try {
+        candidate.append({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'new summary' }],
+          metadata: { isSummary: true },
+        });
+        await applyCompressionValuesWithAnchor(
+          history,
+          previous,
+          candidate,
+          1,
+          'model',
+          0,
+          { origin },
+        );
+      } finally {
+        candidate.close();
+      }
+      expect(await owned.originsOfRows()).toStrictEqual([
+        ...ownersFrom(1, count),
+        historyOriginId(origin),
+      ]);
+    },
+  );
+
+  it.each(SIZES)(
+    'high-density over %i rows drops a head and keeps the owners of the rest, summarized tool rows included',
+    async (count) => {
+      const response: ToolResponseBlock = {
+        type: 'tool_response',
+        callId: 'call-1',
+        toolName: 'read',
+        result: 'big',
+      };
+      const owned = await openOwnedJournal(
+        path.join(directory, `density-${count}.llxj`),
+        Array.from({ length: count }, (_, index) => ({
+          content: densityHistoryRow(index, response),
+          origin: OWNERS[index % OWNERS.length],
+        })),
+      );
+      opened.push(owned);
+      const history = journalRoutedHistory(owned);
+      const outcome = await runDiskHighDensity(
+        ...routeArguments(
+          history,
+          highdensitySetup(history, undefined, undefined, {
+            contextLimit: densityLimit(count),
+          }),
+          {},
+        ),
+      );
+      expect(outcome.outcome).toBe('applied');
+      const kept = owned.store.getLength();
+      expect(kept).toBeGreaterThan(0);
+      expect(kept).toBeLessThan(count);
+      expect(await owned.originsOfRows()).toStrictEqual(
+        ownersFrom(count - kept, count),
+      );
+      // The retained head still holds a tool response the module rewrote.
+      const summarized: IContent[] = [];
+      for await (const row of owned.store.streamRows())
+        for (const block of row.blocks)
+          if (
+            block.type === 'tool_response' &&
+            typeof block.result === 'string' &&
+            block.result.startsWith('[read')
+          )
+            summarized.push(row);
+      expect(summarized.length).toBeGreaterThan(0);
+    },
+  );
+
+  describe.each([
+    ['middle-out', runDiskMiddleOut],
+    ['one-shot', runDiskOneShot],
+  ] as const)('%s', (name, run) => {
+    it.each(SUMMARY_SIZES)(
+      'over %i rows keeps the owners of the head and tail it retains and writes the summary under the origin',
+      async (count) => {
+        const owned = await ownedHistory(count, name);
+        const origin = {};
+        const history = journalRoutedHistory(owned);
+        const outcome = await run(
+          ...routeArguments(history, middleoutSetup(history), origin),
+        );
+        expect(outcome.outcome).toBe('applied');
+        const label = historyOriginId(origin);
+        const actual = await owned.originsOfRows();
+        const head = actual.indexOf(label);
+        const summary = actual.filter((entry) => entry === label).length;
+        const tail = actual.length - head - summary;
+        expect(head).toBeGreaterThanOrEqual(0);
+        expect(summary).toBeGreaterThan(0);
+        expect(tail).toBeGreaterThan(0);
+        expect(actual).toStrictEqual([
+          ...ownersFrom(0, head),
+          ...Array.from({ length: summary }, () => label),
+          ...ownersFrom(count - tail, count),
+        ]);
+        // Only a middle-out keeps a head.
+        expect(head > 0).toBe(name === 'middle-out');
+      },
+    );
+  });
 });

@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
@@ -10,6 +9,7 @@ import {
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+import { curatedDensityRows } from './curatedCandidate.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -76,11 +76,10 @@ async function runDiskSummary(
   const history = args[2];
   const origin = args[7]?.historyOrigin;
   const previous = await history.openDumpSnapshot();
-  const curated = new HistoryDensityRows();
+  let curated: HistoryDensityRows | undefined;
   const candidate = new HistoryDensityRows();
   try {
-    for await (const row of previous.rows())
-      if (isCuratedContent(row)) curated.append(row);
+    curated = await curatedDensityRows(previous.rows());
     const context = { ...metadata, history: curated };
     const strategy =
       name === 'middle-out' ? new MiddleOutStrategy() : new OneShotStrategy();
@@ -124,7 +123,7 @@ async function runDiskSummary(
     return { outcome: 'applied', summary };
   } finally {
     candidate.close();
-    curated.close();
+    curated?.close();
     await previous.close();
   }
 }
