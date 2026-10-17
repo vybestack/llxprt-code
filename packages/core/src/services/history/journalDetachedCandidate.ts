@@ -19,6 +19,7 @@ import {
 } from './journalDetachedPrefix.js';
 import type { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
+import type { RowOwnerTags } from './journalDetachedCapture.js';
 import { encodeContentRow, UNOWNED_ROW } from './journalRowCodec.js';
 
 /** The chronology number of an entry; a row without a marker counts as 0, as the span rules do. */
@@ -38,6 +39,8 @@ export interface CandidateContext {
   readonly appendOnly: boolean;
   readonly baseTokens: number;
   readonly media: PullFeed<MediaReferenceBlock, void> | undefined;
+  /** Owners of the rows the transform was handed (see {@link RowOwnerTags}). */
+  readonly tags: RowOwnerTags;
 }
 
 /**
@@ -86,12 +89,14 @@ export class JournalCandidate {
     return {
       appendValue: async (row) => {
         assertActive();
-        await this.accept(row);
+        await this.accept(row, this.ctx.tags.get(row) ?? UNOWNED_ROW);
       },
       appendReplacement: async (ordinal, row) => {
         assertActive();
         const entry = await snapshot.entryAt(ordinal);
         const marked = entry.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ;
+        // A replacement is the row it replaces: it keeps that row's owner (design 4.6).
+        const owner = entry.owner;
         if (marked) {
           row = {
             ...row,
@@ -107,7 +112,7 @@ export class JournalCandidate {
           };
           densitySpans.append(spanOf(entry, 'density-replaced'));
         }
-        await this.accept(row);
+        await this.accept(row, owner);
       },
       removeValue: async (ordinal) => {
         assertActive();
@@ -147,7 +152,7 @@ export class JournalCandidate {
     return { start: newLastSeq + 1, end: previousLastSeq, reason: 'rewound' };
   }
 
-  private async accept(row: IContent): Promise<void> {
+  private async accept(row: IContent, owner: number): Promise<void> {
     const { host, modelName, signal, appendOnly } = this.ctx;
     validateHistoryEntry(row, this.count);
     host.chronology.stamp(row);
@@ -155,7 +160,7 @@ export class JournalCandidate {
     this.range.add(row);
     this.lastSeq = row.metadata?.chronology?.seq ?? 0;
     if (appendOnly) await this.ctx.publication.appendOne(row);
-    else await this.place(encodeContentRow(row, { owner: UNOWNED_ROW }));
+    else await this.place(encodeContentRow(row, { owner }));
     for (const reference of collectMediaReferences([row]))
       await this.ctx.media?.put(reference);
     this.count++;

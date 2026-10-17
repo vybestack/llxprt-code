@@ -17,7 +17,7 @@ import {
 import { finalizeMutationEffects } from './historyMutationFailure.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import { JournalCandidate } from './journalDetachedCandidate.js';
-import { snapshotRows } from './journalDetachedCapture.js';
+import { snapshotRows, type RowOwnerTags } from './journalDetachedCapture.js';
 import { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
@@ -50,6 +50,7 @@ export async function publishDetachedOnJournal(
   const effects: PreparedHistoryBatchEffect[] = [];
   const densitySpans = new DensitySpanRows();
   const publication = new JournalDetachedPublication(store);
+  const tags: RowOwnerTags = new WeakMap();
   const media = mediaFeed(host, appendOnly, effects);
   const candidate = new JournalCandidate({
     snapshot,
@@ -61,13 +62,14 @@ export async function publishDetachedOnJournal(
     appendOnly,
     baseTokens: appendOnly ? state.tokens : 0,
     media,
+    tags,
   });
   const scope = store.openPublication();
   let derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   let failure: { error: unknown } | undefined;
   try {
     await candidate.seedRange();
-    await transformCandidate(task, snapshot, candidate, options.signal);
+    await transformCandidate(task, snapshot, candidate, tags, options.signal);
     if (!appendOnly || candidate.count > 0) {
       const rewound = await candidate.rewoundSpan();
       const spans = densitySpans.project(
@@ -134,6 +136,7 @@ async function transformCandidate(
   task: DetachedHistoryTask,
   snapshot: VersionSnapshot,
   candidate: JournalCandidate,
+  tags: RowOwnerTags,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   let active = true;
@@ -147,7 +150,7 @@ async function transformCandidate(
     streamRows(cursorSignal) {
       assertActive();
       const cursor = scopedRows(
-        snapshotRows(snapshot, cursorSignal),
+        snapshotRows(snapshot, cursorSignal, tags),
         assertActive,
         () => cursors.delete(cursor),
       );

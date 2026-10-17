@@ -2,26 +2,32 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import type { IContent } from './IContent.js';
-import { decodeStoredRow, UNOWNED_ROW } from './journalRowCodec.js';
+import { decodeStoredRow } from './journalRowCodec.js';
+
+/**
+ * The owner id each row handed out by {@link snapshotRows} had in the
+ * snapshot, keyed by the row object. A transform that carries a row over by
+ * passing the same object back to the sink keeps its owner; a row the
+ * transform builds has no entry and is written unowned. Weak, so a tag never
+ * keeps a row alive.
+ */
+export type RowOwnerTags = WeakMap<IContent, number>;
 
 /**
  * The rows of `snapshot` in order, one decoded row at a time from the file.
- * Row owners are S06: a row with an owner cannot be carried into a candidate
- * yet, so it is refused instead of read as unowned.
+ * When `tags` is given each row's owner id is recorded against the row.
  */
 export async function* snapshotRows(
   snapshot: VersionSnapshot,
   signal?: AbortSignal,
+  tags?: RowOwnerTags,
 ): AsyncGenerator<IContent, void, unknown> {
   for await (const entry of snapshot.entries()) {
     signal?.throwIfAborted();
-    if (entry.owner !== UNOWNED_ROW) {
-      throw new Error(
-        'not implemented: S06 (owned rows in a detached capture)',
-      );
-    }
-    yield sanitizeProviderContentForSerialization(
+    const row = sanitizeProviderContentForSerialization(
       decodeStoredRow(await snapshot.readRow(entry)),
     );
+    tags?.set(row, entry.owner);
+    yield row;
   }
 }
