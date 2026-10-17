@@ -67,6 +67,19 @@ function notifyDetachedBatch(
   });
 }
 
+function notifyDetachedRow(
+  history: HistoryServiceCore,
+  ownership: RowOwnership | undefined,
+  row: IContent,
+): void {
+  emitHistoryBatchValues(
+    history,
+    { length: 1, readRow: () => row },
+    0,
+    ownership,
+  );
+}
+
 export function createDetachedHistoryAPI(
   history: HistoryServiceCore,
   journal: HistoryStorePort,
@@ -104,6 +117,7 @@ export function createDetachedHistoryAPI(
     },
     notifyBatch: (addedTokens, rows, start) =>
       notifyDetachedBatch(history, ownership, addedTokens, rows, start),
+    notifyRow: (row) => notifyDetachedRow(history, ownership, row),
     notifyTokens: (addedTokens) => {
       history.emit('tokensUpdated', {
         totalTokens: history.getTotalTokens(),

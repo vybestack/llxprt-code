@@ -150,6 +150,26 @@ export class ContextRangeAccumulator {
     }
   }
 
+  /**
+   * Starts an empty accumulator from the boundary of rows that are not
+   * re-read (their first and last chronology numbers and their count), so
+   * rows added after are joined to them. The interior spans of those rows
+   * come from the caller's accumulated spans.
+   */
+  seed(boundary: {
+    readonly firstSeq: number;
+    readonly lastSeq: number;
+    readonly totalEntries: number;
+    readonly approximate: boolean;
+  }): void {
+    if (this.totalEntries !== 0)
+      throw new Error('The accumulator is not empty');
+    this.firstSeq = boundary.firstSeq;
+    this.lastSeq = boundary.lastSeq;
+    this.totalEntries = boundary.totalEntries;
+    this.approximate = boundary.approximate;
+  }
+
   clone(): ContextRangeAccumulator {
     const copy = new ContextRangeAccumulator();
     copy.firstSeq = this.firstSeq;

@@ -64,3 +64,65 @@ export async function* pulledRows<T>(
   }
   if (failure !== undefined) throw failure.error;
 }
+
+/** A pull stream whose rows are pushed from outside, with the consumer started at once. */
+export interface PullFeed<T, R> {
+  /** Resolves when the consumer has asked for the row after this one; throws the consumer's failure if it ended. */
+  put(row: T): Promise<void>;
+  /** Ends the rows and resolves with what the consumer returned. */
+  close(): Promise<R>;
+  /** Ends the rows with `error`; the consumer sees it from its next pull. Resolves when the consumer is done. */
+  abort(error: unknown): Promise<void>;
+}
+
+/**
+ * Starts `consume` over a pulled stream the caller feeds with `put`. The
+ * consumer is the writer of a group or the reservation of a media owner; it
+ * runs as soon as the feed is made, so a producer that decides late whether it
+ * needs the consumer (a prefix that has not diverged yet) can create the feed
+ * at that point.
+ */
+export function pullFeed<T, R>(
+  consume: (rows: AsyncGenerator<T, void, unknown>) => Promise<R>,
+): PullFeed<T, R> {
+  let end: () => void = () => {};
+  let fail: (error: unknown) => void = () => {};
+  const ended = new Promise<void>((resolve, reject) => {
+    end = resolve;
+    fail = reject;
+  });
+  ended.catch(() => {});
+  let ready: () => void = () => {};
+  const readied = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  let putRow: ((row: T) => Promise<void>) | undefined;
+  const rows = pulledRows<T>(async (put) => {
+    putRow = put;
+    ready();
+    await ended;
+  });
+  const consuming = consume(rows);
+  consuming.catch(() => {});
+  const consumerEnded = consuming.then(() => {
+    throw new Error('The consumer of the rows ended before taking them all');
+  });
+  consumerEnded.catch(() => {});
+  return {
+    put: async (row) => {
+      await Promise.race([readied, consumerEnded]);
+      await putRow?.(row);
+    },
+    close: () => {
+      end();
+      return consuming;
+    },
+    abort: async (error) => {
+      fail(error);
+      await consuming.then(
+        () => undefined,
+        () => undefined,
+      );
+    },
+  };
+}

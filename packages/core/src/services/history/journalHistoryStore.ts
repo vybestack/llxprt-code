@@ -35,6 +35,12 @@ import {
 } from './journalRowCodec.js';
 import { captureDetachedRows } from './journalDetachedCapture.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
+import { publishDetachedOnJournal } from './journalPublishDetached.js';
+import type {
+  DetachedHistoryHost,
+  DetachedHistoryOptions,
+  DetachedHistoryTask,
+} from './detachedHistoryMutation.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import type { JournalSession } from './journalSession.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
@@ -261,6 +267,42 @@ export class JournalHistoryStore {
     return this.requireAck(this.enqueueTurn(undefined, replaceEdits(rows)));
   }
 
+  /**
+   * The streamed `replace` group of {@link replaceStreamed} over rows that
+   * are already encoded, so a caller can carry stored rows into the new
+   * version without decoding them.
+   */
+  async replaceDrafts(
+    rows: AsyncIterable<RowDraft>,
+    signal?: AbortSignal,
+  ): Promise<CommitAck> {
+    this.assertUsable();
+    signal?.throwIfAborted();
+    return this.requireAck(
+      this.enqueueTurn(undefined, () =>
+        Promise.resolve([{ kind: 'replace', rows }]),
+      ),
+    );
+  }
+
+  /**
+   * The version a detached transform reads: the queue is durable, the token
+   * updates the caller still owes are settled, and nothing was queued while
+   * they ran.
+   */
+  async settledSnapshot(
+    settleTokens: () => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<VersionSnapshot> {
+    await this.waitForDurable();
+    const snapshot = this.session.store.snapshot();
+    await settleTokens();
+    await this.waitForDurable();
+    this.assertSettled(snapshot, 'captured');
+    signal?.throwIfAborted();
+    return snapshot;
+  }
+
   /** Brackets one logical publication. Fan-out holds are the work of S06; until then it only counts. */
   openPublication(): HistoryPublicationScope {
     this.publicationDepth++;
@@ -482,6 +524,16 @@ export class JournalHistoryStore {
       return;
     }
     await this.restoreTo(saved);
+  }
+
+  /** Runs a detached task against the durable rows and publishes its result (design 4.5). */
+  publishDetached(
+    task: DetachedHistoryTask,
+    host: DetachedHistoryHost,
+    modelName: string | undefined,
+    options: DetachedHistoryOptions,
+  ): Promise<void> {
+    return publishDetachedOnJournal(this, task, host, modelName, options);
   }
 
   /** Copies the durable rows into `previous`, the candidate-side journal the detached API still reads. */

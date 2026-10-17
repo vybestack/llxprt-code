@@ -85,6 +85,8 @@ export interface DetachedHistoryHost {
     rows: DetachedHistoryJournal,
     start: number,
   ): void;
+  /** One row of a published batch, announced after its group is acked (journal store). */
+  notifyRow(row: IContent): void;
   notifyTokens(tokensDelta: number): void;
   notifyRange(range: ReturnType<typeof buildContextRangeSnapshot>): void;
 }

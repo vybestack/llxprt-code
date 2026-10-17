@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { pulledRows } from './journalDetachedStream.js';
+import type { RowDraft } from '../../journal/rowDraft.js';
 import type { IContent } from './IContent.js';
 import {
   rowsUnchanged,
@@ -75,6 +76,45 @@ export class JournalDetachedPublication {
         signal,
       );
       signal?.throwIfAborted();
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
+
+  /** Publishes the encoded rows the writer pulls from `rows` as one `replace` group. */
+  async publishDrafts(
+    rows: AsyncIterable<RowDraft>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    try {
+      signal?.throwIfAborted();
+      this.admittedCount++;
+      this.lastAck = await this.store.replaceDrafts(rows, signal);
+      signal?.throwIfAborted();
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
+
+  /** Removes the last `itemsRemoved` rows (a cut tail, or all of them for an emptied history) as one rewind. */
+  async rewindTail(itemsRemoved: number): Promise<void> {
+    try {
+      await this.rewind(itemsRemoved);
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
+
+  /** Appends one row as its own group and waits for its ack. */
+  async appendOne(content: IContent): Promise<void> {
+    try {
+      this.admittedCount++;
+      this.store.apply({ kind: 'content', content });
+      await this.store.waitForDurable();
+      this.lastAck = this.store.lastAck;
     } catch (error) {
       this.failure = error;
       throw error;
