@@ -50,9 +50,16 @@ export interface TestJournalSeams {
 
 export const FAKE_NOW_MS = 1_900_000_000_000;
 
+/** Where the seams put what the writer asked of the file; a log that is kept, or one that drops everything. */
+interface EventSink {
+  push: (event: JournalEvent) => unknown;
+}
+
+const DISCARD_EVENTS: EventSink = { push: () => undefined };
+
 function wrapHandle(
   real: fsp.FileHandle,
-  events: JournalEvent[],
+  events: EventSink,
   failures: Failures,
   gate: { promise: Promise<void> },
 ): JournalFileHandle {
@@ -98,12 +105,19 @@ function wrapHandle(
   };
 }
 
-/** Real files, with every write, flush and truncate recorded and single ones failable. */
+/**
+ * Real files, with every write, flush and truncate recorded and single ones
+ * failable. A test that runs many thousands of commits and measures the heap
+ * passes `recordEvents: false`: the log has one entry per file operation, so
+ * it would grow with the run and be counted as growth of the store.
+ */
 export function testJournalSeams(
   failures: Failures = {},
   seed = 1,
+  recordEvents = true,
 ): TestJournalSeams {
   const events: JournalEvent[] = [];
+  const sink: EventSink = recordEvents ? events : DISCARD_EVENTS;
   const random = new SeededRandom(seed);
   let flushes = 0;
   let release: () => void = () => undefined;
@@ -114,14 +128,14 @@ export function testJournalSeams(
   };
   const flush: FlushRecords = (fd) => {
     const index = flushes++;
-    events.push({ type: 'flush', fd });
+    sink.push({ type: 'flush', fd });
     if (failures.failFlushAt === index)
       throw new Error('injected flush failure');
   };
   const dependencies: JournalOpenDependencies = {
     open: async (path, flags) => {
-      events.push({ type: 'open', flags });
-      return wrapHandle(await fsp.open(path, flags), events, failures, gate);
+      sink.push({ type: 'open', flags });
+      return wrapHandle(await fsp.open(path, flags), sink, failures, gate);
     },
     flush,
     nowMs: () => FAKE_NOW_MS,

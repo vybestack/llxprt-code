@@ -11,6 +11,8 @@ import {
   labelsOf,
   storeDeps,
 } from './__tests__/support/storeFixtures.js';
+import { ageOutIdleCode } from './__tests__/support/compactionMemory.js';
+import { testJournalSeams } from './__tests__/support/journalFixtures.js';
 import { MIB, startGrowthProbe } from './__tests__/support/streamedBody.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 
@@ -20,6 +22,12 @@ const ITERATIONS = 10_000;
 const SAMPLES = 4;
 const RUN_MS = 170_000;
 const BASE_ROWS = 8;
+/**
+ * Iterations before the baseline. They compile the commit path, which costs
+ * a few MiB of code blocks once and does not grow with the count (measured:
+ * the same settled growth at 1,000, 10,000 and 20,000 iterations).
+ */
+const WARMUP_ITERATIONS = 1_000;
 
 function current(store: JournalStore): Version {
   const version = store.published;
@@ -44,7 +52,13 @@ describe('journal store heap', () => {
   /**
    * Each iteration appends a row with an id of its own and pops it again, so
    * the history stays at `BASE_ROWS` while every kind of per-commit state is
-   * exercised 10,000 times. `retain` is called with each published version.
+   * exercised 10,000 times. `retain` is called with each published version
+   * of the measured iterations.
+   *
+   * The baseline is taken after a warm-up and after the idle start-up code
+   * is dropped: both are one-time costs of the process and not growth of the
+   * store. The seams drop their event log, which has an entry per file
+   * operation and would be counted as growth of the store.
    */
   async function loop(
     name: string,
@@ -56,9 +70,10 @@ describe('journal store heap', () => {
       caches.push(cache);
       return cache;
     };
+    const seams = testJournalSeams({}, 1, false);
     const store = await JournalStore.create(
       path.join(directory(), name),
-      storeDeps({ createCache }),
+      storeDeps({ createCache, seams }),
     );
     open.push(store);
     const model = new ArrayModel();
@@ -67,9 +82,7 @@ describe('journal store heap', () => {
       Array.from({ length: BASE_ROWS }, () => draftRow()),
     );
     model.append(BASE_ROWS);
-    const probe = await startGrowthProbe();
-    const every = ITERATIONS / SAMPLES;
-    for (let iteration = 1; iteration <= ITERATIONS; iteration++) {
+    const iterate = async (iteration: number, keep: boolean): Promise<void> => {
       const [label] = model.append(1);
       await store.commit([
         {
@@ -79,13 +92,22 @@ describe('journal store heap', () => {
           ],
         },
       ]);
-      retain(current(store));
+      if (keep) retain(current(store));
       const removed = model.popFrom(label);
       await store.commit([
         { kind: 'pop', cutLabel: label, expectedRemoved: removed },
       ]);
-      retain(current(store));
-      if (iteration % every === 0) await probe.sample();
+      if (keep) retain(current(store));
+    };
+    for (let iteration = 1; iteration <= WARMUP_ITERATIONS; iteration++) {
+      await iterate(iteration, false);
+    }
+    await ageOutIdleCode();
+    const probe = await startGrowthProbe();
+    const every = ITERATIONS / SAMPLES;
+    for (let count = 1; count <= ITERATIONS; count++) {
+      await iterate(WARMUP_ITERATIONS + count, true);
+      if (count % every === 0) await probe.sample();
     }
     return { growth: probe.peakGrowth(), caches, store, model };
   }
