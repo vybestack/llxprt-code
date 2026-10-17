@@ -3,6 +3,7 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { IContent } from './IContent.js';
+import { isAcceptedHistoryValue } from './historyValueEntries.js';
 
 export async function estimateMergedAppendTokens(
   candidate: HistoryDensityRows,
@@ -30,11 +31,7 @@ function appendSnapshot(
 ): void {
   let index = 0;
   for (const row of source) {
-    const accepted =
-      ['human', 'ai', 'tool'].includes(row.speaker) &&
-      Array.isArray(row.blocks) &&
-      row.blocks.length > 0;
-    if (!acceptedOnly || accepted) {
+    if (!acceptedOnly || isAcceptedHistoryValue(row)) {
       if (source.isPendingRow(index)) candidate.appendSanitized(row);
       else candidate.append(row);
     }

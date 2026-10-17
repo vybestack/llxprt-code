@@ -19,16 +19,20 @@ async function appendDensityValue(
   else await sink.appendReplacement(index, clean);
 }
 
+/** A row history admits: a known speaker and at least one block. */
+export function isAcceptedHistoryValue(content: IContent): boolean {
+  return (
+    ['human', 'ai', 'tool'].includes(content.speaker) &&
+    Array.isArray(content.blocks) &&
+    content.blocks.length > 0
+  );
+}
+
 export function* acceptedHistoryValues(
   contents: readonly IContent[],
 ): Generator<IContent, void, unknown> {
   for (const content of contents) {
-    if (
-      ['human', 'ai', 'tool'].includes(content.speaker) &&
-      Array.isArray(content.blocks) &&
-      content.blocks.length > 0
-    )
-      yield content;
+    if (isAcceptedHistoryValue(content)) yield content;
   }
 }
 

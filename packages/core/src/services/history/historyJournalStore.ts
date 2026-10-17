@@ -93,6 +93,7 @@ import type {
   HistoryMutationMark,
   HistoryProfileReplacementRequest,
   HistoryPublicationScope,
+  HistoryMergeRequest,
   HistoryRemoveTailRequest,
   HistoryRepair,
   HistoryRepairRequest,
@@ -101,6 +102,7 @@ import type {
   ProfileCandidateRows,
   StagedProfileAdoption,
 } from './historyStorePort.js';
+import { withMergedHistoryRows } from './historyMergeRows.js';
 import { StagedProfileReplacement } from './historyProfileReplacement.js';
 import { clearHistoryRows } from './historyClearRows.js';
 import {
@@ -137,7 +139,7 @@ import {
 } from '../../recording/replaceTransaction.js';
 import {
   applyFoldEvent,
-  foldAboveResumeBoundary,
+  foldDurableBinding,
   opToEvent,
 } from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
@@ -433,6 +435,19 @@ export class HistoryJournalStore implements HistoryStorePort {
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
     return this.withMutationSnapshot((previous) =>
       owner.reconcile(previous, () => previous),
+    );
+  }
+
+  mergeFrom(request: HistoryMergeRequest): Promise<void> {
+    return this.withMutationSnapshot((previous) =>
+      request.withSourceSnapshot((incoming) =>
+        withMergedHistoryRows(
+          previous,
+          incoming,
+          (candidate) => request.publish(candidate, previous),
+          request.ownership,
+        ),
+      ),
     );
   }
 
@@ -972,43 +987,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     return this.binding.recorder;
   }
 
-  /**
-   * Synchronously fold the journal bytes below the durable tail. Reads only
-   * watermarked bytes, so a concurrent drain — however far it has gotten —
-   * can never leak a not-yet-acked record into the fold (the pending overlay
-   * owns those until their ack fires).
-   *
-   * The watermark protocol bounds only bytes this store wrote itself. A
-   * store that has never applied an op (no acks, empty pending overlay)
-   * sits over a wholly-external journal — e.g. a recorder seeded before the
-   * facade was constructed — and folds the entire durable file, matching
-   * the JournalResolver fold of the same path (#854).
-   */
   private foldDurable(tx: ReplaceTransactionFold): IContent[] {
-    const filePath = this.binding.recorder?.getFilePath();
-    if (filePath === null || filePath === undefined) return [];
-    const externallySeeded =
-      !this.binding.seeded &&
-      this.binding.durableTail === 0 &&
-      this.binding.pending.length === 0;
-    if (!externallySeeded && this.binding.durableTail <= 0) return [];
-    let buffer: Buffer;
-    try {
-      buffer = fs.readFileSync(filePath);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-      throw error;
-    }
-    const limit = externallySeeded
-      ? buffer.length
-      : Math.min(buffer.length, this.binding.durableTail);
-    if (limit <= 0) return [];
-    const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
-    return foldAboveResumeBoundary(
-      folded,
-      this.binding.resumeBoundary ?? 0,
-      this.binding.projection?.filePath,
-      tx,
-    );
+    return foldDurableBinding(this.binding, tx);
   }
 }

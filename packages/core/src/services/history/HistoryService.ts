@@ -21,10 +21,8 @@ import type {
 } from './historyStorePort.js';
 import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
 import { withFallbackRestoreRows } from './historyFallbackRows.js';
-import {
-  withMergedHistoryRows,
-  estimateMergedAppendTokens,
-} from './historyMergeRows.js';
+import { estimateMergedAppendTokens } from './historyMergeRows.js';
+import type { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 export type {
@@ -751,35 +749,38 @@ export class HistoryService extends HistoryServiceReads {
       });
     }
     return this.enqueueAsynchronousHistoryMutation(() =>
-      this.journal.withMutationSnapshot((previous) =>
-        other.withRawHistorySnapshot((incoming) =>
-          withMergedHistoryRows(
-            previous,
-            incoming,
-            async (nextHistory) => {
-              await this.waitForTokenUpdates();
-              const addedTokens = await estimateMergedAppendTokens(
-                nextHistory,
-                previous.length,
-                (row) =>
-                  this.estimateContentTokens(row, this.activeTokenizationModel),
-                this.mutationOwnership,
-              );
-              await this.commitHistoryMutation(
-                {
-                  nextHistory,
-                  nextHistoryTokens: this.totalTokens + addedTokens,
-                  publishedRowStart: previous.length,
-                  streamPublication: !previous.hasPendingRows,
-                  options: {},
-                },
-                previous,
-              );
-            },
-            this.mutationOwnership,
-          ),
-        ),
-      ),
+      this.journal.mergeFrom({
+        source: other.journal,
+        withSourceSnapshot: (execute) =>
+          other.journal.withMutationSnapshot(execute),
+        ownership: this.mutationOwnership,
+        host: this.detachedValues.host(),
+        publish: (nextHistory, previous) =>
+          this.publishMergedRows(nextHistory, previous),
+      }),
+    );
+  }
+
+  private async publishMergedRows(
+    nextHistory: HistoryDensityRows,
+    previous: HistoryMutationSnapshot,
+  ): Promise<void> {
+    await this.waitForTokenUpdates();
+    const addedTokens = await estimateMergedAppendTokens(
+      nextHistory,
+      previous.length,
+      (row) => this.estimateContentTokens(row, this.activeTokenizationModel),
+      this.mutationOwnership,
+    );
+    await this.commitHistoryMutation(
+      {
+        nextHistory,
+        nextHistoryTokens: this.totalTokens + addedTokens,
+        publishedRowStart: previous.length,
+        streamPublication: !previous.hasPendingRows,
+        options: {},
+      },
+      previous,
     );
   }
 

@@ -21,6 +21,7 @@ import {
   requireTxId,
 } from '../../recording/replaceTransaction.js';
 import type { HistoryJournalOp } from './historyStorePort.js';
+import type { JournalBinding } from './historyJournalBinding.js';
 
 /**
  * Kind-neutral fold event: ops (pending) and parsed journal envelopes
@@ -493,5 +494,48 @@ export function foldAboveResumeBoundary(
     [...restored],
     tx,
     false,
+  );
+}
+
+/**
+ * Synchronously fold the journal bytes below the durable tail. Reads only
+ * watermarked bytes, so a concurrent drain, however far it has gotten, can
+ * never leak a not-yet-acked record into the fold (the pending overlay owns
+ * those until their ack fires).
+ *
+ * The watermark protocol bounds only bytes this store wrote itself. A store
+ * that has never applied an op (no acks, empty pending overlay) sits over a
+ * wholly-external journal, e.g. a recorder seeded before the facade was
+ * constructed, and folds the entire durable file, matching the JournalResolver
+ * fold of the same path (#854).
+ */
+export function foldDurableBinding(
+  binding: JournalBinding,
+  tx: ReplaceTransactionFold,
+): IContent[] {
+  const filePath = binding.recorder?.getFilePath();
+  if (filePath === null || filePath === undefined) return [];
+  const externallySeeded =
+    !binding.seeded &&
+    binding.durableTail === 0 &&
+    binding.pending.length === 0;
+  if (!externallySeeded && binding.durableTail <= 0) return [];
+  let buffer: Buffer;
+  try {
+    buffer = readFileSync(filePath);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const limit = externallySeeded
+    ? buffer.length
+    : Math.min(buffer.length, binding.durableTail);
+  if (limit <= 0) return [];
+  const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
+  return foldAboveResumeBoundary(
+    folded,
+    binding.resumeBoundary ?? 0,
+    binding.projection?.filePath,
+    tx,
   );
 }

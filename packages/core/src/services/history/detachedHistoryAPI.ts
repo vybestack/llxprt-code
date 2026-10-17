@@ -27,6 +27,8 @@ export type {
 } from './detachedHistoryMutation.js';
 
 export interface DetachedHistoryAPI {
+  /** The service-side policy a store needs to publish a detached group of its own. */
+  host(): DetachedHistoryHost;
   withRollbackCheckpoint<T>(
     execute: (restore: () => Promise<void>) => Promise<T>,
   ): Promise<T>;
@@ -151,6 +153,7 @@ export function createDetachedHistoryAPI(
   ): Promise<void> =>
     enqueue(() => journal.publishDetached(task, host(), model, options));
   return {
+    host,
     withRollbackCheckpoint: (execute) =>
       journal.withRollbackCheckpoint(host(), enqueue, execute),
     withCheckpoint: (execute, signal) =>

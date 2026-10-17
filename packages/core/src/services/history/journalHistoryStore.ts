@@ -24,6 +24,7 @@ import type {
   HistoryMutationMark,
   HistoryProfileReplacementRequest,
   HistoryPublicationScope,
+  HistoryMergeRequest,
   HistoryRemoveTailRequest,
   HistoryRepairRequest,
   HistoryResumeRequest,
@@ -64,6 +65,7 @@ import {
   withRollbackCheckpointOnJournal,
 } from './journalCheckpoints.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
+import { mergeOnJournal } from './journalMerge.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
 import {
   reconcileMediaOnJournal,
@@ -626,14 +628,10 @@ export class JournalHistoryStore {
    * A failing publish with rollback on puts the removed version back with
    * `restore(version)` (design 4.5) and then undoes the service's changes.
    */
-  async clear(request: HistoryClearRequest): Promise<void> {
-    await this.waitForDurable();
-    const snapshot = await this.session.store.snapshot();
-    try {
-      await this.clearOver(snapshot, request);
-    } finally {
-      snapshot.close();
-    }
+  clear(request: HistoryClearRequest): Promise<void> {
+    return this.withDurableSnapshot((snapshot) =>
+      this.clearOver(snapshot, request),
+    );
   }
 
   private async clearOver(
@@ -717,6 +715,11 @@ export class JournalHistoryStore {
   /** Makes the owner hold the media of the current rows, one streamed pass. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
     return reconcileMediaOnJournal(this, owner);
+  }
+
+  /** Appends the accepted rows of another history as one detached append. */
+  mergeFrom(request: HistoryMergeRequest): Promise<void> {
+    return mergeOnJournal(this, request);
   }
 
   /** Writes `candidate` as the live rows at once; `rollback` restores the saved version (decision G3). */

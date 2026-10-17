@@ -38,6 +38,7 @@ const PORT_METHODS = [
   'removeTail',
   'reconcileMedia',
   'stageProfileReplacement',
+  'mergeFrom',
   'captureCompensation',
   'compensate',
   'publishDetached',

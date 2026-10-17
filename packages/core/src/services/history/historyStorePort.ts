@@ -24,6 +24,7 @@ import type { ResumeDerivedState } from './historyResumeAdoption.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
+import type { HistoryDensityRows } from './historyDensityRows.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -164,6 +165,30 @@ export interface HistoryRemoveTailRequest {
   readonly recalculate?: () => Promise<void>;
 }
 
+/**
+ * One merge of another history's rows onto the end of this one. A store that
+ * publishes detached groups (the journal store) reads `source` and publishes
+ * through `host`; a store that publishes through mutation snapshots (the old
+ * store) reads `withSourceSnapshot` and hands its candidate to `publish`.
+ */
+export interface HistoryMergeRequest {
+  /** The history whose accepted rows are appended; it is only read. */
+  readonly source: Pick<HistoryStorePort, 'streamRows'>;
+  readonly ownership?: RowOwnership;
+  readonly host: DetachedHistoryHost;
+  readonly withSourceSnapshot: <T>(
+    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
+  ) => Promise<T>;
+  /**
+   * The service's commit of one candidate over the rows it was built from
+   * (tokens, spans, chronology, events).
+   */
+  readonly publish: (
+    candidate: HistoryDensityRows,
+    previous: HistoryMutationSnapshot,
+  ) => Promise<void>;
+}
+
 /** The rows a profile replacement takes over; any store can be the candidate. */
 export type ProfileCandidateRows = Pick<
   HistoryStorePort,
@@ -272,6 +297,12 @@ export interface HistoryStorePort {
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined>;
   /** Makes what `owner` holds equal to the media the current rows reference. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void>;
+  /**
+   * Appends the accepted rows of `request.source` (a known speaker and at
+   * least one block), in order, keeping their values and chronology markers.
+   * Publishes and announces nothing when no row is accepted.
+   */
+  mergeFrom(request: HistoryMergeRequest): Promise<void>;
   /**
    * Stages `candidate` as the live rows (decision G3). The old store stages
    * invisibly and `commit` flips the rows; a journal group is atomic and
