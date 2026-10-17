@@ -89,10 +89,13 @@ describe('pinned density membership and hard context window', () => {
       512,
       async (history) => {
         history.setTokenizerFactory(exactTokenizer());
-        await history.transformRows(async (_source, sink) => {
-          for (let index = 0; index < 512; index++)
-            sink.appendDetached(densityRow(index));
-        });
+        await history.detachedValues.replace(
+          (function* () {
+            for (let index = 0; index < 512; index++) yield densityRow(index);
+          })(),
+          undefined,
+          { publishTokens: true },
+        );
         const before = history.getTotalTokens();
         const runtime = buildRuntimeContext(history, {
           compressionStrategy: 'high-density',

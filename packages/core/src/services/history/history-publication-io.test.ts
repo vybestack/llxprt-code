@@ -85,13 +85,17 @@ describe('bounded disk publication work', () => {
     await withSuffixFixture(512, async (history) => {
       history.setTokenizerFactory(exactTokenizer());
       const readBytes = await measuredReads(async () => {
-        await history.transformAll(async (source, sink) => {
-          for await (const { row } of source.streamRows())
-            sink.appendDetached({
-              ...row,
-              metadata: { ...row.metadata, responsesStored: false },
-            });
-        });
+        await history.detachedValues.transform(
+          async (source, sink) => {
+            for await (const row of source.streamRows())
+              await sink.appendValue({
+                ...row,
+                metadata: { ...row.metadata, responsesStored: false },
+              });
+          },
+          undefined,
+          { publishTokens: true },
+        );
         await history.waitForCommit();
         expect(await collectRawHistory(history)).toStrictEqual(
           Array.from({ length: 512 }, (_, index) => {

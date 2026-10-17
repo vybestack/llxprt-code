@@ -5,7 +5,6 @@ import type {
   ProviderFileReferenceMetadata,
 } from './IContent.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
-import type { HistoryService } from './HistoryService.js';
 
 export const bindingContentId =
   'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -78,9 +77,4 @@ export async function* bindingBridgeRows(
     const row = bindingBridgeRow(index, bytes);
     yield bound ? expectedBoundRow(row) : row;
   }
-}
-export function forbidLegacyBindingTransform(history: HistoryService): void {
-  history.transformRows = async (): Promise<never> => {
-    throw new Error('Binding entered the identity-capable rollback engine');
-  };
 }

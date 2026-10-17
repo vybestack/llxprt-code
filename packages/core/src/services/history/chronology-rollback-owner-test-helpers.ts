@@ -156,10 +156,14 @@ async function observeDensity(
   if (kind === 'density') transaction.retain(replacement);
   const operation = rejectedValue(
     kind === 'transform'
-      ? history.transformAll(async (source, sink) => {
-          for await (const { row } of source.streamRows())
-            sink.appendDetached(row);
-        })
+      ? history.detachedValues.transform(
+          async (source, sink) => {
+            for await (const row of source.streamRows())
+              await sink.appendValue(row);
+          },
+          undefined,
+          { publishTokens: true },
+        )
       : history.applyDensityResult({
           replacements: new Map([[Math.floor(size / 2), replacement]]),
           removals: [size - 1],

@@ -55,14 +55,6 @@ import { HistoryServiceReads } from './HistoryServiceReads.js';
 import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 
 export type {
-  HistoryTransformEntry,
-  HistoryTransformSource,
-  HistoryTransformSink,
-  HistoryRowTransformOptions,
-  HistoryRowTransform,
-} from './historyRowTransform.js';
-
-export type {
   CompressionConfig,
   HistoryBatchOptions,
   HistoryMediaOwner,

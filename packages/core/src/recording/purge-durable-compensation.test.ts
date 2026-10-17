@@ -17,9 +17,6 @@ class StreamOnlyHistory extends HistoryService {
     super(options);
     forbidHistoryMaterializationForTest(this, 'materialize trap');
   }
-  override transformAll(): Promise<void> {
-    throw new Error('transformAll trap');
-  }
 }
 
 describe('journal materialization guard', () => {

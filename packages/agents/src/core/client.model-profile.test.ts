@@ -380,8 +380,8 @@ async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
       new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 * 1024 }),
   });
   try {
-    await history.transformRows(async (_previous, sink) => {
-      for (const row of liveHistory) sink.appendDetached(row);
+    await history.detachedValues.replace(liveHistory, undefined, {
+      publishTokens: true,
     });
     const mockChat: Partial<ChatSession> = {
       waitForIdle: async (): Promise<void> => {},

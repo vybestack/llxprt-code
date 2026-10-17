@@ -13,9 +13,6 @@ export class ValueCompressionHistory extends MiddleoutDiskHistory {
   get compressionLocked(): boolean {
     return this.isCompressing;
   }
-  override transformRows(): Promise<void> {
-    throw new Error('Disk compression must select detached value publication');
-  }
 }
 
 export class StreamingSummaryTransport extends SummaryTransport {

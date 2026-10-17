@@ -7,7 +7,7 @@ import {
 } from './__tests__/support/fanout-harness.js';
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import type { HistoryRowTransform } from './historyRowTransform.js';
+import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { HistoryValidationRepair } from './historyValidationRepair.js';
 
@@ -93,9 +93,9 @@ describe('a failed batch clear keeps the origin of every restored row', () => {
 });
 
 /** Rewrites every row's text, so the mutation replaces all of the history. */
-const rewriteEveryRow: HistoryRowTransform = async (source, sink) => {
-  for await (const entry of source.streamRows())
-    sink.appendDetached(textRow(`rewritten ${rowText(entry.row)}`));
+const rewriteEveryRow: DetachedHistoryTransform = async (source, sink) => {
+  for await (const row of source.streamRows())
+    await sink.appendValue(textRow(`rewritten ${rowText(row)}`));
 };
 
 describe('a failed row transform keeps the origin of every restored row', () => {
@@ -114,7 +114,7 @@ describe('a failed row transform keeps the origin of every restored row', () => 
       const { service, ownerA, ownerB } = await seedMixedRows(fanout, pending);
 
       await expect(
-        service.transformRows(rewriteEveryRow, undefined, {
+        service.detachedValues.transform(rewriteEveryRow, undefined, {
           ...(named ? { origin: ownerA } : {}),
           afterPublication: () => {
             throw new Error(OBSERVER_FAILURE);

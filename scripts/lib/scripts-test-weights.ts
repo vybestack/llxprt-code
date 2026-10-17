@@ -56,7 +56,6 @@ export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/truncation-value-highdensity-body.test.ts': 42,
   'scripts/tests/history-removals-body.test.ts': 42,
   'scripts/tests/batch-event-body.test.ts': 40,
-  'scripts/tests/transformall-body.test.ts': 40,
   'scripts/tests/assign-workflow-behaviors.test.ts': 33,
   'scripts/tests/oneshot-summary-body.test.ts': 32,
   'scripts/tests/ink-devtools-lifecycle.test.ts': 31,

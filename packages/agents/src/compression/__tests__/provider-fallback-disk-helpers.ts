@@ -88,10 +88,14 @@ export async function withFallbackFixture(
   });
   history.setTokenizerFactory(exactTokenizer());
   try {
-    await history.transformRows(async (_source, sink) => {
-      for (let index = 0; index < size; index++)
-        sink.appendDetached(toolRankingRow(index, 2048));
-    }, 'test');
+    await history.detachedValues.replace(
+      (function* () {
+        for (let index = 0; index < size; index++)
+          yield toolRankingRow(index, 2048);
+      })(),
+      'test',
+      { publishTokens: true },
+    );
     await recorder.flush();
     history.setCacheAnchorSeq(1);
     history.setBaseTokenOffset(37);

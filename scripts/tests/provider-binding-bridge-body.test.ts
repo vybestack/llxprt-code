@@ -17,10 +17,7 @@ import { recomposeFixture } from '../../packages/agents/src/compression/__tests_
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { withDetachedFixture } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 import { createHistoryProviderFileBindingStore } from '../../packages/core/src/services/history/provider-file-binding.js';
-import {
-  bindingFile,
-  forbidLegacyBindingTransform,
-} from '../../packages/core/src/services/history/provider-binding-bridge-test-helpers.js';
+import { bindingFile } from '../../packages/core/src/services/history/provider-binding-bridge-test-helpers.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../packages/core/src/storage/media-admission-service.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
@@ -88,7 +85,6 @@ async function compareBodies(
           },
         })),
       );
-    forbidLegacyBindingTransform(history);
     const result = await rejectedValue(
       createHistoryProviderFileBindingStore(history).bind(
         reference.contentId,

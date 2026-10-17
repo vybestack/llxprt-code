@@ -59,10 +59,7 @@ function partialSnapshotWrites(): () => void {
 describe('fallback partial filesystem writes', () => {
   it('completes short snapshot writes without changing serialized rows', async () => {
     await withRollbackFixture(async (history, recorder) => {
-      await history.transformRows(async (_source, sink) => {
-        sink.appendDetached(rollbackRow(0));
-        sink.appendDetached(rollbackRow(1));
-      });
+      await history.replaceAll([rollbackRow(0), rollbackRow(1)]);
       await recorder.flush();
       const restore = partialSnapshotWrites();
       try {

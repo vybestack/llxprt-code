@@ -35,12 +35,6 @@ import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTok
 import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
-import {
-  withHistoryRowTransform,
-  prepareRowTransformMutation,
-  type HistoryRowTransform,
-  type HistoryRowTransformOptions,
-} from './historyRowTransform.js';
 
 import { canonicalizeToolCallId } from './canonicalToolIds.js';
 import type { DensityResult } from '../../core/compression/types.js';
@@ -778,42 +772,6 @@ export abstract class HistoryServiceCore
       ...options,
       publishBatch: true,
     });
-  }
-
-  transformRows(
-    transform: HistoryRowTransform,
-    modelName?: string,
-    options: HistoryRowTransformOptions = {},
-  ): Promise<void> {
-    return this.enqueueAsynchronousHistoryMutation(() =>
-      this.journal.withMutationSnapshot((previous) =>
-        withHistoryRowTransform(
-          previous,
-          transform,
-          async (nextHistory) => {
-            await this.commitHistoryMutation(
-              await prepareRowTransformMutation(
-                nextHistory,
-                this,
-                modelName,
-                options,
-              ),
-              previous,
-            );
-          },
-          this.mutationOwnership,
-          options.signal,
-        ),
-      ),
-    );
-  }
-
-  transformAll(
-    transform: HistoryRowTransform,
-    modelName?: string,
-    options: HistoryRowTransformOptions = {},
-  ): Promise<void> {
-    return this.transformRows(transform, modelName, options);
   }
 
   async registerMediaOwner(owner: HistoryMediaOwner): Promise<void> {

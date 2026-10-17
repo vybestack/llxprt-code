@@ -12,10 +12,7 @@ import {
   detachedDigest,
   detachedDurableDigest,
 } from './detached-rollback-test-helpers.js';
-import {
-  bindingFile,
-  forbidLegacyBindingTransform,
-} from './provider-binding-bridge-test-helpers.js';
+import { bindingFile } from './provider-binding-bridge-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 
@@ -64,7 +61,6 @@ describe('binding bridge local media reservations', () => {
         history.once('tokensUpdated', () => {
           throw failure;
         });
-        forbidLegacyBindingTransform(history);
         expect(
           await rejectedValue(
             createHistoryProviderFileBindingStore(history).bind(

@@ -64,8 +64,8 @@ async function installHistory(rows: readonly IContent[]): Promise<void> {
           getChat: () => chat,
           getHistoryService: () => history,
           setHistoryFromSource: async (source: AsyncIterable<IContent>) => {
-            await history.transformRows(async (_previous, sink) => {
-              for await (const row of source) sink.appendDetached(row);
+            await history.detachedValues.replace(source, undefined, {
+              publishTokens: true,
             });
           },
         },

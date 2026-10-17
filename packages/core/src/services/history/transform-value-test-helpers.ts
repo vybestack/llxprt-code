@@ -7,7 +7,6 @@ import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { HistoryService } from './HistoryService.js';
-import type { HistoryRowTransform } from './historyRowTransform.js';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import {
   BatchOwnerCensus,
@@ -30,12 +29,6 @@ function collectTransformRows(): void {
   )
     throw new Error('Bun JSC gcAndSweep is required');
   jsc.gcAndSweep();
-}
-
-export class ValueTransformHistory extends HistoryService {
-  override transformRows(_transform: HistoryRowTransform): Promise<void> {
-    throw new Error('Legacy borrowed transform reached by value caller');
-  }
 }
 
 export interface TransformProbes {
@@ -129,7 +122,7 @@ export function expectTransformBound(owners: BatchOwnerCensus): void {
 
 export async function withValueTransformFixture<T>(
   action: (fixture: {
-    history: ValueTransformHistory;
+    history: HistoryService;
     recorder: AdmissionFailureRecorder;
     owners: BatchOwnerCensus;
     pauseWriter(): void;
@@ -159,7 +152,7 @@ export async function withValueTransformFixture<T>(
     },
   });
   const owners = new BatchOwnerCensus();
-  const history = new ValueTransformHistory({
+  const history = new HistoryService({
     recording: recorder,
     mutationOwnership: owners,
   });

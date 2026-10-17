@@ -20,9 +20,6 @@ class StreamOnlyHistory extends HistoryService {
       'production materializer array seam',
     );
   }
-  override transformAll(): Promise<void> {
-    throw new Error('production transformAll array seam');
-  }
 }
 
 describe('journal materialization guard', () => {

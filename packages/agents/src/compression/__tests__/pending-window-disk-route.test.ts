@@ -137,14 +137,19 @@ describe('actual pending-window disk route', () => {
     await withPendingFixture(
       3,
       async ({ history, setup }) => {
-        await history.transformRows(async (_source, sink) => {
-          for (let index = 0; index < 3; index++)
-            sink.appendDetached(pendingCaller(index));
-          sink.appendDetached({
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'x'.repeat(9 * 1024 * 1024) }],
-          });
-        });
+        await history.detachedValues.replace(
+          (function* () {
+            for (let index = 0; index < 3; index++) yield pendingCaller(index);
+            yield {
+              speaker: 'human' as const,
+              blocks: [
+                { type: 'text' as const, text: 'x'.repeat(9 * 1024 * 1024) },
+              ],
+            };
+          })(),
+          undefined,
+          { publishTokens: true },
+        );
         setup.handler.setLastPromptTokenCount(
           history.getTotalTokens() + 20000000,
         );

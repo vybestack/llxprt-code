@@ -151,12 +151,12 @@ describe('recorder mirrors stay replayable under random operations', () => {
           return;
         case 'purge':
           if (rows.length === 0) return;
-          await service.transformRows(
+          await service.detachedValues.transform(
             async (source, sink) => {
-              for await (const entry of source.streamRows())
-                sink.appendDetached({
-                  ...entry.row,
-                  blocks: [{ type: 'text', text: `${rowText(entry.row)}*` }],
+              for await (const row of source.streamRows())
+                await sink.appendValue({
+                  ...row,
+                  blocks: [{ type: 'text', text: `${rowText(row)}*` }],
                 });
             },
             undefined,

@@ -44,10 +44,10 @@ describe('every row written to the shared journal carries its origin', () => {
     service.add(textRow('A2'), undefined, ownerA);
     await service.waitForCommit();
     await expect(
-      service.transformRows(
+      service.detachedValues.transform(
         async (source, sink) => {
-          for await (const entry of source.streamRows())
-            sink.appendDetached(textRow(`changed-${rowText(entry.row)}`));
+          for await (const row of source.streamRows())
+            await sink.appendValue(textRow(`changed-${rowText(row)}`));
         },
         undefined,
         {

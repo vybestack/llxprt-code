@@ -12,7 +12,6 @@ import {
   bindingBridgeRows,
   bindingContentId,
   bindingFile,
-  forbidLegacyBindingTransform,
 } from './provider-binding-bridge-test-helpers.js';
 import {
   mediaParticipant,
@@ -55,7 +54,6 @@ async function bindingFault(size: number, stage: string): Promise<number> {
       history.once('tokensUpdated', () => {
         throw primary;
       });
-    forbidLegacyBindingTransform(history);
     expect(
       await rejectedValue(
         createHistoryProviderFileBindingStore(history).bind(
@@ -83,7 +81,6 @@ describe('provider binding detached production bridge', () => {
         await seed(fixture, size);
         const range = expectedRange(size);
         history.setBaseTokenOffset(73);
-        forbidLegacyBindingTransform(history);
         await createHistoryProviderFileBindingStore(history).bind(
           bindingContentId,
           bindingFile,
@@ -133,7 +130,6 @@ describe('provider binding value edge cases', () => {
       history.once('tokensUpdated', () => {
         throw failure;
       });
-      forbidLegacyBindingTransform(history);
       expect(
         await rejectedValue(
           createHistoryProviderFileBindingStore(history).bind(
@@ -155,7 +151,6 @@ describe('provider binding value edge cases', () => {
     await withDetachedFixture(async (fixture) => {
       await seed(fixture, 512);
       const expected = await detachedDigest(bindingBridgeRows(512));
-      forbidLegacyBindingTransform(fixture.history);
       await expect(
         createHistoryProviderFileBindingStore(fixture.history).bind(
           'missing',

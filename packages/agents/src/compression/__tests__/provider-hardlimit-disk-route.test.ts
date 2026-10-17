@@ -129,18 +129,22 @@ describe('actual provider hard-limit disk fallback', () => {
     const history = new HardlimitHistory();
     try {
       const { handler } = setup(history);
-      await history.transformRows(async (_source, sink) => {
-        for (let index = 0; index < 3; index++)
-          sink.appendDetached({
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'text',
-                text: `${index}:${'x'.repeat(index === 2 ? 9 * 1024 * 1024 : 64)}`,
-              },
-            ],
-          });
-      });
+      await history.detachedValues.replace(
+        (function* () {
+          for (let index = 0; index < 3; index++)
+            yield {
+              speaker: 'human' as const,
+              blocks: [
+                {
+                  type: 'text' as const,
+                  text: `${index}:${'x'.repeat(index === 2 ? 9 * 1024 * 1024 : 64)}`,
+                },
+              ],
+            };
+        })(),
+        undefined,
+        { publishTokens: true },
+      );
       const pending: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pending' }],

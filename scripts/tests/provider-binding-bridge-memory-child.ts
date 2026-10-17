@@ -7,7 +7,6 @@ import {
   bindingBridgeRows,
   bindingContentId,
   bindingFile,
-  forbidLegacyBindingTransform,
 } from '../../packages/core/src/services/history/provider-binding-bridge-test-helpers.js';
 import { createHistoryProviderFileBindingStore } from '../../packages/core/src/services/history/provider-file-binding.js';
 import {
@@ -60,7 +59,6 @@ async function probe(size: number, trap: boolean): Promise<void> {
         };
       }),
     );
-    forbidLegacyBindingTransform(history);
     const operation = rejectedValue(
       createHistoryProviderFileBindingStore(history).bind(
         bindingContentId,

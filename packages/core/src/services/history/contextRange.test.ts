@@ -94,21 +94,25 @@ describe('HistoryService context range publication', () => {
     expect(events[0]?.removedInterior).toStrictEqual([]);
     expect(events[0]?.approximate).toBe(false);
 
-    await service.transformAll(async (source, sink) => {
-      sink.appendDetached({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'summary of three' }],
-        metadata: {
-          chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
-          chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
-        },
-      });
-      let index = 0;
-      for await (const { row } of source.streamRows()) {
-        if (index >= 3) sink.appendRetained(index, row);
-        index++;
-      }
-    });
+    await service.detachedValues.transform(
+      async (source, sink) => {
+        await sink.appendValue({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'summary of three' }],
+          metadata: {
+            chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
+            chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
+          },
+        });
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index >= 3) await sink.appendDerived(index, row);
+          index++;
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     expect(events).toHaveLength(2);
     expect(events[1]?.totalEntries).toBe(1);
     expect(events[1]?.firstSeq).toBe(99);
@@ -148,16 +152,16 @@ describe('HistoryService context summaries', () => {
       [],
     );
 
-    await service.transformAll(async (_source, sink) => {
-      sink.appendDetached({
+    await service.replaceAll([
+      {
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'summary of four' }],
         metadata: {
           chronology: { seq: 98, userTurn: 1, step: 1, recordedAt: 0 },
           chronologyReplaced: { fromSeq: 1, toSeq: 4, itemCount: 4 },
         },
-      });
-    });
+      },
+    ]);
     const summaries = await Array.fromAsync(service.getContextSummaries());
     expect(summaries).toHaveLength(1);
     const summary = summaries.length > 0 ? summaries[0] : undefined;

@@ -74,7 +74,7 @@ function makeDensityResult(
   return { removals, replacements, metadata: makeMetadata() };
 }
 
-/** Compression summary shaped like the ones transformAll-based tests build. */
+/** Compression summary shaped like the ones detached-transform-based tests build. */
 function summaryEntry(
   seq: number,
   replacedFromSeq: number,
@@ -165,17 +165,21 @@ describe('HistoryService context range v2', () => {
       service.add(textContent('human', text));
     }
     const events = captureRanges(service);
-    await service.transformAll(async (source, sink) => {
-      let index = 0;
-      for await (const { row } of source.streamRows()) {
-        if (index === 2)
-          sink.appendDetached(
-            summaryEntry(99, 3, 5, 'summary of three through five'),
-          );
-        if (index < 2 || index >= 5) sink.appendRetained(index, row);
-        index++;
-      }
-    });
+    await service.detachedValues.transform(
+      async (source, sink) => {
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index === 2)
+            await sink.appendValue(
+              summaryEntry(99, 3, 5, 'summary of three through five'),
+            );
+          if (index < 2 || index >= 5) await sink.appendDerived(index, row);
+          index++;
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     expect(events).toHaveLength(1);
     const range = lastRangeOf(events);
     expect(range.firstSeq).toBe(await seqOf(service, 4));
@@ -243,13 +247,17 @@ describe('HistoryService context range v2 membership changes', () => {
     const events = captureRanges(service);
     // In-memory rewind shape: a strict seq-prefix truncation through the
     // batch-commit path; P05 journals it as a durable rewind op.
-    await service.transformAll(async (source, sink) => {
-      let index = 0;
-      for await (const { row } of source.streamRows()) {
-        if (index === 3) break;
-        sink.appendRetained(index++, row);
-      }
-    });
+    await service.detachedValues.transform(
+      async (source, sink) => {
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index === 3) break;
+          await sink.appendDerived(index++, row);
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     expect(events).toHaveLength(1);
     const range = lastRangeOf(events);
     expect(range.firstSeq).toBe(await seqOf(service, 2));
@@ -295,17 +303,21 @@ describe('HistoryService context range v2 combined changes and projections', () 
       service.add(textContent('human', text));
     }
     const events = captureRanges(service);
-    await service.transformAll(async (source, sink) => {
-      let index = 0;
-      for await (const { row } of source.streamRows()) {
-        if (index === 2)
-          sink.appendDetached(
-            summaryEntry(99, 3, 5, 'summary of three through five'),
-          );
-        if (index < 2 || index >= 5) sink.appendRetained(index, row);
-        index++;
-      }
-    });
+    await service.detachedValues.transform(
+      async (source, sink) => {
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index === 2)
+            await sink.appendValue(
+              summaryEntry(99, 3, 5, 'summary of three through five'),
+            );
+          if (index < 2 || index >= 5) await sink.appendDerived(index, row);
+          index++;
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     await service.waitForTokenUpdates();
     // After the compression the tail row with seq 6 sits at index 3.
     await service.applyDensityResult(

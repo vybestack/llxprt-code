@@ -57,16 +57,11 @@ export function captureConfigHistory(): {
   return {
     streamHistory: (signal) => journal.streamRawHistory(signal),
     storeHistoryForLaterUse: vi.fn(async (source, options = {}) => {
-      await journal.transformRows(
-        async (_previous, sink) => {
-          for await (const row of source) {
-            options.signal?.throwIfAborted();
-            sink.appendDetached(row);
-          }
-        },
-        undefined,
-        { signal: options.signal, awaitDurableCommit: true },
-      );
+      await journal.detachedValues.replace(source, undefined, {
+        signal: options.signal,
+        awaitDurableCommit: true,
+        publishTokens: true,
+      });
     }),
     initialize: vi.fn(async (_config, options = {}) => {
       for await (const _row of journal.streamRawHistory(options.signal)) {

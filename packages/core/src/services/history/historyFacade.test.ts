@@ -519,21 +519,25 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
     expect(events[0]?.removedInterior).toStrictEqual([]);
     expect(events[0]?.approximate).toBe(false);
 
-    await service.transformAll(async (source, sink) => {
-      sink.appendDetached({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'summary of three' }],
-        metadata: {
-          chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
-          chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
-        },
-      });
-      let index = 0;
-      for await (const { row } of source.streamRows()) {
-        if (index >= 3) sink.appendRetained(index, row);
-        index++;
-      }
-    });
+    await service.detachedValues.transform(
+      async (source, sink) => {
+        await sink.appendValue({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'summary of three' }],
+          metadata: {
+            chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
+            chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
+          },
+        });
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index >= 3) await sink.appendDerived(index, row);
+          index++;
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     expect(events).toHaveLength(2);
     expect(events[1]?.totalEntries).toBe(1);
     expect(events[1]?.firstSeq).toBe(99);

@@ -37,9 +37,13 @@ await withSuffixFixture(32, async (service) => {
     })),
   );
   service.setTokenizerFactory(exactTokenizer());
-  await service.transformAll(async (source, sink) => {
-    for await (const { row } of source.streamRows()) sink.appendDetached(row);
-  });
+  await service.detachedValues.transform(
+    async (source, sink) => {
+      for await (const row of source.streamRows()) await sink.appendValue(row);
+    },
+    undefined,
+    { publishTokens: true },
+  );
 });
 await withSuffixFixture(
   size,
@@ -69,13 +73,14 @@ await withSuffixFixture(
       : [];
     const failure = new Error('rollback probe publication failure');
     const operation = rejectedValue(
-      service.transformAll(
+      service.detachedValues.transform(
         async (source, sink) => {
-          for await (const { row } of source.streamRows())
-            sink.appendDetached(row);
+          for await (const row of source.streamRows())
+            await sink.appendValue(row);
         },
         undefined,
         {
+          publishTokens: true,
           afterPublication: async (): Promise<void> => {
             reached?.();
             await gate;

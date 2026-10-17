@@ -20,9 +20,7 @@ function scratch(): string[] {
 describe('fallback capture storage', () => {
   it('closes partially opened snapshot storage when the index cannot open', async () => {
     await withRollbackFixture(async (history, recorder) => {
-      await history.transformRows(async (_source, sink) => {
-        sink.appendDetached(rollbackRow(0));
-      });
+      await history.replaceAll([rollbackRow(0)]);
       await recorder.flush();
       const before = scratch();
       const originalOpen = fs.openSync;
@@ -82,10 +80,9 @@ describe('fallback capture writes', () => {
 describe('fallback capture cancellation', () => {
   it('closes a mid-capture cancellation before calling the consumer', async () => {
     await withRollbackFixture(async (history, recorder) => {
-      await history.transformRows(async (_source, sink) => {
-        for (let index = 0; index < 512; index++)
-          sink.appendDetached(rollbackRow(index));
-      });
+      await history.replaceAll(
+        Array.from({ length: 512 }, (_, index) => rollbackRow(index)),
+      );
       await recorder.flush();
       const before = scratch();
       const controller = new AbortController();

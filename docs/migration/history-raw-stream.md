@@ -21,8 +21,9 @@ in cleanup when it stops early. Cancellation is checked when iteration resumes.
 
 Use `IContent` for the row type rather than a return type derived from the removed
 method. Read-only diagnostics should fold the cursor to scalar results. Full
-history mutations need an addressed candidate or the scoped `transformRows`
-source and sink, rather than an array read followed by replacement.
+history mutations need an addressed candidate or the scoped
+`detachedValues.transform` source and sink, rather than an array read followed
+by replacement.
 
 Continuous high-density optimization now invokes `optimizeRows` over a pinned
 disk snapshot through `HistoryService.optimizeDensityRows`. Its row, path,
@@ -124,43 +125,35 @@ previous target intact. The media probe supplies its single accepted journal row
 to this method and counts settled history with a scalar. Neither operation reads
 `getAll`.
 
-## Public `transformAll` callback
+## Whole-history rewrites: `detachedValues.transform`
 
-`HistoryService.transformAll` now takes the same scoped asynchronous source and
-sink callback as `transformRows`. Its callback returns `Promise<void>`, not a
-history array. The method still returns `Promise<void>` and accepts a model name
-and batch options, including cancellation:
+`HistoryService.transformRows` and `transformAll` are removed. A rewrite of the
+whole history uses `history.detachedValues.transform(transform, modelName?,
+options?)` (or `detachedValues.replace` when the new rows do not depend on the
+old ones). The callback takes a scoped asynchronous source and sink and returns
+`Promise<void>`, not a history array:
 
 ```typescript
-await history.transformAll(async (source, sink) => {
+await history.detachedValues.transform(async (source, sink) => {
   let index = 0;
-  for await (const { row } of source.streamRows()) {
-    sink.appendRetained(index++, row);
+  for await (const row of source.streamRows()) {
+    await sink.appendDerived(index++, row);
   }
 });
 ```
 
 The source is repeatable and ordered. Omitting rows removes them; sink append
-order determines output order. Use `appendDetached` for changed row values or
-insertions. It serializes a sanitized value immediately without stamping the
-caller object. `appendRetained(index, row)` verifies unchanged speaker and blocks;
-metadata changes are allowed. It keeps pending caller identities and serializes
-durable values. Empty raw rows can be retained, while newly appended rows must
-pass the existing batch validation.
+order determines output order. Use `appendValue` for changed row values or
+insertions: it serializes a sanitized value without stamping the caller object.
+`appendDerived(index, row)` carries a source row over, possibly rewritten, and
+keeps that row's owner and chronology marker. Each sink call resolves when the
+candidate has taken the row. Newly appended rows must pass the existing batch
+validation.
 
-`appendBorrowed` and `appendIdentity` both retain the exact caller row strongly
-until the transaction ends. Its original chronology marker is also held strongly
-for rollback, including marker displacement followed by GC. These operations
-accept whole histories and large rows, but their ownership grows with what the
-caller chooses to pin. They cannot certify bounded retained memory. No input or
-row size limit was introduced.
-
-Source and sink handles expire when the callback completes. Exhaustion, early
-return and resumed cancellation release active reader rows. Candidate values
+Source and sink handles expire when the callback completes. Candidate values
 and rollback snapshots are disk-backed; publication and compensation preserve
 membership, chronology, tokens and media participant rollback before queued
-mutations run. Pending writer identities remain separate from bounded durable
-history ownership. There is no array-callback compatibility route.
+mutations run. There is no array-callback compatibility route.
 
 ## Array batch publication and backpressure
 
@@ -242,7 +235,7 @@ ownership instrumentation. This overload requires an inactive chat. CLI
 `--continue` startup calls it through `restoreResumeBoot` and
 `admitResumeHistorySource`, using `ResumeCursorBoot.streamRows()` rather than an
 array materialization. The source is traversed in order, admitted for local
-media one row at a time, and serialized with `appendDetached`.
+media one row at a time, and serialized as detached values.
 
 Streamed admission prepares a separate disk journal. Previous membership is
 copied through a scoped disk merge to preserve chronology reconciliation. The

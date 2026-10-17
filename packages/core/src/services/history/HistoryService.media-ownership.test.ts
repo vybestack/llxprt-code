@@ -261,7 +261,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     }).toStrictEqual({ afterClear: false, afterDispose: false });
   });
 
-  it('keeps retained references and releases compression-removed references through replaceAll and transformAll', async () => {
+  it('keeps retained references and releases compression-removed references through replaceAll', async () => {
     const store = storeOf();
     const service = await serviceOf(store);
     const first = await admitted(store, [inlineImageContent(PNG_BASE64)]);

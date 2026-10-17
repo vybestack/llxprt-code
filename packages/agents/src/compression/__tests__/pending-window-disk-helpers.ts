@@ -101,11 +101,15 @@ export async function withPendingFixture<T>(
       await recorder.commit('content', { content: middleoutRow(index, bytes) });
     }
     await recorder.flush();
-    await history.transformRows(async (source, sink) => {
-      for await (const { row } of source.streamRows()) {
-        if (row.blocks.length > 0) sink.appendDetached(row);
-      }
-    });
+    await history.detachedValues.transform(
+      async (source, sink) => {
+        for await (const row of source.streamRows()) {
+          if (row.blocks.length > 0) await sink.appendValue(row);
+        }
+      },
+      undefined,
+      { publishTokens: true },
+    );
     await recorder.flush();
     history.setCacheAnchorSeq(1);
     history.setBaseTokenOffset(37);
