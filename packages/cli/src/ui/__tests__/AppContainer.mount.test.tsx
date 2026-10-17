@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -458,6 +460,7 @@ describe('AppContainer.mount', () => {
     it('should mount without throwing errors', async () => {
       // Arrange: All dependencies mocked
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -482,6 +485,7 @@ describe('AppContainer.mount', () => {
     it('should render with provider contexts active', async () => {
       // Arrange
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -511,6 +515,7 @@ describe('AppContainer.mount', () => {
     it('should render DefaultAppLayout', async () => {
       // Arrange
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -543,6 +548,7 @@ describe('AppContainer.mount', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
       ];
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -571,6 +577,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const startupWarnings = ['Warning 1', 'Warning 2'];
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -598,6 +605,7 @@ describe('AppContainer.mount', () => {
     it('should unmount without errors', async () => {
       // Arrange
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

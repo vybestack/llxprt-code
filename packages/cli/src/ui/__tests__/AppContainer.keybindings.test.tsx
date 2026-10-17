@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -505,6 +507,7 @@ describe('AppContainer.keybindings', () => {
   describe('keybinding behavior', () => {
     it('should mount component with keybinding handlers active', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -530,6 +533,7 @@ describe('AppContainer.keybindings', () => {
 
     it('should have copy mode toggle available when using alternate buffer', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -560,6 +564,7 @@ describe('AppContainer.keybindings', () => {
       });
 
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

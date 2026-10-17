@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CredentialCommands } from '../ui/hooks/credentialCommandTypes.js';
 
 import { createDocsCommand } from '../ui/commands/docsCommand.js';
 import { createHelpCommand } from '../ui/commands/helpCommand.js';
@@ -579,4 +580,23 @@ function createUnconfiguredMcpCommand(unavailable: () => never): SlashCommand {
       unavailableSessionAgent,
     ),
   );
+}
+
+export function createUnconfiguredCredentialRegistry(): CredentialCommands {
+  const commands = createUnconfiguredBuiltinOwners();
+  return {
+    modelCommand: commands.modelCommand,
+    toolFormatCommand: commands.toolFormatCommand,
+    providerCommand: commands.providerCommand,
+    baseurlCommand: commands.baseurlCommand,
+    logoutCommand: commands.logoutCommand,
+    keyfileCommand: commands.keyfileCommand,
+    keyCommand: commands.keyCommand,
+    toolkeyCommand: commands.toolkeyCommand,
+    toolkeyfileCommand: commands.toolkeyfileCommand,
+    authCommand: commands.authCommand,
+    quotaCommand: commands.quotaCommand,
+    mcpCommand: commands.mcpCommand,
+    profileCommand: commands.profileCommand,
+  };
 }

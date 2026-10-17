@@ -632,6 +632,7 @@ function useInputStartup(
   const initialPrompt = useMemo(() => readInitialPrompt(), [readInitialPrompt]);
   useInitialPromptSubmit({
     initialPrompt,
+    commandsReady: core.slashCommands !== undefined,
     submitPrompt: stream.handleUserInputSubmit,
     agentClientPresent: p.isAgentClientPresent(),
     interactiveRuntimeReady: stream.interactiveRuntimeReady,

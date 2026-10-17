@@ -1,3 +1,4 @@
+import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -237,6 +238,7 @@ describe('useSlashCommandProcessor', () => {
     const extensionUpdates = new Map();
     const { result, unmount } = renderHook(() =>
       useSlashCommandProcessor(
+        () => createUnconfiguredCredentialRegistry(),
         config,
         null,
         mockSettings,

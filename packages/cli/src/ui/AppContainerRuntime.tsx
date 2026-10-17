@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CredentialCommandRegistration } from './hooks/credentialCommandRegistration.js';
+
 import { useRuntimeApi } from './contexts/RuntimeContext.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -96,6 +98,7 @@ import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 export interface AppContainerRuntimeProps {
+  registerCredentials: CredentialCommandRegistration;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   /**
@@ -406,6 +409,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     bootstrap.setLlxprtMdFileCount,
   );
   const commands = useSlashCommandProcessorCore({
+    registerCredentials: props.registerCredentials,
     config: props.slashCommandRuntime,
     agent: props.agent,
     ...view,

@@ -16,6 +16,7 @@ import { createOAuthControl } from '../../runtime/createOAuthControl.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockSettings, render, waitFor } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { SettingsContext } from '../contexts/SettingsContext.js';
 import { AppWrapper } from '../App.js';
 import {
   buildUiRuntimeFromSource,
@@ -39,49 +40,10 @@ describe('application input producer', () => {
       model: 'fake-model',
       question: '@' + request,
     });
-    const context = createMockCommandContext();
-    const oauthManager = new OAuthManager(new MemoryTokenStore());
-    const providers = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      new SettingsService(),
-    );
-    const oauthControl = createOAuthControl(() => oauthManager, providers);
-    const selectedSettings = new SessionSettingsOwner(new SettingsService());
-    selectedSettings.bindTelemetry(config);
-    const uiRuntime = buildUiRuntimeFromSource(
-      config,
+    const app = renderApplication(
       owner,
-      undefined,
-      selectedSettings,
-    );
-    const slashCommandRuntime = buildSlashCommandRuntime(
       config,
-      owner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      selectedSettings,
-    );
-    const app = render(
-      <AppWrapper
-        agent={owner}
-        uiRuntime={uiRuntime}
-        slashCommandRuntime={slashCommandRuntime}
-        settings={createMockSettings({
-          folderTrust: false,
-          ui: { theme: 'Default' },
-        })}
-        version="test"
-        runtimeOwner={{ create: () => context.runtimeApi }}
-        providerAliasRefresh={async () => {}}
-        oauthControl={oauthControl}
-        suppressStartupWelcome
-      />,
+      createMockCommandContext().runtimeApi,
     );
     try {
       await waitFor(async () => {
@@ -94,4 +56,107 @@ describe('application input producer', () => {
       await config.dispose();
     }
   });
+  it('saves profiles on the application owner despite a sibling runtime and survives sibling retirement', async () => {
+    const owner = await makeOwner(
+      'app-credential-owner',
+      undefined,
+      undefined,
+      true,
+    );
+    const peer = await makeOwner(
+      'app-credential-peer',
+      undefined,
+      undefined,
+      true,
+    );
+    owner.setModelParam('temperature', 0.4375);
+    const root = owner.workspace.getWorkingDirectory();
+    const config = new Config({
+      sessionId: 'app-credential-source',
+      storageRoot: join(root, 'host-state'),
+      cwd: root,
+      targetDir: root,
+      debugMode: false,
+      model: 'fake-model',
+      question: '/profile save model captured-root',
+    });
+    const context = createMockCommandContext({ services: { agent: peer } });
+    const decoyRuntime = {
+      ...context.runtimeApi,
+      saveProfileSnapshot: peer.saveProfileSnapshot.bind(peer),
+      deleteProfileByName: peer.deleteProfileByName.bind(peer),
+      getEphemeralSettings: peer.getEphemeralSettings.bind(peer),
+    };
+    await peer.dispose();
+    const app = renderApplication(owner, config, decoyRuntime);
+    try {
+      await waitFor(async () => {
+        expect(
+          await owner.workspace.profileDefinitions.loadProfile('captured-root'),
+        ).toMatchObject({ modelParams: { temperature: 0.4375 } });
+      });
+      expect(
+        JSON.stringify(await owner.workspace.profileDefinitions.listProfiles()),
+      ).toContain('captured-root');
+    } finally {
+      app.unmount();
+      await config.dispose();
+    }
+  });
 });
+
+function renderApplication(
+  owner: Awaited<ReturnType<ReturnType<typeof useCommandOwners>>>,
+  config: Config,
+  runtimeApi: ReturnType<typeof createMockCommandContext>['runtimeApi'],
+) {
+  const oauthManager = new OAuthManager(new MemoryTokenStore());
+  const providers = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+  );
+  const oauthControl = createOAuthControl(() => oauthManager, providers);
+  const selectedSettings = new SessionSettingsOwner(new SettingsService());
+  selectedSettings.bindTelemetry(config);
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    owner,
+    undefined,
+    selectedSettings,
+  );
+  const slashCommandRuntime = buildSlashCommandRuntime(
+    config,
+    owner,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    selectedSettings,
+  );
+  const settings = createMockSettings({
+    folderTrust: false,
+    ui: { theme: 'Default' },
+  });
+  return render(
+    <SettingsContext.Provider value={settings}>
+      <AppWrapper
+        agent={owner}
+        uiRuntime={uiRuntime}
+        slashCommandRuntime={slashCommandRuntime}
+        settings={createMockSettings({
+          folderTrust: false,
+          ui: { theme: 'Default' },
+        })}
+        version="test"
+        runtimeOwner={{ create: () => runtimeApi }}
+        providerAliasRefresh={async () => {}}
+        oauthControl={oauthControl}
+        suppressStartupWelcome
+      />
+    </SettingsContext.Provider>,
+  );
+}

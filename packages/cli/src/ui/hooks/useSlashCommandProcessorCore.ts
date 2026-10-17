@@ -49,7 +49,8 @@ import { bindAboutDetails } from '../commands/aboutCommandHost.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
 import { useSetCommand } from './useSetCommand.js';
-import { useCredentialCommands } from './useCredentialCommands.js';
+import type { CredentialCommandRegistration } from './credentialCommandRegistration.js';
+import type { CredentialCommands } from './credentialCommandTypes.js';
 import { useChatCommand } from './useChatCommand.js';
 import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
 import { basename, join } from 'node:path';
@@ -67,7 +68,6 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import { useProviderAliasRefresh } from '../contexts/ProviderAliasRefreshContext.js';
 import type {
   HistoryItemWithoutId,
   SlashCommandProcessorResult,
@@ -113,6 +113,7 @@ export type SlashCommandProcessorCoreResult = {
 export interface UseSlashCommandProcessorCoreArgs {
   config: CliUiRuntime | null;
   agent: Agent | null;
+  registerCredentials: CredentialCommandRegistration;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
@@ -459,7 +460,7 @@ function useRegisteredCommands(
   args: UseSlashCommandProcessorCoreArgs,
   presentationCommands: ReturnType<typeof usePresentationCommands>,
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>,
-  providerCommands: ReturnType<typeof useCredentialCommands>,
+  providerCommands: CredentialCommands,
   setPendingItem: (item: HistoryItemWithoutId | null) => void,
   reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
@@ -733,34 +734,19 @@ function useProcessorRegistration(
   presentationCommands: ReturnType<typeof usePresentationCommands>,
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
 ): SlashCommandProcessorState {
-  const { agent, config, settings, recordingIntegration, recordingOwner } =
-    args;
+  const {
+    agent,
+    config,
+    settings,
+    recordingIntegration,
+    recordingOwner,
+    registerCredentials,
+    addItem,
+  } = args;
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
   const tools = agent?.tools;
-  const history = useMemo(
-    () => ({
-      compress: agent === null ? null : agent.compress.bind(agent),
-      readRaw: () =>
-        agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
-      isInitialized: () => agent?.agentClient.hasChatInitialized() ?? false,
-      read: () => agent?.getHistory() ?? Promise.resolve([]),
-      replace: async (items: Parameters<Agent['setHistory']>[0]) => {
-        if (agent === null) throw new Error('Session agent is unavailable');
-        await agent.setHistory(items);
-      },
-      dump: () => {
-        const service = agent?.agentClient.getHistoryService();
-        return service == null
-          ? null
-          : {
-              messages: service.getAll(),
-              chronology: service.getChronologyTrace(),
-            };
-      },
-    }),
-    [agent],
-  );
+  const history = useCommandHistoryReaders(agent);
   return useRegisteredCommands(
     args,
     presentationCommands,
@@ -790,17 +776,54 @@ function useProcessorRegistration(
       history.dump,
       useBound(api, api.getProviderDumpMetadata),
     ),
-    useCredentialCommands(
-      agent,
-      settings,
-      config,
+    useCredentialRegistry(
+      registerCredentials,
+      addItem,
+      reloadRegisteredCommands,
       recordingIntegration,
       recordingOwner,
-      args.addItem,
-      reloadRegisteredCommands,
-      useProviderAliasRefresh(),
     ),
     setPendingItem,
     reloadCommandsRef,
   );
+}
+
+function useCredentialRegistry(
+  register: CredentialCommandRegistration,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reload: () => void,
+  raw: RecordingIntegration | undefined,
+  owner: 'agent' | 'raw' | undefined,
+): CredentialCommands {
+  return useMemo(
+    () => register(addItem, reload, raw, owner),
+    [register, addItem, reload, raw, owner],
+  );
+}
+
+function useCommandHistoryReaders(agent: Agent | null) {
+  const history = useMemo(
+    () => ({
+      compress: agent === null ? null : agent.compress.bind(agent),
+      readRaw: () =>
+        agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
+      isInitialized: () => agent?.agentClient.hasChatInitialized() ?? false,
+      read: () => agent?.getHistory() ?? Promise.resolve([]),
+      replace: async (items: Parameters<Agent['setHistory']>[0]) => {
+        if (agent === null) throw new Error('Session agent is unavailable');
+        await agent.setHistory(items);
+      },
+      dump: () => {
+        const service = agent?.agentClient.getHistoryService();
+        return service == null
+          ? null
+          : {
+              messages: service.getAll(),
+              chronology: service.getChronologyTrace(),
+            };
+      },
+    }),
+    [agent],
+  );
+  return history;
 }

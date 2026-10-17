@@ -3,11 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CredentialCommands } from './credentialCommandTypes.js';
+
 import { useMemo } from 'react';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { SlashCommand } from '../commands/types.js';
 import type { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
-import type { useCredentialCommands } from './useCredentialCommands.js';
 import type { usePresentationCommands } from './usePresentationCommands.js';
 import type { useHostCommands } from './useHostCommands.js';
 import type { useUtilityCommands } from './useUtilityCommands.js';
@@ -37,7 +38,7 @@ type BuiltinCommandOwnerParts = Pick<
   hooksCommand: SlashCommand;
   taskCommand: SlashCommand;
   todoCommand: SlashCommand;
-  credentialCommands: ReturnType<typeof useCredentialCommands>;
+  credentialCommands: CredentialCommands;
 };
 
 export function useBuiltinCommandOwners(

@@ -33,6 +33,7 @@ interface UseInitialPromptSubmitParams {
   submitPrompt: (query: string) => void | Promise<void>;
   agentClientPresent: boolean;
   interactiveRuntimeReady: boolean;
+  commandsReady: boolean;
   store: DialogStore;
   startupGuardsInitialized: boolean;
 }
@@ -42,6 +43,7 @@ export function useInitialPromptSubmit({
   submitPrompt,
   agentClientPresent,
   interactiveRuntimeReady,
+  commandsReady,
   store,
   startupGuardsInitialized,
 }: UseInitialPromptSubmitParams): void {
@@ -61,7 +63,10 @@ export function useInitialPromptSubmit({
 
     const trimmedPrompt = initialPrompt.trim();
     const isCommand = isSlashCommand(trimmedPrompt);
-    if (!startupGuardsInitialized || (!interactiveRuntimeReady && !isCommand)) {
+    if (
+      !startupGuardsInitialized ||
+      (isCommand ? !commandsReady : !interactiveRuntimeReady)
+    ) {
       return;
     }
 
@@ -83,6 +88,7 @@ export function useInitialPromptSubmit({
     submitPrompt,
     agentClientPresent,
     interactiveRuntimeReady,
+    commandsReady,
     blockingDialogOpen,
     startupGuardsInitialized,
   ]);

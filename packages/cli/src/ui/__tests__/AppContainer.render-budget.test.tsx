@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -434,6 +436,7 @@ describe('AppContainer.render-budget', () => {
   describe('callback stability', () => {
     it('should maintain stable output across re-renders', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -473,6 +476,7 @@ describe('AppContainer.render-budget', () => {
 
     it('should not throw on rapid re-renders', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -506,6 +510,7 @@ describe('AppContainer.render-budget', () => {
   describe('memoization', () => {
     it('should use useMemo for computed values', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -533,6 +538,7 @@ describe('AppContainer.render-budget', () => {
 
     it('should use useCallback for event handlers', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -562,6 +568,7 @@ describe('AppContainer.render-budget', () => {
   describe('render performance', () => {
     it('should mount within reasonable time', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -589,6 +596,7 @@ describe('AppContainer.render-budget', () => {
 
     it('should handle re-renders efficiently', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
@@ -627,6 +635,7 @@ describe('AppContainer.render-budget', () => {
   describe('cleanup smoke test', () => {
     it('should complete mount/unmount cycles without errors', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),

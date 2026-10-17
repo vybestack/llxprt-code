@@ -1,10 +1,11 @@
-import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
-const metrics = new UiTelemetryService();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUnconfiguredCredentialRegistry } from '../../__tests__/unconfigured-model-command.js';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+const metrics = new UiTelemetryService();
 
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
@@ -48,6 +49,7 @@ function slashInputs(
   recordingOwner?: 'agent' | 'raw',
 ): UseSlashCommandProcessorCoreArgs {
   return {
+    registerCredentials: () => createUnconfiguredCredentialRegistry(),
     config: null,
     agent,
     settings: createMockSettings({}),

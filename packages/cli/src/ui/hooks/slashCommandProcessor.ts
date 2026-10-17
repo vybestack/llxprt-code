@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CredentialCommandRegistration } from './credentialCommandRegistration.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
@@ -70,6 +71,7 @@ interface TodoContextValue {
  * @plan PLAN-20260214-SESSIONBROWSER.P23 - Added recordingSwapCallbacks for /continue command
  */
 export const useSlashCommandProcessor = (
+  registerCredentials: CredentialCommandRegistration,
   config: CliUiRuntime | null,
   agent: Agent | null,
   settings: LoadedSettings,
@@ -90,6 +92,7 @@ export const useSlashCommandProcessor = (
   recordingOwner?: 'agent' | 'raw',
 ) =>
   useSlashCommandProcessorCore({
+    registerCredentials,
     config,
     agent,
     settings,
