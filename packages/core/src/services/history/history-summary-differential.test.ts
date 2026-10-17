@@ -197,13 +197,18 @@ describe('history scalar queries', () => {
         await rescanned('append after rewind'),
       );
 
-      await history.summarizeOldHistory(2, async () => ({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'summary' }],
-        metadata: {
-          chronologyReplaced: { fromSeq: 1, toSeq: 6, itemCount: 6 },
+      const kept: IContent[] = [];
+      for await (const row of history.getRecent(2)) kept.push(row);
+      await history.replaceAll([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'summary' }],
+          metadata: {
+            chronologyReplaced: { fromSeq: 1, toSeq: 6, itemCount: 6 },
+          },
         },
-      }));
+        ...kept,
+      ]);
       expect(await observed('compression pending')).toStrictEqual(
         await rescanned('compression pending'),
       );

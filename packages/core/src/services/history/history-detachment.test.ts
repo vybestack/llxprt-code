@@ -288,11 +288,16 @@ async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutatio
     speaker: 'human',
     blocks: [{ type: 'text', text: 'before' }],
   });
-  const summary = history.summarizeOldHistory(0, async () => {
-    entered.resolve();
-    await release.promise;
-    return { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] };
-  });
+  const summary = history.detachedValues.replace(
+    (async function* () {
+      entered.resolve();
+      await release.promise;
+      yield {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'summary' }],
+      };
+    })(),
+  );
   await entered.promise;
   void integration.subscribeToJournal(history);
   const disposal = integration.dispose();
@@ -334,11 +339,16 @@ async function verifyBindsRetirementToTheSelectedJournalWhenAttachmentIsDeferred
     speaker: 'human',
     blocks: [{ type: 'text', text: 'before' }],
   });
-  const summary = history.summarizeOldHistory(0, async () => {
-    entered.resolve();
-    await release.promise;
-    return { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] };
-  });
+  const summary = history.detachedValues.replace(
+    (async function* () {
+      entered.resolve();
+      await release.promise;
+      yield {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'summary' }],
+      };
+    })(),
+  );
   await entered.promise;
   void integration.subscribeToJournal(history);
   release.resolve();

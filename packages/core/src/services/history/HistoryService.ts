@@ -41,14 +41,6 @@ import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
 export type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 
 import {
-  withSummaryRows,
-  type HistorySummaryCallback,
-} from './history-summary.js';
-export type {
-  HistorySummarySource,
-  HistorySummaryCallback,
-} from './history-summary.js';
-import {
   streamHistoryJson,
   writeHistoryJson,
   type HistoryJsonSink,
@@ -750,63 +742,6 @@ export class HistoryService extends HistoryServiceReads {
       },
       previous,
     );
-  }
-
-  /**
-   * Summarize older history to fit within token limits
-   */
-  async summarizeOldHistory(
-    keepRecentCount: number,
-    summarizeFn: HistorySummaryCallback,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    return this.enqueueAsynchronousHistoryMutation(() =>
-      this.summarizeOldHistoryInternal(keepRecentCount, summarizeFn, signal),
-    );
-  }
-
-  private async summarizeOldHistoryInternal(
-    keepRecentCount: number,
-    summarizeFn: HistorySummaryCallback,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    await this.waitForTokenUpdates();
-    const chronology = this.chronology.snapshot();
-    try {
-      await this.journal.withMutationSnapshot(async (previous) => {
-        for (const row of previous) {
-          if (row.metadata?.chronology !== undefined)
-            this.chronology.stamp(row);
-        }
-        await withSummaryRows(
-          previous,
-          keepRecentCount,
-          summarizeFn,
-          async (nextHistory) => {
-            const nextHistoryTokens = await this.estimateTokensForContents(
-              nextHistory.streamRows(signal),
-              this.activeTokenizationModel,
-              signal,
-            );
-            await this.commitHistoryMutation(
-              {
-                nextHistory,
-                nextHistoryTokens,
-                streamPublication: !previous.hasPendingRows,
-                signal,
-                options: {},
-              },
-              previous,
-            );
-          },
-          this.mutationOwnership,
-          signal,
-        );
-      }, signal);
-    } catch (error) {
-      this.chronology.restore(chronology);
-      throw error;
-    }
   }
 
   /** Cold JSON chunks, byte-equivalent to JSON.stringify(history, null, 2). */

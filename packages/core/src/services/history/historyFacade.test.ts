@@ -47,7 +47,7 @@ import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/cor
  * getRecent() and getWithinTokenLimit() are cold async row streams under P05d.
  * Other surfaces keep their shape: getAll(), getCurated(), getContextRange(), the contextRangeChanged /
  * contentAdded / tokensUpdated events, and every mutation method (add, pop,
- * clear, replaceAll, applyDensityResult, validateAndFix, summarizeOldHistory).
+ * clear, replaceAll, applyDensityResult, validateAndFix).
  * Their postcondition is "journal appended (awaitable commit ack) + observers
  * notified".
  */
@@ -56,7 +56,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { HistoryService, type HistorySummarySource } from './HistoryService.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { ContextRange } from './historyEventTypes.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
@@ -361,11 +361,12 @@ describe('HistoryService facade retention property (P05b3)', () => {
       service.add(content);
       if ((index + 1) % 50 === 0) {
         compressions += 1;
-        await service.summarizeOldHistory(
-          3,
-          async (oldContents: HistorySummarySource) =>
-            textContent('ai', `summary-${compressions}-${oldContents.length}`),
-        );
+        const kept: IContent[] = [];
+        for await (const row of service.getRecent(3)) kept.push(row);
+        await service.replaceAll([
+          textContent('ai', `summary-${compressions}`),
+          ...kept,
+        ]);
       }
     }
     await service.waitForTokenUpdates();

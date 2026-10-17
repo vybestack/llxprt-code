@@ -246,11 +246,13 @@ async function verifyWaitForCommitIncludesAPrecedingAsynchronousSummaryAndSubseq
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   history.add(row('second'));
-  const summary = history.summarizeOldHistory(0, async () => {
-    entered.resolve();
-    await release.promise;
-    return row('summary');
-  });
+  const summary = history.detachedValues.replace(
+    (async function* () {
+      entered.resolve();
+      await release.promise;
+      yield row('summary');
+    })(),
+  );
   await entered.promise;
   history.add(row('after summary'));
   let durable = false;

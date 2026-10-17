@@ -23,7 +23,7 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { HistoryService, type HistorySummarySource } from './HistoryService.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import {
   createUserMessage as createUserMessageFromIContent,
@@ -135,22 +135,17 @@ async function managementCase2(service: HistoryService): Promise<unknown> {
     });
   }
 
-  // Mock summarize function
-  const summarizeFn = async (
-    contents: HistorySummarySource,
-  ): Promise<IContent> => ({
-    speaker: 'ai',
-    blocks: [
-      {
-        type: 'text',
-        text: `Summary of ${contents.length} messages`,
-      },
-    ],
-    metadata: { isSummary: true },
-  });
-
   // Summarize old history, keeping last 4 messages
-  await service.summarizeOldHistory(4, summarizeFn);
+  const kept: IContent[] = [];
+  for await (const row of service.getRecent(4)) kept.push(row);
+  await service.replaceAll([
+    {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Summary of 36 messages' }],
+      metadata: { isSummary: true },
+    },
+    ...kept,
+  ]);
 
   let summary: unknown;
   await collectRowsForAssertions(service.streamRawHistory(), (history) => {
