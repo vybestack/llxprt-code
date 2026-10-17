@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { StateReader } from '../journal/journalReaderState.js';
+import type { SessionStartKind } from './types.js';
 
 /**
  * State map keys of the session facts the journal recorder writes (design 3.5,
@@ -77,4 +79,92 @@ export function decodeTitleFact(bytes: Uint8Array): string | null {
     throw malformed(SESSION_KEYS.title);
   }
   return fact;
+}
+
+/** What `session:start` holds: the facts fixed when the file was created. */
+export interface SessionStartFact {
+  readonly startTime: string;
+  readonly projectHash: string;
+  readonly workspaceDirs: string[];
+  readonly cwd?: string;
+  readonly kind: SessionStartKind;
+  readonly parentSessionId?: string;
+}
+
+type StartFields = Record<string, unknown> & {
+  startTime: string;
+  projectHash: string;
+  kind: SessionStartKind;
+  workspaceDirs: unknown[];
+};
+
+function hasStartFields(fact: Record<string, unknown>): fact is StartFields {
+  const strings = ['startTime', 'projectHash'].every(
+    (key) => typeof fact[key] === 'string',
+  );
+  const kind = fact['kind'] === 'main' || fact['kind'] === 'subagent';
+  return strings && kind && Array.isArray(fact['workspaceDirs']);
+}
+
+export function decodeStartFact(bytes: Uint8Array): SessionStartFact {
+  const fact = decodeSessionFact(bytes);
+  if (!isRecord(fact) || !hasStartFields(fact)) {
+    throw malformed(SESSION_KEYS.start);
+  }
+  const { cwd, parentSessionId } = fact;
+  return {
+    startTime: fact['startTime'],
+    projectHash: fact['projectHash'],
+    workspaceDirs: fact['workspaceDirs'].map(String),
+    kind: fact['kind'],
+    ...(typeof cwd === 'string' ? { cwd } : {}),
+    ...(typeof parentSessionId === 'string' ? { parentSessionId } : {}),
+  };
+}
+
+/** The session facts of one journal, as discovery and resume need them. */
+export interface SessionFacts {
+  readonly sessionId: string;
+  readonly start: SessionStartFact;
+  readonly provider: string;
+  readonly model: string;
+  readonly directories: string[];
+  /** Undefined when never set; null for explicitly untitled. */
+  readonly title?: string | null;
+  /** Undefined when never set; null once cleared. */
+  readonly name?: string | null;
+}
+
+/**
+ * Reads the facts from a state map. Undefined when the journal holds no
+ * `session:id` entry (no session group was ever committed). A missing
+ * `session:start` or `session:provider` entry is a damaged file, because the
+ * recorder writes them in the same group as the id.
+ */
+export async function readSessionFacts(
+  read: StateReader,
+): Promise<SessionFacts | undefined> {
+  const id = await read(SESSION_KEYS.id);
+  if (id === undefined) return undefined;
+  const sessionId = decodeSessionFact(id);
+  const start = await read(SESSION_KEYS.start);
+  const provider = await read(SESSION_KEYS.provider);
+  if (typeof sessionId !== 'string' || !start || !provider) {
+    throw malformed(SESSION_KEYS.id);
+  }
+  const directories = await read(SESSION_KEYS.directories);
+  const title = await read(SESSION_KEYS.title);
+  const name = await read(SESSION_KEYS.name);
+  const startFact = decodeStartFact(start);
+  return {
+    sessionId,
+    start: startFact,
+    ...decodeProviderFact(provider),
+    directories:
+      directories === undefined
+        ? startFact.workspaceDirs
+        : decodeDirectoriesFact(directories),
+    ...(title === undefined ? {} : { title: decodeTitleFact(title) }),
+    ...(name === undefined ? {} : { name: decodeTitleFact(name) }),
+  };
 }

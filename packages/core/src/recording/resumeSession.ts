@@ -39,18 +39,15 @@ import {
   type LockHandle,
 } from './SessionLockManager.js';
 import { scanResumeMetadata } from './resumeMetadata.js';
-import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
 import {
-  describeUnreadableRecording,
   matchUnreadableRecordings,
+  noReadableSessionsError,
 } from './unreadableRecordings.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
-/**
- * Sentinel constant for "resume most recent session".
- */
-export const CONTINUE_LATEST = '__CONTINUE_LATEST__' as const;
+import { CONTINUE_LATEST } from './continueLatest.js';
+export { CONTINUE_LATEST } from './continueLatest.js';
 
 /**
  * Input to the resume flow.
@@ -237,15 +234,6 @@ async function bootNewestReadableSession(
   return firstFailure === null
     ? { ok: false, error: 'All sessions for this project are in use' }
     : replayFailureError(firstFailure);
-}
-
-/** The error for a project whose only recordings have unreadable headers. */
-function noReadableSessionsError(
-  skipped: readonly UnreadableRecording[],
-): string {
-  return skipped.length === 0
-    ? RESUME_NO_SESSIONS_FOUND
-    : `${RESUME_NO_SESSIONS_FOUND}; skipped unreadable recordings: ${skipped.map(describeUnreadableRecording).join('; ')}`;
 }
 
 /**
