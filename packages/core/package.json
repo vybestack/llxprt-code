@@ -203,6 +203,11 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./services/history/journalSession.js": {
+      "types": "./dist/src/services/history/journalSession.d.ts",
+      "bun": "./src/services/history/journalSession.ts",
+      "import": "./dist/src/services/history/journalSession.js"
+    },
     "./services/history/provider-normalization-disk.js": {
       "types": "./dist/src/services/history/provider-normalization-disk.d.ts",
       "bun": "./src/services/history/provider-normalization-disk.ts",

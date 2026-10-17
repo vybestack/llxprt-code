@@ -12,6 +12,7 @@ import {
   labelsAt,
   planDensity,
   type PositionedContent,
+  type PositionedOrigin,
   type PositionedOwner,
 } from './journalHistoryEdits.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
@@ -29,6 +30,9 @@ import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
+import { JournalMirrors } from './journalMirrors.js';
+import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
+import { suffixStart } from './journalSuffix.js';
 import {
   decodeStoredRow,
   encodeContentRow,
@@ -67,30 +71,17 @@ type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
  */
 async function* encodedRows(
   rows: Iterable<IContent> | AsyncIterable<IContent>,
+  owner: number,
 ): AsyncGenerator<RowDraft> {
   for await (const content of rows) {
-    yield encodeContentRow(content, { owner: UNOWNED_ROW });
+    yield encodeContentRow(content, { owner });
   }
-}
-
-/** The builder of the single `replace` edit of `rows`. */
-function replaceEdits(
-  rows: Iterable<IContent> | AsyncIterable<IContent>,
-): EditBuilder {
-  return () => Promise.resolve([{ kind: 'replace', rows: encodedRows(rows) }]);
 }
 
 /** What a compensation puts back: the version the queue had reached when the mark was captured. */
 export interface JournalCompensationMark {
   readonly store: JournalHistoryStore;
   readonly saved: Promise<VersionSnapshot>;
-}
-
-/** The first of the last `count` rows; a count that is not a positive number keeps the whole history. */
-function recentStart(length: number, count: number): number {
-  const start = -Math.trunc(count);
-  if (Number.isNaN(start)) return 0;
-  return start < 0 ? Math.max(length + start, 0) : Math.min(start, length);
 }
 
 /**
@@ -114,9 +105,13 @@ export class JournalHistoryStore {
   /** Groups accepted so far, acked or not; the mutation mark names this position. */
   private admitted = 0;
   private publicationDepth = 0;
+  private readonly owners: JournalOwners;
+  private readonly mirrors: JournalMirrors;
 
   constructor(private readonly session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
+    this.owners = new JournalOwners(session.store);
+    this.mirrors = new JournalMirrors(session.store, this.owners);
   }
 
   /** The ack of the last group that became durable. */
@@ -135,23 +130,23 @@ export class JournalHistoryStore {
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();
-    if (op.origin !== undefined) {
-      throw new Error(
-        'Row owners are not implemented in the journal store yet',
-      );
-    }
+    // Only rows an op writes carry its origin; a rewind, a density and a detail name who asked, not who owns.
     switch (op.kind) {
       case 'content':
-        this.applyContent(op.content, op.tx);
+        this.applyContent(op.content, op.tx, op.origin);
         return;
       case 'rewind':
         this.applyRewind(op.itemsRemoved);
         return;
       case 'compressed':
-        this.applyCompressed(op.summary);
+        this.applyCompressed(op.summary, op.origin);
         return;
       case 'syntheticInsert':
-        this.applySyntheticInsert(op.payload.content, op.payload.afterSeq);
+        this.applySyntheticInsert(
+          op.payload.content,
+          op.payload.afterSeq,
+          op.origin,
+        );
         return;
       case 'compressionDetail':
         // The span a compression destroyed is in the summary row's metadata (design 4.4).
@@ -218,6 +213,31 @@ export class JournalHistoryStore {
     });
   }
 
+  /**
+   * Like {@link changeOwners}, naming origins: the store maps each to its
+   * owner id (an unknown origin gets the next id, recorded in the same group)
+   * and `undefined` makes the row unowned.
+   */
+  changeOwnersOf(changes: readonly PositionedOrigin[]): void {
+    this.assertUsable();
+    const sorted = checkedPositions(changes, this.tentativeRows);
+    if (sorted.length === 0) return;
+    this.enqueue(this.tentativeRows, async (snapshot) => {
+      const labels = await labelsAt(
+        snapshot,
+        sorted.map(({ position }) => position),
+      );
+      const edits: VersionEdit[] = [];
+      const owned: Array<{ label: bigint; owner: number }> = [];
+      for (const [at, label] of labels.entries()) {
+        const resolved = await this.owners.resolve(sorted[at].origin);
+        edits.push(...resolved.edits);
+        owned.push({ label, owner: resolved.id });
+      }
+      return [...edits, { kind: 'owner', changes: owned }];
+    });
+  }
+
   /** Sets entry fields of rows (design 8.2); the rows and their order do not change. */
   fill(fills: readonly EntryFill[]): void {
     this.assertUsable();
@@ -231,12 +251,13 @@ export class JournalHistoryStore {
    * Replaces the whole history by `rows` in one group. The rows are encoded
    * as the writer pulls them, one at a time, so no encoded copy of the array
    * exists. Only the references are copied, which keeps a later edit of the
-   * caller's array out of the queued group.
+   * caller's array out of the queued group. Every row is written under
+   * `origin`, unowned when it is omitted.
    */
-  replaceAll(rows: readonly IContent[]): void {
+  replaceAll(rows: readonly IContent[], origin?: string): void {
     this.assertUsable();
     const held = [...rows];
-    this.enqueue(held.length, replaceEdits(held));
+    this.enqueue(held.length, this.replaceEdits(held, origin));
   }
 
   /**
@@ -251,10 +272,13 @@ export class JournalHistoryStore {
     rows: Iterable<IContent> | AsyncIterable<IContent>,
     count: number,
     signal?: AbortSignal,
+    origin?: string,
   ): Promise<CommitAck> {
     this.assertUsable();
     signal?.throwIfAborted();
-    return this.requireAck(this.enqueueTurn(count, replaceEdits(rows)));
+    return this.requireAck(
+      this.enqueueTurn(count, this.replaceEdits(rows, origin)),
+    );
   }
 
   /**
@@ -266,10 +290,13 @@ export class JournalHistoryStore {
   async replaceStreamed(
     rows: AsyncIterable<IContent>,
     signal?: AbortSignal,
+    origin?: string,
   ): Promise<CommitAck> {
     this.assertUsable();
     signal?.throwIfAborted();
-    return this.requireAck(this.enqueueTurn(undefined, replaceEdits(rows)));
+    return this.requireAck(
+      this.enqueueTurn(undefined, this.replaceEdits(rows, origin)),
+    );
   }
 
   /**
@@ -308,7 +335,11 @@ export class JournalHistoryStore {
     return snapshot;
   }
 
-  /** Brackets one logical publication. Fan-out holds are the work of S06; until then it only counts. */
+  /**
+   * Brackets one logical publication. Mirrors follow every acked group, and a
+   * compensation is a `restore` group they follow like any other (design 5.2),
+   * so nothing is held back from them; the scope only counts.
+   */
   openPublication(): HistoryPublicationScope {
     this.publicationDepth++;
     let closed = false;
@@ -347,6 +378,39 @@ export class JournalHistoryStore {
     return mark.binding === this && mark.lastSeq === this.admitted;
   }
 
+  /** Seeds and binds the mirror file of `origin` behind everything queued (late attach, design 5.3). */
+  attachMirror(mirror: JournalSession, origin: string): Promise<void> {
+    this.assertUsable();
+    return this.exclusive(() => this.mirrors.attach(mirror, origin));
+  }
+
+  /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
+  detachMirror(mirror: JournalSession): Promise<boolean> {
+    return this.exclusive(() => this.mirrors.detach(mirror));
+  }
+
+  isMirror(mirror: JournalSession): boolean {
+    return this.mirrors.has(mirror);
+  }
+
+  /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */
+  async settleFanout(): Promise<void> {
+    await this.queue;
+    await this.mirrors.flush();
+  }
+
+  primaryOriginId(): string | undefined {
+    return this.mirrors.primaryOriginId();
+  }
+
+  adoptedOrigin(origin: string | undefined): void {
+    this.mirrors.adoptedOrigin(origin);
+  }
+
+  onRetired(listener: () => void): () => void {
+    return this.mirrors.onRetired(listener);
+  }
+
   /** Resolves when every operation applied so far is acked; throws the first failure of the queue. */
   async waitForDurable(): Promise<void> {
     await this.queue;
@@ -366,7 +430,7 @@ export class JournalHistoryStore {
     await this.waitForDurable();
     const snapshot = this.session.store.snapshot();
     signal?.throwIfAborted();
-    const start = await this.suffixStart(snapshot, query, signal);
+    const start = await suffixStart(snapshot, query, signal);
     for await (const entry of snapshot.entries(start)) {
       signal?.throwIfAborted();
       yield decodeStoredRow(await snapshot.readRow(entry));
@@ -575,10 +639,18 @@ export class JournalHistoryStore {
     if (this.disposed) return;
     this.disposed = true;
     await this.queue;
-    await this.session.close();
+    try {
+      await this.mirrors.retire();
+    } finally {
+      await this.session.close();
+    }
   }
 
-  private applyContent(content: IContent, tx: string | undefined): void {
+  private applyContent(
+    content: IContent,
+    tx: string | undefined,
+    origin: string | undefined,
+  ): void {
     if (tx !== undefined) {
       throw new Error(
         'Rows of a replace transaction are not implemented in the journal store yet',
@@ -586,9 +658,13 @@ export class JournalHistoryStore {
     }
     // Encoded now: the chronology stamper writes the entry's metadata in place after the call.
     const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
-    this.enqueue(this.tentativeRows + 1, () =>
-      Promise.resolve([{ kind: 'append', rows: [draft] }]),
-    );
+    this.enqueue(this.tentativeRows + 1, async () => {
+      const owner = await this.owners.resolve(origin);
+      return [
+        ...owner.edits,
+        { kind: 'append', rows: [{ ...draft, owner: owner.id }] },
+      ];
+    });
   }
 
   private applyDensity(payload: DensityMutationPayload): void {
@@ -622,22 +698,28 @@ export class JournalHistoryStore {
     });
   }
 
-  private applyCompressed(summary: IContent): void {
+  private applyCompressed(summary: IContent, origin: string | undefined): void {
     const draft = encodeContentRow(summary, { owner: UNOWNED_ROW });
     // A compression replaces the whole history; the rows to keep are appended after it.
-    this.enqueue(1, (snapshot) =>
-      Promise.resolve([
+    this.enqueue(1, async (snapshot) => {
+      const owner = await this.owners.resolve(origin);
+      return [
+        ...owner.edits,
         {
           kind: 'compress',
-          summary: draft,
+          summary: { ...draft, owner: owner.id },
           retainFromLabel: snapshot.version?.nextLabel ?? FIRST_NEXT_LABEL,
           expectedReplaced: snapshot.rows,
         },
-      ]),
-    );
+      ];
+    });
   }
 
-  private applySyntheticInsert(content: IContent, afterSeq: number): void {
+  private applySyntheticInsert(
+    content: IContent,
+    afterSeq: number,
+    origin: string | undefined,
+  ): void {
     if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) {
       throw new Error(`Invalid synthetic insert anchor ${afterSeq}`);
     }
@@ -646,11 +728,20 @@ export class JournalHistoryStore {
       const anchor = BigInt(afterSeq);
       for await (const entry of snapshot.entries()) {
         if (entry.chronologySeq === anchor) {
+          // The op's owner, else the owner of the row it follows (design 5.1).
+          const owner: {
+            readonly id: number | typeof INHERIT_OWNER;
+            readonly edits: ResolvedOwner['edits'];
+          } =
+            origin === undefined
+              ? { id: INHERIT_OWNER, edits: [] }
+              : await this.owners.resolve(origin);
           return [
+            ...owner.edits,
             {
               kind: 'insert',
               afterLabel: entry.label,
-              draft: { ...draft, owner: INHERIT_OWNER },
+              draft: { ...draft, owner: owner.id },
             },
           ];
         }
@@ -661,34 +752,17 @@ export class JournalHistoryStore {
     });
   }
 
-  private async suffixStart(
-    snapshot: VersionSnapshot,
-    query: HistorySuffixQuery | undefined,
-    signal: AbortSignal | undefined,
-  ): Promise<number> {
-    if (query === undefined) return 0;
-    if (query.kind === 'recent') return recentStart(snapshot.rows, query.count);
-    return this.tokenSuffixStart(snapshot, query, signal);
-  }
-
-  private async tokenSuffixStart(
-    snapshot: VersionSnapshot,
-    query: Extract<HistorySuffixQuery, { kind: 'tokens' }>,
-    signal: AbortSignal | undefined,
-  ): Promise<number> {
-    let start = snapshot.rows;
-    let total = 0;
-    while (start > 0) {
-      signal?.throwIfAborted();
-      const entry = await snapshot.entryAt(start - 1);
-      const tokens = query.countTokens(
-        decodeStoredRow(await snapshot.readRow(entry)),
-      );
-      if (!(total + tokens <= query.maxTokens)) break;
-      total += tokens;
-      start -= 1;
-    }
-    return start;
+  /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
+  private exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const turn = this.queue.then(() => {
+      if (this.failure !== undefined) throw this.failure.error;
+      return task();
+    });
+    this.queue = turn.then(
+      () => undefined,
+      () => undefined,
+    );
+    return turn;
   }
 
   /**
@@ -722,6 +796,20 @@ export class JournalHistoryStore {
     return ack;
   }
 
+  /** The builder of the single `replace` edit of `rows`, every row written under `origin`. */
+  private replaceEdits(
+    rows: Iterable<IContent> | AsyncIterable<IContent>,
+    origin: string | undefined,
+  ): EditBuilder {
+    return async () => {
+      const owner = await this.owners.resolve(origin);
+      return [
+        ...owner.edits,
+        { kind: 'replace', rows: encodedRows(rows, owner.id) },
+      ];
+    };
+  }
+
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
   private async restoreTo(saved: VersionSnapshot): Promise<void> {
     const version = saved.version;
@@ -741,7 +829,7 @@ export class JournalHistoryStore {
     if (this.failure !== undefined) return undefined;
     try {
       const edits = await build(this.session.store.snapshot());
-      const group = await this.session.store.commitDetailed(edits);
+      const group = await this.mirrors.commit(edits);
       if (rowsAfter === undefined) {
         this.tentativeRows = group.after.rows;
       } else if (group.after.rows !== rowsAfter) {
@@ -753,6 +841,7 @@ export class JournalHistoryStore {
       return group.ack;
     } catch (error) {
       this.failure = { error };
+      this.owners.invalidate();
       return undefined;
     }
   }

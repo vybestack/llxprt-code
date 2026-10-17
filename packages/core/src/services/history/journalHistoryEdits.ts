@@ -23,6 +23,12 @@ export interface PositionedOwner {
   readonly owner: number;
 }
 
+/** The row at `position` of the history, given the owner `origin` names; undefined makes it unowned. */
+export interface PositionedOrigin {
+  readonly position: number;
+  readonly origin: string | undefined;
+}
+
 /** A row that rewrites a live row keeps that row's owner (design 4.6). */
 export function inheritingDraft(content: IContent): InheritingDraft {
   const draft: RowDraft = encodeContentRow(content, { owner: UNOWNED_ROW });

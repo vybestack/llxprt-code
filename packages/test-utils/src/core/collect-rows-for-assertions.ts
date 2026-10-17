@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 type AssertRows = (rows: readonly IContent[]) => void | Promise<void>;
@@ -49,4 +50,26 @@ export function collectJournalRowsForAssertions(
     journalRowsForAssertions(history),
     assertRows,
   );
+}
+
+async function* journalFileRows(path: string): AsyncGenerator<IContent> {
+  const session = await JournalSession.open(path);
+  try {
+    for await (const { content } of session.rows()) yield content;
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * The live rows of the journal file at `path`, read one at a time through the
+ * store (`JournalStore.rows()` and the row codec) and handed to `assertRows`.
+ * Unlike {@link collectJournalRowsForAssertions} it knows nothing of a
+ * history service: the caller has already made the file durable.
+ */
+export function collectJournalFileRowsForAssertions(
+  path: string,
+  assertRows: AssertRows,
+): Promise<void> {
+  return collectRowsForAssertions(journalFileRows(path), assertRows);
 }

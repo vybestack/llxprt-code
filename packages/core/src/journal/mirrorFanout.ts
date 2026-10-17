@@ -2,7 +2,7 @@
 import type { VersionEdit } from './groupEdits.js';
 import { deltaOf, type GroupDelta } from './groupDelta.js';
 import type { CommitAck } from './groupWriter.js';
-import type { JournalStore } from './journalStore.js';
+import type { CommittedGroup, JournalStore } from './journalStore.js';
 import {
   mirrorEdits,
   resyncEdits,
@@ -62,13 +62,38 @@ export class MirrorFanout {
   }
 
   /** Commits to the primary, queues the group's delta for every mirror, and returns when the primary has acked. */
-  commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
+  async commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
+    return (await this.commitDetailed(edits)).ack;
+  }
+
+  /** Like {@link commit}, and returns the group with the versions before and after it. */
+  commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
     return this.serial(async () => {
       const group = await this.primary.commitDetailed(edits);
+      if (this.links.length === 0) return group;
       const delta = deltaOf(group, edits);
       for (const link of this.links) this.deliver(link, delta);
-      return group.ack;
+      return group;
     });
+  }
+
+  /**
+   * Unbinds the mirror file `store` once everything queued for it is applied.
+   * Returns false when it was not bound. The file is left as it is.
+   */
+  detach(store: JournalStore): Promise<boolean> {
+    return this.serial(async () => {
+      const at = this.links.findIndex((link) => link.store === store);
+      if (at < 0) return false;
+      await this.links[at].queue;
+      this.links.splice(at, 1);
+      return true;
+    });
+  }
+
+  /** Whether `store` is bound as a mirror. */
+  has(store: JournalStore): boolean {
+    return this.links.some((link) => link.store === store);
   }
 
   /**
