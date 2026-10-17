@@ -22,12 +22,13 @@ const GROUP_TAG_BYTES = 7;
 /**
  * What the caller decides about a trailer; the writer fills in the rest. A
  * copy that keeps the identity of a version it copies names its `commitSeq`
- * (design 4.11); every other group takes the next one.
+ * and its `groupTag` (design 4.11, D-ORCH-6); every other group takes the next
+ * sequence and a fresh random tag.
  */
 export type TrailerState = Omit<
   TrailerHeader,
   'selfOffset' | 'commitSeq' | 'groupTag' | 'durableEnd' | 'syncMarker'
-> & { readonly commitSeq?: number };
+> & { readonly commitSeq?: number; readonly groupTag?: bigint };
 
 export interface CommitGroup {
   readonly records: readonly GroupRecord[];
@@ -233,7 +234,9 @@ export class JournalGroupWriter {
       ...state,
       selfOffset,
       commitSeq: state.commitSeq ?? (this.publishedTrailer?.commitSeq ?? 0) + 1,
-      groupTag: groupTagFrom(this.dependencies.random(GROUP_TAG_BYTES)),
+      groupTag:
+        state.groupTag ??
+        groupTagFrom(this.dependencies.random(GROUP_TAG_BYTES)),
       durableEnd: selfOffset + TRAILER_RECORD_BYTES,
       syncMarker: this.syncMarker,
     };

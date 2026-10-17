@@ -63,7 +63,7 @@ async function copyTrailerState(
   version: Version,
   policy: StatePolicy,
   shared: CopyShared,
-  commitSeq: number | undefined,
+  kept: Pick<Version, 'commitSeq' | 'groupTag'> | undefined,
 ): Promise<TrailerState> {
   const { roots } = version;
   const rowRoot = await remapOffset(OFFSET.trailerRowRoot, roots.rowRoot, (o) =>
@@ -91,7 +91,8 @@ async function copyTrailerState(
   const none = (old: number): Promise<number> =>
     remapOffset(OFFSET.trailerSkip, old, async () => 0);
   return {
-    commitSeq,
+    commitSeq: kept?.commitSeq,
+    groupTag: kept?.groupTag,
     parent: await remapOffset(
       OFFSET.trailerParent,
       version.parent,
@@ -102,7 +103,7 @@ async function copyTrailerState(
       await none(version.skip[1]),
       await none(version.skip[2]),
     ],
-    lineage: BigInt(commitSeq ?? 1),
+    lineage: BigInt(kept?.commitSeq ?? 1),
     lineageDepth: 0,
     mutation: MUTATION.clone,
     mutationArg0: 0n,
@@ -124,8 +125,8 @@ async function copyTrailerState(
 interface VersionJob {
   readonly version: Version;
   readonly policy: StatePolicy;
-  /** Keep the version's own `commitSeq` (compaction) or take the next one (clone). */
-  readonly keepCommitSeq: boolean;
+  /** Keep the version's own `commitSeq` and `groupTag` (compaction) or take the next sequence and a new tag (clone). */
+  readonly keepIdentity: boolean;
   /** Whether a version follows, which may share records with this one. */
   readonly recording: boolean;
 }
@@ -181,7 +182,7 @@ class CopySession {
           version,
           job.policy,
           this.shared,
-          job.keepCommitSeq ? version.commitSeq : undefined,
+          job.keepIdentity ? version : undefined,
         );
       },
     );
@@ -247,7 +248,7 @@ export function cloneVersion(
     await session.copyVersion({
       version,
       policy: 'portable',
-      keepCommitSeq: false,
+      keepIdentity: false,
       recording: false,
     });
   });
@@ -311,7 +312,7 @@ export function compactionCopy(
           await session.copyVersion({
             version,
             policy: 'portable',
-            keepCommitSeq: true,
+            keepIdentity: true,
             recording: true,
           });
         }
@@ -320,7 +321,7 @@ export function compactionCopy(
     await session.copyVersion({
       version: current,
       policy: 'retained',
-      keepCommitSeq: true,
+      keepIdentity: true,
       recording: false,
     });
   });
