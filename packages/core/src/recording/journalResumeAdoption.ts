@@ -10,10 +10,8 @@ import type {
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import { SpanWindow } from '../services/history/historySpanWindow.js';
-import type {
-  JournalAdoption,
-  JournalHistoryStore,
-} from '../services/history/journalHistoryStore.js';
+import type { JournalAdoption } from '../services/history/journalAdoption.js';
+import type { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
 import type { JournalRecordingService } from './journalRecordingService.js';
 import { resumedRows, type ResumePoint } from './journalResume.js';

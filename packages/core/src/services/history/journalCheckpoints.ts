@@ -24,10 +24,12 @@ type Enqueue = (execute: () => Promise<void>) => Promise<void>;
 function snapshotCheckpoint(
   snapshot: VersionSnapshot,
   signal: AbortSignal | undefined,
+  resumeBoundary: bigint | undefined,
 ): HistoryCheckpointRows {
   return {
     length: snapshot.rows,
-    [Symbol.asyncIterator]: () => snapshotRows(snapshot, signal),
+    [Symbol.asyncIterator]: () =>
+      snapshotRows(snapshot, signal, resumeBoundary),
   };
 }
 
@@ -55,7 +57,9 @@ export async function withCheckpointOnJournal<T>(
     signal?.throwIfAborted();
     if (snapshot === undefined)
       throw new Error('The checkpoint was not captured');
-    return await execute(snapshotCheckpoint(snapshot, signal));
+    return await execute(
+      snapshotCheckpoint(snapshot, signal, store.resumeBoundary),
+    );
   } finally {
     snapshot?.close();
   }

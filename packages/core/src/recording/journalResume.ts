@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { invalidateResponsesStatefulChain } from '../services/history/IContent.js';
+import { applyResumeBoundary } from '../services/history/journalRowCodec.js';
 import type {
   JournalSession,
   JournalSessionOptions,
@@ -299,11 +299,13 @@ export async function* resumedRows(
   resumePoint: ResumePoint,
 ): AsyncGenerator<SessionRow> {
   for await (const row of session.rows()) {
-    yield row.entry.label < resumePoint.nextLabel
-      ? {
-          entry: row.entry,
-          content: invalidateResponsesStatefulChain([row.content])[0],
-        }
-      : row;
+    yield {
+      entry: row.entry,
+      content: applyResumeBoundary(
+        row.entry.label,
+        row.content,
+        resumePoint.nextLabel,
+      ),
+    };
   }
 }

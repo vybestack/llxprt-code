@@ -14,6 +14,7 @@ async function tokenSuffixStart(
   snapshot: VersionSnapshot,
   query: Extract<HistorySuffixQuery, { kind: 'tokens' }>,
   signal: AbortSignal | undefined,
+  resumeBoundary: bigint | undefined,
 ): Promise<number> {
   let start = snapshot.rows;
   let total = 0;
@@ -21,7 +22,7 @@ async function tokenSuffixStart(
     signal?.throwIfAborted();
     const entry = await snapshot.entryAt(start - 1);
     const tokens = query.countTokens(
-      decodeStoredRow(await snapshot.readRow(entry)),
+      decodeStoredRow(await snapshot.readRow(entry), resumeBoundary),
     );
     if (!(total + tokens <= query.maxTokens)) break;
     total += tokens;
@@ -35,8 +36,9 @@ export async function suffixStart(
   snapshot: VersionSnapshot,
   query: HistorySuffixQuery | undefined,
   signal: AbortSignal | undefined,
+  resumeBoundary?: bigint,
 ): Promise<number> {
   if (query === undefined) return 0;
   if (query.kind === 'recent') return recentStart(snapshot.rows, query.count);
-  return tokenSuffixStart(snapshot, query, signal);
+  return tokenSuffixStart(snapshot, query, signal, resumeBoundary);
 }

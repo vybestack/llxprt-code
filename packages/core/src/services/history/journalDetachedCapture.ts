@@ -8,11 +8,12 @@ import { decodeStoredRow } from './journalRowCodec.js';
 export async function* snapshotRows(
   snapshot: VersionSnapshot,
   signal?: AbortSignal,
+  resumeBoundary?: bigint,
 ): AsyncGenerator<IContent, void, unknown> {
   for await (const entry of snapshot.entries()) {
     signal?.throwIfAborted();
     yield sanitizeProviderContentForSerialization(
-      decodeStoredRow(await snapshot.readRow(entry)),
+      decodeStoredRow(await snapshot.readRow(entry), resumeBoundary),
     );
   }
 }

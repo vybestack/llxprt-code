@@ -69,12 +69,13 @@ const LAST_LABEL_OF = {
 export async function lastContentOf(
   snapshot: VersionSnapshot,
   speaker?: IContent['speaker'],
+  resumeBoundary?: bigint,
 ): Promise<IContent | undefined> {
   const version = snapshot.version;
   if (version === undefined || version.rows === 0) return undefined;
   if (speaker === undefined) {
     const entry = await snapshot.entryAt(version.rows - 1);
-    return decodeStoredRow(await snapshot.readRow(entry));
+    return decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
   }
   const label = LAST_LABEL_OF[speaker](version.aggregate);
   if (label === 0n) return undefined;
@@ -84,7 +85,7 @@ export async function lastContentOf(
       `The aggregate names row ${label} as the last ${speaker} row, and no live row has that label`,
     );
   }
-  return decodeStoredRow(await snapshot.readRow(entry));
+  return decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
 }
 
 /** The facts of the rows of one pinned version; every read goes to the file. */
@@ -94,6 +95,7 @@ export class JournalRowView implements HistoryRowView {
   constructor(
     private readonly snapshot: VersionSnapshot,
     private readonly owners: JournalOwners,
+    private readonly resumeBoundary?: bigint,
   ) {}
 
   get length(): number {
@@ -116,7 +118,10 @@ export class JournalRowView implements HistoryRowView {
     this.assertOpen();
     for await (const entry of this.snapshot.entries()) {
       this.assertOpen();
-      yield decodeStoredRow(await this.snapshot.readRow(entry));
+      yield decodeStoredRow(
+        await this.snapshot.readRow(entry),
+        this.resumeBoundary,
+      );
     }
   }
 

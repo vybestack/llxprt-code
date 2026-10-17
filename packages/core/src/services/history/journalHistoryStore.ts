@@ -37,6 +37,11 @@ import {
   type ContextBoundary,
 } from './journalScalars.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
+import {
+  adoptOnto,
+  type AdoptionHost,
+  type JournalAdoption,
+} from './journalAdoption.js';
 import { JournalMirrors } from './journalMirrors.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
 import { suffixStart } from './journalSuffix.js';
@@ -79,15 +84,8 @@ import type { JournalRecordingService } from '../../recording/journalRecordingSe
 import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 import { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { SessionPreviews, recorderAcceptsRow } from './sessionPreviews.js';
+import type { ResumePoint } from '../../recording/journalResume.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
-
-/** A swap of the primary journal that can still be taken back; see {@link JournalHistoryStore.adoptJournal}. */
-export interface JournalAdoption {
-  /** Puts the prior store back. The adopted file is the recorder's and stays open. */
-  rollback(): Promise<void>;
-  /** Closes the prior store; the adoption can no longer be rolled back. */
-  commit(): Promise<void>;
-}
 
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
 export interface JournalRepair {
@@ -118,6 +116,7 @@ export class JournalHistoryStore {
   private owners: JournalOwners;
   private mirrorSet: JournalMirrors;
   private adopted: JournalRecordingService | undefined;
+  private boundary: bigint | undefined;
   private previews = new SessionPreviews();
   private readonly adoptedWrites = new PendingRecorderWrites();
 
@@ -135,89 +134,65 @@ export class JournalHistoryStore {
   private mirrorsOf(
     session: JournalSession,
     owners: JournalOwners,
+    listeners?: Set<() => void>,
   ): JournalMirrors {
-    return new JournalMirrors(session.store, owners, {
-      exclusive: (task) => this.exclusive(task),
-      assertUsable: () => this.assertUsable(),
-    });
+    return new JournalMirrors(
+      session.store,
+      owners,
+      {
+        exclusive: (task) => this.exclusive(task),
+        assertUsable: () => this.assertUsable(),
+      },
+      listeners,
+    );
   }
 
   /**
-   * Resume onto a recorder (decision G5). The file the recorder opened
-   * becomes the primary journal, inside one turn of the queue, so no group is
-   * in flight on either file. The point must be the version the recorder is
-   * at: a file that moved since the resume was read is refused. Nothing is
-   * opened here, so a failure before the swap leaves the prior store in
-   * place and nothing to close. After the swap, `rollback` puts the prior
-   * store back and `commit` closes it.
+   * Resume onto a recorder (decision G5); see {@link adoptOnto}. The recorders
+   * bound to this history move with it.
    */
   adoptJournal(
     recorder: JournalRecordingService,
-    point: { readonly commitSeq: number; readonly rows: number },
+    point: ResumePoint,
   ): Promise<JournalAdoption> {
     this.assertUsable();
-    return this.exclusive(async () => {
-      if (this.mirrorSet.size > 0) {
-        throw new Error(
-          'A history with recorders bound cannot adopt a resumed journal',
-        );
-      }
-      const next = await recorder.session();
-      const published = next.store.published;
-      if (
-        (published?.commitSeq ?? 0) !== point.commitSeq ||
-        (published?.rows ?? 0) !== point.rows
-      ) {
-        throw new Error(
-          `The journal ${next.path} is at commit ${published?.commitSeq ?? 0} with ${published?.rows ?? 0} rows, the resume read commit ${point.commitSeq} with ${point.rows} rows`,
-        );
-      }
-      return this.swapPrimary(next, recorder);
-    });
+    return this.exclusive(() =>
+      adoptOnto(this.adoptionHost(), recorder, point),
+    );
   }
 
   isAdoptingRecorder(recorder: JournalRecordingService): boolean {
     return this.adopted === recorder;
   }
 
-  private swapPrimary(
-    next: JournalSession,
-    recorder: JournalRecordingService,
-  ): JournalAdoption {
-    const previous = {
-      session: this.session,
-      owners: this.owners,
-      mirrors: this.mirrorSet,
-      rows: this.tentativeRows,
-      adopted: this.adopted,
-      previews: this.previews,
-    };
-    this.session = next;
-    this.owners = new JournalOwners(next.store);
-    this.mirrorSet = this.mirrorsOf(next, this.owners);
-    this.tentativeRows = next.store.published?.rows ?? 0;
-    this.adopted = recorder;
-    this.previews = new SessionPreviews();
-    let settled = false;
-    const settle = (action: string): void => {
-      if (settled) throw new Error(`The adoption was already ${action}`);
-      settled = true;
-    };
+  /** Rows with a label below this were written by an earlier process; every reader applies it (D-S08-3). */
+  get resumeBoundary(): bigint | undefined {
+    return this.boundary;
+  }
+
+  private adoptionHost(): AdoptionHost {
     return {
-      rollback: async () => {
-        settle('settled');
-        await this.queue;
-        this.session = previous.session;
-        this.owners = previous.owners;
-        this.mirrorSet = previous.mirrors;
-        this.tentativeRows = previous.rows;
-        this.adopted = previous.adopted;
-        this.previews = previous.previews;
+      state: () => ({
+        session: this.session,
+        owners: this.owners,
+        mirrors: this.mirrorSet,
+        rows: this.tentativeRows,
+        adopted: this.adopted,
+        previews: this.previews,
+        resumeBoundary: this.boundary,
+      }),
+      install: (state) => {
+        this.session = state.session;
+        this.owners = state.owners;
+        this.mirrorSet = state.mirrors;
+        this.tentativeRows = state.rows;
+        this.adopted = state.adopted;
+        this.previews = state.previews;
+        this.boundary = state.resumeBoundary;
       },
-      commit: async () => {
-        settle('settled');
-        await previous.session.close();
-      },
+      drained: () => this.queue,
+      mirrorsOf: (session, owners, listeners) =>
+        this.mirrorsOf(session, owners, listeners),
     };
   }
 
@@ -533,10 +508,10 @@ export class JournalHistoryStore {
     const snapshot = await this.session.store.snapshot();
     try {
       signal?.throwIfAborted();
-      const start = await suffixStart(snapshot, query, signal);
+      const start = await suffixStart(snapshot, query, signal, this.boundary);
       for await (const entry of snapshot.entries(start)) {
         signal?.throwIfAborted();
-        yield decodeStoredRow(await snapshot.readRow(entry));
+        yield decodeStoredRow(await snapshot.readRow(entry), this.boundary);
       }
       signal?.throwIfAborted();
     } finally {
@@ -552,7 +527,11 @@ export class JournalHistoryStore {
   async committedBatch(count?: number): Promise<CommittedBatchRowSource> {
     const snapshot = await this.session.store.snapshot();
     try {
-      return committedBatchSource(snapshot, count ?? snapshot.rows);
+      return committedBatchSource(
+        snapshot,
+        count ?? snapshot.rows,
+        this.boundary,
+      );
     } catch (error) {
       snapshot.close();
       throw error;
@@ -576,7 +555,7 @@ export class JournalHistoryStore {
   /** The newest row, or the newest of `speaker`, once the queue is durable; nothing is kept. */
   lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
     return this.withDurableSnapshot((snapshot) =>
-      lastContentOf(snapshot, speaker),
+      lastContentOf(snapshot, speaker, this.boundary),
     );
   }
 
@@ -590,7 +569,7 @@ export class JournalHistoryStore {
   ): Promise<T> {
     signal?.throwIfAborted();
     return this.withDurableSnapshot(async (snapshot) => {
-      const view = new JournalRowView(snapshot, this.owners);
+      const view = new JournalRowView(snapshot, this.owners, this.boundary);
       try {
         return await execute(view);
       } finally {
@@ -621,7 +600,10 @@ export class JournalHistoryStore {
   /** A dump of the rows once the queue is durable; it reads the file, so it holds no row. */
   async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     await this.waitForDurable();
-    return new JournalDumpSnapshot(await this.session.store.snapshot());
+    return new JournalDumpSnapshot(
+      await this.session.store.snapshot(),
+      this.boundary,
+    );
   }
 
   /**

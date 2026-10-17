@@ -19,6 +19,13 @@ export interface MirrorQueue {
   assertUsable(): void;
 }
 
+/** A recorder bound as a mirror, with the origin whose rows it holds. */
+export interface BoundRecorder {
+  readonly recorder: JournalRecordingService;
+  readonly session: JournalSession;
+  readonly origin: string | undefined;
+}
+
 /**
  * The per-agent mirror files of one history and the origin bookkeeping that
  * goes with them (design 5.2 and 5.3). The primary journal keeps every row;
@@ -29,7 +36,6 @@ export interface MirrorQueue {
 export class JournalMirrors {
   private readonly fanout: MirrorFanout;
   private primaryOrigin: string | undefined;
-  private readonly retired = new Set<() => void>();
   private readonly recorders = new Map<
     JournalRecordingService,
     { readonly session: JournalSession; readonly origin: string | undefined }
@@ -40,6 +46,8 @@ export class JournalMirrors {
     primary: JournalStore,
     private readonly owners: JournalOwners,
     private readonly queue: MirrorQueue,
+    /** Shared by the mirrors of successive primaries, so a swap keeps the listeners. */
+    private readonly retired: Set<() => void> = new Set(),
   ) {
     this.fanout = new MirrorFanout(primary);
   }
@@ -129,6 +137,39 @@ export class JournalMirrors {
     this.recorders.delete(recorder);
   }
 
+  /** Whether every bound mirror is a recorder, which is what a swap of the primary can move. */
+  get onlyRecorders(): boolean {
+    return this.fanout.mirrors === this.recorders.size;
+  }
+
+  /**
+   * Unbinds every recorder, inside an exclusive turn of the queue. Each file
+   * has applied what was delivered and nothing is written to it.
+   */
+  async unbindRecorders(): Promise<BoundRecorder[]> {
+    const bound = [...this.recorders].map(([recorder, held]) => ({
+      recorder,
+      ...held,
+    }));
+    for (const { recorder, session } of bound) {
+      await this.fanout.detach(session.store);
+      this.recorders.delete(recorder);
+    }
+    return bound;
+  }
+
+  /**
+   * Binds recorders that were bound to another primary, inside an exclusive
+   * turn: each file is brought in line with this primary by the attach, so a
+   * file that held other rows is replaced.
+   */
+  async bindRecorders(bound: readonly BoundRecorder[]): Promise<void> {
+    for (const { recorder, session, origin } of bound) {
+      await this.seedAndBind(session, origin);
+      this.recorders.set(recorder, { session, origin });
+    }
+  }
+
   isRecorder(recorder: JournalRecordingService): boolean {
     return this.recorders.has(recorder);
   }
@@ -164,6 +205,18 @@ export class JournalMirrors {
     }
   }
 
+  /** Tells the retirement listeners that the session of this primary is replaced, once. */
+  fireRetired(): void {
+    const listeners = [...this.retired];
+    this.retired.clear();
+    for (const listener of listeners) listener();
+  }
+
+  /** The listeners of this primary; a successor primary shares them. */
+  get retirementListeners(): Set<() => void> {
+    return this.retired;
+  }
+
   onRetired(listener: () => void): () => void {
     this.retired.add(listener);
     return () => this.retired.delete(listener);
@@ -171,6 +224,11 @@ export class JournalMirrors {
 
   primaryOriginId(): string | undefined {
     return this.primaryOrigin;
+  }
+
+  /** Makes `origin` the primary origin of a successor primary without the check of {@link adoptedOrigin}. */
+  inheritPrimaryOrigin(origin: string | undefined): void {
+    this.primaryOrigin = origin;
   }
 
   /** A resumed recorder was adopted for `origin`; with mirrors bound it must name one. */

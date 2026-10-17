@@ -16,6 +16,7 @@ export type CommittedBatchRowSource = HistoryBatchRowSource;
 export function committedBatchSource(
   snapshot: VersionSnapshot,
   count: number,
+  resumeBoundary?: bigint,
 ): CommittedBatchRowSource {
   if (count > snapshot.rows) {
     throw new Error(
@@ -43,7 +44,7 @@ export function committedBatchSource(
       passes += 1;
       try {
         for await (const entry of snapshot.entries(start)) {
-          yield decodeStoredRow(await snapshot.readRow(entry));
+          yield decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
         }
       } finally {
         passes -= 1;

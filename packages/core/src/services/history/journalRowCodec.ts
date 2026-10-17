@@ -254,7 +254,10 @@ function decodeBlock(bytes: Uint8Array, type: number): ContentBlock {
  * Converts a stored row back to a history entry. The row is already whole in
  * memory (`readStoredRow`); this builds its objects and keeps nothing else.
  */
-export function decodeStoredRow(row: StoredRow): IContent {
+export function decodeStoredRow(
+  row: StoredRow,
+  resumeBoundary?: bigint,
+): IContent {
   const { header } = row;
   const piece = JSON.parse(DECODER.decode(row.meta)) as MetaPiece;
   if (SPEAKER_NAME[header.speaker] !== piece.speaker) {
@@ -282,6 +285,23 @@ export function decodeStoredRow(row: StoredRow): IContent {
         };
   if (metadata !== undefined) content.metadata = metadata;
   return (header.flags & ROW_FLAG.invalidateResponses) !== 0
+    ? invalidateResponsesStatefulChain([content])[0]
+    : applyResumeBoundary(header.label, content, resumeBoundary);
+}
+
+/**
+ * The read rule of a resumed history (D-S08-3): a row written by an earlier
+ * process, which is a row with a label below `resumeBoundary`, loses its
+ * stored Responses chain marker, because the chain belongs to the process that
+ * made the request. Rows are immutable, so every reader applies this to what
+ * it decodes; without a boundary the content is returned as stored.
+ */
+export function applyResumeBoundary(
+  label: bigint,
+  content: IContent,
+  resumeBoundary: bigint | undefined,
+): IContent {
+  return resumeBoundary !== undefined && label < resumeBoundary
     ? invalidateResponsesStatefulChain([content])[0]
     : content;
 }

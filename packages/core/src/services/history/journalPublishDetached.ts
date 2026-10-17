@@ -98,13 +98,15 @@ async function publishOver(
   let failure: { error: unknown } | undefined;
   try {
     await candidate.seedRange();
-    await transformCandidate(task, snapshot, candidate, options.signal);
+    await transformCandidate(
+      task,
+      snapshot,
+      candidate,
+      options.signal,
+      store.resumeBoundary,
+    );
     if (!appendOnly || candidate.count > 0) {
-      const rewound = await candidate.rewoundSpan();
-      const spans = densitySpans.project(
-        state.spans,
-        rewound === undefined ? [] : mergeRemovedInteriorSpans([rewound]),
-      );
+      const spans = await projectedSpans(candidate, densitySpans, state);
       derived = [candidate.tokens, spans];
       await media?.close();
       await candidate.finish();
@@ -141,6 +143,19 @@ async function publishOver(
     throw new AggregateError(closing, 'Detached mutation cleanup failed');
 }
 
+/** The interior spans after the candidate: the density spans and the span the rewind removed. */
+async function projectedSpans(
+  candidate: JournalCandidate,
+  densitySpans: DensitySpanRows,
+  state: ReturnType<DetachedHistoryHost['snapshot']>,
+): Promise<ReturnType<DensitySpanRows['project']>> {
+  const rewound = await candidate.rewoundSpan();
+  return densitySpans.project(
+    state.spans,
+    rewound === undefined ? [] : mergeRemovedInteriorSpans([rewound]),
+  );
+}
+
 function mediaFeed(
   host: DetachedHistoryHost,
   appendOnly: boolean,
@@ -170,6 +185,7 @@ async function transformCandidate(
   snapshot: VersionSnapshot,
   candidate: JournalCandidate,
   signal: AbortSignal | undefined,
+  resumeBoundary: bigint | undefined,
 ): Promise<void> {
   let active = true;
   const assertActive = (): void => {
@@ -182,7 +198,7 @@ async function transformCandidate(
     streamRows(cursorSignal) {
       assertActive();
       const cursor = scopedRows(
-        snapshotRows(snapshot, cursorSignal),
+        snapshotRows(snapshot, cursorSignal, resumeBoundary),
         assertActive,
         () => cursors.delete(cursor),
       );

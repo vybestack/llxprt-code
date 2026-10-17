@@ -38,7 +38,7 @@ export async function removeTailOnJournal(
     if (saved.rows !== store.getLength()) {
       throw new Error('History changed while its tail was being removed');
     }
-    const tail = await lastContentOf(saved);
+    const tail = await lastContentOf(saved, undefined, store.resumeBoundary);
     if (tail === undefined) return undefined;
     if (request.match !== undefined && !isDeepStrictEqual(tail, request.match))
       return undefined;

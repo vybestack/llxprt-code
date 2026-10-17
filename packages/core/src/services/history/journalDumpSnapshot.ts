@@ -16,13 +16,19 @@ import { decodeStoredRow } from './journalRowCodec.js';
 export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   private closed = false;
 
-  constructor(private readonly snapshot: VersionSnapshot) {}
+  constructor(
+    private readonly snapshot: VersionSnapshot,
+    private readonly resumeBoundary?: bigint,
+  ) {}
 
   async *rows(): AsyncGenerator<IContent, void, unknown> {
     this.assertOpen();
     for await (const entry of this.snapshot.entries()) {
       this.assertOpen();
-      yield decodeStoredRow(await this.snapshot.readRow(entry));
+      yield decodeStoredRow(
+        await this.snapshot.readRow(entry),
+        this.resumeBoundary,
+      );
     }
     this.assertOpen();
   }
