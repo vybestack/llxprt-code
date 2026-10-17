@@ -43,7 +43,6 @@ import {
 } from './recording-ticket-queue.js';
 import { ReplaceWriteGuard } from './replaceWriteGuard.js';
 import { type IContent } from '../services/history/IContent.js';
-import { debugLogger } from '../utils/debugLogger.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
@@ -75,7 +74,9 @@ import {
   reportQueueHighWater,
 } from './recordingWriterDefaults.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
-import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
+import type { RecordingPort } from './recordingPort.js';
+import { watchChatsDir } from './ChatsDirWatcher.js';
+import { logDrainFailure } from './recordingDrainFailure.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   stagePurgeRecordingRows,
@@ -116,7 +117,7 @@ type RecordingLifecycle =
  * @requirement REQ-REC-003, REQ-REC-004, REQ-REC-005, REQ-REC-006, REQ-REC-007, REQ-REC-008
  * @pseudocode session-recording-service.md lines 40-185
  */
-export class SessionRecordingService {
+export class SessionRecordingService implements RecordingPort {
   /** @pseudocode session-recording-service.md lines 40-51 */
   private readonly queue = new RecordingTicketQueue();
   private readonly replaceWrites = new ReplaceWriteGuard();
@@ -568,31 +569,7 @@ export class SessionRecordingService {
     if (this.draining) return;
     this.draining = true;
     this.drainPromise = this.drain().catch((error: unknown) => {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') {
-        const diag = diagnoseMissingPath(this.chatsDir);
-        debugLogger.error(
-          `[SessionRecording] ENOENT writing session file — recording stopped.
-` +
-            `  filePath: ${this.filePath}
-` +
-            `  chatsDir exists: ${diag.chatsDirExists}
-` +
-            `  parentDir exists: ${diag.parentDirExists} (${diag.parentDir})
-` +
-            `  grandparentDir exists: ${diag.grandparentDirExists} (${diag.grandparentDir})
-` +
-            `  This directory was removed mid-session by an external process or AI shell command.`,
-        );
-      } else {
-        debugLogger.error(
-          `[SessionRecording] Unexpected error writing session file — recording stopped.
-` +
-            `  filePath: ${this.filePath}
-` +
-            `  error: ${error}`,
-        );
-      }
+      logDrainFailure(error, this.filePath, this.chatsDir);
       this.transitionToFailure(error);
     });
   }

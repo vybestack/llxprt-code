@@ -29,24 +29,11 @@ import type {
 } from './types.js';
 
 /**
- * The surface of a session recorder that the history store and its callers
- * use. History-side modules depend on this port rather than on the concrete
- * `SessionRecordingService`, so the journal-backed recorder can take over the
- * role without touching them (#854 phase 4).
+ * What a session recorder is, apart from how it writes: lifecycle, identity,
+ * the session lock, header facts and checkpoints. Both recorders provide it
+ * (the JSONL `SessionRecordingService` and the journal recorder).
  */
-export interface RecordingPort {
-  // Acks and the commit protocol.
-  onCommitWatermark(listener: (watermark: CommitWatermark) => void): () => void;
-  enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null;
-  commit(type: SessionEventType, payload: unknown): Promise<CommitWatermark>;
-  waitForCommit(line: SessionRecordLine): Promise<CommitWatermark>;
-  waitForCommitSequence(seq: number): Promise<CommitWatermark>;
-  requireCommittable(): void;
-  retireIdleTicketStorage(): void;
-  getPendingRecordCount(): number;
-  getPendingByteCount(): number;
-  getLastEnqueuedSequence(): number;
-
+export interface SessionRecordingPort {
   // Lifecycle, identity and the session lock.
   flush(): Promise<void>;
   dispose(): Promise<void>;
@@ -58,6 +45,45 @@ export interface RecordingPort {
   adoptLock(lockHandle: LockHandle): void;
   ownsLockFor(sessionId: string): boolean;
   getOwnedLockHandle(): LockHandle | null;
+
+  // Session facts.
+  recordProviderSwitch(provider: string, model: string): void;
+  recordSessionEvent(
+    severity: 'info' | 'warning' | 'error',
+    message: string,
+  ): void;
+  recordDirectoriesChanged(directories: string[]): void;
+  recordSessionMetadata(title: string | null): void;
+  getSessionMetadataTitle(): string | null | undefined;
+  setSessionName(name: string | null): Promise<void>;
+  recordSessionFork(payload: SessionForkedPayload): void;
+
+  // Checkpoints.
+  createCheckpoint(name: string): Promise<RecordingCheckpointInfo>;
+  deleteCheckpoint(checkpointId: string): Promise<void>;
+  renameCheckpoint(checkpointId: string, name: string): Promise<void>;
+}
+
+/**
+ * The surface of the JSONL recorder that the history store and its callers
+ * use: the session surface plus the old record layout (envelope lines, seq
+ * watermarks, mutation records). History-side modules depend on this port
+ * rather than on the concrete `SessionRecordingService`. The journal recorder
+ * has no such layout; its rows are written by the history store, and the
+ * members below leave with the JSONL recorder (#854 phase 4, S15).
+ */
+export interface RecordingPort extends SessionRecordingPort {
+  // Acks and the commit protocol.
+  onCommitWatermark(listener: (watermark: CommitWatermark) => void): () => void;
+  enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null;
+  commit(type: SessionEventType, payload: unknown): Promise<CommitWatermark>;
+  waitForCommit(line: SessionRecordLine): Promise<CommitWatermark>;
+  waitForCommitSequence(seq: number): Promise<CommitWatermark>;
+  requireCommittable(): void;
+  retireIdleTicketStorage(): void;
+  getPendingRecordCount(): number;
+  getPendingByteCount(): number;
+  getLastEnqueuedSequence(): number;
   initializeForResume(
     filePath: string,
     lastSeq: number,
@@ -87,21 +113,4 @@ export interface RecordingPort {
   recordCompressionDetail(
     payload: CompressionDetailPayload,
   ): SessionRecordLine | null;
-
-  // Session facts.
-  recordProviderSwitch(provider: string, model: string): void;
-  recordSessionEvent(
-    severity: 'info' | 'warning' | 'error',
-    message: string,
-  ): void;
-  recordDirectoriesChanged(directories: string[]): void;
-  recordSessionMetadata(title: string | null): void;
-  getSessionMetadataTitle(): string | null | undefined;
-  setSessionName(name: string | null): Promise<void>;
-  recordSessionFork(payload: SessionForkedPayload): void;
-
-  // Checkpoints.
-  createCheckpoint(name: string): Promise<RecordingCheckpointInfo>;
-  deleteCheckpoint(checkpointId: string): Promise<void>;
-  renameCheckpoint(checkpointId: string, name: string): Promise<void>;
 }
