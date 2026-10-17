@@ -18,11 +18,18 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { replaySession } from './ReplayEngine.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
+import { type LockHandle } from './SessionLockManager.js';
 import {
-  SessionLockManager,
-  SessionLockedError,
-  type LockHandle,
-} from './SessionLockManager.js';
+  CheckpointLockError,
+  acquireSessionLock,
+  acquireSessionLocks,
+  isReservedIdentity,
+  isSameReference,
+  releaseSessionLocks,
+  targetName,
+  targetSessionId,
+  type NamedOperation,
+} from './checkpointNaming.js';
 import { type SessionRecordingService } from './SessionRecordingService.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
@@ -32,19 +39,9 @@ import {
   type SessionRecordLine,
 } from './types.js';
 
-export class CheckpointLockError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CheckpointLockError';
-  }
-}
+export { CheckpointLockError };
 
 type SessionTarget = Extract<ContinueTarget, { kind: 'session' }>;
-
-type NamedOperation =
-  | { kind: 'create'; name: string }
-  | { kind: 'rename'; checkpointId: string; name: string }
-  | { kind: 'session'; sessionId: string; name: string };
 
 type NamedOperationAction<T> = (name: string) => Promise<T>;
 
@@ -103,32 +100,6 @@ async function runWithFileRollback<T>(
     }
     throw error;
   }
-}
-
-function targetSessionId(target: ContinueTarget): string {
-  return target.kind === 'session'
-    ? target.session.sessionId
-    : target.source.sessionId;
-}
-
-function targetName(target: ContinueTarget): string | null {
-  return target.kind === 'session'
-    ? (target.session.name ?? null)
-    : target.checkpointName;
-}
-
-function isSameReference(
-  target: ContinueTarget,
-  operation: NamedOperation,
-): boolean {
-  if (operation.kind === 'rename' && target.kind === 'checkpoint') {
-    return target.checkpointId === operation.checkpointId;
-  }
-  return (
-    operation.kind === 'session' &&
-    target.kind === 'session' &&
-    target.session.sessionId === operation.sessionId
-  );
 }
 
 async function appendEvent(
@@ -249,7 +220,7 @@ export class CheckpointService {
     sourceSessionId: string,
     checkpointId: string,
   ): Promise<void> {
-    const lock = await this.acquireLock(chatsDir, sourceSessionId);
+    const lock = await acquireSessionLock(chatsDir, sourceSessionId);
     try {
       await this.requireLiveCheckpoint(filePath, projectHash, checkpointId);
       await appendEvent(
@@ -272,10 +243,7 @@ export class CheckpointService {
       checkpointId: input.checkpointId,
       name: input.name,
     };
-    const locks = await this.acquireSessionLocks(
-      input.chatsDir,
-      input.sessionIds,
-    );
+    const locks = await acquireSessionLocks(input.chatsDir, input.sessionIds);
     try {
       const refreshedCollisions = (
         await SessionDiscovery.listContinueTargets(
@@ -315,9 +283,7 @@ export class CheckpointService {
         );
       });
     } finally {
-      for (const lock of [...locks].reverse()) {
-        await lock.release().catch(() => undefined);
-      }
+      await releaseSessionLocks(locks);
     }
   }
 
@@ -331,7 +297,7 @@ export class CheckpointService {
     overwrite = false,
   ): Promise<void> {
     const trimmed = this.requireName(newName);
-    const namespaceLock = await this.acquireLock(
+    const namespaceLock = await acquireSessionLock(
       chatsDir,
       `checkpoint-namespace-${projectHash}`,
     );
@@ -342,9 +308,7 @@ export class CheckpointService {
         this.mediaStore,
       );
       const reservedIdentity = targets.find((target) =>
-        target.kind === 'session'
-          ? target.session.sessionId === trimmed
-          : target.checkpointId === trimmed,
+        isReservedIdentity(target, trimmed),
       );
       if (reservedIdentity !== undefined) {
         throw new Error(`Name '${trimmed}' already exists`);
@@ -385,7 +349,7 @@ export class CheckpointService {
     name: string,
   ): Promise<RecordingCheckpointInfo> {
     const trimmed = this.requireName(name);
-    const namespaceLock = await this.acquireLock(
+    const namespaceLock = await acquireSessionLock(
       chatsDir,
       `checkpoint-namespace-${projectHash}`,
     );
@@ -405,7 +369,7 @@ export class CheckpointService {
       if (collision !== undefined) {
         throw new Error(`Name '${trimmed}' already exists`);
       }
-      const lock = await this.acquireLock(chatsDir, sourceSessionId);
+      const lock = await acquireSessionLock(chatsDir, sourceSessionId);
       try {
         const replay = await replaySession(filePath, projectHash, {
           mediaStore: this.mediaStore,
@@ -450,7 +414,7 @@ export class CheckpointService {
     this.requireActiveRecording(recording);
     const name = this.requireName(operation.name);
     const chatsDir = recording.getChatsDir();
-    const namespaceLock = await this.acquireLock(
+    const namespaceLock = await acquireSessionLock(
       chatsDir,
       `checkpoint-namespace-${projectHash}`,
     );
@@ -461,9 +425,7 @@ export class CheckpointService {
         this.mediaStore,
       );
       const reservedIdentity = targets.find((target) =>
-        target.kind === 'session'
-          ? target.session.sessionId === name
-          : target.checkpointId === name,
+        isReservedIdentity(target, name),
       );
       if (reservedIdentity !== undefined) {
         throw new Error(`Name '${name}' already exists`);
@@ -497,30 +459,10 @@ export class CheckpointService {
           return action(name);
         });
       } finally {
-        for (const lock of [...locks].reverse()) {
-          await lock.release().catch(() => undefined);
-        }
+        await releaseSessionLocks(locks);
       }
     } finally {
       await namespaceLock.release().catch(() => undefined);
-    }
-  }
-
-  private async acquireSessionLocks(
-    chatsDir: string,
-    sessionIds: readonly string[],
-  ): Promise<LockHandle[]> {
-    const acquired: LockHandle[] = [];
-    try {
-      for (const sessionId of sessionIds) {
-        acquired.push(await this.acquireLock(chatsDir, sessionId));
-      }
-      return acquired;
-    } catch (error: unknown) {
-      for (const lock of [...acquired].reverse()) {
-        await lock.release().catch(() => undefined);
-      }
-      throw error;
     }
   }
 
@@ -560,18 +502,7 @@ export class CheckpointService {
     const sessionIds = [...new Set(collisions.map(targetSessionId))]
       .filter((sessionId) => !recording.ownsLockFor(sessionId))
       .sort((left, right) => left.localeCompare(right));
-    const acquired: LockHandle[] = [];
-    try {
-      for (const sessionId of sessionIds) {
-        acquired.push(await this.acquireLock(chatsDir, sessionId));
-      }
-      return acquired;
-    } catch (error: unknown) {
-      for (const lock of [...acquired].reverse()) {
-        await lock.release().catch(() => undefined);
-      }
-      throw error;
-    }
+    return acquireSessionLocks(chatsDir, sessionIds);
   }
 
   private async refreshLockedCollisions(
@@ -689,24 +620,5 @@ export class CheckpointService {
       throw new Error(`Checkpoint ${checkpointId} not found or deleted`);
     }
     return checkpoint;
-  }
-
-  private async acquireLock(
-    chatsDir: string,
-    sessionId: string,
-  ): Promise<LockHandle> {
-    try {
-      return await SessionLockManager.acquire(chatsDir, sessionId);
-    } catch (error: unknown) {
-      if (error instanceof SessionLockedError) {
-        throw new CheckpointLockError(
-          `Session ${sessionId} is in use by another process`,
-        );
-      }
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new CheckpointLockError(
-        `Failed to acquire lock for session ${sessionId}: ${detail}`,
-      );
-    }
   }
 }

@@ -77,6 +77,7 @@ export interface JournalCheckpointFact {
   readonly name: string;
   /** The `commitSeq` of the version the checkpoint names. */
   readonly sequence: number;
+  readonly createdAtMs: number;
 }
 
 /** The live checkpoints of one journal file, from its last trailer's state map; no row is read. */
@@ -91,6 +92,7 @@ export async function readJournalCheckpoints(
         checkpointId: id,
         name: descriptor.name,
         sequence: descriptor.commitSeq,
+        createdAtMs: descriptor.createdAtMs,
       });
     }
     return found;

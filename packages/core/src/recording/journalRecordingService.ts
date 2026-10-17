@@ -6,7 +6,6 @@ import type { CommitAck } from '../journal/groupWriter.js';
 import {
   type CheckpointDescriptor,
   checkpointKey,
-  encodeCheckpointDescriptor,
   parseCheckpointEntry,
 } from '../journal/checkpointDescriptor.js';
 import {
@@ -23,8 +22,13 @@ import {
   decodeSessionFact,
   decodePreviewFact,
   decodeTitleFact,
-  encodeSessionFact,
 } from './sessionMetaKeys.js';
+import {
+  createCheckpointEdit,
+  deleteCheckpointEdit,
+  renameCheckpointEdit,
+  sessionFactEdit,
+} from './sessionEdits.js';
 import { logDrainFailure } from './recordingDrainFailure.js';
 import type { SessionRecordingPort } from './recordingPort.js';
 import type {
@@ -309,7 +313,7 @@ export class JournalRecordingService implements SessionRecordingPort {
       throw new Error('Cannot set session name: name must not be empty');
     }
     await this.enqueue(() =>
-      this.commitFacts([this.factEdit(SESSION_KEYS.name, resolved)]),
+      this.commitFacts([sessionFactEdit(SESSION_KEYS.name, resolved)]),
     );
     await this.flushAndRequireActive('set session name');
   }
@@ -333,14 +337,7 @@ export class JournalRecordingService implements SessionRecordingPort {
       if (session === undefined || (session.store.published?.rows ?? 0) === 0) {
         return undefined;
       }
-      await this.commitFacts([
-        {
-          kind: 'checkpoint',
-          id: checkpointId,
-          name: trimmed,
-          createdAtMs: Date.now(),
-        },
-      ]);
+      await this.commitFacts([createCheckpointEdit(checkpointId, trimmed)]);
       return this.findCheckpoint(checkpointId);
     });
     await this.flushAndRequireActive('create checkpoint');
@@ -356,7 +353,7 @@ export class JournalRecordingService implements SessionRecordingPort {
     this.requireActive('delete checkpoint');
     const deleted = await this.enqueue(async () => {
       if ((await this.findCheckpoint(checkpointId)) === undefined) return false;
-      await this.commitFacts([{ kind: 'deleteCheckpoint', id: checkpointId }]);
+      await this.commitFacts([deleteCheckpointEdit(checkpointId)]);
       return true;
     });
     await this.flushAndRequireActive('delete checkpoint');
@@ -370,11 +367,7 @@ export class JournalRecordingService implements SessionRecordingPort {
       const descriptor = await this.findCheckpoint(checkpointId);
       if (descriptor === undefined) return false;
       await this.commitFacts([
-        {
-          kind: 'setState',
-          key: checkpointKey(checkpointId),
-          value: encodeCheckpointDescriptor({ ...descriptor, name: trimmed }),
-        },
+        renameCheckpointEdit(checkpointId, descriptor, trimmed),
       ]);
       return true;
     });
@@ -406,13 +399,9 @@ export class JournalRecordingService implements SessionRecordingPort {
     }
   }
 
-  private factEdit(key: string, value: unknown): VersionEdit {
-    return { kind: 'setState', key, value: encodeSessionFact(value) };
-  }
-
   /** A fact that needs the file: it is written, creating the file first. */
   private persistFact(key: string, value: unknown): void {
-    this.enqueue(() => this.commitFacts([this.factEdit(key, value)])).catch(
+    this.enqueue(() => this.commitFacts([sessionFactEdit(key, value)])).catch(
       ignore,
     );
   }
@@ -480,8 +469,8 @@ export class JournalRecordingService implements SessionRecordingPort {
     this.model = model;
     const { config } = this;
     const edits: VersionEdit[] = [
-      this.factEdit(SESSION_KEYS.id, config.sessionId),
-      this.factEdit(SESSION_KEYS.start, {
+      sessionFactEdit(SESSION_KEYS.id, config.sessionId),
+      sessionFactEdit(SESSION_KEYS.start, {
         startTime: new Date().toISOString(),
         projectHash: config.projectHash,
         workspaceDirs: config.workspaceDirs,
@@ -491,14 +480,14 @@ export class JournalRecordingService implements SessionRecordingPort {
           ? {}
           : { parentSessionId: config.parentSessionId }),
       }),
-      this.factEdit(SESSION_KEYS.provider, { provider, model }),
-      this.factEdit(SESSION_KEYS.directories, this.directories),
+      sessionFactEdit(SESSION_KEYS.provider, { provider, model }),
+      sessionFactEdit(SESSION_KEYS.directories, this.directories),
     ];
     if (this.title !== undefined) {
-      edits.push(this.factEdit(SESSION_KEYS.title, this.title));
+      edits.push(sessionFactEdit(SESSION_KEYS.title, this.title));
     }
     if (this.preview !== undefined) {
-      edits.push(this.factEdit(SESSION_KEYS.preview, this.preview));
+      edits.push(sessionFactEdit(SESSION_KEYS.preview, this.preview));
     }
     const ack = await session.store.commit(edits);
     this.lastCommitAck = ack;
