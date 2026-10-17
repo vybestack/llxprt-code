@@ -3,6 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ReadBuiltinCommands,
+  LoadRegisteredCommands,
+  SubscribeCommandChanges,
+} from '../services/commandRegistryOperations.js';
+
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
 import type { CredentialCommandRegistration } from './hooks/credentialCommandRegistration.js';
@@ -101,7 +107,10 @@ import { useTodoContext } from './contexts/TodoContext.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
 import { useSlashCommandActions } from './containers/AppContainer/hooks/useSlashCommandActions.js';
 import { useStoreSelector } from './stores/useStoreSelector.js';
-import type { SlashCommandProcessorCoreResult } from './hooks/useSlashCommandProcessorCore.js';
+import type {
+  SlashCommandProcessorCoreResult,
+  UseSlashCommandProcessorCoreArgs,
+} from './hooks/useSlashCommandProcessorCore.js';
 import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCore.js';
 import type { HistoryItem } from './types.js';
 import type { PromptContentGenerator } from './hooks/usePromptCompletion.js';
@@ -111,12 +120,31 @@ import {
 } from './inputOwnerBindings.js';
 import { useAutoPromptOperation } from './hooks/useAutoPromptOperation.js';
 import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
+import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 
-export interface AppContainerRuntimeProps {
+export interface AppContainerRuntimeProps
+  extends Pick<
+    UseSlashCommandProcessorCoreArgs,
+    | 'registerWorkspaceCommands'
+    | 'registerChatCommands'
+    | 'registerSubagentCommand'
+    | 'resumeOwnedCommand'
+    | 'replaceCommandHistory'
+    | 'readCommandHistoryService'
+    | 'recordCommandEvent'
+    | 'isMcpDiscoveryPending'
+    | 'endCommandSession'
+    | 'startNewCommandSession'
+    | 'startCommandSession'
+    | 'listCommandTools'
+  > {
   historyReads: RegisteredHistoryReads;
   registerCredentials: CredentialCommandRegistration;
+  readBuiltinCommands: ReadBuiltinCommands;
+  loadRegisteredCommands: LoadRegisteredCommands;
+  subscribeCommandChanges: SubscribeCommandChanges;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   /**
@@ -423,13 +451,45 @@ function useBootstrapRuntime(
   });
 }
 
+function useRuntimeCommandProcessor(
+  props: AppContainerRuntimeProps,
+  bootstrap: AppBootstrapResult,
+  view: ReturnType<typeof useInputCommandView>,
+) {
+  return useSlashCommandProcessorCore({
+    registerCredentials: props.registerCredentials,
+    readBuiltinCommands: props.readBuiltinCommands,
+    loadRegisteredCommands: props.loadRegisteredCommands,
+    subscribeCommandChanges: props.subscribeCommandChanges,
+    ...props.historyReads,
+    config: props.slashCommandRuntime,
+    registerWorkspaceCommands: props.registerWorkspaceCommands,
+    registerChatCommands: props.registerChatCommands,
+    registerSubagentCommand: props.registerSubagentCommand,
+    resumeOwnedCommand: props.resumeOwnedCommand,
+    replaceCommandHistory: props.replaceCommandHistory,
+    readCommandHistoryService: props.readCommandHistoryService,
+    recordCommandEvent: props.recordCommandEvent,
+    isMcpDiscoveryPending: props.isMcpDiscoveryPending,
+    endCommandSession: props.endCommandSession,
+    startNewCommandSession: props.startNewCommandSession,
+    startCommandSession: props.startCommandSession,
+    listCommandTools: props.listCommandTools,
+    ...view,
+    recordingIntegration:
+      bootstrap.recordingIntegrationRef?.current ?? undefined,
+    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
+    recordingOwner: bootstrap.recordingOwner,
+  });
+}
+
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const stores = useAppStores(props.slashCommandRuntime);
   const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
   const bootstrap = useBootstrapRuntime(props, stores);
   const dialogs = useAppDialogsRuntime(props, bootstrap, stores);
-  const { setQuittingMessagesRef, ...view } = useInputCommandView(
+  const inputCommandView = useInputCommandView(
     useBound(
       props.slashCommandRuntime,
       props.slashCommandRuntime.getExtensions,
@@ -439,17 +499,12 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     props.settings,
     bootstrap.setLlxprtMdFileCount,
   );
-  const commands = useSlashCommandProcessorCore({
-    registerCredentials: props.registerCredentials,
-    ...props.historyReads,
-    config: props.slashCommandRuntime,
-    agent: props.agent,
-    ...view,
-    recordingIntegration:
-      bootstrap.recordingIntegrationRef?.current ?? undefined,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingOwner: bootstrap.recordingOwner,
-  });
+  const setQuittingMessagesRef = inputCommandView.setQuittingMessagesRef;
+  const commands = useRuntimeCommandProcessor(
+    props,
+    bootstrap,
+    inputCommandView,
+  );
   const inputView = buildInputView(
     stores,
     props.settings,
@@ -539,14 +594,6 @@ function AppRuntimeView({
       </TurnProvider>
     </TerminalProvider>
   );
-}
-
-export function getInteractiveTranscriptPath(
-  recordingOwner: 'agent' | 'raw' | undefined,
-  readOwnedPath: () => string | undefined,
-  readRawPath: () => string | undefined,
-): string | undefined {
-  return recordingOwner === 'agent' ? readOwnedPath() : readRawPath();
 }
 
 function useInputBrowserCommands(

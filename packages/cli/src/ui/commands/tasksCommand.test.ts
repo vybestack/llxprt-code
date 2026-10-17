@@ -16,7 +16,7 @@ import { TasksControl } from '../../../../agents/src/api/control/tasksControl.js
 import { createFakeAgent } from '../hooks/agentStream/__tests__/helpers/createFakeAgent.js';
 import { registerTaskCommand } from '../../__tests__/hook-task-command-test-owner.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 
 import {
   AsyncTaskManager,

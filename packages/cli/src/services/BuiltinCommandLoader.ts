@@ -11,10 +11,6 @@ import type {
   MessageActionReturn,
 } from '../ui/commands/types.js';
 import { CommandKind } from '../ui/commands/types.js';
-import type {
-  CliUiRuntime,
-  ExtensionEnablementSource,
-} from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
 
 import { editorCommand } from '../ui/commands/editorCommand.js';
@@ -87,17 +83,15 @@ export interface BuiltinCommandOwners {
 }
 
 export class BuiltinCommandLoader implements ICommandLoader {
-  private extensionEnablementManager?: ExtensionEnablementSource;
-
   constructor(
     private readonly owners: BuiltinCommandOwners,
-    private config: CliUiRuntime | null,
-  ) {
-    // Access extensionEnablementManager if available on config
-    if (config && 'extensionEnablementManager' in config) {
-      this.extensionEnablementManager = config.extensionEnablementManager;
-    }
-  }
+    private readonly readHooksEnabled: () => boolean,
+    private readonly readSkillsEnabled: () => boolean,
+    private readonly readAdminSkillsEnabled: () => boolean,
+    private readonly isExtensionEnabled:
+      | ((name: string, path: string) => boolean)
+      | null,
+  ) {}
 
   /**
    * Discovers and returns all built-in slash commands.
@@ -116,7 +110,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
     const allCommands = this.registerBuiltinCommands();
 
     // Filter out commands from disabled extensions
-    if (this.extensionEnablementManager) {
+    const isExtensionEnabled = this.isExtensionEnabled;
+    if (isExtensionEnabled !== null) {
       return allCommands.filter((cmd) => {
         // Built-in commands (no extensionName) are always included
         if (!cmd.extensionName) {
@@ -126,10 +121,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
         // Extension commands are filtered by enabled state
         // Note: isEnabled requires a path, but for session-based enablement
         // we use an empty string as the path since session state doesn't depend on path
-        return this.extensionEnablementManager!.isEnabled(
-          cmd.extensionName,
-          '',
-        );
+        return isExtensionEnabled(cmd.extensionName, '');
       });
     }
 
@@ -197,9 +189,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.todoCommand,
       setupCommand,
       this.owners.taskCommand,
-      ...(this.config?.getEnableHooksUI() === true
-        ? [this.owners.hooksCommand]
-        : []),
+      ...(this.readHooksEnabled() ? [this.owners.hooksCommand] : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */
@@ -216,10 +206,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
    * disabled by admin, or [skillsCommand] when enabled.
    */
   private resolveSkillsCommand(): SlashCommand[] {
-    if (this.config?.isSkillsSupportEnabled() !== true) {
+    if (!this.readSkillsEnabled()) {
       return [];
     }
-    if (this.config.isAdminSkillsEnabled() === false) {
+    if (!this.readAdminSkillsEnabled()) {
       return [
         {
           name: 'skills',

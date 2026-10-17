@@ -12,7 +12,7 @@ import { render } from '../__tests__/render.js';
 import { Colors } from './colors.js';
 import { withRecordingLifetimeFixture } from '../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
-import { getInteractiveTranscriptPath } from './AppContainerRuntime.js';
+import { getInteractiveTranscriptPath } from './transcriptPath.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 function Transcript({ agent }: { agent: Agent }) {

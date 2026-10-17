@@ -3,8 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createCommandRegistryFixture } from '../../__tests__/command-registry-fixture.js';
 
-import { act, useCallback, useState } from 'react';
+import { act, useCallback, useMemo, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
@@ -63,14 +64,18 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
   const reloadCommands = useCallback(() => {
     setReloadTrigger((value) => value + 1);
   }, []);
+  const registry = useMemo(
+    () => createCommandRegistryFixture(config),
+    [config],
+  );
   useCommandReload(
     builtinOwners,
-    config,
+    registry.loadRegisteredCommands,
+    registry.subscribeCommandChanges,
     reloadTrigger,
     true,
     reloadCommands,
     setCommands,
-    null,
   );
   return commands;
 }

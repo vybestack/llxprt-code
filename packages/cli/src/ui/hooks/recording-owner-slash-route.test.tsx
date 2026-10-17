@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+const commandRegistry = createCommandRegistryFixture(null);
+
+import {
   createUnconfiguredCredentialRegistry,
   createUnconfiguredHistoryReaders,
 } from '../../__tests__/unconfigured-model-command.js';
@@ -132,14 +138,15 @@ function wrapper({ children }: { children: React.ReactNode }): React.ReactNode {
 }
 
 function slashInputs(
-  agent: Agent,
+  _agent: Agent,
   recordingOwner?: 'agent' | 'raw',
 ): UseSlashCommandProcessorCoreArgs {
   return {
     registerCredentials: () => createUnconfiguredCredentialRegistry(),
+    ...commandRegistry,
+    ...createCommandRegistrationFixture(_agent),
     ...createUnconfiguredHistoryReaders(),
     config: null,
-    agent,
     settings: createMockSettings({}),
     addItem: () => 0,
     clearItems: () => {},

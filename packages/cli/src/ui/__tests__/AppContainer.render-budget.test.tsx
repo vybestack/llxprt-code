@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+const commandRegistry = {
+  ...createCommandRegistryFixture(null),
+  ...createCommandRegistrationFixture(),
+};
+
+import {
   createUnconfiguredCredentialRegistry,
   createUnconfiguredHistoryReaders,
 } from '../../__tests__/unconfigured-model-command.js';
@@ -456,6 +465,7 @@ describe('AppContainer.render-budget', () => {
     it('should maintain stable output across re-renders', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -497,6 +507,7 @@ describe('AppContainer.render-budget', () => {
     it('should not throw on rapid re-renders', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -532,6 +543,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useMemo for computed values', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -561,6 +573,7 @@ describe('AppContainer.render-budget', () => {
     it('should use useCallback for event handlers', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -592,6 +605,7 @@ describe('AppContainer.render-budget', () => {
     it('should mount within reasonable time', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -621,6 +635,7 @@ describe('AppContainer.render-budget', () => {
     it('should handle re-renders efficiently', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -661,6 +676,7 @@ describe('AppContainer.render-budget', () => {
     it('should complete mount/unmount cycles without errors', async () => {
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,

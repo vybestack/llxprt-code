@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import type { Todo } from '@vybestack/llxprt-code-core';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';

@@ -1,9 +1,10 @@
-import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
+
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -11,7 +12,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createMcpCommand } from '../commands/mcpCommand.js';
 import { createMcpAuthCommand } from '../commands/mcpAuth.js';

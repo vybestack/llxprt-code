@@ -1,9 +1,10 @@
-import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
+
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ import { bindContinueCommandOperations } from './continueCommandHost.js';
 import { describe, expect, it } from 'bun:test';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createContinueCommand } from './continueCommand.js';
 

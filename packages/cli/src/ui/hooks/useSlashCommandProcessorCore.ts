@@ -3,6 +3,12 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ReadBuiltinCommands,
+  LoadRegisteredCommands,
+  SubscribeCommandChanges,
+} from '../../services/commandRegistryOperations.js';
+
 import {
   useHistoryRegistration,
   type RegisteredHistoryReads,
@@ -31,21 +37,8 @@ import {
 } from '../contexts/RuntimeContext.js';
 
 import { useCommandView } from './useCommandView.js';
-import {
-  useOwnedChatOperations,
-  useRawChatOperations,
-  useRawChatHistory,
-  useCurrentChatRecording,
-  useChatProjectHash,
-} from './useChatOperations.js';
-import { useContinueCommand } from './useContinueCommand.js';
 
-import { createWorkspaceCommandOwners } from './workspaceCommandOwners.js';
-
-import { bindDirectoryChangeRecording } from '../commands/directoryCommandHost.js';
 import { bindCommandOwnerResume } from './commandOwnerResumeHost.js';
-import { importOwnerSession } from '../utils/ownerSessionUi.js';
-import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import {
   bindCommandHistoryLoader,
   bindResumedHistoryReplay,
@@ -70,12 +63,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSetCommand } from './useSetCommand.js';
 import type { CredentialCommandRegistration } from './credentialCommandRegistration.js';
 import type { CredentialCommands } from './credentialCommandTypes.js';
-import { useChatCommand } from './useChatCommand.js';
 import { useBuiltinCommandOwners } from './useBuiltinCommandOwners.js';
-import { basename } from 'node:path';
 import { useExtensionCommand } from './useExtensionCommand.js';
-import { useSubagentCommand } from './useSubagentCommand.js';
-import { useAutoPromptOperation } from './useAutoPromptOperation.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
@@ -84,6 +73,15 @@ import type {
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  RegisterWorkspaceCommands,
+  RegisterChatCommands,
+  RegisterSubagentCommand,
+  ResumeOwnedCommand,
+  EndCommandSession,
+  StartNewCommandSession,
+  StartCommandSession,
+} from './commandSessionOperations.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 
@@ -102,7 +100,6 @@ import {
 } from './slashCommandProcessor.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import {
-  loadBuiltinSlashCommands,
   type useCommandContext,
   useCommandReload,
   type usePendingHistory,
@@ -132,8 +129,24 @@ export type SlashCommandProcessorCoreResult = {
 export interface UseSlashCommandProcessorCoreArgs
   extends RegisteredHistoryReads {
   config: CliUiRuntime | null;
-  agent: Agent | null;
+  registerWorkspaceCommands: RegisterWorkspaceCommands;
+  registerChatCommands: RegisterChatCommands;
+  registerSubagentCommand: RegisterSubagentCommand;
+  resumeOwnedCommand: ResumeOwnedCommand;
+  replaceCommandHistory: Agent['setHistory'];
+  readCommandHistoryService: () => ReturnType<
+    Agent['agentClient']['getHistoryService']
+  >;
+  recordCommandEvent: Agent['session']['recordRecordingEvent'] | null;
+  isMcpDiscoveryPending: () => boolean;
+  endCommandSession: EndCommandSession;
+  startNewCommandSession: StartNewCommandSession;
+  startCommandSession: StartCommandSession;
+  listCommandTools: Agent['tools']['list'];
   registerCredentials: CredentialCommandRegistration;
+  readBuiltinCommands: ReadBuiltinCommands;
+  loadRegisteredCommands: LoadRegisteredCommands;
+  subscribeCommandChanges: SubscribeCommandChanges;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
@@ -183,133 +196,14 @@ function useTodoCommandOwner(
   );
 }
 
-function useWorkspaceRegistration(
-  agent: Agent | null,
-  config: CliUiRuntime | null,
-  addItem: UseHistoryManagerReturn['addItem'],
-  setMemoryFileCount: (count: number) => void,
-  recordingOwner: 'agent' | 'raw' | undefined,
-  rawRecording: RecordingIntegration | undefined,
-) {
-  const session = agent?.session;
-  const client = agent?.agentClient;
-  const directoryRecorder = useDirectoryRecorder(
-    recordingOwner,
-    session,
-    rawRecording,
-  );
-  const conversationHistory = useConversationHistory(client);
-  const tools = agent?.tools;
-  const sessionClient = agent?.sessionClient;
-  const hooks = agent?.hooks;
-  const tasks = agent?.tasks;
-  const policy = agent?.policy;
-  const runImageOperation = useMemo(
-    () => sessionClient?.runImageOperation.bind(sessionClient),
-    [sessionClient],
-  );
-  const readRules = useMemo(() => policy?.getRules.bind(policy), [policy]);
-  const listTools = useMemo(() => tools?.list.bind(tools) ?? null, [tools]);
-  const workspaceCommands = useMemo(
-    () =>
-      createWorkspaceCommandOwners(
-        config,
-        listTools,
-        (key) => agent?.getEphemeralSetting(key),
-        (key, value) => agent?.setEphemeralSetting(key, value),
-        addItem,
-        setMemoryFileCount,
-        async () => {
-          await client?.setTools();
-        },
-        readAvailablePolicyRules(readRules),
-        policy?.getDefaultDecision.bind(policy) ?? unavailablePolicyOwner,
-        policy?.isNonInteractive.bind(policy) ?? unavailablePolicyOwner,
-        hooks?.listHooks.bind(hooks) ?? null,
-        hooks?.enable.bind(hooks) ?? unavailableHookOwner,
-        hooks?.disable.bind(hooks) ?? unavailableHookOwner,
-        hooks?.setDisabledHooks.bind(hooks) ?? unavailableHookOwner,
-        tasks?.list.bind(tasks) ?? null,
-        tasks?.listRunning.bind(tasks) ?? unavailableTaskOwner,
-        tasks?.get.bind(tasks) ?? unavailableTaskOwner,
-        tasks?.cancel.bind(tasks) ?? unavailableTaskOwner,
-        client?.addDirectoryContext.bind(client) ?? unavailableSessionOwner,
-        directoryRecorder,
-        runImageOperation,
-        conversationHistory,
-      ),
-    [
-      config,
-      agent,
-      addItem,
-      setMemoryFileCount,
-      listTools,
-      client,
-      directoryRecorder,
-      conversationHistory,
-      hooks,
-      tasks,
-      policy,
-      runImageOperation,
-      readRules,
-    ],
-  );
-  return workspaceCommands;
-}
-
-function useDirectoryRecorder(
-  recordingOwner: 'agent' | 'raw' | undefined,
-  session: Agent['session'] | undefined,
-  rawRecording: RecordingIntegration | undefined,
-) {
-  return useMemo(
-    () =>
-      bindDirectoryChangeRecording(
-        recordingOwner,
-        session?.recordRecordingEvent.bind(session) ?? null,
-        rawRecording?.recordDirectoriesChanged.bind(rawRecording),
-      ),
-    [recordingOwner, session, rawRecording],
-  );
-}
-
-function useConversationHistory(client: Agent['agentClient'] | undefined) {
-  return useCallback(
-    () =>
-      client?.hasChatInitialized() === true
-        ? client.getChat().getHistory()
-        : undefined,
-    [client],
-  );
-}
-
-function readAvailablePolicyRules(
-  readRules: Agent['policy']['getRules'] | undefined,
-) {
-  return () => readRules?.() ?? null;
-}
-
-function unavailableHookOwner(): never {
-  throw new Error('Hook owner unavailable');
-}
-function unavailableTaskOwner(): never {
-  throw new Error('Task owner unavailable');
-}
-function unavailablePolicyOwner(): never {
-  throw new Error('Policy owner unavailable');
-}
-function unavailableSessionOwner(): never {
-  throw new Error('Session agent is unavailable');
-}
-
 function useRegistryState(
   builtins: BuiltinCommandOwners,
-  config: CliUiRuntime | null,
+  readBuiltins: ReadBuiltinCommands,
 ): Omit<SlashCommandProcessorState, 'builtins'> {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommands(builtins, config)
+        ? readBuiltins(builtins)
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -336,24 +230,7 @@ function bindOwnedCommandResume(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandHandlerDeps['resumeOwnedSession'] {
   return args.recordingOwner === 'agent'
-    ? bindCommandOwnerResume((action) => {
-        const agent = args.agent;
-        if (agent === null) throw new Error('Session agent is unavailable');
-        const mode = resolveEmojiFilterMode(args.config);
-        return action.sessionPackage === undefined
-          ? resumeOwnerSession(
-              agent.session.resume.bind(agent.session),
-              action.sessionRef,
-              mode,
-              agent.session.listBrowserTargetsDetailed.bind(agent.session),
-            )
-          : importOwnerSession(
-              agent.session.importSession.bind(agent.session),
-              action.sessionPackage.packageDirectory,
-              mode,
-              agent.session.getHistory.bind(agent.session),
-            );
-      }, args.loadHistory)
+    ? bindCommandOwnerResume(args.resumeOwnedCommand, args.loadHistory)
     : null;
 }
 
@@ -367,22 +244,17 @@ function buildHandlerDeps(
   return {
     resumeOwnedSession: bindOwnedCommandResume(args),
     loadCommandHistory: bindCommandHistoryLoader(
-      async (history) => {
-        if (!args.agent) throw new Error('Session agent is unavailable');
-        await args.agent.setHistory(history);
-      },
+      args.replaceCommandHistory,
       () => resolveEmojiFilterMode(args.config),
       commandContext.ui.clear,
       args.addItem,
     ),
     recordCommandError: bindCommandErrorRecorder(
-      args.agent === null
-        ? null
-        : args.agent.session.recordRecordingEvent.bind(args.agent.session),
+      args.recordCommandEvent,
       args.recordingOwner,
       args.recordingIntegration,
     ),
-    isMcpDiscoveryPending: () => args.agent?.mcp.discoveryState() === 'pending',
+    isMcpDiscoveryPending: args.isMcpDiscoveryPending,
     commands: state.commands,
     config: args.config,
     commandContext,
@@ -400,10 +272,7 @@ function buildHandlerDeps(
     resumeRawSession: bindCommandRawResume(
       args.config,
       args.config?.sessionPersistence,
-      () => {
-        if (!args.agent) throw new Error('Session agent is unavailable');
-        return args.agent.agentClient.getHistoryService();
-      },
+      args.readCommandHistoryService,
       args.recordingSwapCallbacks,
       slashCommandLogger,
       performResume,
@@ -440,40 +309,14 @@ function useStaticBuiltinCommands(
   };
 }
 
-function useBound<Owner, Args extends unknown[], Result>(
-  owner: Owner,
-  operation: (this: Owner, ...args: Args) => Result,
-): (...args: Args) => Result {
-  return useMemo(() => operation.bind(owner), [owner, operation]);
-}
-
 function useBoundRegistry(
   builtins: BuiltinCommandOwners,
-  config: CliUiRuntime | null,
+  readBuiltins: ReadBuiltinCommands,
   reloadRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
-  const state = useRegistryState(builtins, config);
+  const state = useRegistryState(builtins, readBuiltins);
   reloadRef.current = state.reloadCommands;
   return { builtins, ...state };
-}
-
-function useRawChatRegistration(
-  readCurrent: Parameters<typeof useCurrentChatRecording>[0],
-  readFallback: Parameters<typeof useCurrentChatRecording>[1],
-  readRoot: Parameters<typeof useChatProjectHash>[0],
-  readDirectory: Parameters<typeof useRawChatOperations>[2],
-  history: ReturnType<typeof useRawChatHistory>,
-  readModel: Parameters<typeof useRawChatOperations>[6],
-): ReturnType<typeof useRawChatOperations> {
-  return useRawChatOperations(
-    useCurrentChatRecording(readCurrent, readFallback),
-    useChatProjectHash(readRoot),
-    readDirectory,
-    history.getMediaStore,
-    history.getChatHistory,
-    history.replaceChatHistory,
-    readModel,
-  );
 }
 
 function useRegisteredCommands(
@@ -484,7 +327,19 @@ function useRegisteredCommands(
   setPendingItem: (item: HistoryItemWithoutId | null) => void,
   reloadCommandsRef: React.MutableRefObject<() => void>,
 ): SlashCommandProcessorState {
-  const { agent, config, settings, recordingOwner } = args;
+  const {
+    config,
+    settings,
+    recordingOwner,
+    registerWorkspaceCommands,
+    registerChatCommands,
+    registerSubagentCommand,
+    addItem,
+    setLlxprtMdFileCount,
+    recordingIntegration,
+    recordingSwapCallbacks,
+    readBuiltinCommands,
+  } = args;
   const fuzzy = useFuzzyPreference(settings);
   const { extensionsCommand, ...staticCommands } = useStaticBuiltinCommands(
     config,
@@ -494,68 +349,54 @@ function useRegisteredCommands(
     args.actions.dispatchExtensionStateUpdate,
   );
 
-  const { session, agentClient: chatClient, sessionClient: port } = agent ?? {};
-  const raw = args.recordingIntegration;
-  const swaps = args.recordingSwapCallbacks;
-  const ownerChat = useOwnedChatOperations(
-    session,
-    useBound(agent, agent?.getModel ?? missingChatOwner),
-    useCallback(() => resolveEmojiFilterMode(config), [config]),
+  const workspaceCommands = useMemo(
+    () =>
+      registerWorkspaceCommands(
+        addItem,
+        setLlxprtMdFileCount,
+        recordingOwner,
+        recordingIntegration,
+      ),
+    [
+      registerWorkspaceCommands,
+      addItem,
+      setLlxprtMdFileCount,
+      recordingOwner,
+      recordingIntegration,
+    ],
   );
-  const history = useRawChatHistory(chatClient);
-  const rawChat = useRawChatRegistration(
-    useBound(swaps, swaps?.getCurrentRecording ?? readNull),
-    useBound(raw, raw?.getRecordingService ?? readNull),
-    useBound(config, config?.getProjectRoot ?? readNull),
-    useCallback(() => config?.projectChatsDir ?? null, [config]),
-    history,
-    useCallback(() => (config ? config.getModel() : null), [config]),
+  const chatCommands = useMemo(
+    () =>
+      registerChatCommands(
+        recordingOwner,
+        recordingIntegration,
+        recordingSwapCallbacks,
+        fuzzy,
+      ),
+    [
+      registerChatCommands,
+      recordingOwner,
+      recordingIntegration,
+      recordingSwapCallbacks,
+      fuzzy,
+    ],
   );
-  const workspaceCommands = useWorkspaceRegistration(
-    agent,
-    config,
-    args.addItem,
-    args.setLlxprtMdFileCount,
-    recordingOwner,
-    args.recordingIntegration,
+  const subagentCommand = useMemo(
+    () => registerSubagentCommand(fuzzy, addItem),
+    [registerSubagentCommand, fuzzy, addItem],
   );
   const builtins = useBuiltinCommandOwners({
-    chatCommand: useChatCommand(ownerChat, rawChat, recordingOwner, fuzzy),
-    continueCommand: useContinueCommand(
-      useBound(session, session?.exportSession ?? missingSession),
-      useCallback(() => config?.isInteractive() === true, [config]),
-      useBound(session, session?.listBrowserTargets ?? missingSession),
-      useCallback(() => config?.projectChatsDir ?? null, [config]),
-      useCallback(
-        () => (config ? basename(config.projectTempDir) : null),
-        [config],
-      ),
-      chatClient?.mediaStore,
-      recordingOwner,
-    ),
+    ...chatCommands,
     historyCommandOwners,
     setCommand: useSetCommand(settings),
     todoCommand: useTodoCommandOwner(args.todoContext, args.addItem),
-    subagentCommand: useSubagentCommand(
-      agent?.workspace.subagentDefinitions,
-      agent?.workspace.subagentWrites,
-      useSubagentProfileCatalog(agent?.workspace.profileDefinitions),
-      fuzzy,
-      useAutoPromptOperation(
-        useBound(agent, agent?.getProvider ?? missingSession),
-        useCallback(() => chatClient, [chatClient]),
-        useBound(port, port?.createDetachedAgentClient ?? missingSession),
-        useBound(config, config?.getContentGeneratorConfig ?? readNoConfig),
-      ),
-      config !== null,
-      args.addItem,
-    ),
+    subagentCommand,
     extensionsCommand,
     presentationCommands: { ...staticCommands, ...presentationCommands },
     ...workspaceCommands,
     credentialCommands: providerCommands,
   });
-  return useBoundRegistry(builtins, config, reloadCommandsRef);
+  return useBoundRegistry(builtins, readBuiltinCommands, reloadCommandsRef);
 }
 
 function useAboutDetails(
@@ -596,18 +437,10 @@ function useAboutDetails(
   );
 }
 
-function useOptionalBound<Owner, Args extends unknown[], Result>(
-  owner: Owner,
-  operation: ((this: Owner, ...args: Args) => Result) | undefined,
-): ((...args: Args) => Result) | null {
-  return useMemo(() => operation?.bind(owner) ?? null, [owner, operation]);
-}
-
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
   const {
-    agent,
     config,
     settings,
     recordingIntegration: _recordingIntegration,
@@ -633,9 +466,9 @@ export function useSlashCommandProcessorCore(
   const presentationCommands = usePresentationCommands(
     useAboutDetails(config, settings),
     config?.getTargetDir(),
-    useOptionalBound(agent?.hooks, agent?.hooks.triggerSessionEnd),
-    useBound(agent?.session, agent?.session.startNewSession ?? missingSession),
-    useBound(agent?.hooks, agent?.hooks.triggerSessionStart ?? missingSession),
+    args.endCommandSession,
+    args.startNewCommandSession,
+    args.startCommandSession,
     args.addItem,
     args.actions.setDebugMessage,
     session.updateHistoryTokenCount,
@@ -662,12 +495,12 @@ export function useSlashCommandProcessorCore(
   );
   useCommandReload(
     state.builtins,
-    args.config,
+    args.loadRegisteredCommands,
+    args.subscribeCommandChanges,
     state.reloadTrigger,
     args.isConfigInitialized,
     state.reloadCommands,
     state.setCommands,
-    args.agent,
   );
   return useCommandView(
     invocation,
@@ -680,18 +513,6 @@ export function useSlashCommandProcessorCore(
   );
 }
 
-function missingChatOwner(): never {
-  throw new Error('No session owner available');
-}
-
-function missingSession(): never {
-  throw new Error('Session agent is unavailable');
-}
-
-function readNull(): null {
-  return null;
-}
-
 function useFuzzyPreference(
   settings: Pick<LoadedSettings, 'merged'>,
 ): () => boolean {
@@ -699,22 +520,6 @@ function useFuzzyPreference(
     () => settings.merged.enableFuzzyFiltering !== false,
     [settings],
   );
-}
-
-function useSubagentProfileCatalog(
-  profiles: Agent['workspace']['profileDefinitions'] | undefined,
-): () => Promise<string[]> {
-  return useCallback(
-    () => profiles?.listProfiles() ?? Promise.resolve([]),
-    [profiles],
-  );
-}
-
-function readNoConfig(): undefined {
-  return undefined;
-}
-function missingHistoryTools(): never {
-  throw new Error('agent not available');
 }
 
 function useProcessorRegistration(
@@ -732,7 +537,6 @@ function useProcessorRegistration(
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
 ): SlashCommandProcessorState {
   const {
-    agent,
     config,
     settings,
     recordingIntegration,
@@ -742,14 +546,14 @@ function useProcessorRegistration(
   } = args;
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
-  const tools = agent?.tools;
+  const listTools = args.listCommandTools;
 
   return useRegisteredCommands(
     args,
     presentationCommands,
     useHistoryRegistration(
       useDiagnosticsRegistration(
-        tools,
+        listTools,
         config,
         settings,
         readBalancerStats,
@@ -799,7 +603,7 @@ function useCredentialRegistry(
 }
 
 function useDiagnosticsRegistration(
-  tools: Agent['tools'] | undefined,
+  listTools: Agent['tools']['list'],
   config: CliUiRuntime | null,
   settings: LoadedSettings,
   readBalancerStats: GetLoadBalancerStatsOperation,
@@ -814,7 +618,7 @@ function useDiagnosticsRegistration(
       bindDiagnosticsReads(
         config,
         settings,
-        tools === undefined ? missingHistoryTools : () => tools.list(),
+        listTools,
         readBalancerStats,
         readBalancerTokens,
         readDiagnostics,
@@ -823,7 +627,7 @@ function useDiagnosticsRegistration(
         oauth,
       ),
     [
-      tools,
+      listTools,
       config,
       settings,
       readBalancerStats,

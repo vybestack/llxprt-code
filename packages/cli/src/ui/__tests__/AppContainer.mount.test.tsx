@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+const commandRegistry = {
+  ...createCommandRegistryFixture(null),
+  ...createCommandRegistrationFixture(),
+};
+
+import {
   createUnconfiguredCredentialRegistry,
   createUnconfiguredHistoryReaders,
 } from '../../__tests__/unconfigured-model-command.js';
@@ -480,6 +489,7 @@ describe('AppContainer.mount', () => {
       // Arrange: All dependencies mocked
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -506,6 +516,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -537,6 +548,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -571,6 +583,7 @@ describe('AppContainer.mount', () => {
       ];
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -601,6 +614,7 @@ describe('AppContainer.mount', () => {
       const startupWarnings = ['Warning 1', 'Warning 2'];
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
@@ -630,6 +644,7 @@ describe('AppContainer.mount', () => {
       // Arrange
       const props = {
         registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
         historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,

@@ -20,7 +20,7 @@ void vi.mock('../ui/commands/profileCommand.js', () => ({
 }));
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../__tests__/builtin-loader-fixture.js';
 import { createUnconfiguredBuiltinOwners } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';

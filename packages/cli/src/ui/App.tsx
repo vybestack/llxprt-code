@@ -3,6 +3,43 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createWorkspaceCommandOwners } from './hooks/workspaceCommandOwners.js';
+import { bindDirectoryChangeRecording } from './commands/directoryCommandHost.js';
+import {
+  bindChatOwnerOperations,
+  bindChatRecordingOperations,
+} from './commands/chatCommandHost.js';
+import { createChatOwnerCommand } from './commands/chatOwnerCommand.js';
+import { createChatCommand } from './commands/chatCommand.js';
+import { createContinueRegistration } from './hooks/useContinueCommand.js';
+import { createSubagentCommand } from './commands/subagentCommand.js';
+import {
+  bindSubagentCommand,
+  bindAutoPromptOperation,
+} from './commands/subagentCommandHost.js';
+import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
+import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
+import { importOwnerSession } from './utils/ownerSessionUi.js';
+import { basename } from 'node:path';
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+import type {
+  RegisterWorkspaceCommands,
+  RegisterChatCommands,
+  RegisterSubagentCommand,
+  ResumeOwnedCommand,
+} from './hooks/commandSessionOperations.js';
+import type { UseSlashCommandProcessorCoreArgs } from './hooks/useSlashCommandProcessorCore.js';
+import {
+  createBuiltinCommandLoaderFactory,
+  createRegisteredCommandLoader,
+  createCommandChangeSubscription,
+  type ReadBuiltinCommands,
+  type LoadRegisteredCommands,
+  type SubscribeCommandChanges,
+} from '../services/commandRegistryOperations.js';
+import { McpPromptLoader } from '../services/McpPromptLoader.js';
+import { createHeadlessCommandLoader } from '../nonInteractiveBindings.js';
+
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
 import { SettingScope } from '../config/settings.js';
@@ -137,14 +174,35 @@ interface AppProps {
  */
 export class AppWrapper extends Component<AppProps> {
   #captured: AppProps | undefined;
+  #registry:
+    | {
+        readBuiltinCommands: ReadBuiltinCommands;
+        loadRegisteredCommands: LoadRegisteredCommands;
+        subscribeCommandChanges: SubscribeCommandChanges;
+      }
+    | undefined;
+  #sessionCommands:
+    | ReturnType<AppWrapper['registerSessionCommands']>
+    | undefined;
   #history: RegisteredHistoryReads | undefined;
   #registration: CredentialCommandRegistration | undefined;
   readonly #toolkeys = createToolkeyCommands();
 
   private capture() {
     const props = this.props;
-    if (this.#captured?.agent !== props.agent)
+    if (
+      this.#captured?.agent !== props.agent ||
+      this.#captured.slashCommandRuntime !== props.slashCommandRuntime
+    )
+      this.#registry = this.registerRegistry();
+    if (this.#captured?.agent !== props.agent) {
       this.#history = this.bindHistory();
+    }
+    if (
+      this.#captured?.agent !== props.agent ||
+      this.#captured.slashCommandRuntime !== props.slashCommandRuntime
+    )
+      this.#sessionCommands = this.registerSessionCommands();
     const keys = [
       'agent',
       'slashCommandRuntime',
@@ -175,6 +233,220 @@ export class AppWrapper extends Component<AppProps> {
     if (this.#registration === undefined)
       throw new Error('Application commands were not registered');
     return this.#registration;
+  }
+
+  private registerRegistry() {
+    const c = this.props.slashCommandRuntime;
+    const createBuiltin = createBuiltinCommandLoaderFactory(
+      () => c.getEnableHooksUI() === true,
+      () => c.isSkillsSupportEnabled() === true,
+      () => c.isAdminSkillsEnabled() !== false,
+      () => {
+        const manager = c.extensionEnablementManager;
+        return manager ? (name, path) => manager.isEnabled(name, path) : null;
+      },
+    );
+    return {
+      readBuiltinCommands: (owners: Parameters<ReadBuiltinCommands>[0]) =>
+        createBuiltin(owners).loadCommandsSync(),
+      loadRegisteredCommands: createRegisteredCommandLoader(
+        createBuiltin,
+        () =>
+          new McpPromptLoader({
+            getMcpServers: () => c.getMcpServers(),
+            listPrompts: (server) => c.listPrompts(server),
+          }),
+        this.registryFiles(),
+      ),
+      subscribeCommandChanges: this.registrySubscription(),
+    };
+  }
+
+  private registryFiles() {
+    const c = this.props.slashCommandRuntime;
+    return createHeadlessCommandLoader(
+      () => c.userCommandsDir,
+      () => c.projectCommandsDir,
+      () => c.getProjectRoot(),
+      () => c.getExtensions(),
+      () => c.getFolderTrust(),
+      () => () => c.isTrustedFolder(),
+      () => c.getShellReplacement(),
+      () => c.getExcludeTools(),
+      () => c.getCoreTools(),
+      () => c.getApprovalMode(),
+      () => c.getShellExecutionConfig(),
+      () => c.getTargetDir(),
+      () => c.getShouldUseNodePtyShell(),
+    );
+  }
+
+  private registrySubscription() {
+    const c = this.props.slashCommandRuntime;
+    const mcp = this.props.agent.mcp;
+    return createCommandChangeSubscription(
+      (listener) => {
+        const client = c.getIdeClient();
+        client?.addStatusChangeListener(listener);
+        return () => client?.removeStatusChangeListener(listener);
+      },
+      (listener) => mcp.subscribeStatus(listener),
+    );
+  }
+
+  private registerSessionCommands() {
+    const a = this.props.agent;
+    const c = this.props.slashCommandRuntime;
+    const session = a.session;
+    const resumeOwnedCommand: ResumeOwnedCommand = (action) => {
+      const mode = resolveEmojiFilterMode(c);
+      return action.sessionPackage === undefined
+        ? resumeOwnerSession(
+            session.resume.bind(session),
+            action.sessionRef,
+            mode,
+            session.listBrowserTargetsDetailed.bind(session),
+          )
+        : importOwnerSession(
+            session.importSession.bind(session),
+            action.sessionPackage.packageDirectory,
+            mode,
+            session.getHistory.bind(session),
+          );
+    };
+    return {
+      registerWorkspaceCommands: this.registerWorkspaceCommands(),
+      registerChatCommands: this.registerChatCommands(),
+      registerSubagentCommand: this.registerSubagentCommand(),
+      resumeOwnedCommand,
+      replaceCommandHistory: async (
+        history: Parameters<Agent['setHistory']>[0],
+      ) => {
+        await a.setHistory(history);
+      },
+      readCommandHistoryService: () => a.agentClient.getHistoryService(),
+      recordCommandEvent: session.recordRecordingEvent.bind(session),
+      isMcpDiscoveryPending: () => a.mcp.discoveryState() === 'pending',
+      endCommandSession: a.hooks.triggerSessionEnd.bind(a.hooks),
+      startNewCommandSession: session.startNewSession.bind(session),
+      startCommandSession: a.hooks.triggerSessionStart.bind(a.hooks),
+      listCommandTools: a.tools.list.bind(a.tools),
+    };
+  }
+  private registerWorkspaceCommands(): RegisterWorkspaceCommands {
+    const a = this.props.agent;
+    const c = this.props.slashCommandRuntime;
+    const client = a.agentClient;
+    return (add, setMemory, owner, raw) =>
+      createWorkspaceCommandOwners(
+        c,
+        a.tools.list.bind(a.tools),
+        a.getEphemeralSetting.bind(a),
+        a.setEphemeralSetting.bind(a),
+        add,
+        setMemory,
+        async () => {
+          await client.setTools();
+        },
+        a.policy.getRules.bind(a.policy),
+        a.policy.getDefaultDecision.bind(a.policy),
+        a.policy.isNonInteractive.bind(a.policy),
+        a.hooks.listHooks.bind(a.hooks),
+        a.hooks.enable.bind(a.hooks),
+        a.hooks.disable.bind(a.hooks),
+        a.hooks.setDisabledHooks.bind(a.hooks),
+        a.tasks.list.bind(a.tasks),
+        a.tasks.listRunning.bind(a.tasks),
+        a.tasks.get.bind(a.tasks),
+        a.tasks.cancel.bind(a.tasks),
+        client.addDirectoryContext.bind(client),
+        bindDirectoryChangeRecording(
+          owner,
+          a.session.recordRecordingEvent.bind(a.session),
+          raw?.recordDirectoriesChanged.bind(raw),
+        ),
+        a.sessionClient.runImageOperation.bind(a.sessionClient),
+        () =>
+          client.hasChatInitialized()
+            ? client.getChat().getHistory()
+            : undefined,
+      );
+  }
+  private registerChatCommands(): RegisterChatCommands {
+    const a = this.props.agent;
+    const c = this.props.slashCommandRuntime;
+    const s = a.session;
+    const owner = bindChatOwnerOperations(
+      s.listCheckpoints.bind(s),
+      s.createCheckpoint.bind(s),
+      s.resume.bind(s),
+      s.deleteCheckpoint.bind(s),
+      s.renameCheckpoint.bind(s),
+      s.getHistory.bind(s),
+      s.clearHistory.bind(s),
+      s.restoreTurns.bind(s),
+      s.nameCurrentSession.bind(s),
+      () => s.getRecording().path,
+      () => a.getModel(),
+      () => resolveEmojiFilterMode(c),
+    );
+    const client = a.agentClient;
+    return (mode, raw, swaps, fuzzy) => ({
+      chatCommand:
+        mode === 'agent'
+          ? createChatOwnerCommand(owner, fuzzy)
+          : createChatCommand(
+              bindChatRecordingOperations(
+                () =>
+                  swaps?.getCurrentRecording() ??
+                  raw?.getRecordingService() ??
+                  null,
+                () => getProjectHash(c.getProjectRoot()),
+                () => c.projectChatsDir,
+                () => client.mediaStore,
+                () =>
+                  client.hasChatInitialized()
+                    ? client.getChat().getHistory()
+                    : null,
+                async (history) => {
+                  await client.getChat().setHistory(history);
+                },
+                () => c.getModel(),
+              ),
+              fuzzy,
+            ),
+      continueCommand: createContinueRegistration(
+        s.exportSession.bind(s),
+        () => c.isInteractive(),
+        s.listBrowserTargets.bind(s),
+        () => c.projectChatsDir,
+        () => basename(c.projectTempDir),
+        client.mediaStore,
+        mode,
+      ),
+    });
+  }
+  private registerSubagentCommand(): RegisterSubagentCommand {
+    const a = this.props.agent;
+    const c = this.props.slashCommandRuntime;
+    const generate = bindAutoPromptOperation(
+      () => a.getProvider(),
+      () => a.agentClient,
+      a.sessionClient.createDetachedAgentClient.bind(a.sessionClient),
+      () => c.getContentGeneratorConfig(),
+    );
+    return (fuzzy, add) =>
+      createSubagentCommand(
+        bindSubagentCommand(
+          a.workspace.subagentDefinitions,
+          a.workspace.subagentWrites,
+          () => a.workspace.profileDefinitions.listProfiles(),
+          fuzzy,
+          generate,
+          true,
+          add,
+        ),
+      );
   }
 
   private bindHistory(): RegisteredHistoryReads {
@@ -342,8 +614,12 @@ export class AppWrapper extends Component<AppProps> {
   override render() {
     const props = this.props;
     const registerCredentials = this.capture();
+    if (this.#registry === undefined)
+      throw new Error('Application command discovery was not registered');
     if (this.#history === undefined)
       throw new Error('Application history was not registered');
+    if (this.#sessionCommands === undefined)
+      throw new Error('Application session commands were not registered');
     const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
     const mouseEventsEnabled = isMouseEventsEnabled(
       renderOptions,
@@ -373,6 +649,8 @@ export class AppWrapper extends Component<AppProps> {
                           <OverflowProvider>
                             <AppWithState
                               {...props}
+                              {...this.#registry}
+                              {...this.#sessionCommands}
                               historyReads={this.#history}
                               registerCredentials={registerCredentials}
                             />
@@ -395,9 +673,27 @@ export class AppWrapper extends Component<AppProps> {
  * AppWithState manages the app reducer state and wraps AppContainer.
  */
 const AppWithState = (
-  props: AppProps & { historyReads: RegisteredHistoryReads } & {
-    registerCredentials: CredentialCommandRegistration;
-  },
+  props: AppProps &
+    Pick<
+      UseSlashCommandProcessorCoreArgs,
+      | 'registerWorkspaceCommands'
+      | 'registerChatCommands'
+      | 'registerSubagentCommand'
+      | 'resumeOwnedCommand'
+      | 'replaceCommandHistory'
+      | 'readCommandHistoryService'
+      | 'recordCommandEvent'
+      | 'isMcpDiscoveryPending'
+      | 'endCommandSession'
+      | 'startNewCommandSession'
+      | 'startCommandSession'
+      | 'listCommandTools'
+    > & { historyReads: RegisteredHistoryReads } & {
+      registerCredentials: CredentialCommandRegistration;
+      readBuiltinCommands: ReadBuiltinCommands;
+      loadRegisteredCommands: LoadRegisteredCommands;
+      subscribeCommandChanges: SubscribeCommandChanges;
+    },
 ) => {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
 
