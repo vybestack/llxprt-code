@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
 import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
@@ -84,7 +86,9 @@ const SAVED_ENV: Readonly<Record<string, string | undefined>> = {
 const SAVED_CWD = process.cwd();
 
 async function buildAgent(): Promise<Agent> {
-  const { createTaskAgent, setTargetDir } = await import('../config/config.js');
+  const { createTaskAgentConfig, setTargetDir } = await import(
+    '../config/config.js'
+  );
   const { loadSettings } = await import('../config/settings.js');
   // Executor parity: resolve the workspace (chdir) before building the task
   // agent, exactly as the executor does per request.
@@ -94,7 +98,9 @@ async function buildAgent(): Promise<Agent> {
   });
   process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
   const settings = loadSettings(WORKSPACE);
-  return createTaskAgent(settings, [], 'approval-semantics-task');
+  return createAgent(
+    createTaskAgentConfig(settings, [], 'approval-semantics-task'),
+  );
 }
 
 /**

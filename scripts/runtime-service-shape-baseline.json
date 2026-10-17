@@ -1,7 +1,7 @@
 {
   "counts": {
     "a2a-server": {
-      "runtime-service-bundle": 5,
+      "runtime-service-bundle": 4,
       "runtime-service-bag-parameter": 0
     },
     "agents": {

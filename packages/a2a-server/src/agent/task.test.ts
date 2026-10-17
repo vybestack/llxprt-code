@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
 import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
@@ -27,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { createTaskAgent } from '../config/config.js';
+import { createTaskAgentConfig } from '../config/config.js';
 import type { ToolConfirmation } from '@vybestack/llxprt-code-agents';
 
 const WORKSPACE = mkdtempSync(join(tmpdir(), 'a2a-taskfacade-'));
@@ -42,7 +44,7 @@ writeFileSync(
 );
 
 async function buildAgent(): Promise<Agent> {
-  return createTaskAgent({}, [], 'task-facade');
+  return createAgent(createTaskAgentConfig({}, [], 'task-facade'));
 }
 
 async function disposeAgent(agent: Agent): Promise<void> {
@@ -203,8 +205,10 @@ describe('Task over the Agent facade (#3221)', () => {
         '{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"after tool"}]}]}\n',
     );
     process.env.LLXPRT_FAKE_RESPONSES = filesResponses;
-    const { createTaskAgent: build } = await import('../config/config.js');
-    const agent = await build({}, [], 'facade-tool');
+    const { createTaskAgentConfig: buildConfig } = await import(
+      '../config/config.js'
+    );
+    const agent = await createAgent(buildConfig({}, [], 'facade-tool'));
     try {
       // Subscribe to the real Agent confirmation surface: auto-answering with
       // ProceedOnce lets the FakeProvider's list_files tool run headlessly.

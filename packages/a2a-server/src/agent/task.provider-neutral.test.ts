@@ -3,6 +3,8 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
 import { createOwnedTask } from './__tests__/owned-task.js';
 
 /**
@@ -39,8 +41,8 @@ writeFileSync(
 const SAVED_ENV = { ...process.env };
 
 async function buildAgent(): Promise<Agent> {
-  const { createTaskAgent } = await import('../config/config.js');
-  return createTaskAgent({}, [], 'neutral-task');
+  const { createTaskAgentConfig } = await import('../config/config.js');
+  return createAgent(createTaskAgentConfig({}, [], 'neutral-task'));
 }
 
 async function disposeAgent(agent: Agent): Promise<void> {
