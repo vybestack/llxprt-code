@@ -6,6 +6,7 @@ import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap
 import type { RowDraft } from './rowDraft.js';
 import { JournalStore } from './journalStore.js';
 import {
+  ageOutIdleCode,
   FLATNESS_BOUND_BYTES,
   IN_FLIGHT_BOUND_BYTES,
 } from './__tests__/support/compactionMemory.js';
@@ -92,6 +93,13 @@ describe('id fact batch memory over a 40,000-row rebuild (design 4.6)', () => {
     'holds one bounded chunk of id facts, not the facts of every id, and the growth does not scale with the id count',
     async () => {
       expect(idCount(SMALL_PERIOD)).toBeGreaterThanOrEqual(4_000);
+      // Run the rebuild once, then wait until JavaScriptCore has dropped the
+      // idle start-up code (two waves, about 5 s and 15 s). A baseline taken
+      // before that sees the drop as a negative growth in the first measured
+      // rebuild; each measured rebuild still warms its own code right before
+      // its baseline.
+      await replaceAll('prime.llxj', history(SMALL_PERIOD));
+      await ageOutIdleCode();
       const small = await measuredRebuild('small.llxj', SMALL_PERIOD);
       const large = await measuredRebuild('large.llxj', LARGE_PERIOD);
       process.stderr.write(
