@@ -169,7 +169,9 @@ async function resumedRows(history: HistoryService): Promise<RowsObservation> {
   return observed;
 }
 
-async function currentRows(history: HistoryService): Promise<IContent[]> {
+export async function currentRows(
+  history: HistoryService,
+): Promise<IContent[]> {
   let held: IContent[] = [];
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
     held = [...rows];
@@ -200,7 +202,7 @@ async function densityChanged(
   });
 }
 
-async function applyStep(
+export async function applyStep(
   history: HistoryService,
   step: MutationStep,
 ): Promise<void> {
