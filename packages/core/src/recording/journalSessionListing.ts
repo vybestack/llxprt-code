@@ -15,7 +15,11 @@ import {
   readSessionFacts,
   type SessionFacts,
 } from './sessionMetaKeys.js';
-import type { SessionSummary, UnreadableRecording } from './types.js';
+import type {
+  SessionStartPayload,
+  SessionSummary,
+  UnreadableRecording,
+} from './types.js';
 
 export interface JournalSessionListing {
   /** Sessions of the project, newest first. */
@@ -65,6 +69,36 @@ export async function readJournalFileFacts(
   } finally {
     await reader.close();
   }
+}
+
+/**
+ * The header of one journal file as the `session_start` payload that the
+ * JSONL header reader returns, built from the session facts. Null for a file
+ * that is not a journal (a retired `.jsonl` file is never opened), holds no
+ * committed session, or cannot be read: the file is external input and a
+ * header reader answers "no header" for all of those.
+ */
+export async function readJournalSessionHeader(
+  filePath: string,
+): Promise<SessionStartPayload | null> {
+  if (!filePath.endsWith(SESSION_FILE_EXTENSION)) return null;
+  const found = await readJournalFileFacts(filePath).catch(() => undefined);
+  if (found === undefined) return null;
+  const { facts } = found;
+  const { start } = facts;
+  return {
+    sessionId: facts.sessionId,
+    projectHash: start.projectHash,
+    workspaceDirs: start.workspaceDirs,
+    ...(start.cwd === undefined ? {} : { cwd: start.cwd }),
+    provider: facts.provider,
+    model: facts.model,
+    startTime: start.startTime,
+    kind: start.kind,
+    ...(start.parentSessionId === undefined
+      ? {}
+      : { parentSessionId: start.parentSessionId }),
+  };
 }
 
 /** The summary of one journal file, or the reason the file cannot be listed. */

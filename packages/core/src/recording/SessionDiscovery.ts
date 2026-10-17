@@ -58,6 +58,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { selectBackend } from '../services/history/historyBackendSelect.js';
 import {
   listJournalSessions,
+  readJournalSessionHeader,
   readJournalFileFacts,
 } from './journalSessionListing.js';
 import { describeUnreadableRecording } from './unreadableRecordings.js';
@@ -247,6 +248,18 @@ export class SessionDiscovery {
     const unreadable: UnreadableRecording[] = [
       ...detailed.unreadableRecordings,
     ];
+    if (selectBackend() === 'journal') {
+      // A journal summary carries the session name; its checkpoints are not
+      // listed here yet (S10), and no row is scanned.
+      return {
+        targets: detailed.sessions.map(
+          (session): ContinueTarget => ({ kind: 'session', session }),
+        ),
+        skippedCount: unreadable.length,
+        recordingErrors: unreadable.map(describeUnreadableRecording),
+        unreadableRecordings: unreadable,
+      };
+    }
     for (const summary of detailed.sessions) {
       const scan = await scanSessionMetadata(
         summary.filePath,
@@ -410,6 +423,8 @@ export class SessionDiscovery {
   static async readSessionHeader(
     filePath: string,
   ): Promise<SessionStartPayload | null> {
+    if (selectBackend() === 'journal')
+      return readJournalSessionHeader(filePath);
     return readSessionHeader(filePath);
   }
 

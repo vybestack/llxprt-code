@@ -24,6 +24,7 @@ export interface RecordOptions {
   readonly projectHash?: string;
   readonly provider?: string;
   readonly title?: string;
+  readonly name?: string;
   readonly kind?: 'main' | 'subagent';
   /** Sets the file's modification time, so the listing order is known. */
   readonly modifiedAt?: Date;
@@ -55,6 +56,8 @@ export async function recordJournal(
     if (options.title !== undefined) {
       recording.recordSessionMetadata(options.title);
     }
+    if (options.name !== undefined)
+      await recording.setSessionName(options.name);
     if (options.rows !== undefined && options.rows.length > 0) {
       await session.append(options.rows);
     }
