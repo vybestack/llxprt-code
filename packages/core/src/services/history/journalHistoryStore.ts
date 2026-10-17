@@ -60,6 +60,7 @@ import {
   type EditBuilder,
   type JournalCompensationMark,
 } from './journalPublication.js';
+import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
@@ -335,6 +336,28 @@ export class JournalHistoryStore {
 
   isCurrentMutationMark(mark: HistoryMutationMark): boolean {
     return this.publication.isCurrent(this, mark);
+  }
+
+  /**
+   * Binds the file of `recorder` as the mirror of `origin`: it holds the
+   * rows of that origin and the unowned ones, and every later group reaches
+   * it (design 5.3).
+   */
+  attachJournal(
+    recorder: JournalRecordingService,
+    replace = false,
+    onAttached?: () => void,
+    origin?: string,
+  ): Promise<void> {
+    return this.mirrors.attachRecorder(recorder, replace, onAttached, origin);
+  }
+
+  detachJournal(recorder: JournalRecordingService): Promise<void> {
+    return this.mirrors.detachRecorder(recorder);
+  }
+
+  isRecorder(recorder: JournalRecordingService): boolean {
+    return this.mirrors.isRecorder(recorder);
   }
 
   /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */

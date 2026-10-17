@@ -5,6 +5,7 @@ import type {
   JournalStore,
 } from '../../journal/journalStore.js';
 import { MirrorFanout } from '../../journal/mirrorFanout.js';
+import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { JournalOwners } from './journalOwners.js';
 import type { JournalSession } from './journalSession.js';
 
@@ -27,6 +28,10 @@ export class JournalMirrors {
   private readonly fanout: MirrorFanout;
   private primaryOrigin: string | undefined;
   private readonly retired = new Set<() => void>();
+  private readonly recorders = new Map<
+    JournalRecordingService,
+    JournalSession
+  >();
 
   constructor(
     primary: JournalStore,
@@ -48,7 +53,7 @@ export class JournalMirrors {
    * Seeds and binds the mirror file of `origin` behind everything queued
    * (late attach, design 5.3).
    */
-  attach(mirror: JournalSession, origin: string): Promise<void> {
+  attach(mirror: JournalSession, origin: string | undefined): Promise<void> {
     this.queue.assertUsable();
     return this.queue.exclusive(() => this.seedAndBind(mirror, origin));
   }
@@ -60,7 +65,7 @@ export class JournalMirrors {
    */
   private async seedAndBind(
     mirror: JournalSession,
-    origin: string,
+    origin: string | undefined,
   ): Promise<void> {
     const owner = await this.owners.resolve(origin);
     try {
@@ -75,6 +80,54 @@ export class JournalMirrors {
   /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
   detach(mirror: JournalSession): Promise<boolean> {
     return this.queue.exclusive(() => this.fanout.detach(mirror.store));
+  }
+
+  /**
+   * Binds the file of a session recorder as the mirror of `origin`. The file
+   * is brought in line with the history by the attach itself, so it can only
+   * be appended to when it is empty: a recorder that already holds rows needs
+   * `replace`. A recorder that is already bound is only reported attached.
+   * Resume adopts a file instead (S08).
+   */
+  async attachRecorder(
+    recorder: JournalRecordingService,
+    replace: boolean,
+    onAttached: (() => void) | undefined,
+    origin: string | undefined,
+  ): Promise<void> {
+    this.queue.assertUsable();
+    if (this.recorders.has(recorder)) {
+      onAttached?.();
+      return;
+    }
+    const session = await recorder.session();
+    if (!replace && (session.store.published?.rows ?? 0) > 0) {
+      throw new Error(
+        `The recorder already holds rows (${session.path}); attaching it must replace them`,
+      );
+    }
+    const first = this.size === 0;
+    await this.attach(session, origin);
+    this.recorders.set(recorder, session);
+    if (first && origin !== undefined) this.primaryOrigin ??= origin;
+    try {
+      onAttached?.();
+    } catch (error) {
+      await this.detachRecorder(recorder);
+      throw error;
+    }
+  }
+
+  /** Unbinds a recorder once its file has applied what was delivered; one that is not bound is ignored. */
+  async detachRecorder(recorder: JournalRecordingService): Promise<void> {
+    const session = this.recorders.get(recorder);
+    if (session === undefined) return;
+    await this.detach(session);
+    this.recorders.delete(recorder);
+  }
+
+  isRecorder(recorder: JournalRecordingService): boolean {
+    return this.recorders.has(recorder);
   }
 
   has(mirror: JournalSession): boolean {
