@@ -216,7 +216,6 @@ async function handleZedAcpIntegration(
   await runZedIntegration(config, profileApplication, {
     trustPort,
     profileDefinitions,
-    providerManager,
     onExitCleanup: runExitCleanup,
     providerInputs: createZedProviderInputs(
       providerContributions,

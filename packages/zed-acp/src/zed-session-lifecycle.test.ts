@@ -6,7 +6,6 @@
 import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 import type { ZedAgent } from './zedIntegration.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -113,7 +112,6 @@ describe('isolated ACP session fixtures', () => {
       config,
       new RecordingConnection() as unknown as acp.AgentSideConnection,
       unusedProfileApplication,
-      createConnectionProviderManager(config, settingsService),
       () => new SettingsService({ sessionSource: settingsService }),
       emptyChatsLister,
       definitionFixture(),

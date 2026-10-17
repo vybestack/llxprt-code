@@ -1,4 +1,8 @@
-import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  HostCredentialOwner,
+  createFileOAuthSettingsProvider,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,11 +15,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
 
-import {
-  type Config,
-  type RuntimeProviderManager,
-  createInkStdio,
-} from '@vybestack/llxprt-code-core';
+import { type Config, createInkStdio } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
@@ -119,7 +119,6 @@ export interface ZedConnectionOwner {
   readonly profileDefinitions: Pick<ProfileDefinitionReads, 'listProfiles'>;
   readonly createSessionSettings: () => SettingsService;
   readonly config: Config;
-  readonly providerManager: RuntimeProviderManager;
   readonly profileApplication: AgentProfileApplication;
   readonly providerInputs?: ZedSessionProviderInputs;
 }
@@ -137,7 +136,6 @@ export async function serveZedConnection(
         owner.config,
         conn,
         owner.profileApplication,
-        owner.providerManager,
         owner.createSessionSettings,
         undefined,
         owner.profileDefinitions,
@@ -154,11 +152,6 @@ export async function serveZedConnection(
 }
 
 async function discoverZedSessionProviderInputs(): Promise<ZedSessionProviderInputs> {
-  const [{ loadInstalledRuntimePlugins }, { createFileOAuthSettingsProvider }] =
-    await Promise.all([
-      import('@vybestack/llxprt-code-providers/composition.js'),
-      import('@vybestack/llxprt-code-providers/auth.js'),
-    ]);
   return {
     credentialAuthority: new HostCredentialOwner(process.env).authority,
     providerContributions: await loadInstalledRuntimePlugins(),
@@ -172,7 +165,6 @@ export async function runZedIntegration(
   options: {
     profileDefinitions: ZedConnectionOwner['profileDefinitions'];
     trustPort: ZedConnectionOwner['trustPort'];
-    providerManager: RuntimeProviderManager;
     createSessionSettings: () => SettingsService;
     onExitCleanup?: ExitCleanupCallback;
     /**
@@ -197,7 +189,6 @@ export async function runZedIntegration(
     profileApplication,
     profileDefinitions: options.profileDefinitions,
     trustPort: options.trustPort,
-    providerManager: options.providerManager,
     createSessionSettings: options.createSessionSettings,
     providerInputs:
       options.providerInputs ?? (await discoverZedSessionProviderInputs()),

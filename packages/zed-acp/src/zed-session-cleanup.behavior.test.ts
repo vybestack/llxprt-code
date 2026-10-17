@@ -8,46 +8,40 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config, DebugLogger, ApprovalMode } from '@vybestack/llxprt-code-core';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
-  buildZedSessionAgent,
+  acquireZedSession,
   captureZedHostInputs,
 } from './zed-session-agent.js';
 import * as acp from '@agentclientprotocol/sdk';
 import { ZedAgent } from './zedIntegration.js';
+import { nodeChatSessionFileLister } from './zed-session-loader.js';
 import { unusedProfileApplication } from './test-profile-application.js';
-let managers: ProviderManager[] = [];
-
 let host: Config | undefined;
+let rootDir: string;
 function buildHost(): Config {
   host = new Config({
     sessionId: crypto.randomUUID(),
-    cwd: process.cwd(),
-    targetDir: process.cwd(),
+    cwd: rootDir,
+    targetDir: rootDir,
+    storageRoot: join(rootDir, 'state'),
     debugMode: false,
     model: 'cleanup-test-model',
   });
   return host;
 }
-function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
+async function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    settingsService,
-    config,
-  );
-  managers.push(manager);
   const connection = new acp.AgentSideConnection(
     (connection) =>
       new ZedAgent(
         config,
         connection,
         unusedProfileApplication,
-        manager,
         () => new SettingsService({ sessionSource: settingsService }),
       ),
     acp.ndJsonStream(
@@ -59,32 +53,56 @@ function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
       }),
     ),
   );
-  return buildZedSessionAgent(
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  const { session } = await acquireZedSession(
     config,
     captureZedHostInputs(config),
     connection,
     undefined,
     crypto.randomUUID(),
-    process.cwd(),
+    rootDir,
     new DebugLogger('acp-cleanup-test'),
     settingsService,
+    settingsOwner,
     trust,
     { credentialAuthority: new CredentialAuthority() },
+    false,
+    nodeChatSessionFileLister,
   );
+  return { session, settingsOwner, disposeConfig: () => session.dispose() };
 }
 
 describe('ACP session infrastructure cleanup', () => {
   let trust: WorkspaceTrustLifecycle;
-  beforeEach(() => {
+  beforeEach(async () => {
+    rootDir = await mkdtemp(join(tmpdir(), 'acp-session-owner-'));
     trust = new WorkspaceTrustLifecycle();
   });
   afterEach(async () => {
     vi.restoreAllMocks();
-    for (const manager of managers) manager.dispose();
-    managers = [];
     await trust.dispose();
     await host?.dispose();
     host = undefined;
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it('keeps acquired session policy isolated when a sibling is retired', async () => {
+    const config = buildHost();
+    const first = await buildSession(config, trust);
+    const second = await buildSession(config, trust);
+    try {
+      first.session.setMode(ApprovalMode.YOLO);
+      expect(first.session.getApprovalMode()).toBe(ApprovalMode.YOLO);
+      expect(second.session.getApprovalMode()).not.toBe(
+        first.session.getApprovalMode(),
+      );
+      await first.disposeConfig();
+      second.session.setMode(ApprovalMode.AUTO_EDIT);
+      expect(second.session.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
+    } finally {
+      await first.disposeConfig();
+      await second.disposeConfig();
+    }
   });
 
   it('releases Config subscriptions when the owned manager throws synchronously during disposal', async () => {
@@ -94,7 +112,6 @@ describe('ACP session infrastructure cleanup', () => {
     await built.settingsOwner.updateTelemetrySettings({ enabled: true });
     expect(notifications).toBeGreaterThan(0);
 
-    await built.agent.dispose();
     const failure = new Error('owned manager disposal failed');
     vi.spyOn(ProviderManager.prototype, 'dispose').mockImplementation(() => {
       throw failure;

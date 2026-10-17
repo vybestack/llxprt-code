@@ -87,14 +87,6 @@ describe('Zed session host declarations', () => {
         sessionUpdate: vi.fn(async () => undefined),
       } as never,
       unusedProfileApplication,
-      new ProviderManager(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        hostSettings,
-        host,
-      ),
       () => {
         const session = new SettingsService({ sessionSource: hostSettings });
         session.restoreFromStateSnapshot(hostSettings.exportForStateSnapshot());

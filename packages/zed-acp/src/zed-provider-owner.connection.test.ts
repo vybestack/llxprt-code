@@ -97,7 +97,6 @@ describe('isolated ACP session fixtures', () => {
         providerInputs: { credentialAuthority: credentials().authority },
         trustPort: built.mcpRuntime.trust,
         createSessionSettings: () => built.settingsOwner.createChildStore(),
-        providerManager: manager,
         profileApplication: application,
         profileDefinitions: built.mcpRuntime.profileDefinitions,
       },
