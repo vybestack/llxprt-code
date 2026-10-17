@@ -7,6 +7,8 @@ import type {
   HistoryJournalOp,
   HistoryMutationMark,
   HistoryStorePort,
+  ProfileCandidateRows,
+  StagedProfileAdoption,
 } from './historyStorePort.js';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -18,7 +20,7 @@ import { journalPublicationOwners } from './historyPublicationOwners.js';
  * What the live journal needs so that its rows equal the candidate's rows.
  * The cheapest shape that is exact wins, as in DetachedHistoryPublication.
  */
-type ReplacementPlan =
+export type ReplacementPlan =
   | { readonly kind: 'unchanged' }
   | {
       readonly kind: 'rewind';
@@ -36,9 +38,9 @@ async function nextOf<T>(iterator: AsyncIterator<T>): Promise<T | undefined> {
  * Compare the live rows with the candidate rows without materializing either:
  * unchanged, a pure tail truncation (one rewind), or anything else.
  */
-async function planReplacement(
-  live: HistoryStorePort,
-  candidate: HistoryStorePort,
+export async function planReplacement(
+  live: ProfileCandidateRows,
+  candidate: ProfileCandidateRows,
 ): Promise<Exclude<ReplacementPlan, { kind: 'replace' }> | undefined> {
   const liveLength = live.getLength();
   const candidateLength = candidate.getLength();
@@ -82,7 +84,7 @@ async function planReplacement(
  * commit abandons the transaction, so a concurrent mutation is detected by the
  * journal mark and aborts the adoption instead of being merged.
  */
-export class StagedProfileReplacement {
+export class StagedProfileReplacement implements StagedProfileAdoption {
   private settled = false;
 
   private constructor(
@@ -95,7 +97,7 @@ export class StagedProfileReplacement {
 
   static async stage(
     journal: HistoryStorePort,
-    candidate: HistoryStorePort,
+    candidate: ProfileCandidateRows,
     ownership: RowOwnership | undefined,
     origin: string | undefined,
   ): Promise<StagedProfileReplacement> {
@@ -122,7 +124,7 @@ export class StagedProfileReplacement {
 
   private async writeTransaction(
     open: { txId: string; rows: number },
-    candidate: HistoryStorePort,
+    candidate: ProfileCandidateRows,
   ): Promise<void> {
     try {
       // An unmaterialized recorder buffers a non-content record until the

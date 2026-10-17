@@ -164,6 +164,29 @@ export interface HistoryRemoveTailRequest {
   readonly recalculate?: () => Promise<void>;
 }
 
+/** The rows a profile replacement takes over; any store can be the candidate. */
+export type ProfileCandidateRows = Pick<
+  HistoryStorePort,
+  'getLength' | 'streamRows'
+>;
+
+export interface HistoryProfileReplacementRequest {
+  /** Retains the rows in flight while they are written. */
+  readonly ownership?: RowOwnership;
+  /** Persisted id every adopted row is written under; absent means unowned. */
+  readonly origin?: string;
+}
+
+/**
+ * A candidate staged against the live rows. `commit` is synchronous: it
+ * throws, with nothing changed by it, when the live history was written after
+ * staging. `rollback` takes the staging back.
+ */
+export interface StagedProfileAdoption {
+  commit(): void;
+  rollback(): Promise<void>;
+}
+
 /** Opaque proof that a store captured what its own compensation needs; see {@link HistoryStorePort.captureCompensation}. */
 export interface HistoryCompensationMark {
   readonly store: HistoryStorePort;
@@ -249,6 +272,16 @@ export interface HistoryStorePort {
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined>;
   /** Makes what `owner` holds equal to the media the current rows reference. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void>;
+  /**
+   * Stages `candidate` as the live rows (decision G3). The old store stages
+   * invisibly and `commit` flips the rows; a journal group is atomic and
+   * visible at its ack, so that store writes the group while staging and its
+   * `rollback` puts the previous version back.
+   */
+  stageProfileReplacement(
+    candidate: ProfileCandidateRows,
+    request: HistoryProfileReplacementRequest,
+  ): Promise<StagedProfileAdoption>;
   /**
    * Called before a publication admits anything: captures what
    * {@link compensate} needs to put the previous rows back.

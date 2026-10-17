@@ -22,11 +22,15 @@ import type {
   HistoryClearRequest,
   HistoryJournalOp,
   HistoryMutationMark,
+  HistoryProfileReplacementRequest,
   HistoryPublicationScope,
   HistoryRemoveTailRequest,
   HistoryRepairRequest,
   HistoryResumeRequest,
+  ProfileCandidateRows,
+  StagedProfileAdoption,
 } from './historyStorePort.js';
+import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 import type { HistoryRowView } from './historyRowView.js';
@@ -713,6 +717,14 @@ export class JournalHistoryStore {
   /** Makes the owner hold the media of the current rows, one streamed pass. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
     return reconcileMediaOnJournal(this, owner);
+  }
+
+  /** Writes `candidate` as the live rows at once; `rollback` restores the saved version (decision G3). */
+  stageProfileReplacement(
+    candidate: ProfileCandidateRows,
+    request: HistoryProfileReplacementRequest,
+  ): Promise<StagedProfileAdoption> {
+    return stageProfileReplacementOnJournal(this, candidate, request);
   }
 
   /**

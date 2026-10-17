@@ -15,8 +15,10 @@
  */
 
 import { rewriteToolResponse } from './historyToolRewrite.js';
-import { StagedProfileReplacement } from './historyProfileReplacement.js';
-import type { HistoryRepair } from './historyStorePort.js';
+import type {
+  HistoryRepair,
+  StagedProfileAdoption,
+} from './historyStorePort.js';
 import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
 import { withFallbackRestoreRows } from './historyFallbackRows.js';
 import {
@@ -251,13 +253,14 @@ export class HistoryService extends HistoryServiceReads {
     if (this.isCompressing || candidate.isCompressing) {
       throw new Error('Profile history adoption requires idle histories');
     }
-    const holder: { staged?: StagedProfileReplacement } = {};
+    const holder: { staged?: StagedProfileAdoption } = {};
     await this.enqueueAsynchronousHistoryMutation(async () => {
-      holder.staged = await StagedProfileReplacement.stage(
-        this.journal,
+      holder.staged = await this.journal.stageProfileReplacement(
         candidate.journal,
-        this.mutationOwnership,
-        this.journal.primaryOriginId(),
+        {
+          ownership: this.mutationOwnership,
+          origin: this.journal.primaryOriginId(),
+        },
       );
     });
     const replacement = holder.staged;

@@ -91,13 +91,17 @@ import type {
   HistoryCompensationMark,
   HistoryJournalOp,
   HistoryMutationMark,
+  HistoryProfileReplacementRequest,
   HistoryPublicationScope,
   HistoryRemoveTailRequest,
   HistoryRepair,
   HistoryRepairRequest,
   HistoryResumeRequest,
   HistoryStorePort,
+  ProfileCandidateRows,
+  StagedProfileAdoption,
 } from './historyStorePort.js';
+import { StagedProfileReplacement } from './historyProfileReplacement.js';
 import { clearHistoryRows } from './historyClearRows.js';
 import {
   adoptResumeOnJsonl,
@@ -429,6 +433,18 @@ export class HistoryJournalStore implements HistoryStorePort {
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
     return this.withMutationSnapshot((previous) =>
       owner.reconcile(previous, () => previous),
+    );
+  }
+
+  stageProfileReplacement(
+    candidate: ProfileCandidateRows,
+    request: HistoryProfileReplacementRequest,
+  ): Promise<StagedProfileAdoption> {
+    return StagedProfileReplacement.stage(
+      this,
+      candidate,
+      request.ownership,
+      request.origin,
     );
   }
 
