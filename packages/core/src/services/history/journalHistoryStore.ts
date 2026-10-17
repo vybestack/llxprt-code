@@ -52,6 +52,14 @@ import type {
 } from './detachedHistoryMutation.js';
 import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalSession } from './journalSession.js';
+import {
+  encodedRows,
+  JournalPublication,
+  originChangeEdits,
+  ownerChangeEdits,
+  type EditBuilder,
+  type JournalCompensationMark,
+} from './journalPublication.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
@@ -59,29 +67,6 @@ export interface JournalRepair {
   readonly inserted: IContent[];
   rollback(): Promise<void>;
   close(): void;
-}
-
-/** Builds the edits of one queued operation against the version the previous operation published. */
-type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
-
-/**
- * The drafts of `rows`, each encoded when the writer asks for it. The stream
- * never checks a signal: a group that stops after its first byte poisons the
- * writer, so a cancellation is acted on before the group and after its ack.
- */
-async function* encodedRows(
-  rows: Iterable<IContent> | AsyncIterable<IContent>,
-  owner: number,
-): AsyncGenerator<RowDraft> {
-  for await (const content of rows) {
-    yield encodeContentRow(content, { owner });
-  }
-}
-
-/** What a compensation puts back: the version the queue had reached when the mark was captured. */
-export interface JournalCompensationMark {
-  readonly store: JournalHistoryStore;
-  readonly saved: Promise<VersionSnapshot>;
 }
 
 /**
@@ -102,9 +87,7 @@ export class JournalHistoryStore {
   private failure: { readonly error: unknown } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
-  /** Groups accepted so far, acked or not; the mutation mark names this position. */
-  private admitted = 0;
-  private publicationDepth = 0;
+  private readonly publication = new JournalPublication();
   private readonly owners: JournalOwners;
   private readonly mirrors: JournalMirrors;
 
@@ -195,47 +178,16 @@ export class JournalHistoryStore {
   changeOwners(changes: readonly PositionedOwner[]): void {
     this.assertUsable();
     const sorted = checkedPositions(changes, this.tentativeRows);
-    if (sorted.length === 0) return;
-    this.enqueue(this.tentativeRows, async (snapshot) => {
-      const labels = await labelsAt(
-        snapshot,
-        sorted.map(({ position }) => position),
-      );
-      return [
-        {
-          kind: 'owner',
-          changes: labels.map((label, at) => ({
-            label,
-            owner: sorted[at].owner,
-          })),
-        },
-      ];
-    });
+    if (sorted.length > 0)
+      this.enqueue(this.tentativeRows, ownerChangeEdits(sorted));
   }
 
-  /**
-   * Like {@link changeOwners}, naming origins: the store maps each to its
-   * owner id (an unknown origin gets the next id, recorded in the same group)
-   * and `undefined` makes the row unowned.
-   */
+  /** Like {@link changeOwners}, naming origins; `undefined` makes the row unowned. */
   changeOwnersOf(changes: readonly PositionedOrigin[]): void {
     this.assertUsable();
     const sorted = checkedPositions(changes, this.tentativeRows);
-    if (sorted.length === 0) return;
-    this.enqueue(this.tentativeRows, async (snapshot) => {
-      const labels = await labelsAt(
-        snapshot,
-        sorted.map(({ position }) => position),
-      );
-      const edits: VersionEdit[] = [];
-      const owned: Array<{ label: bigint; owner: number }> = [];
-      for (const [at, label] of labels.entries()) {
-        const resolved = await this.owners.resolve(sorted[at].origin);
-        edits.push(...resolved.edits);
-        owned.push({ label, owner: resolved.id });
-      }
-      return [...edits, { kind: 'owner', changes: owned }];
-    });
+    if (sorted.length > 0)
+      this.enqueue(this.tentativeRows, originChangeEdits(sorted, this.owners));
   }
 
   /** Sets entry fields of rows (design 8.2); the rows and their order do not change. */
@@ -335,21 +287,9 @@ export class JournalHistoryStore {
     return snapshot;
   }
 
-  /**
-   * Brackets one logical publication. Mirrors follow every acked group, and a
-   * compensation is a `restore` group they follow like any other (design 5.2),
-   * so nothing is held back from them; the scope only counts.
-   */
+  /** Brackets one logical publication; the scope only counts (see {@link JournalPublication}). */
   openPublication(): HistoryPublicationScope {
-    this.publicationDepth++;
-    let closed = false;
-    return {
-      close: () => {
-        if (closed) return;
-        closed = true;
-        this.publicationDepth--;
-      },
-    };
+    return this.publication.open();
   }
 
   /** Ordinals ordered rows of one publication for the token tickets, which this store does not have (G3). */
@@ -369,13 +309,12 @@ export class JournalHistoryStore {
   /** A version is the boundary of a mutation; there is no fold to adopt one into. */
   adoptMutationBoundary(): void {}
 
-  /** Names the position after the last group accepted; a later group makes the mark stale. */
   mutationMark(): HistoryMutationMark {
-    return { binding: this, lastSeq: this.admitted };
+    return this.publication.mark(this);
   }
 
   isCurrentMutationMark(mark: HistoryMutationMark): boolean {
-    return mark.binding === this && mark.lastSeq === this.admitted;
+    return this.publication.isCurrent(this, mark);
   }
 
   /** Seeds and binds the mirror file of `origin` behind everything queued (late attach, design 5.3). */
@@ -779,7 +718,7 @@ export class JournalHistoryStore {
     build: EditBuilder,
   ): Promise<CommitAck | undefined> {
     if (rowsAfter !== undefined) this.tentativeRows = rowsAfter;
-    this.admitted++;
+    this.publication.accepted();
     const turn = this.queue.then(() => this.runStep(rowsAfter, build));
     this.queue = turn.then(() => undefined);
     return turn;

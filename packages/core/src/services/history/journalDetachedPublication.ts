@@ -8,10 +8,8 @@ import {
   truncationCut,
   type DetachedRows,
 } from './detachedRowShapes.js';
-import type {
-  JournalCompensationMark,
-  JournalHistoryStore,
-} from './journalHistoryStore.js';
+import type { JournalHistoryStore } from './journalHistoryStore.js';
+import type { JournalCompensationMark } from './journalPublication.js';
 
 /**
  * Publishes a detached candidate on the journal store. A general replacement
