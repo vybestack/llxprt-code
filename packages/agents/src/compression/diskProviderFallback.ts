@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -18,7 +19,7 @@ export async function runDiskProviderFallback(
   return args[2].detachedValues.withCheckpoint(async (snapshot) => {
     const rows = new DetachedHistoryJournal();
     try {
-      for (const row of snapshot) {
+      for await (const row of checkpointRows(snapshot)) {
         if (!isCuratedContent(row)) continue;
         rows.append(row);
       }

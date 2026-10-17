@@ -101,7 +101,8 @@ import type {
 } from './historyStorePort.js';
 import { clearHistoryRows } from './historyClearRows.js';
 import { repairHistoryRows } from './historyValidationRepair.js';
-import { captureDetachedHistory } from './detachedHistoryCapture.js';
+import { withDetachedHistoryCheckpoint } from './detachedHistoryCheckpoint.js';
+import { withDetachedRollbackCheckpoint } from './detachedRollbackCheckpoint.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import {
   withDetachedHistoryMutation,
@@ -434,7 +435,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     modelName: string | undefined,
     options: DetachedHistoryOptions,
   ): Promise<void> {
-    return withDetachedHistoryMutation(task, host, modelName, options);
+    return withDetachedHistoryMutation(this, task, host, modelName, options);
   }
 
   compensate(mark: HistoryCompensationMark, _failure: unknown): Promise<void> {
@@ -448,12 +449,21 @@ export class HistoryJournalStore implements HistoryStorePort {
     );
   }
 
-  captureDetached(
-    previous: DetachedHistoryJournal,
+  withCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (checkpoint: DetachedHistoryJournal) => Promise<T>,
     signal?: AbortSignal,
-    settleTokens?: () => Promise<void>,
-  ): Promise<void> {
-    return captureDetachedHistory(this, previous, signal, settleTokens);
+  ): Promise<T> {
+    return withDetachedHistoryCheckpoint(this, host, enqueue, execute, signal);
+  }
+
+  withRollbackCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (restore: () => Promise<void>) => Promise<T>,
+  ): Promise<T> {
+    return withDetachedRollbackCheckpoint(this, host, enqueue, execute);
   }
 
   /** Internal only. Capture binding, watermark, and pending membership in one turn. */

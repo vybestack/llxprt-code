@@ -21,7 +21,7 @@ import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { HistoryRowSummary } from './historySummaryTracker.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
-import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -239,12 +239,26 @@ export interface HistoryStorePort {
     modelName: string | undefined,
     options: DetachedHistoryOptions,
   ): Promise<void>;
-  /** Copies the current rows and their origins into `previous` once they are durable. */
-  captureDetached(
-    previous: DetachedHistoryJournal,
+  /**
+   * Runs `execute` over a checkpoint of the rows durable now. The capture
+   * happens inside the service queue (`enqueue`); `execute` runs outside it so
+   * it can publish. Tokens still owed are settled through `host`.
+   */
+  withCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
     signal?: AbortSignal,
-    settleTokens?: () => Promise<void>,
-  ): Promise<void>;
+  ): Promise<T>;
+  /**
+   * Runs `execute` with a `restore` that puts the history, its token total,
+   * spans and chronology back as they were when the checkpoint was taken.
+   */
+  withRollbackCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (restore: () => Promise<void>) => Promise<T>,
+  ): Promise<T>;
 
   dispose(): Promise<void>;
 }

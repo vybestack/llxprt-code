@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { indexedCheckpoint } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -31,7 +32,8 @@ class RetainingHistory extends TruncationStreamHistory {
           signal?: AbortSignal,
         ) =>
           withCheckpoint(
-            (checkpoint) => execute(this.retainingRows(checkpoint)),
+            (checkpoint) =>
+              execute(this.retainingRows(indexedCheckpoint(checkpoint))),
             signal,
           ),
       },

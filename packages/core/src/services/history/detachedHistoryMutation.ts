@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryStorePort } from './historyStorePort.js';
+import { captureDetachedHistory } from './detachedHistoryCapture.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { IContent } from './IContent.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
 import type {
@@ -202,6 +204,7 @@ async function transformCandidate(
 }
 
 export async function withDetachedHistoryMutation(
+  store: HistoryJournalStore,
   task: DetachedHistoryTask,
   host: DetachedHistoryHost,
   modelName: string | undefined,
@@ -215,7 +218,7 @@ export async function withDetachedHistoryMutation(
     previous = new DetachedHistoryJournal(host.ownership);
     next = new DetachedHistoryJournal(host.ownership);
     densitySpans = new DensitySpanRows();
-    await host.journal.captureDetached(previous, options.signal, () =>
+    await captureDetachedHistory(store, previous, options.signal, () =>
       host.waitForTokenUpdates(),
     );
     await transformCandidate(
@@ -259,6 +262,7 @@ export async function withDetachedHistoryMutation(
 }
 
 export async function restoreDetachedHistory(
+  store: HistoryJournalStore,
   checkpoint: DetachedHistoryJournal,
   state: DetachedState,
   host: DetachedHistoryHost,
@@ -266,7 +270,7 @@ export async function restoreDetachedHistory(
   const previous = new DetachedHistoryJournal(host.ownership);
   const spans = new DensitySpanRows();
   try {
-    await host.journal.captureDetached(previous, undefined, () =>
+    await captureDetachedHistory(store, previous, undefined, () =>
       host.waitForTokenUpdates(),
     );
     await commitDetachedHistory(

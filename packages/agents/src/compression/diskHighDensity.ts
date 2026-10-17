@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { isCuratedContent } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -88,7 +89,7 @@ export async function runDiskHighDensity(
   return history.detachedValues.withCheckpoint(async (checkpoint) => {
     const previous: HistoryDumpSource = {
       async *rows() {
-        yield* checkpoint;
+        yield* checkpointRows(checkpoint);
       },
     };
     const curated = new HistoryDensityRows();

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { indexedCheckpoint } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -30,7 +31,8 @@ class RetainingHistory extends HighdensityDiskHistory {
           execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
           signal?: AbortSignal,
         ): Promise<T> =>
-          real.withCheckpoint((checkpoint) => {
+          real.withCheckpoint((source) => {
+            const checkpoint = indexedCheckpoint(source);
             let retain = first;
             first = false;
             return execute({

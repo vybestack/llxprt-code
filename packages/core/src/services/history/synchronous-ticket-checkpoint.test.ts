@@ -12,6 +12,7 @@ import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix
 import {
   detachedDigest,
   detachedDurableDigest,
+  indexedCheckpoint,
 } from './detached-rollback-test-helpers.js';
 import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
@@ -54,7 +55,8 @@ async function pendingCheckpoint(size: number): Promise<void> {
     let reached = false;
     let escaped: HistoryIndexedRows | undefined;
     const operation = rejectedValue(
-      history.detachedValues.withCheckpoint(async (snapshot) => {
+      history.detachedValues.withCheckpoint(async (checkpoint) => {
+        const snapshot = indexedCheckpoint(checkpoint);
         reached = true;
         escaped = snapshot;
         ready.resolve();

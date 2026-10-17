@@ -13,6 +13,7 @@ import { probedTransformInput } from '@vybestack/llxprt-code-core/services/histo
 import {
   detachedDigest,
   detachedDurableDigest,
+  indexedCheckpoint,
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import { publishCandidate } from '../diskTruncation.js';
@@ -26,7 +27,8 @@ function publish(
   history: HistoryService,
   options: DetachedHistoryOptions,
 ): Promise<IContent | undefined> {
-  return history.detachedValues.withCheckpoint(async (previous) => {
+  return history.detachedValues.withCheckpoint(async (checkpoint) => {
+    const previous = indexedCheckpoint(checkpoint);
     const candidate = new DetachedHistoryJournal();
     try {
       for (let index = 11; index < previous.length; index++)
@@ -121,7 +123,8 @@ async function rejectPublication(
 async function summaryPublication(): Promise<IContent | undefined> {
   return withValueTransformFixture(async ({ history }) => {
     await history.detachedValues.replace(truncationValues(32));
-    return history.detachedValues.withCheckpoint(async (previous) => {
+    return history.detachedValues.withCheckpoint(async (checkpoint) => {
+      const previous = indexedCheckpoint(checkpoint);
       const candidate = new DetachedHistoryJournal();
       try {
         for (let index = 11; index < 32; index++) {

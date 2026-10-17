@@ -13,6 +13,8 @@ import {
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
+import type { HistoryCheckpoint } from './historyCheckpointRows.js';
+import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 
 export function detachedRow(index: number, bytes = 2048): IContent {
   return {
@@ -112,4 +114,13 @@ export async function detachedDurableDigest(
   } finally {
     await resolver.close();
   }
+}
+
+/** The synchronous checkpoint the file-backed store hands out; the journal store hands an async source. */
+export function indexedCheckpoint(
+  checkpoint: HistoryCheckpoint,
+): HistoryIndexedRows {
+  if (Symbol.asyncIterator in checkpoint)
+    throw new Error('Expected the indexed checkpoint of the file-backed store');
+  return checkpoint;
 }

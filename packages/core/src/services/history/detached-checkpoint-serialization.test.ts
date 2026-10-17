@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { indexedCheckpoint } from './detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import {
   withRollbackFixture,
@@ -19,7 +20,8 @@ describe('fallback value serialization and media', () => {
       };
       history.add(row);
       const operation = history.detachedValues.withCheckpoint(
-        async (snapshot) => {
+        async (checkpoint) => {
+          const snapshot = indexedCheckpoint(checkpoint);
           const expected: IContent['blocks'] = [
             {
               type: 'tool_call',

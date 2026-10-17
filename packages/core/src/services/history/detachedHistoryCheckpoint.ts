@@ -1,22 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryStorePort } from './historyStorePort.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { captureDetachedHistory } from './detachedHistoryCapture.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
+import type { DetachedHistoryHost } from './detachedHistoryMutation.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 
 export async function withDetachedHistoryCheckpoint<T>(
-  journal: HistoryStorePort,
-  ownership: RowOwnership | undefined,
+  journal: HistoryJournalStore,
+  host: DetachedHistoryHost,
   enqueue: (execute: () => Promise<void>) => Promise<void>,
-  settleTokens: () => Promise<void>,
   execute: (checkpoint: DetachedHistoryJournal) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const checkpoint = new DetachedHistoryJournal(ownership);
+  const checkpoint = new DetachedHistoryJournal(host.ownership);
   let outcome: { value: T } | { error: unknown };
   try {
     await enqueue(() =>
-      journal.captureDetached(checkpoint, signal, settleTokens),
+      captureDetachedHistory(journal, checkpoint, signal, () =>
+        host.waitForTokenUpdates(),
+      ),
     );
     signal?.throwIfAborted();
     outcome = { value: await execute(checkpoint) };

@@ -35,7 +35,10 @@ import {
   UNOWNED_ROW,
 } from './journalRowCodec.js';
 import { committedBatchSource } from './journalBatchSource.js';
-import { captureDetachedRows } from './journalDetachedCapture.js';
+import {
+  withCheckpointOnJournal,
+  withRollbackCheckpointOnJournal,
+} from './journalCheckpoints.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
 import type {
@@ -43,7 +46,7 @@ import type {
   DetachedHistoryOptions,
   DetachedHistoryTask,
 } from './detachedHistoryMutation.js';
-import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalSession } from './journalSession.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
@@ -548,19 +551,23 @@ export class JournalHistoryStore {
     return publishDetachedOnJournal(this, task, host, modelName, options);
   }
 
-  /** Copies the durable rows into `previous`, the candidate-side journal the detached API still reads. */
-  async captureDetached(
-    previous: DetachedHistoryJournal,
+  /** A checkpoint over the rows durable now (design 4.5): the callback reads them from the saved version. */
+  withCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (checkpoint: HistoryCheckpointRows) => Promise<T>,
     signal?: AbortSignal,
-    settleTokens?: () => Promise<void>,
-  ): Promise<void> {
-    await this.waitForDurable();
-    const snapshot = this.session.store.snapshot();
-    await captureDetachedRows(snapshot, previous, signal);
-    await settleTokens?.();
-    await this.waitForDurable();
-    this.assertSettled(snapshot, 'captured');
-    signal?.throwIfAborted();
+  ): Promise<T> {
+    return withCheckpointOnJournal(this, host, enqueue, execute, signal);
+  }
+
+  /** A checkpoint whose `restore` is `restore(version)` of the version saved now. */
+  withRollbackCheckpoint<T>(
+    host: DetachedHistoryHost,
+    enqueue: (execute: () => Promise<void>) => Promise<void>,
+    execute: (restore: () => Promise<void>) => Promise<T>,
+  ): Promise<T> {
+    return withRollbackCheckpointOnJournal(this, host, enqueue, execute);
   }
 
   /** Settles the queue, then closes the journal. */

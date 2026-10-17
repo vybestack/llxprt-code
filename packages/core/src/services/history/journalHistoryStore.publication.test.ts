@@ -9,7 +9,6 @@ import {
   type Failures,
 } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import type { IContent } from './IContent.js';
 import { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -347,37 +346,6 @@ describe('journal history store publication and compensation', () => {
         'old one',
         'old two',
       ]);
-    });
-  });
-
-  describe('detached capture', () => {
-    it('copies the durable rows into the candidate journal', async () => {
-      const { store } = await withOld('capture.llxj');
-      const previous = new DetachedHistoryJournal();
-      try {
-        await store.captureDetached(previous);
-
-        expect(previous.length).toBe(2);
-        expect(texts([previous.readRow(0), previous.readRow(1)])).toStrictEqual(
-          ['old one', 'old two'],
-        );
-        expect(previous.origins.length).toBe(2);
-      } finally {
-        previous.close();
-      }
-    });
-
-    it('refuses rows that have an owner until owners are mapped', async () => {
-      const { store } = await withOld('owned.llxj');
-      store.changeOwners([{ position: 1, owner: 2 }]);
-      const previous = new DetachedHistoryJournal();
-      try {
-        await expect(store.captureDetached(previous)).rejects.toThrow(
-          'not implemented: S06',
-        );
-      } finally {
-        previous.close();
-      }
     });
   });
 });

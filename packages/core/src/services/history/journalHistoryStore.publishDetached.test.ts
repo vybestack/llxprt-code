@@ -513,4 +513,125 @@ describe('JournalHistoryStore.publishDetached', () => {
       }
     });
   });
+
+  describe('checkpoints', () => {
+    const now = <T>(execute: () => Promise<T>): Promise<void> =>
+      execute().then(() => undefined);
+
+    async function readAll(source: AsyncIterable<IContent>) {
+      const rows: IContent[] = [];
+      for await (const row of source) rows.push(row);
+      return rows;
+    }
+
+    it('hands out the committed rows as an async source that later publications do not change', async () => {
+      const { store, host, dispose } = await openJournal(
+        path.join(directory(), 'checkpoint.llxj'),
+      );
+      try {
+        await store.withCheckpoint(host, now, async (checkpoint) => {
+          expect(checkpoint.length).toBe(SEED);
+          await store.publishDetached(
+            { transform: keepFirstThree },
+            host,
+            undefined,
+            {},
+          );
+          expect(store.getLength()).toBe(3);
+          const seen = shape(await readAll(checkpoint));
+          expect(seen).toStrictEqual(shape(seedRows(SEED_BYTES)));
+          expect(shape(await readAll(checkpoint))).toStrictEqual(seen);
+        });
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('does not run the callback when the signal is already aborted', async () => {
+      const { store, host, dispose } = await openJournal(
+        path.join(directory(), 'checkpoint-abort.llxj'),
+      );
+      try {
+        const controller = new AbortController();
+        controller.abort(new Error('aborted before the checkpoint'));
+        let ran = false;
+        await expect(
+          store.withCheckpoint(
+            host,
+            now,
+            async () => {
+              ran = true;
+            },
+            controller.signal,
+          ),
+        ).rejects.toThrow('aborted before the checkpoint');
+        expect(ran).toBe(false);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('restores the rows, tokens, spans and chronology of the checkpoint with one restore', async () => {
+      const file = path.join(directory(), 'rollback.llxj');
+      const { store, host, stamper, observed, startTokens, dispose } =
+        await openJournal(file);
+      try {
+        const chronologyBefore = stamper.snapshot();
+        await store.withRollbackCheckpoint(host, now, async (restore) => {
+          await store.publishDetached(
+            { transform: compressKeepingTail },
+            host,
+            undefined,
+            {},
+          );
+          expect(store.getLength()).toBe(4);
+          const commitAfterCompression = await commitSeqOf(file);
+
+          await restore();
+
+          expect(shape(await store.materialize())).toStrictEqual(
+            shape(seedRows(SEED_BYTES)),
+          );
+          expect(last(observed.applied)?.tokens).toBe(startTokens);
+          expect(last(observed.applied)?.spans).toStrictEqual([]);
+          expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
+          expect(last(observed.ranges)).toStrictEqual(
+            (await viaOldStore(keepAll)).range,
+          );
+          expect(await commitSeqOf(file)).toBe(
+            (commitAfterCompression ?? 0) + 1,
+          );
+        });
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('writes nothing when restoring a checkpoint nothing was published after', async () => {
+      const file = path.join(directory(), 'rollback-idle.llxj');
+      const { store, host, dispose } = await openJournal(file);
+      try {
+        const before = await commitSeqOf(file);
+        await store.withRollbackCheckpoint(host, now, (restore) => restore());
+        expect(await commitSeqOf(file)).toBe(before);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('refuses to restore once the checkpoint scope has closed', async () => {
+      const { store, host, dispose } = await openJournal(
+        path.join(directory(), 'rollback-closed.llxj'),
+      );
+      try {
+        let escaped: (() => Promise<void>) | undefined;
+        await store.withRollbackCheckpoint(host, now, async (restore) => {
+          escaped = restore;
+        });
+        await expect(escaped?.()).rejects.toThrow('closed');
+      } finally {
+        await dispose();
+      }
+    });
+  });
 });

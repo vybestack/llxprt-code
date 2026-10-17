@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
@@ -150,7 +151,7 @@ export async function runDiskTruncation(
   return history.detachedValues.withCheckpoint(async (previous) => {
     const curated = new DetachedHistoryJournal();
     try {
-      for (const row of previous)
+      for await (const row of checkpointRows(previous))
         if (isCuratedContent(row)) curated.append(row);
       const strategy = new TopDownTruncationStrategy();
       const result = await retryWithBackoff(
@@ -167,7 +168,7 @@ export async function runDiskTruncation(
         history,
         {
           async *rows() {
-            yield* previous;
+            yield* checkpointRows(previous);
           },
         },
         curated,
