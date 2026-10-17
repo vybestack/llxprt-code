@@ -7,7 +7,7 @@ import {
   type CheckpointDescriptor,
   checkpointKey,
   encodeCheckpointDescriptor,
-  parseCheckpointDescriptor,
+  parseCheckpointEntry,
 } from '../journal/checkpointDescriptor.js';
 import {
   JournalSession,
@@ -352,17 +352,15 @@ export class JournalRecordingService implements SessionRecordingPort {
     return { checkpointId, name: trimmed, sequence: descriptor.commitSeq };
   }
 
-  /**
-   * The library has no edit that removes a state entry or releases the
-   * version a checkpoint retains, so a deletion cannot be recorded honestly.
-   * CheckpointService (S10) and compaction (S11) add it together.
-   */
-  deleteCheckpoint(checkpointId: string): Promise<void> {
-    return Promise.reject(
-      new Error(
-        `not implemented: S10 (delete checkpoint ${checkpointId} needs a state-entry removal edit)`,
-      ),
-    );
+  async deleteCheckpoint(checkpointId: string): Promise<void> {
+    this.requireActive('delete checkpoint');
+    const deleted = await this.enqueue(async () => {
+      if ((await this.findCheckpoint(checkpointId)) === undefined) return false;
+      await this.commitFacts([{ kind: 'deleteCheckpoint', id: checkpointId }]);
+      return true;
+    });
+    await this.flushAndRequireActive('delete checkpoint');
+    if (!deleted) throw new Error(`Checkpoint ${checkpointId} does not exist`);
   }
 
   async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
@@ -392,7 +390,7 @@ export class JournalRecordingService implements SessionRecordingPort {
     const bytes = await this.journalSession?.store.getState(
       checkpointKey(checkpointId),
     );
-    return bytes === undefined ? undefined : parseCheckpointDescriptor(bytes);
+    return bytes === undefined ? undefined : parseCheckpointEntry(bytes);
   }
 
   private requireActive(operation: string): void {

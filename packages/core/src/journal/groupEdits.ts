@@ -144,7 +144,13 @@ export type VersionEdit =
       readonly id: string;
       readonly name: string;
       readonly createdAtMs: number;
-    };
+    }
+  /**
+   * Design 4.9: a live checkpoint is deleted. A state-only group: the entry
+   * becomes a tombstone (a compaction drops it) and `ckptBytes` gives the
+   * checkpoint's `liveBytes` back, so the version it retained is garbage.
+   */
+  | { readonly kind: 'deleteCheckpoint'; readonly id: string };
 
 /** A row as the occurrence planner sees it: its place, its speaker and its ids with their raw strings. */
 export interface PlannedRow {

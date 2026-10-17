@@ -3,6 +3,7 @@ import type { IdKeyHasher } from './idKeys.js';
 import type { JournalReader } from './journalReader.js';
 import { BoundedIdNodeCache } from './idTrieCache.js';
 import { KeyedMapReader } from './keyedMap.js';
+import { listCheckpoints, type ListedCheckpoint } from './checkpointList.js';
 
 /** Reads one entry of the state map of the version a reader was opened on. */
 export type StateReader = (key: string) => Promise<Uint8Array | undefined>;
@@ -25,4 +26,16 @@ export function stateReaderOf(
     hasher,
   );
   return (key) => map.get(trailer.stateRoot, key);
+}
+
+/** The live checkpoints of the committed version of a read-only journal view. */
+export function checkpointsOf(
+  reader: JournalReader,
+): AsyncGenerator<ListedCheckpoint> {
+  const { trailer } = reader;
+  return listCheckpoints(
+    reader,
+    new BoundedIdNodeCache(),
+    trailer?.stateRoot ?? 0,
+  );
 }

@@ -4,7 +4,7 @@ import {
   MIRROR_KEY_PREFIX,
   RELEASE_KEY_PREFIX,
   encodeCheckpointDescriptor,
-  parseCheckpointDescriptor,
+  parseCheckpointEntry,
 } from './checkpointDescriptor.js';
 import type { GroupCopier } from './groupCopier.js';
 import type { IdNodeCache } from './idTrieCache.js';
@@ -54,16 +54,18 @@ function treatmentOf(key: string, policy: StatePolicy): Treatment {
 
 /**
  * The checkpoint's descriptor with its trailer offset taken from the copy of
- * the version it names, written as a new `VALUE` under the same key.
+ * the version it names, written as a new `VALUE` under the same key. A
+ * deleted checkpoint's entry is dropped (design 4.11 step 4): undefined.
  */
 async function rewriteCheckpoint(
   copier: GroupCopier,
   entry: MapEntry,
   liveBytes: { total: number },
-): Promise<number> {
-  const descriptor = parseCheckpointDescriptor(
+): Promise<number | undefined> {
+  const descriptor = parseCheckpointEntry(
     await readValueBody(copier.source, entry.head),
   );
+  if (descriptor === undefined) return undefined;
   const trailerOffset = await remapOffset(
     OFFSET.checkpointTrailer,
     descriptor.trailerOffset,
@@ -156,19 +158,34 @@ class StateMapWalk {
     };
   }
 
+  /** The new `VALUE` of an entry, or undefined when the copy leaves the entry out. */
+  private copiedValue(
+    entry: MapEntry,
+    treatment: Treatment,
+  ): Promise<number | undefined> {
+    if (treatment === 'drop') return Promise.resolve(undefined);
+    if (treatment === 'checkpoint') {
+      return rewriteCheckpoint(this.copier, entry, this.liveBytes);
+    }
+    return remapOffset(OFFSET.stateValue, entry.valueOffset, (old) =>
+      this.copier.copyRecord(old, OFFSET.stateValue.points, entry.head),
+    );
+  }
+
   private async copyLeaf(entries: readonly IdEntry[]): Promise<Piece> {
     const kept: IdEntry[] = [];
     for (const fact of entries) {
       const entry = await readMapEntry(this.copier.source, fact);
-      const treatment = treatmentOf(entry.key, this.policy);
-      if (treatment === 'drop') continue;
-      const valueOffset =
-        treatment === 'checkpoint'
-          ? await rewriteCheckpoint(this.copier, entry, this.liveBytes)
-          : await remapOffset(OFFSET.stateValue, entry.valueOffset, (old) =>
-              this.copier.copyRecord(old, OFFSET.stateValue.points, entry.head),
-            );
-      kept.push({ hash: entry.hash.slice(), value: encodeMapRef(valueOffset) });
+      const valueOffset = await this.copiedValue(
+        entry,
+        treatmentOf(entry.key, this.policy),
+      );
+      if (valueOffset !== undefined) {
+        kept.push({
+          hash: entry.hash.slice(),
+          value: encodeMapRef(valueOffset),
+        });
+      }
     }
     return kept.length === 0 ? EMPTY : { kind: 'few', entries: kept };
   }

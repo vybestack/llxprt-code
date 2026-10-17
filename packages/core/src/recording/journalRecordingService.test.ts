@@ -224,11 +224,35 @@ describe('journal recording service', () => {
     ).rejects.toThrow('empty');
   });
 
-  it('refuses to delete a checkpoint until the library can record it', async () => {
+  it('deletes a checkpoint: the entry is gone, the version it kept is released, a second delete refuses', async () => {
     const recording = created();
-    await expect(recording.deleteCheckpoint('x')).rejects.toThrow(
-      'not implemented: S10',
+    const session = await recording.session();
+    await session.append([USER]);
+    const kept = await recording.createCheckpoint('kept');
+    const dropped = await recording.createCheckpoint('dropped');
+    const before = session.store.published!;
+    const droppedBytes = parseCheckpointDescriptor(
+      (await session.store.getState(`ckpt:${dropped.checkpointId}`))!,
+    ).liveBytes;
+
+    await recording.deleteCheckpoint(dropped.checkpointId);
+
+    expect(
+      await session.store.checkpoint(dropped.checkpointId),
+    ).toBeUndefined();
+    expect((await session.store.checkpoint(kept.checkpointId))?.name).toBe(
+      'kept',
     );
+    expect(session.store.published!.ckptBytes).toBe(
+      before.ckptBytes - droppedBytes,
+    );
+    await expect(
+      recording.deleteCheckpoint(dropped.checkpointId),
+    ).rejects.toThrow('does not exist');
+    await expect(
+      recording.renameCheckpoint(dropped.checkpointId, 'again'),
+    ).rejects.toThrow('does not exist');
+    expect(recording.isActive()).toBe(true);
   });
 
   it('reopens a file with its facts, and refuses another session', async () => {

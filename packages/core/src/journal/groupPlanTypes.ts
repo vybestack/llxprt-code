@@ -124,4 +124,6 @@ export interface PlanContext {
   readonly readVersion: VersionReader;
   /** The `nextLabel` of a journal with no group. */
   readonly firstNextLabel: bigint;
+  /** An entry of the state map of the published version. */
+  readonly readState: (key: string) => Promise<Uint8Array | undefined>;
 }

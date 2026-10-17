@@ -2,7 +2,7 @@
 import {
   checkpointKey,
   isCheckpointKey,
-  parseCheckpointDescriptor,
+  parseCheckpointEntry,
 } from './checkpointDescriptor.js';
 import { JournalFormatError } from './errors.js';
 import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
@@ -262,9 +262,10 @@ async function unrelocatedCheckpoint(
   session: CopySession,
   entry: MapEntry,
 ): Promise<Version | undefined> {
-  const descriptor = parseCheckpointDescriptor(
+  const descriptor = parseCheckpointEntry(
     await readValueBody(source, entry.head),
   );
+  if (descriptor === undefined) return undefined;
   if (
     (await session.relocation.lookup(descriptor.trailerOffset)) !== undefined
   ) {
@@ -345,12 +346,13 @@ export async function cloneCheckpoint(
     deps.hasher,
   );
   const stored = await reader.get(current.roots.stateRoot, checkpointKey(id));
-  if (stored === undefined) {
+  const descriptor =
+    stored === undefined ? undefined : parseCheckpointEntry(stored);
+  if (descriptor === undefined) {
     throw new JournalFormatError(
       `There is no checkpoint ${JSON.stringify(id)}`,
     );
   }
-  const descriptor = parseCheckpointDescriptor(stored);
   const version = await readVersionAt(source, descriptor.trailerOffset);
   if (version.commitSeq !== descriptor.commitSeq) {
     throw new JournalFormatError(

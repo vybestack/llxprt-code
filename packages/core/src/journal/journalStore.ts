@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  checkpointKey,
+  parseCheckpointEntry,
+  type CheckpointDescriptor,
+} from './checkpointDescriptor.js';
+import { listCheckpoints, type ListedCheckpoint } from './checkpointList.js';
 import { JournalFormatError } from './errors.js';
 import { buildGroup, mapReader, type BuildContext } from './groupBuild.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
@@ -171,6 +177,21 @@ export class JournalStore {
     );
   }
 
+  /** The live checkpoints of the published version (design 4.9). */
+  checkpoints(): AsyncGenerator<ListedCheckpoint> {
+    return listCheckpoints(
+      this.requireAccess(),
+      this.stateCache,
+      this.currentVersion?.roots.stateRoot ?? 0,
+    );
+  }
+
+  /** One checkpoint of the published version; undefined when it does not exist or was deleted. */
+  async checkpoint(id: string): Promise<CheckpointDescriptor | undefined> {
+    const bytes = await this.getState(checkpointKey(id));
+    return bytes === undefined ? undefined : parseCheckpointEntry(bytes);
+  }
+
   /** Id facts of the published version. */
   idFacts(): IdFactQueries {
     const root = this.currentVersion?.roots.idRoot ?? 0;
@@ -286,6 +307,7 @@ export class JournalStore {
       published: this.currentVersion,
       readVersion: (offset) => this.readVersion(offset),
       firstNextLabel: FIRST_NEXT_LABEL,
+      readState: (key) => this.getState(key),
     };
   }
 

@@ -58,6 +58,31 @@ function requireNumber(source: Record<string, unknown>, name: string): number {
   return value;
 }
 
+/**
+ * What a deleted checkpoint's entry holds until a compaction drops it (design
+ * 4.9 and 4.11 step 4): the state map has no removal, so a delete overwrites
+ * the descriptor, and every reader treats this value as "no checkpoint".
+ */
+export const CHECKPOINT_TOMBSTONE: Uint8Array = UTF8.encode(
+  JSON.stringify({ deleted: true }),
+);
+
+export function isCheckpointTombstone(bytes: Uint8Array): boolean {
+  return (
+    bytes.length === CHECKPOINT_TOMBSTONE.length &&
+    bytes.every((byte, at) => byte === CHECKPOINT_TOMBSTONE[at])
+  );
+}
+
+/** The descriptor a `ckpt:` entry holds, or undefined for a deleted checkpoint. */
+export function parseCheckpointEntry(
+  bytes: Uint8Array,
+): CheckpointDescriptor | undefined {
+  return isCheckpointTombstone(bytes)
+    ? undefined
+    : parseCheckpointDescriptor(bytes);
+}
+
 export function parseCheckpointDescriptor(
   bytes: Uint8Array,
 ): CheckpointDescriptor {

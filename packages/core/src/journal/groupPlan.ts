@@ -1,7 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  CHECKPOINT_TOMBSTONE,
   checkpointKey,
   encodeCheckpointDescriptor,
+  parseCheckpointEntry,
 } from './checkpointDescriptor.js';
 import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
@@ -194,6 +196,24 @@ function applyCheckpoint(
   plan.ckptDelta += liveBytes;
 }
 
+async function applyDeleteCheckpoint(
+  ctx: PlanContext,
+  plan: GroupPlan,
+  id: string,
+): Promise<void> {
+  const key = checkpointKey(id);
+  const held = plan.stateSets.get(key) ?? (await ctx.readState(key));
+  const descriptor =
+    held === undefined ? undefined : parseCheckpointEntry(held);
+  if (descriptor === undefined) {
+    throw new JournalFormatError(
+      `There is no checkpoint ${JSON.stringify(id)}`,
+    );
+  }
+  plan.stateSets.set(key, CHECKPOINT_TOMBSTONE);
+  plan.ckptDelta -= descriptor.liveBytes;
+}
+
 async function applyEdit(
   ctx: PlanContext,
   plan: GroupPlan,
@@ -227,6 +247,9 @@ async function applyEdit(
       break;
     case 'checkpoint':
       applyCheckpoint(ctx, plan, edit);
+      break;
+    case 'deleteCheckpoint':
+      await applyDeleteCheckpoint(ctx, plan, edit.id);
       break;
     default:
       throw new JournalFormatError(`Unknown edit ${JSON.stringify(edit)}`);
@@ -286,9 +309,15 @@ export function mutationOf(edits: readonly VersionEdit[]): MutationCode {
   if (clears) return MUTATION.clear;
   if (restores) return MUTATION.restore;
   const changesRows = kinds.some(
-    (kind) => kind !== 'setState' && kind !== 'checkpoint',
+    (kind) =>
+      kind !== 'setState' &&
+      kind !== 'checkpoint' &&
+      kind !== 'deleteCheckpoint',
   );
-  if (kinds.includes('checkpoint') && changesRows) {
+  if (
+    (kinds.includes('checkpoint') || kinds.includes('deleteCheckpoint')) &&
+    changesRows
+  ) {
     throw new JournalFormatError(
       'A checkpoint group changes only the state map',
     );

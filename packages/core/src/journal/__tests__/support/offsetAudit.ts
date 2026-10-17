@@ -1,11 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import { parseCheckpointDescriptor } from '../../checkpointDescriptor.js';
+import { listCheckpoints } from '../../checkpointList.js';
 import { decodeIdFact, ID_FACT_MIN_BYTES } from '../../idFactCodec.js';
 import { BoundedIdNodeCache } from '../../idTrieCache.js';
 import { IdTrieReader } from '../../idTrieReader.js';
 import { decodeMapRef } from '../../keyedMap.js';
-import { readMapEntries, readValueBody } from '../../mapEntries.js';
 import {
   OFFSET,
   OFFSET_FIELDS,
@@ -171,15 +170,11 @@ export class OffsetAudit {
 
   /** Every checkpoint the state map names points at a trailer that reads as a version of this file. */
   private async walkCheckpoints(version: Version): Promise<void> {
-    for await (const entry of readMapEntries(
+    for await (const { descriptor } of listCheckpoints(
       this.access,
       new BoundedIdNodeCache(),
       version.roots.stateRoot,
     )) {
-      if (!entry.key.startsWith('ckpt:')) continue;
-      const descriptor = parseCheckpointDescriptor(
-        await readValueBody(this.access, entry.head),
-      );
       await this.check(
         OFFSET.checkpointTrailer,
         descriptor.trailerOffset,
