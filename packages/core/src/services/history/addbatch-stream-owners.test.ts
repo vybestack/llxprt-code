@@ -6,6 +6,7 @@ import {
   withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
+import { batchValues } from './batch-event-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -25,7 +26,7 @@ describe('addBatch actual disk publication owners', () => {
         let observed = 0;
         history.on('contentBatchAdded', (published) => {
           expect(published).toHaveLength(size);
-          published.withRows((cursor) => {
+          batchValues(published).withRows((cursor) => {
             let index = 0;
             for (
               let item = cursor.next();

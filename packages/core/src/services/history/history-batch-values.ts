@@ -11,6 +11,18 @@ export interface HistoryBatchValues {
   readonly length: number;
   withRows(execute: (cursor: HistoryBatchCursor) => undefined): void;
 }
+/**
+ * The rows of a batch the journal store has already committed. They are read
+ * after the event, one row at a time, from the version that was published when
+ * the event fired, so a later mutation does not change what a listener reads
+ * and nothing is held between reads. Each `rows()` call is an independent pass.
+ */
+export interface HistoryBatchRowSource {
+  readonly length: number;
+  rows(): AsyncGenerator<IContent, void, unknown>;
+}
+/** What `contentBatchAdded` carries: the scoped values of the old store, or the committed row source of the journal store. */
+export type HistoryBatchEvent = HistoryBatchValues | HistoryBatchRowSource;
 export interface HistoryBatchRows {
   readonly length: number;
   readRow(ordinal: number): IContent;

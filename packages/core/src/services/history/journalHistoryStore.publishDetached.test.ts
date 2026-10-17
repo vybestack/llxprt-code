@@ -21,6 +21,7 @@ import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
 
 const SEED = 8;
 const SEED_BYTES = 256;
@@ -75,13 +76,15 @@ async function viaOldStore(
 interface Observed {
   applied: Array<{ tokens: number; spans: readonly RemovedInteriorSpan[] }>;
   ranges: ContextRange[];
-  rowsNotified: IContent[];
+  /** Each `contentBatchAdded` the store announced, with the version that was acked when it fired. */
+  batches: Array<{ source: HistoryBatchRowSource; ackedCommitSeq: number }>;
 }
 
 interface JournalFixture {
   readonly store: JournalHistoryStore;
   readonly host: DetachedHistoryHost;
   readonly stamper: ChronologyStamper;
+  readonly session: JournalSession;
   readonly observed: Observed;
   readonly startTokens: number;
   readonly dispose: () => Promise<void>;
@@ -92,7 +95,8 @@ async function openJournal(
   file: string,
   bytes = SEED_BYTES,
 ): Promise<JournalFixture> {
-  const store = new JournalHistoryStore(await JournalSession.create(file));
+  const session = await JournalSession.create(file);
+  const store = new JournalHistoryStore(session);
   const stamper = new ChronologyStamper(() => 0);
   const rows = seedRows(bytes);
   for (const content of rows) {
@@ -103,7 +107,7 @@ async function openJournal(
   const estimator = new HistoryService();
   estimator.setTokenizerFactory(exactTokenizer());
   const startTokens = await estimator.estimateTokensForContents(rows);
-  const observed: Observed = { applied: [], ranges: [], rowsNotified: [] };
+  const observed: Observed = { applied: [], ranges: [], batches: [] };
   const host: DetachedHistoryHost = {
     // The journal path never reads it; the old store's port is a placeholder.
     journal: new HistoryJournalStore(),
@@ -123,8 +127,11 @@ async function openJournal(
       observed.ranges.push(range);
     },
     notifyBatch: () => {},
-    notifyRow: (row) => {
-      observed.rowsNotified.push(row);
+    notifyRows: (source) => {
+      observed.batches.push({
+        source,
+        ackedCommitSeq: session.store.snapshot().version?.commitSeq ?? 0,
+      });
     },
     notifyTokens: () => {},
     notifyRange: (range) => {
@@ -135,6 +142,7 @@ async function openJournal(
     store,
     host,
     stamper,
+    session,
     observed,
     startTokens,
     dispose: async () => {
@@ -376,5 +384,133 @@ describe('JournalHistoryStore.publishDetached', () => {
     } finally {
       await dispose();
     }
+  });
+
+  describe('with publishBatch', () => {
+    async function readAll(source: HistoryBatchRowSource): Promise<IContent[]> {
+      const rows: IContent[] = [];
+      for await (const row of source.rows()) rows.push(row);
+      return rows;
+    }
+
+    it('announces the replacement once, after its trailer is acked, with the committed rows', async () => {
+      const file = path.join(directory(), 'batch-replace.llxj');
+      const { store, host, observed, dispose } = await openJournal(file);
+      try {
+        const before = await commitSeqOf(file);
+        await store.publishDetached(
+          { transform: keepHeadThenReplace },
+          host,
+          undefined,
+          { publishBatch: true },
+        );
+        const after = await commitSeqOf(file);
+        if (after === undefined) throw new Error('Nothing was committed');
+
+        expect(after).toBeGreaterThan(before ?? 0);
+        expect(observed.batches).toHaveLength(1);
+        const [batch] = observed.batches;
+        expect(batch.ackedCommitSeq).toBe(after);
+        expect(batch.source.length).toBe(5);
+        const committed = shape(await store.materialize());
+        expect(shape(await readAll(batch.source))).toStrictEqual(committed);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('reads the rows of the announced version after later groups are published', async () => {
+      const file = path.join(directory(), 'batch-pinned.llxj');
+      const { store, host, observed, dispose } = await openJournal(file);
+      try {
+        await store.publishDetached(
+          { transform: keepHeadThenReplace },
+          host,
+          undefined,
+          { publishBatch: true },
+        );
+        const announced = shape(await store.materialize());
+        store.apply({ kind: 'content', content: detachedRow(90, SEED_BYTES) });
+        await store.waitForDurable();
+
+        const [batch] = observed.batches;
+        expect(shape(await readAll(batch.source))).toStrictEqual(announced);
+        expect(shape(await readAll(batch.source))).toStrictEqual(announced);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('announces only the appended rows in append mode, once, after the last ack', async () => {
+      const file = path.join(directory(), 'batch-append.llxj');
+      const { store, host, observed, dispose } = await openJournal(file);
+      try {
+        const appendTwo: DetachedHistoryTransform = async (_source, sink) => {
+          await sink.appendValue(detachedRow(60, SEED_BYTES));
+          await sink.appendValue(detachedRow(61, SEED_BYTES));
+        };
+        await store.publishDetached(
+          { transform: appendTwo, append: true },
+          host,
+          undefined,
+          { publishBatch: true },
+        );
+        const after = await commitSeqOf(file);
+        if (after === undefined) throw new Error('Nothing was committed');
+
+        expect(observed.batches).toHaveLength(1);
+        const [batch] = observed.batches;
+        expect(batch.ackedCommitSeq).toBe(after);
+        expect(batch.source.length).toBe(2);
+        const all = shape(await store.materialize());
+        expect(shape(await readAll(batch.source))).toStrictEqual(all.slice(-2));
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('announces nothing when the transform fails', async () => {
+      const file = path.join(directory(), 'batch-failure.llxj');
+      const { store, host, observed, dispose } = await openJournal(file);
+      try {
+        const boom = new Error('transform failed after one row');
+        const failing: DetachedHistoryTransform = async (_source, sink) => {
+          await sink.appendValue(detachedRow(50, SEED_BYTES));
+          throw boom;
+        };
+        await expect(
+          store.publishDetached({ transform: failing }, host, undefined, {
+            publishBatch: true,
+          }),
+        ).rejects.toBe(boom);
+        expect(observed.batches).toHaveLength(0);
+      } finally {
+        await dispose();
+      }
+    });
+
+    it('announces nothing when the publication is cancelled before its ack', async () => {
+      const file = path.join(directory(), 'batch-cancelled.llxj');
+      const { store, host, observed, dispose } = await openJournal(file);
+      try {
+        const controller = new AbortController();
+        const cancelling: DetachedHistoryTransform = async (source, sink) => {
+          for await (const row of source.streamRows()) {
+            await sink.appendValue(row);
+          }
+          await sink.appendValue(detachedRow(70, SEED_BYTES));
+          controller.abort(new Error('cancelled before the ack'));
+        };
+        await expect(
+          store.publishDetached({ transform: cancelling }, host, undefined, {
+            publishBatch: true,
+            signal: controller.signal,
+          }),
+        ).rejects.toThrow('cancelled before the ack');
+        expect(observed.batches).toHaveLength(0);
+      } finally {
+        await dispose();
+      }
+    });
   });
 });

@@ -18,6 +18,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
+import { batchValues } from './batch-event-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
 
@@ -156,7 +157,7 @@ async function batchCase4(): Promise<string[][]> {
   const observed: string[][] = [];
   history.on('contentBatchAdded', (contents) => {
     const texts: string[] = [];
-    contents.withRows((cursor) => {
+    batchValues(contents).withRows((cursor) => {
       for (let item = cursor.next(); item.done !== true; item = cursor.next())
         texts.push(textOf(item.value));
     });
@@ -220,7 +221,7 @@ async function batchCase6(): Promise<{
   const tokenDeltas: number[] = [];
   history.on('contentBatchAdded', (contents) => {
     const texts: string[] = [];
-    contents.withRows((cursor) => {
+    batchValues(contents).withRows((cursor) => {
       for (let item = cursor.next(); item.done !== true; item = cursor.next())
         texts.push(textOf(item.value));
     });

@@ -9,6 +9,7 @@ import type { IContent } from './IContent.js';
 import {
   emitHistoryBatchValues,
   type HistoryBatchRows,
+  type HistoryBatchRowSource,
 } from './history-batch-values.js';
 import { withDetachedHistoryCheckpoint } from './detachedHistoryCheckpoint.js';
 import { withDetachedRollbackCheckpoint } from './detachedRollbackCheckpoint.js';
@@ -67,16 +68,29 @@ function notifyDetachedBatch(
   });
 }
 
-function notifyDetachedRow(
+/** The committed batch as one `contentBatchAdded`; the row ownership census counts each row while a listener holds it. */
+export function notifyDetachedRows(
   history: HistoryServiceCore,
   ownership: RowOwnership | undefined,
-  row: IContent,
+  source: HistoryBatchRowSource,
 ): void {
-  emitHistoryBatchValues(
-    history,
-    { length: 1, readRow: () => row },
-    0,
-    ownership,
+  history.emit(
+    'contentBatchAdded',
+    ownership === undefined
+      ? source
+      : {
+          length: source.length,
+          async *rows() {
+            for await (const row of source.rows()) {
+              ownership.retain(row);
+              try {
+                yield row;
+              } finally {
+                ownership.release(row);
+              }
+            }
+          },
+        },
   );
 }
 
@@ -117,7 +131,7 @@ export function createDetachedHistoryAPI(
     },
     notifyBatch: (addedTokens, rows, start) =>
       notifyDetachedBatch(history, ownership, addedTokens, rows, start),
-    notifyRow: (row) => notifyDetachedRow(history, ownership, row),
+    notifyRows: (rows) => notifyDetachedRows(history, ownership, rows),
     notifyTokens: (addedTokens) => {
       history.emit('tokensUpdated', {
         totalTokens: history.getTotalTokens(),

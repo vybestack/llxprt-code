@@ -9,7 +9,11 @@ import {
 } from './history-batch-values.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
-import { eventRows, visitBatch } from './batch-event-test-helpers.js';
+import {
+  batchValues,
+  eventRows,
+  visitBatch,
+} from './batch-event-test-helpers.js';
 import { publishMutationTokens } from './historyBatchContracts.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 
@@ -53,8 +57,8 @@ describe('batch reader scope failures', () => {
     let saved: HistoryBatchCursor | undefined;
     let view: HistoryBatchValues | undefined;
     history.on('contentBatchAdded', (values) => {
-      view = values;
-      values.withRows((cursor) => {
+      view = batchValues(values);
+      view.withRows((cursor) => {
         saved = cursor;
         cursor.next();
         cursor.next();
@@ -87,9 +91,9 @@ describe('batch reader misuse and legacy producer', () => {
         cursor.next();
         return thenable;
       };
-      expect(() => Reflect.apply(values.withRows, values, [callback])).toThrow(
-        'synchronous',
-      );
+      expect(() =>
+        Reflect.apply(batchValues(values).withRows, values, [callback]),
+      ).toThrow('synchronous');
     });
     try {
       emitHistoryBatchValues(history, source);
@@ -111,7 +115,7 @@ describe('batch reader misuse and legacy producer', () => {
     const order: string[] = [];
     let saved: HistoryBatchValues | undefined;
     history.on('contentBatchAdded', (values) => {
-      saved = values;
+      saved = batchValues(values);
       order.push(`batch:${visitBatch(values, () => undefined)}`);
     });
     history.on('contentAdded', () => {

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { batchValues } from '../../../core/src/services/history/batch-event-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import { withDetachedFixture } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
@@ -29,7 +30,7 @@ function registerObserver(size: number, retain: boolean): void {
           const failure = new Error('client observer checkpoint');
           history.on('contentBatchAdded', (rows) => {
             expect(rows.length).toBe(size);
-            rows.withRows((cursor) => {
+            batchValues(rows).withRows((cursor) => {
               let count = 0;
               for (
                 let item = cursor.next();

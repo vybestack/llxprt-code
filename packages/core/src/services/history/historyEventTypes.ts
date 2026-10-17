@@ -16,7 +16,7 @@
 
 import type { EventEmitter } from 'events';
 import type { IContent } from './IContent.js';
-import type { HistoryBatchValues } from './history-batch-values.js';
+import type { HistoryBatchEvent } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
 
 /**
@@ -110,14 +110,14 @@ type NativeEventArguments = Parameters<Parameters<EventEmitter['on']>[1]>;
 export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
   event: Event,
   listener: Event extends 'contentBatchAdded'
-    ? (contents: HistoryBatchValues) => void
+    ? (contents: HistoryBatchEvent) => void
     : Parameters<EventEmitter['on']>[1],
 ) => Host;
 
 export type HistoryEventEmission = <Event extends string | symbol>(
   event: Event,
   ...args: Event extends 'contentBatchAdded'
-    ? [contents: HistoryBatchValues]
+    ? [contents: HistoryBatchEvent]
     : NativeEventArguments
 ) => boolean;
 
@@ -139,7 +139,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   on(
     event: 'contentBatchAdded',
-    listener: (contents: HistoryBatchValues) => void,
+    listener: (contents: HistoryBatchEvent) => void,
   ): this;
   on(event: 'compressionStarted', listener: (origin?: object) => void): this;
   on(
@@ -157,7 +157,7 @@ export interface HistoryServiceEventEmitter {
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent, origin?: object): boolean;
   emit(event: 'contextRangeChanged', range: ContextRange): boolean;
-  emit(event: 'contentBatchAdded', contents: HistoryBatchValues): boolean;
+  emit(event: 'contentBatchAdded', contents: HistoryBatchEvent): boolean;
   emit(event: 'compressionStarted', origin?: object): boolean;
   emit(event: 'compressionLockReleased', origin?: object): boolean;
   emit(
@@ -180,7 +180,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   off(
     event: 'contentBatchAdded',
-    listener: (contents: HistoryBatchValues) => void,
+    listener: (contents: HistoryBatchEvent) => void,
   ): this;
   off(event: 'compressionStarted', listener: (origin?: object) => void): this;
   off(

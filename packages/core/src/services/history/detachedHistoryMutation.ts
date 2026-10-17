@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
 import type {
   ChronologyStamper,
   ChronologyState,
@@ -85,8 +86,8 @@ export interface DetachedHistoryHost {
     rows: DetachedHistoryJournal,
     start: number,
   ): void;
-  /** One row of a published batch, announced after its group is acked (journal store). */
-  notifyRow(row: IContent): void;
+  /** The published batch as one event, announced after its group is acked (journal store). */
+  notifyRows(rows: HistoryBatchRowSource): void;
   notifyTokens(tokensDelta: number): void;
   notifyRange(range: ReturnType<typeof buildContextRangeSnapshot>): void;
 }

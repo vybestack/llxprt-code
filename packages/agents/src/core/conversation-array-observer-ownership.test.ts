@@ -8,6 +8,7 @@ import {
   mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { batchValues } from '../../../core/src/services/history/batch-event-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import {
   boundedOwners,
@@ -23,7 +24,7 @@ async function observerOwners(size: number, retain: boolean): Promise<boolean> {
     let held = owners.snapshot();
     history.once('contentBatchAdded', (rows) => {
       expect(rows.length).toBe(size);
-      rows.withRows((cursor) => {
+      batchValues(rows).withRows((cursor) => {
         let count = 0;
         for (
           let item = cursor.next();

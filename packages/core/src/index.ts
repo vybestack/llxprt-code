@@ -532,6 +532,8 @@ export { sessionId } from './utils/session.js';
 export * from './services/history/IContent.js';
 export * from './services/history/semantic-media-purge.js';
 export type {
+  HistoryBatchEvent,
+  HistoryBatchRowSource,
   HistoryBatchValues,
   HistoryBatchCursor,
 } from './services/history/history-batch-values.js';

@@ -214,6 +214,26 @@ Consumers outside this checkout must migrate. A consumer that saves every
 returned row creates its own unbounded collection. Complete large rows are
 still accepted; the controlled fixture's 8 MiB cap is not a row-size limit.
 
+### Journal backend: committed row source
+
+When history runs on the journal store, `contentBatchAdded` carries a
+`HistoryBatchRowSource` (exported from Core) instead of `HistoryBatchValues`.
+The event fires once per published batch, after the batch is durable and never
+for a publication that failed. `length` is the batch cardinality, and
+`rows()` returns an async generator that reads one row at a time from the
+version that was published when the event fired. Later mutations do not change
+what it reads, each call starts a new pass, and nothing is retained between
+reads:
+
+```typescript
+history.on('contentBatchAdded', (batch) => {
+  if (!('rows' in batch)) return; // the scoped values of the file-backed store
+  void (async () => {
+    for await (const row of batch.rows()) consume(row);
+  })();
+});
+```
+
 ## Deferred disk-source admission
 
 `AgentClient.storeHistoryForLaterUse` also accepts a cold

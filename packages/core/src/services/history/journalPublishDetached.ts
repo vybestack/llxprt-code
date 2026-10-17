@@ -214,11 +214,10 @@ async function finishPublication(
 ): Promise<void> {
   const delta = candidate.tokens - previousTokens;
   if (options.publishBatch === true) {
-    // Read back from the committed version, one row at a time: observers never hear of rows a failed group dropped.
-    const count = appendOnly ? candidate.count : store.getLength();
-    if (count > 0)
-      for await (const row of store.streamRows({ kind: 'recent', count }))
-        host.notifyRow(row);
+    // One event, after the ack, over the committed version: observers never hear of rows a failed group dropped.
+    host.notifyRows(
+      store.committedBatch(appendOnly ? candidate.count : undefined),
+    );
     host.notifyTokens(delta);
   } else if (options.publishTokens === true) host.notifyTokens(delta);
   await options.onAcknowledged?.();

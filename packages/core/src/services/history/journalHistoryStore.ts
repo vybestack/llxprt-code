@@ -15,6 +15,7 @@ import {
   type PositionedOwner,
 } from './journalHistoryEdits.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
   HistoryClearRequest,
@@ -33,6 +34,7 @@ import {
   encodeContentRow,
   UNOWNED_ROW,
 } from './journalRowCodec.js';
+import { committedBatchSource } from './journalBatchSource.js';
 import { captureDetachedRows } from './journalDetachedCapture.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
@@ -367,6 +369,16 @@ export class JournalHistoryStore {
       yield decodeStoredRow(await snapshot.readRow(entry));
     }
     signal?.throwIfAborted();
+  }
+
+  /**
+   * The last `count` rows (all rows when omitted) of the version published
+   * now, as the source of a batch event. Call it once the publication it
+   * announces is acked.
+   */
+  committedBatch(count?: number): HistoryBatchRowSource {
+    const snapshot = this.session.store.snapshot();
+    return committedBatchSource(snapshot, count ?? snapshot.rows);
   }
 
   /** Every row; for tests and tools that need the whole history, which a send never does. */
