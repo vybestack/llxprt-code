@@ -63,6 +63,14 @@ import {
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
 
+/** A swap of the primary journal that can still be taken back; see {@link JournalHistoryStore.adoptJournal}. */
+export interface JournalAdoption {
+  /** Puts the prior store back. The adopted file is the recorder's and stays open. */
+  rollback(): Promise<void>;
+  /** Closes the prior store; the adoption can no longer be rolled back. */
+  commit(): Promise<void>;
+}
+
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
 export interface JournalRepair {
   readonly inserted: IContent[];
@@ -89,17 +97,105 @@ export class JournalHistoryStore {
   private ack: CommitAck | undefined;
   private disposed = false;
   private readonly publication = new JournalPublication();
-  private readonly owners: JournalOwners;
-  /** The per-agent mirror files bound to this history. */
-  readonly mirrors: JournalMirrors;
+  private owners: JournalOwners;
+  private mirrorSet: JournalMirrors;
+  private adopted: JournalRecordingService | undefined;
 
-  constructor(private readonly session: JournalSession) {
+  constructor(private session: JournalSession) {
     this.tentativeRows = session.store.published?.rows ?? 0;
     this.owners = new JournalOwners(session.store);
-    this.mirrors = new JournalMirrors(session.store, this.owners, {
+    this.mirrorSet = this.mirrorsOf(session, this.owners);
+  }
+
+  /** The per-agent mirror files bound to this history. */
+  get mirrors(): JournalMirrors {
+    return this.mirrorSet;
+  }
+
+  private mirrorsOf(
+    session: JournalSession,
+    owners: JournalOwners,
+  ): JournalMirrors {
+    return new JournalMirrors(session.store, owners, {
       exclusive: (task) => this.exclusive(task),
       assertUsable: () => this.assertUsable(),
     });
+  }
+
+  /**
+   * Resume onto a recorder (decision G5). The file the recorder opened
+   * becomes the primary journal, inside one turn of the queue, so no group is
+   * in flight on either file. The point must be the version the recorder is
+   * at: a file that moved since the resume was read is refused. Nothing is
+   * opened here, so a failure before the swap leaves the prior store in
+   * place and nothing to close. After the swap, `rollback` puts the prior
+   * store back and `commit` closes it.
+   */
+  adoptJournal(
+    recorder: JournalRecordingService,
+    point: { readonly commitSeq: number; readonly rows: number },
+  ): Promise<JournalAdoption> {
+    this.assertUsable();
+    return this.exclusive(async () => {
+      if (this.mirrorSet.size > 0) {
+        throw new Error(
+          'A history with recorders bound cannot adopt a resumed journal',
+        );
+      }
+      const next = await recorder.session();
+      const published = next.store.published;
+      if (
+        (published?.commitSeq ?? 0) !== point.commitSeq ||
+        (published?.rows ?? 0) !== point.rows
+      ) {
+        throw new Error(
+          `The journal ${next.path} is at commit ${published?.commitSeq ?? 0} with ${published?.rows ?? 0} rows, the resume read commit ${point.commitSeq} with ${point.rows} rows`,
+        );
+      }
+      return this.swapPrimary(next, recorder);
+    });
+  }
+
+  isAdoptingRecorder(recorder: JournalRecordingService): boolean {
+    return this.adopted === recorder;
+  }
+
+  private swapPrimary(
+    next: JournalSession,
+    recorder: JournalRecordingService,
+  ): JournalAdoption {
+    const previous = {
+      session: this.session,
+      owners: this.owners,
+      mirrors: this.mirrorSet,
+      rows: this.tentativeRows,
+      adopted: this.adopted,
+    };
+    this.session = next;
+    this.owners = new JournalOwners(next.store);
+    this.mirrorSet = this.mirrorsOf(next, this.owners);
+    this.tentativeRows = next.store.published?.rows ?? 0;
+    this.adopted = recorder;
+    let settled = false;
+    const settle = (action: string): void => {
+      if (settled) throw new Error(`The adoption was already ${action}`);
+      settled = true;
+    };
+    return {
+      rollback: async () => {
+        settle('settled');
+        await this.queue;
+        this.session = previous.session;
+        this.owners = previous.owners;
+        this.mirrorSet = previous.mirrors;
+        this.tentativeRows = previous.rows;
+        this.adopted = previous.adopted;
+      },
+      commit: async () => {
+        settle('settled');
+        await previous.session.close();
+      },
+    };
   }
 
   /** The ack of the last group that became durable. */
@@ -609,7 +705,8 @@ export class JournalHistoryStore {
     try {
       await this.mirrors.retire();
     } finally {
-      await this.session.close();
+      // An adopted file is the recorder's; the recorder closes it.
+      if (this.adopted === undefined) await this.session.close();
     }
   }
 
