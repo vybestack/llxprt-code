@@ -17,7 +17,8 @@ import {
   waitFor,
 } from '../__tests__/render.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import { buildAppCommands, useAppStores } from './AppContainerRuntime.js';
+import { useAppStores } from './AppContainerRuntime.js';
+import { buildAppCommands } from './appCommandBindings.js';
 import {
   AppCommandsProvider,
   useAppCommands,

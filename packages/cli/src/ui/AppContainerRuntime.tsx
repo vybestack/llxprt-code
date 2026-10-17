@@ -37,7 +37,7 @@ import type { AppDialogsResult } from './containers/AppContainer/hooks/useAppDia
 import { useAppInput } from './containers/AppContainer/hooks/useAppInput.js';
 import type { AppInputResult } from './containers/AppContainer/hooks/useAppInput.js';
 import { useAppLayout } from './containers/AppContainer/hooks/useAppLayout.js';
-import type { AppLayoutResult } from './containers/AppContainer/hooks/useAppLayout.js';
+import { useAppCommands } from './appCommandBindings.js';
 import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
 import {
   createDialogStore,
@@ -63,11 +63,33 @@ import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
 import {
   AppCommandsProvider,
   type AppCommandBindings,
-  type AppCommands,
 } from './contexts/AppCommandsContext.js';
 import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
 import { useRef, useMemo, useCallback } from 'react';
-import { useBound } from './hooks/agentStream/useStreamOwnerCallbacks.js';
+import {
+  useBound,
+  useContentIdentityReader,
+} from './hooks/agentStream/useStreamOwnerCallbacks.js';
+import { useBrowserCatalogCommands } from './hooks/useBrowserCatalogCommands.js';
+import {
+  bindOwnerBrowserResume,
+  bindRawBrowserResume,
+  bindRawBrowserSession,
+} from './components/browserResumeHost.js';
+import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
+import { useVimMode } from './contexts/VimModeContext.js';
+import { useTodoContext } from './contexts/TodoContext.js';
+import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { useSlashCommandActions } from './containers/AppContainer/hooks/useSlashCommandActions.js';
+import { useStoreSelector } from './stores/useStoreSelector.js';
+import type { SlashCommandProcessorCoreResult } from './hooks/useSlashCommandProcessorCore.js';
+import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCore.js';
+import type { HistoryItem } from './types.js';
+import type { PromptContentGenerator } from './hooks/usePromptCompletion.js';
+import {
+  useInputAgentOperations,
+  useInputStreamPolicy,
+} from './inputOwnerBindings.js';
 import { useAutoPromptOperation } from './hooks/useAutoPromptOperation.js';
 import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 
@@ -149,12 +171,15 @@ function useUnconfiguredGuidance(
 function useAppDialogsRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  dialogStore: DialogStore,
-  dialogOpeners: DialogOpeners,
-  terminalStore: TerminalStore,
-  settingsStore: SettingsProfileStore,
-  turnStore: TurnStore,
+  stores: ReturnType<typeof useAppStores>,
 ): AppDialogsResult {
+  const {
+    dialogStore,
+    dialogOpeners,
+    terminalStore,
+    settingsStore,
+    turnStore,
+  } = stores;
   return useAppDialogs({
     config: props.slashCommandRuntime,
     recordRecordingEvent: useBound(
@@ -209,190 +234,90 @@ function useAppDialogsRuntime(
 
 /** Input runtime: wiring only; every param is bootstrap/store-owned. */
 function useAppInputRuntime(
+  commands: SlashCommandProcessorCoreResult,
+  setQuittingMessagesRef: React.MutableRefObject<
+    ((messages: HistoryItem[]) => void) | null
+  >,
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  dialogStore: DialogStore,
-  dialogOpeners: DialogOpeners,
-  terminalStore: TerminalStore,
-  turnStore: TurnStore,
-  settingsStore: SettingsProfileStore,
+  inputView: ReturnType<typeof buildInputView>,
 ): AppInputResult {
-  return useAppInput({
-    projectTempDir: props.uiRuntime.projectTempDir,
-    injectInputSteer: useBound(props.agent, props.agent.injectSteer),
-    endInputHookSession: useBound(
-      props.uiRuntime.hooks,
-      props.uiRuntime.hooks.endHookSession,
-    ),
-    readInitialPrompt: useBound(
-      props.uiRuntime.app,
-      props.uiRuntime.app.getQuestion,
-    ),
-    isAgentClientPresent: useCallback(
-      () => Boolean(props.uiRuntime.agentClientSource.getAgentClient()),
-      [props.uiRuntime],
-    ),
-    readIdeMode: useBound(props.uiRuntime.ide, props.uiRuntime.ide.getIdeMode),
-    readInteractiveShellEnabled: useBound(
-      props.uiRuntime.shell,
-      props.uiRuntime.shell.getEnableInteractiveShell,
-    ),
-    readMcpServers: useBound(
-      props.uiRuntime.mcp,
-      props.uiRuntime.mcp.getMcpServers,
-    ),
-    streamRuntime: props.uiRuntime,
-    slashCommandRuntime: props.slashCommandRuntime,
-    agent: props.agent,
-    settings: props.settings,
-    subagentManager: props.uiRuntime.app.getSubagentManager(),
+  const { dialogStore, turnStore } = inputView;
+  const { agent, uiRuntime: runtime, slashCommandRuntime: config } = props;
+  const browser = useInputBrowserCommands(
+    agent.session,
+    config,
+    bootstrap.recordingOwner,
+    bootstrap.recordingSwapCallbacks,
+    agent.agentClient.mediaStore,
+    useCallback(() => agent.agentClient.getHistoryService(), [agent]),
     turnStore,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingIntegration: props.recordingIntegration,
-    recordingOwner: bootstrap.recordingOwner,
-    runtimeMessageBus: props.runtimeMessageBus,
-    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    dialogs: dialogOpeners,
-    store: dialogStore,
-    terminalStore,
-    settingsStore,
-    appState: props.appState,
-    appDispatch: props.appDispatch,
-    operationLifecycle: props.operationLifecycle,
-  });
-}
-
-/**
- * Current domain bindings, including changing input snapshots. The provider
- * separates these snapshots from the stable view-facing command callbacks.
- */
-function subagentDialogCommands(
-  dialogs: Pick<
-    AppCommands,
-    | 'listSubagentDefinitions'
-    | 'loadSubagentDefinition'
-    | 'saveSubagentDefinition'
-    | 'deleteSubagentDefinition'
-    | 'listSubagentProfiles'
-    | 'generateSubagentPrompt'
-  >,
-) {
-  return {
-    listSubagentDefinitions: dialogs.listSubagentDefinitions,
-    loadSubagentDefinition: dialogs.loadSubagentDefinition,
-    saveSubagentDefinition: dialogs.saveSubagentDefinition,
-    deleteSubagentDefinition: dialogs.deleteSubagentDefinition,
-    listSubagentProfiles: dialogs.listSubagentProfiles,
-    generateSubagentPrompt: dialogs.generateSubagentPrompt,
-  };
-}
-
-type DialogViewCommands = Pick<
-  AppDialogsResult,
-  keyof AppCommandBindings & keyof AppDialogsResult
->;
-
-export function buildAppCommands(
-  dialogs: DialogViewCommands,
-  input: Pick<
-    AppInputResult,
-    keyof AppCommandBindings & keyof AppInputResult
-  > & {
-    inputHistoryStore: Pick<
-      AppInputResult['inputHistoryStore'],
-      'inputHistory'
-    >;
-  },
-  layout: Pick<AppLayoutResult, 'handleClearScreen'>,
-  terminalStore: TerminalStore,
-): AppCommandBindings {
-  const { commands: terminalCommands } = terminalStore;
-  return {
-    buffer: input.buffer,
-    commandContext: input.commandContext,
-    generatePromptContent: input.generatePromptContent,
-    inputHistory: input.inputHistoryStore.inputHistory,
-    handleUserInputSubmit: input.handleUserInputSubmit,
-    handleSteer: input.handleSteer,
-    handleClearScreen: layout.handleClearScreen,
-    vimHandleInput: input.vimHandleInput,
-    sendAllQueuedSubmissions: input.sendAllQueuedSubmissions,
-    steerAllQueuedSubmissions: input.steerAllQueuedSubmissions,
-    clearQueuedSubmissions: input.clearQueuedSubmissions,
-    setShellModeActive: terminalCommands.setShellModeActive,
-    handleEscapePromptChange: terminalCommands.setShowEscapePrompt,
-    setQueueErrorMessage: terminalCommands.setQueueErrorMessage,
-    onWorkspaceMigrationDialogOpen: dialogs.onWorkspaceMigrationDialogOpen,
-    handleIdePromptComplete: input.handleIdePromptComplete,
-    handleFolderTrustSelect: dialogs.handleFolderTrustSelect,
-    welcomeActions: dialogs.welcomeActions,
-    triggerWelcomeAuth: dialogs.triggerWelcomeAuth,
-    resumeBrowserTarget: input.resumeBrowserTarget,
-    readBrowserCatalog: input.readBrowserCatalog,
-    deleteBrowserTarget: input.deleteBrowserTarget,
-    recordModelSwitch: dialogs.recordModelSwitch,
-    readPolicyRules: dialogs.readPolicyRules,
-    ...subagentDialogCommands(dialogs),
-    handleThemeSelect: dialogs.handleThemeSelect,
-    handleThemeHighlight: dialogs.handleThemeHighlight,
-    handleAuthSelect: dialogs.handleAuthSelect,
-    handleOAuthCodeDialogClose: input.handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit: input.handleOAuthCodeSubmit,
-    handleEditorSelect: dialogs.handleEditorSelect,
-    handleProviderSelect: dialogs.handleProviderSelect,
-    handleProfileSelect: (...args) => {
-      void dialogs.handleProfileSelect(...args);
-    },
-    viewProfileDetail: (...args) => {
-      void dialogs.viewProfileDetail(...args);
-    },
-    closeProfileDetailDialog: () => {
-      void dialogs.closeProfileDetailDialog();
-    },
-    loadProfileFromDetail: (...args) => {
-      void dialogs.loadProfileFromDetail(...args);
-    },
-    deleteProfileFromDetail: (...args) => {
-      void dialogs.deleteProfileFromDetail(...args);
-    },
-    deleteProfileFromList: (...args) => {
-      void dialogs.deleteProfileFromList(...args);
-    },
-    setProfileAsDefault: (...args) => {
-      void dialogs.setProfileAsDefault(...args);
-    },
-    openProfileEditor: (...args) => {
-      void dialogs.openProfileEditor(...args);
-    },
-    closeProfileEditor: () => {
-      void dialogs.closeProfileEditor();
-    },
-    saveProfileFromEditor: dialogs.saveProfileFromEditor,
-    handleToolsSelect: dialogs.handleToolsSelect,
-    handleSettingsRestart: input.handleSettingsRestart,
-  };
-}
-
-function useAppCommands(
-  dialogs: AppDialogsResult,
-  input: AppInputResult,
-  layout: AppLayoutResult,
-  terminalStore: TerminalStore,
-): AppCommandBindings {
-  return useMemo(
-    () => buildAppCommands(dialogs, input, layout, terminalStore),
-    [dialogs, input, layout, terminalStore],
+    dialogStore,
+    commands.commandContext.ui.clear,
   );
+  const stream = useInputAgentOperations(
+    useBound(agent, agent.getHistory),
+    useBound(agent, agent.stream),
+    useBound(agent, agent.addHistory),
+    useBound(agent, agent.injectSteer),
+    useBound(agent, agent.getProviderContextLimit),
+    useContentIdentityReader(agent),
+    agent.tools,
+    agent.mcp,
+    agent.metrics,
+    agent.tasks,
+    agent.session,
+    bootstrap.recordingOwner,
+    props.recordingIntegration,
+  );
+  const policy = useInputStreamPolicy(
+    runtime.session,
+    runtime.events,
+    runtime.model,
+    runtime.ephemeral,
+    runtime.shell,
+    runtime.checkpoint,
+    runtime.files,
+    runtime.settings,
+    runtime.bucketFailover,
+    runtime.sessionLimits,
+    runtime.projectTempDir,
+    runtime.projectCheckpointsDir,
+  );
+  return useAppInput({
+    ...stream,
+    ...policy,
+    ...browser,
+    commands,
+    setQuittingMessagesRef,
+    disposeInput: useBound(agent, agent.dispose),
+    readApprovalMode: useBound(agent, agent.getApprovalMode),
+    setApprovalMode: useBound(agent, agent.setApprovalMode),
+    generatePromptContent: useCallback(
+      (...args: Parameters<PromptContentGenerator>) =>
+        agent.agentClient.generateContent(...args),
+      [agent],
+    ),
+    injectInputSteer: useBound(agent, agent.injectSteer),
+    ...useInputReadOperations(
+      runtime.hooks,
+      runtime.app,
+      runtime.agentClientSource,
+      runtime.ide,
+      runtime.shell,
+      runtime.mcp,
+      useBound(config, config.refreshMemory),
+      useBound(config, config.getDebugMode),
+    ),
+    ...inputView,
+  });
 }
 
 function useBootstrapRuntime(
   props: AppContainerRuntimeProps,
-  terminalStore: TerminalStore,
-  turnStore: TurnStore,
-  settingsStore: SettingsProfileStore,
+  stores: ReturnType<typeof useAppStores>,
 ): AppBootstrapResult {
+  const { terminalStore, turnStore, settingsStore } = stores;
   const { agent, uiRuntime, ...bootstrapProps } = props;
   const tokenLogger = useMemo(
     () => new DebugLogger('llxprt:ui:tokentracking'),
@@ -466,36 +391,45 @@ function useBootstrapRuntime(
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
-  const {
-    dialogStore,
-    terminalStore,
-    turnStore,
-    settingsStore,
-    dialogOpeners,
-  } = useAppStores(props.slashCommandRuntime);
-  const bootstrap = useBootstrapRuntime(
-    props,
-    terminalStore,
-    turnStore,
-    settingsStore,
+  const stores = useAppStores(props.slashCommandRuntime);
+  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
+  const bootstrap = useBootstrapRuntime(props, stores);
+  const dialogs = useAppDialogsRuntime(props, bootstrap, stores);
+  const { setQuittingMessagesRef, ...view } = useInputCommandView(
+    useBound(
+      props.slashCommandRuntime,
+      props.slashCommandRuntime.getExtensions,
+    ),
+    props.slashCommandRuntime.getWorkingDir(),
+    stores,
+    props.settings,
+    bootstrap.setLlxprtMdFileCount,
   );
-  const dialogs = useAppDialogsRuntime(
-    props,
-    bootstrap,
-    dialogStore,
-    dialogOpeners,
-    terminalStore,
-    settingsStore,
-    turnStore,
+  const commands = useSlashCommandProcessorCore({
+    config: props.slashCommandRuntime,
+    agent: props.agent,
+    ...view,
+    recordingIntegration:
+      bootstrap.recordingIntegrationRef?.current ?? undefined,
+    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
+    recordingOwner: bootstrap.recordingOwner,
+  });
+  const inputView = buildInputView(
+    stores,
+    props.settings,
+    props.appState,
+    props.appDispatch,
+    props.operationLifecycle,
+    props.uiRuntime.app.getSubagentManager(),
+    bootstrap.setIdePromptAnswered,
+    bootstrap.setLlxprtMdFileCount,
   );
   const input = useAppInputRuntime(
+    commands,
+    setQuittingMessagesRef,
     props,
     bootstrap,
-    dialogStore,
-    dialogOpeners,
-    terminalStore,
-    turnStore,
-    settingsStore,
+    inputView,
   );
   const layout = useAppLayout({
     uiRuntime: props.uiRuntime,
@@ -507,40 +441,30 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
   });
   useUnconfiguredGuidance(props, turnStore, dialogStore);
-  return (
-    <AppRuntimeView
-      runtimeMessageBus={props.runtimeMessageBus}
-      slashCommandRuntime={props.slashCommandRuntime}
-      version={props.version}
-      screenReaderEnabled={props.uiRuntime.app.getScreenReader()}
-      disableLoadingPhrases={
-        props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true
-      }
-      debugMode={props.uiRuntime.app.getDebugMode()}
-      settings={bootstrap.settings}
-      startupWarnings={bootstrap.startupWarnings}
-      nightly={bootstrap.nightly}
-      updateInfo={bootstrap.updateInfo}
-      mainControlsRef={layout.mainControlsRef}
-      rootUiRef={layout.rootUiRef}
-      pendingHistoryItemRef={layout.pendingHistoryItemRef}
-      contextFileNames={layout.contextFileNames}
-      appCommands={useAppCommands(dialogs, input, layout, terminalStore)}
-      dialogStore={dialogStore}
-      terminalStore={terminalStore}
-      turnStore={turnStore}
-      settingsStore={settingsStore}
-      getTranscriptFilePath={() =>
-        getInteractiveTranscriptPath(
-          bootstrap.recordingOwner,
-          () => props.agent.session.getRecording().path,
-          () =>
-            bootstrap.recordingSwapCallbacks
-              ?.getCurrentRecording()
-              ?.getFilePath() ?? undefined,
-        )
-      }
-    />
+  const readTranscript = useCallback(
+    () =>
+      getInteractiveTranscriptPath(
+        bootstrap.recordingOwner,
+        () => props.agent.session.getRecording().path,
+        () =>
+          bootstrap.recordingSwapCallbacks
+            ?.getCurrentRecording()
+            ?.getFilePath() ?? undefined,
+      ),
+    [bootstrap.recordingOwner, bootstrap.recordingSwapCallbacks, props.agent],
+  );
+  return renderAppRuntimeView(
+    props.runtimeMessageBus,
+    props.slashCommandRuntime,
+    props.version,
+    props.uiRuntime.app.getScreenReader(),
+    props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
+    props.uiRuntime.app.getDebugMode(),
+    bootstrap,
+    layout,
+    useAppCommands(dialogs, input, layout, terminalStore),
+    stores,
+    readTranscript,
   );
 };
 
@@ -587,4 +511,239 @@ export function getInteractiveTranscriptPath(
   readRawPath: () => string | undefined,
 ): string | undefined {
   return recordingOwner === 'agent' ? readOwnedPath() : readRawPath();
+}
+
+function useInputBrowserCommands(
+  session: Parameters<typeof useBrowserCatalogCommands>[0] &
+    Pick<Agent['session'], 'resume'>,
+  config: Parameters<typeof bindRawBrowserSession>[0] &
+    Parameters<typeof useBrowserCatalogCommands>[2] &
+    Parameters<typeof resolveEmojiFilterMode>[0],
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'],
+  mediaStore: Agent['agentClient']['mediaStore'],
+  readRawHistory: () => ReturnType<Agent['agentClient']['getHistoryService']>,
+  turnStore: TurnStore,
+  dialogStore: DialogStore,
+  clear: () => void,
+) {
+  const { readBrowserCatalog, deleteBrowserTarget } = useBrowserCatalogCommands(
+    session,
+    recordingOwner,
+    config,
+    recordingSwapCallbacks,
+    mediaStore,
+  );
+  const resumeBrowserTarget = useMemo(() => {
+    const close = () => dialogStore.commands.closeDialog('sessionBrowser');
+    if (recordingOwner === 'agent')
+      return bindOwnerBrowserResume(
+        (target) =>
+          resumeOwnerSession(
+            session.resume.bind(session),
+            target.kind === 'session'
+              ? target.session.sessionId
+              : target.checkpointId,
+            resolveEmojiFilterMode(config),
+            session.listBrowserTargetsDetailed.bind(session),
+          ),
+        turnStore.commands.loadHistory,
+        turnStore.commands.addItem,
+        close,
+      );
+    const logger = new DebugLogger('llxprt:ui:dialogmanager');
+    return bindRawBrowserResume(
+      bindRawBrowserSession(
+        config,
+        readRawHistory,
+        recordingSwapCallbacks,
+        logger,
+      ),
+      () => resolveEmojiFilterMode(config),
+      clear,
+      turnStore.commands.addItem,
+      close,
+      logger,
+    );
+  }, [
+    session,
+    readRawHistory,
+    config,
+    turnStore,
+    dialogStore,
+    recordingOwner,
+    recordingSwapCallbacks,
+    clear,
+  ]);
+  return { readBrowserCatalog, deleteBrowserTarget, resumeBrowserTarget };
+}
+
+function useInputCommandView(
+  readExtensions: () => ReturnType<SlashCommandRuntime['getExtensions']>,
+  workingDir: string,
+  stores: ReturnType<typeof useAppStores>,
+  settings: LoadedSettings,
+  setLlxprtMdFileCount: (count: number) => void,
+) {
+  const {
+    settingsStore,
+    terminalStore,
+    dialogStore,
+    dialogOpeners: dialogs,
+    turnStore,
+  } = stores;
+  const { toggleVimEnabled } = useVimMode();
+  const setQuittingMessagesRef = useRef<
+    ((messages: HistoryItem[]) => void) | null
+  >(null);
+  const quitHandler = useCallback((messages: HistoryItem[]) => {
+    setQuittingMessagesRef.current?.(messages);
+  }, []);
+  const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
+    turnStore.commands;
+  const extensions = useExtensionUpdates(
+    readExtensions(),
+    addItem,
+    workingDir,
+    dialogStore,
+  );
+  const actions = useStoreSelector(
+    settingsStore.store,
+    (state) => state.dialogActions,
+  );
+  const commandActions = useSlashCommandActions({
+    ...actions,
+    dialogs,
+    quitHandler,
+    setDebugMessage: settingsStore.commands.setDebugMessage,
+    toggleCorgiMode: noop,
+    toggleDebugProfiler: terminalStore.commands.toggleDebugProfiler,
+    dispatchExtensionStateUpdate: extensions.dispatchExtensionStateUpdate,
+    addConfirmUpdateExtensionRequest:
+      extensions.addConfirmUpdateExtensionRequest,
+  });
+  const { todos, updateTodos } = useTodoContext();
+  const todoContext = useMemo(
+    () => ({ todos, updateTodos, refreshTodos: noop }),
+    [todos, updateTodos],
+  );
+  return {
+    actions: commandActions,
+    todoContext,
+    settings,
+    addItem,
+    clearItems,
+    loadHistory,
+    refreshStatic,
+    setIsProcessing,
+    toggleVimEnabled,
+    setLlxprtMdFileCount,
+    store: dialogStore,
+    isConfigInitialized: true,
+    setQuittingMessagesRef,
+    extensionsUpdateState: extensions.extensionsUpdateState,
+  };
+}
+function noop(): void {}
+
+function useInputReadOperations(
+  hooks: UiRuntime['hooks'],
+  app: UiRuntime['app'],
+  source: UiRuntime['agentClientSource'],
+  ide: UiRuntime['ide'],
+  shell: UiRuntime['shell'],
+  mcp: UiRuntime['mcp'],
+  refreshMemory: SlashCommandRuntime['refreshMemory'],
+  readDebugMode: () => boolean,
+) {
+  return {
+    refreshMemory,
+    readDebugMode,
+    endInputHookSession: useBound(hooks, hooks.endHookSession),
+    readInitialPrompt: useBound(app, app.getQuestion),
+    isAgentClientPresent: useCallback(
+      () => Boolean(source.getAgentClient()),
+      [source],
+    ),
+    readIdeMode: useBound(ide, ide.getIdeMode),
+    readInteractiveShellEnabled: useBound(
+      shell,
+      shell.getEnableInteractiveShell,
+    ),
+    readMcpServers: useBound(mcp, mcp.getMcpServers),
+  };
+}
+
+function buildInputView(
+  stores: ReturnType<typeof useAppStores>,
+  settings: LoadedSettings,
+  appState: AppState,
+  appDispatch: React.Dispatch<AppAction>,
+  operationLifecycle: OperationLifecycleRegistry | undefined,
+  subagentManager: ReturnType<UiRuntime['app']['getSubagentManager']>,
+  setIdePromptAnswered: AppBootstrapResult['setIdePromptAnswered'],
+  setLlxprtMdFileCount: (count: number) => void,
+) {
+  const {
+    dialogOpeners,
+    dialogStore,
+    terminalStore,
+    turnStore,
+    settingsStore,
+  } = stores;
+  return {
+    settings,
+    subagentManager,
+    turnStore,
+    setIdePromptAnswered,
+    setLlxprtMdFileCount,
+    dialogs: dialogOpeners,
+    store: dialogStore,
+    dialogStore,
+    terminalStore,
+    settingsStore,
+    appState,
+    appDispatch,
+    operationLifecycle,
+  };
+}
+
+function renderAppRuntimeView(
+  runtimeMessageBus: MessageBus | undefined,
+  slashCommandRuntime: DefaultAppLayoutProps['slashCommandRuntime'],
+  version: string,
+  screenReaderEnabled: boolean,
+  disableLoadingPhrases: boolean,
+  debugMode: boolean,
+  bootstrap: AppBootstrapResult,
+  layout: ReturnType<typeof useAppLayout>,
+  commands: AppCommandBindings,
+  stores: ReturnType<typeof useAppStores>,
+  readTranscript: () => string | undefined,
+): React.ReactNode {
+  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
+  return (
+    <AppRuntimeView
+      runtimeMessageBus={runtimeMessageBus}
+      slashCommandRuntime={slashCommandRuntime}
+      version={version}
+      screenReaderEnabled={screenReaderEnabled}
+      disableLoadingPhrases={disableLoadingPhrases}
+      debugMode={debugMode}
+      settings={bootstrap.settings}
+      startupWarnings={bootstrap.startupWarnings}
+      nightly={bootstrap.nightly}
+      updateInfo={bootstrap.updateInfo}
+      mainControlsRef={layout.mainControlsRef}
+      rootUiRef={layout.rootUiRef}
+      pendingHistoryItemRef={layout.pendingHistoryItemRef}
+      contextFileNames={layout.contextFileNames}
+      appCommands={commands}
+      dialogStore={dialogStore}
+      terminalStore={terminalStore}
+      turnStore={turnStore}
+      settingsStore={settingsStore}
+      getTranscriptFilePath={readTranscript}
+    />
+  );
 }
