@@ -2,9 +2,9 @@
 import { describe, it, expect } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { truncateLargestToolResponses } from '../toolResultTruncator.js';
 import {
-  BoundedToolHistory,
   toolRankingRow,
   toolDeps,
   digestRows,
@@ -53,7 +53,7 @@ describe('caller cancellation of tool ranking', () => {
         2048,
         toolRankingRow,
         undefined,
-        (options) => new BoundedToolHistory(options),
+        (options) => new HistoryService(options),
       );
       const after = rankingFiles();
       expect({

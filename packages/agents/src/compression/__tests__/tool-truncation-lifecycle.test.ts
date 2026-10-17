@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { readdirSync } from 'node:fs';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
@@ -9,7 +10,6 @@ import {
 } from '../toolResultTruncator.js';
 import { replaceRankedToolResponse } from '../toolResponseDiskRanking.js';
 import {
-  BoundedToolHistory,
   toolRankingRow,
   toolDeps,
   digestRows,
@@ -155,7 +155,7 @@ describe('tool ranking abort and oversized rows', () => {
         2048,
         toolRankingRow,
         undefined,
-        (options) => new BoundedToolHistory(options),
+        (options) => new HistoryService(options),
       );
       const after = scratch();
       expect({
@@ -188,7 +188,7 @@ describe('tool ranking abort and oversized rows', () => {
       9 * 1024 * 1024,
       toolRankingRow,
       undefined,
-      (options) => new BoundedToolHistory(options),
+      (options) => new HistoryService(options),
     );
   }, 120000);
 });

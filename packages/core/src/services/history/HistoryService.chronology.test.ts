@@ -17,6 +17,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
+import { replaceRowAt } from './__tests__/support/row-replacement.js';
 import type {
   IContent,
   ToolResponseBlock,
@@ -541,10 +542,10 @@ describe('HistoryService chronology - AC9: applyDensityResult inherits marker', 
 });
 
 // ---------------------------------------------------------------------------
-// AC11: replaceToolResponseBlock preserves the chronology marker
+// AC11: a replaced row keeps the chronology marker
 // ---------------------------------------------------------------------------
 
-describe('HistoryService chronology - AC11: replaceToolResponseBlock preserves marker', () => {
+describe('HistoryService chronology - AC11: a replaced row preserves its marker', () => {
   let service: HistoryService;
 
   beforeEach(() => {
@@ -658,7 +659,10 @@ async function assertToolResponseChronology(
       result: { replaced: true },
     };
 
-    await service.replaceToolResponseBlock(2, 0, replacementBlock);
+    await replaceRowAt(service, 2, {
+      speaker: rows[2].speaker,
+      blocks: [replacementBlock],
+    });
     await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
       const replaced = rows[2];
       expect(replaced.metadata?.chronology?.seq).toBe(originalSeq);

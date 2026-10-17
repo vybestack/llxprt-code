@@ -27,6 +27,7 @@ const modelTools = installModelToolFixture();
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import * as fc from 'fast-check';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { replaceRowAt } from '@vybestack/llxprt-code-core/services/history/__tests__/support/row-replacement.js';
 import { collectCuratedFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/curated-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -266,7 +267,7 @@ describe('AC3 — entries are shared, so the history layer must stay copy-on-wri
   /**
    * Sharing entries by reference is only safe while every post-insertion
    * edit path REPLACES the array slot instead of mutating the stored entry.
-   * This pins that invariant: if someone later makes replaceToolResponseBlock
+   * This pins that invariant: if someone later makes a row replacement
    * (or any sibling edit path) mutate in place, a previously handed-out
    * history would silently change underneath its holder, and this test fails.
    */
@@ -291,18 +292,17 @@ describe('AC3 — entries are shared, so the history layer must stay copy-on-wri
     const capturedToolEntry = captured[2];
     const capturedBlocks = capturedToolEntry.blocks;
 
-    const replaced = await historyService.replaceToolResponseBlock(
-      2,
-      0,
-      {
-        type: 'tool_response',
-        callId: 'test_tool',
-        toolName: 'test_tool',
-        result: { value: 'edited' },
-      },
-      GENERATING_MODEL,
-    );
-    expect(replaced).toBe(true);
+    await replaceRowAt(historyService, 2, {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'test_tool',
+          toolName: 'test_tool',
+          result: { value: 'edited' },
+        },
+      ],
+    });
 
     // The captured entry and its blocks are untouched by the live edit.
     expect(captured[2]).toBe(capturedToolEntry);

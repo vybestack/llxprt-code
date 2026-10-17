@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
   IContent,
@@ -11,12 +11,6 @@ import {
   createTruncationStub,
   type ToolResultTruncatorDeps,
 } from '../toolResultTruncator.js';
-
-export class BoundedToolHistory extends HistoryService {
-  override replaceToolResponseBlock(): Promise<boolean> {
-    throw new Error('eager tool replacement is forbidden');
-  }
-}
 
 export function toolRankingRow(index: number, bytes = 2048): IContent {
   return {

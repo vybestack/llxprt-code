@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { rewriteToolResponse } from './historyToolRewrite.js';
 import type {
   HistoryRepair,
   StagedProfileAdoption,
@@ -32,7 +31,7 @@ import { publishResumeRestoration } from './historyResumeProjection.js';
 import type { ResumeBoot } from './historyStorePort.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import { isDeepStrictEqual } from 'node:util';
-import type { IContent, ToolResponseBlock } from './IContent.js';
+import type { IContent } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 export type { ToolPairingStreamOptions } from './historyToolPairing.js';
@@ -246,70 +245,6 @@ export class HistoryService extends HistoryServiceReads {
     };
     return Object.assign(commitDerivedState, {
       rollback: () => replacement.rollback(),
-    });
-  }
-
-  /**
-   * Immutably replace a single tool_response block with a replacement
-   * tool_response block, preserving callId/toolName invariants.
-   *
-   * Unlike a generic block-replacement API, this method enforces structural
-   * invariants that compression/truncation callers rely on:
-   *   - The target block at (entryIndex, blockIndex) MUST be a tool_response.
-   *   - The replacement MUST be a tool_response.
-   *   - The replacement MUST carry the same callId and toolName as the target.
-   * This prevents accidental corruption of tool-call/response pairing.
-   */
-  async replaceToolResponseBlock(
-    entryIndex: number,
-    blockIndex: number,
-    replacement: ToolResponseBlock,
-    modelName?: string,
-    signal?: AbortSignal,
-  ): Promise<boolean> {
-    let replaced = false;
-    await this.enqueueAsynchronousHistoryMutation(async () => {
-      replaced = await this.replaceToolResponseBlockInternal(
-        entryIndex,
-        blockIndex,
-        replacement,
-        modelName,
-        signal,
-      );
-    });
-    return replaced;
-  }
-
-  /**
-   * Runs inside the asynchronous mutation FIFO so a concurrent add() observes
-   * the replacement as one step rather than landing mid-recalculation.
-   */
-  private async replaceToolResponseBlockInternal(
-    entryIndex: number,
-    blockIndex: number,
-    replacement: ToolResponseBlock,
-    modelName?: string,
-    signal?: AbortSignal,
-  ): Promise<boolean> {
-    let oldTokens = this.totalTokens;
-    return rewriteToolResponse({
-      journal: this.journal,
-      entryIndex,
-      blockIndex,
-      replacement,
-      ownership: this.mutationOwnership,
-      owner: this.mediaOwner,
-      signal,
-      prepareTokens: async () => {
-        await this.waitForTokenUpdates();
-        oldTokens = this.totalTokens;
-      },
-      recalculate: () =>
-        this.recalculateTotalTokensInternal(modelName, undefined, signal),
-      restoreTokens: () => {
-        this.totalTokens = oldTokens;
-        this.notifyRestoredTokens();
-      },
     });
   }
 

@@ -21,11 +21,6 @@ import {
   weightedTokenizer,
 } from './heavy-far-response-support.js';
 
-class FallbackCaptureHistory extends HistoryService {
-  override replaceToolResponseBlock(): Promise<boolean> {
-    throw new Error('eager tool replacement is forbidden');
-  }
-}
 const logger = new DebugLogger('test:tool-hardlimit-bytes');
 async function finalizedCount(
   history: HistoryService,
@@ -99,7 +94,7 @@ async function hardlimitBodies(
     2048,
     providerFarFixtureRow,
     undefined,
-    (options) => new FallbackCaptureHistory(options),
+    (options) => new HistoryService(options),
   );
 }
 const cases: Array<[number, string, boolean]> = [];

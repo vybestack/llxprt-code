@@ -48,7 +48,6 @@ export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/detached-rollback-body.test.ts': 74,
   'scripts/tests/addbatch-stream-body.test.ts': 71,
   'scripts/tests/reinitialize-history-body.test.ts': 67,
-  'scripts/tests/tool-repair-disk-body.test.ts': 65,
   'scripts/tests/agent-carry-body.test.ts': 63,
   'scripts/tests/deferred-transform-body.test.ts': 48,
   'scripts/tests/auto-issue-metadata.test.ts': 45,

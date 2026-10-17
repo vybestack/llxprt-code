@@ -1,15 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { readdirSync } from 'node:fs';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withToolResponseRanking } from '../toolResponseDiskRanking.js';
-import {
-  BoundedToolHistory,
-  toolRankingRow,
-  toolScore,
-} from './tool-truncation-stream-helpers.js';
+import { toolRankingRow, toolScore } from './tool-truncation-stream-helpers.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 function roots(): string[] {
@@ -73,7 +70,7 @@ describe('pinned ranking source and returned consumers', () => {
         2048,
         toolRankingRow,
         undefined,
-        (options) => new BoundedToolHistory(options),
+        (options) => new HistoryService(options),
       );
       const after = roots();
       expect({

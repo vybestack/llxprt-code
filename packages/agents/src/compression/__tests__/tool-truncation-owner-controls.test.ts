@@ -1,17 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
-import type { HistoryServiceJournalOptions } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  HistoryService,
+  type HistoryServiceJournalOptions,
+} from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { truncateOversizedToolResponsesUnified } from '../toolResultTruncator.js';
-import {
-  BoundedToolHistory,
-  toolRankingRow,
-  toolDeps,
-} from './tool-truncation-stream-helpers.js';
+import { toolRankingRow, toolDeps } from './tool-truncation-stream-helpers.js';
 
-class RetainingToolHistory extends BoundedToolHistory {
+class RetainingToolHistory extends HistoryService {
   readonly retained = new RowOwnership();
   private readonly rows: IContent[] = [];
   constructor(

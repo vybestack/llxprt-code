@@ -17,7 +17,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
-import { BoundedToolHistory } from '../../packages/agents/src/compression/__tests__/tool-truncation-stream-helpers.js';
+import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import {
   rankToolResponses,
@@ -117,7 +117,7 @@ async function toolBodies(
     2048,
     providerFarFixtureRow,
     undefined,
-    (options) => new BoundedToolHistory(options),
+    (options) => new HistoryService(options),
   );
 }
 

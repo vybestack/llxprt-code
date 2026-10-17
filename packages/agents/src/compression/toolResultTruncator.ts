@@ -544,7 +544,7 @@ async function processUnifiedCandidate(
  * Location-aware unified truncation: ranks history + pending tool-response
  * candidates together by active-provider tokenizer size (largest first,
  * recent tie-break), immutably replaces pending candidates in a working
- * copy and history candidates via HistoryService.replaceToolResponseBlock,
+ * copy and history candidates through the ranking's replacement,
  * recomposes and re-estimates after every replacement, and returns the
  * transformed pending contents alongside the truncation result.
  *

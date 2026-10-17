@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
+import { replaceRowAt } from './__tests__/support/row-replacement.js';
 import {
   FanoutHarness,
   rowText,
@@ -128,15 +129,19 @@ describe('journal writers keep every row with its owner', () => {
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
 
-    const replaced = await service.replaceToolResponseBlock(2, 0, {
-      type: 'tool_response',
-      callId: 'call-1',
-      toolName: 'tool',
-      result: 'short',
+    await replaceRowAt(service, 2, {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'tool',
+          result: 'short',
+        },
+      ],
     });
     await service.waitForCommit();
 
-    expect(replaced).toBe(true);
     const rowsA = await harness.replayedRows(a);
     expect(rowsA.map(rowText)).toStrictEqual([
       'seed',
