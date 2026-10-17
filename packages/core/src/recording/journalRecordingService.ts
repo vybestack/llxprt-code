@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { VersionEdit } from '../journal/groupEdits.js';
 import type { CommitAck } from '../journal/groupWriter.js';
@@ -448,11 +448,15 @@ export class JournalRecordingService implements SessionRecordingPort {
       this.config.chatsDir,
       journalSessionFileName(this.config.sessionId),
     );
-    const session = await JournalSession.create(filePath, this.config.journal);
+    // The name is unique to this recorder, so a file at the path is ours and a
+    // failed creation takes it away again instead of leaving a partial journal.
+    let session: JournalSession | undefined;
     try {
+      session = await JournalSession.create(filePath, this.config.journal);
       await this.commitStart(session);
     } catch (error) {
-      await session.close();
+      await session?.close().catch(ignore);
+      await rm(filePath, { force: true });
       throw error;
     }
     this.filePath = filePath;

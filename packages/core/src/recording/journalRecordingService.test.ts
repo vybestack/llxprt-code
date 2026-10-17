@@ -303,6 +303,26 @@ describe('journal recording service', () => {
     ).toThrow('inactive');
   });
 
+  it('leaves no partial file when creating the journal fails', async () => {
+    for (const failWriteAt of [0, 1]) {
+      const seams = testJournalSeams({ failWriteAt });
+      const recording = created({
+        sessionId: `failed-create-${failWriteAt}`,
+        journal: { journal: seams.dependencies },
+      });
+
+      await expect(recording.session()).rejects.toThrow('injected write');
+
+      const entries = await fsp
+        .readdir(config().chatsDir)
+        .catch(() => [] as string[]);
+      expect(
+        entries.filter((e) => e.endsWith(SESSION_FILE_EXTENSION)),
+      ).toStrictEqual([]);
+      expect(recording.getFilePath()).toBeNull();
+    }
+  });
+
   it('holds the session lock until disposed', async () => {
     const chatsDir = config().chatsDir;
     await fsp.mkdir(chatsDir, { recursive: true });
