@@ -930,14 +930,8 @@ export abstract class HistoryServiceCore
 
   protected async commitHistoryMutation(
     input: HistoryMutationInput,
-    previousHistory?: HistoryMutationSnapshot,
+    previousHistory: HistoryMutationSnapshot,
   ): Promise<void> {
-    if (previousHistory === undefined) {
-      await this.journal.withMutationSnapshot((previous) =>
-        this.commitHistoryMutation(input, previous),
-      );
-      return;
-    }
     const previousTokens = this.totalTokens;
     const previousSpans = this.spanWindow.get();
     const chronology = this.chronology.snapshot();

@@ -20,7 +20,6 @@ import type {
   StagedProfileAdoption,
 } from './historyStorePort.js';
 import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
-import { withFallbackRestoreRows } from './historyFallbackRows.js';
 import { estimateMergedAppendTokens } from './historyMergeRows.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
@@ -118,30 +117,6 @@ export class HistoryService extends HistoryServiceReads {
     return this.journal.withMutationSnapshot(execute, signal);
   }
 
-  restoreRawHistorySnapshot(
-    snapshot: HistoryMutationSnapshot,
-    modelName?: string,
-  ): Promise<void> {
-    return this.enqueueAsynchronousHistoryMutation(() =>
-      withFallbackRestoreRows(
-        snapshot,
-        async (nextHistory) => {
-          await this.waitForTokenUpdates();
-          const nextHistoryTokens = await this.estimateTokensForContents(
-            nextHistory.streamRows(),
-            modelName,
-          );
-          await this.commitHistoryMutation({
-            nextHistory,
-            nextHistoryTokens,
-            streamPublication: !snapshot.hasPendingRows,
-            options: {},
-          });
-        },
-        this.mutationOwnership,
-      ),
-    );
-  }
   async adoptResumeBoot(
     recording: RecordingPort,
     boot: ResumeBoot,
