@@ -69,28 +69,42 @@ async function suspendPublication(history: ObservedValueHistory): Promise<{
       rollback: () => undefined,
     })),
   );
-  const replace = history.detachedValues.replace;
-  history.detachedValues.replace = (rows, model, options) => {
-    if (Array.isArray(rows))
-      throw new Error('Context array submitted through value path');
-    async function* observe(): AsyncGenerator<IContent, void, unknown> {
-      for await (const row of rows) {
-        history.submittedRows.push(new WeakRef(row));
-        yield row;
-      }
-    }
-    return replace(observe(), model, {
-      ...options,
-      onAcknowledged: () => {
-        state.acknowledged = true;
+  const transform = history.detachedValues.transform;
+  history.detachedValues.transform = (candidate, model, options) => {
+    const observe = (row: IContent): void => {
+      history.submittedRows.push(new WeakRef(row));
+    };
+    return transform(
+      (source, sink) =>
+        candidate(source, {
+          appendValue: (row) => {
+            observe(row);
+            return sink.appendValue(row);
+          },
+          appendDerived: (ordinal, row) => {
+            observe(row);
+            return sink.appendDerived(ordinal, row);
+          },
+          appendReplacement: (ordinal, row) => {
+            observe(row);
+            return sink.appendReplacement(ordinal, row);
+          },
+          removeValue: (ordinal) => sink.removeValue(ordinal),
+        }),
+      model,
+      {
+        ...options,
+        onAcknowledged: () => {
+          state.acknowledged = true;
+        },
+        afterPublication: async () => {
+          state.callbacks++;
+          ready.resolve();
+          await release.promise;
+          throw failure;
+        },
       },
-      afterPublication: async () => {
-        state.callbacks++;
-        ready.resolve();
-        await release.promise;
-        throw failure;
-      },
-    });
+    );
   };
   return {
     ready,
@@ -98,7 +112,7 @@ async function suspendPublication(history: ObservedValueHistory): Promise<{
     failure,
     state,
     restore: () => {
-      history.detachedValues.replace = replace;
+      history.detachedValues.transform = transform;
     },
   };
 }
