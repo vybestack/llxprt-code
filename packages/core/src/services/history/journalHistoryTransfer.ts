@@ -1,10 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { rm } from 'node:fs/promises';
-import type { SourceRow } from '../../journal/groupEdits.js';
+import { JournalFormatError } from '../../journal/errors.js';
+import type { SourceRow, VersionEdit } from '../../journal/groupEdits.js';
 import { sha256KeyHash } from '../../journal/idKeys.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import { resolveJournalDependencies } from '../../journal/journalWriterOpen.js';
 import { acceptedRows } from '../../journal/mirrorSeed.js';
+import { OwnerDictionary } from '../../journal/ownerDictionary.js';
+import { UNOWNED } from '../../journal/ownerRules.js';
 import { cloneVersion } from '../../journal/versionCopy.js';
 import { HistoryAttachmentError } from './attachHistoryJournal.js';
 import {
@@ -62,10 +65,68 @@ export interface JournalAttachmentCommit {
   readonly destinationRewound: boolean;
 }
 
+/**
+ * Source owner ids to destination owner ids (design 5.1). Two journals number
+ * their owners independently, so an owner crosses by its origin string. The
+ * edits register the origins the destination does not have yet; they go in
+ * the group that copies the rows.
+ */
+interface OwnerMapping {
+  readonly edits: readonly VersionEdit[];
+  readonly ids: ReadonlyMap<number, number>;
+}
+
+/** Maps the origin of `owner`, or every origin of the source when no owner is named. */
+async function mapOwners(
+  source: JournalStore,
+  destination: JournalStore,
+  owner: number | undefined,
+): Promise<OwnerMapping> {
+  const from = await OwnerDictionary.load(source);
+  const into = await OwnerDictionary.load(destination);
+  const wanted: Array<[number, string]> = [];
+  if (owner === undefined) {
+    wanted.push(...from.entries());
+  } else if (owner !== UNOWNED) {
+    const origin = from.originOf(owner);
+    if (origin === undefined) {
+      throw new JournalFormatError(
+        `The source owner dictionary has no owner ${owner}`,
+      );
+    }
+    wanted.push([owner, origin]);
+  }
+  const edits: VersionEdit[] = [];
+  const ids = new Map<number, number>();
+  for (const [id, origin] of wanted) {
+    const registration = into.prepare(origin);
+    into.confirm(registration);
+    edits.push(...registration.edits);
+    ids.set(id, registration.id);
+  }
+  return { edits, ids };
+}
+
+function ownedByDestination(
+  row: SourceRow,
+  ids: ReadonlyMap<number, number>,
+): SourceRow {
+  const { owner } = row.entry;
+  if (owner === UNOWNED) return row;
+  const mapped = ids.get(owner);
+  if (mapped === undefined) {
+    throw new JournalFormatError(
+      `Row ${row.entry.label} names owner ${owner}, which the source owner dictionary does not have`,
+    );
+  }
+  return { source: row.source, entry: { ...row.entry, owner: mapped } };
+}
+
 async function* liveRows(
   source: JournalStore,
   isCancelled: () => boolean,
   owner: number | undefined,
+  ids: ReadonlyMap<number, number>,
 ): AsyncGenerator<SourceRow> {
   const version = source.published;
   if (version === undefined) return;
@@ -76,7 +137,7 @@ async function* liveRows(
       : acceptedRows(access, version, owner);
   for await (const row of rows) {
     requireLive(isCancelled);
-    yield row;
+    yield ownedByDestination(row, ids);
   }
 }
 
@@ -90,7 +151,8 @@ async function* allRows(
 /**
  * Makes the history of `destination` the rows of `source` (design 5.3), as one
  * group: a failure or a cancellation before the group is acknowledged leaves
- * the previous history as it was, with the owners the rows carry. A
+ * the previous history as it was. Owners cross by their origin strings into the
+ * destination's own dictionary. A
  * destination that holds history is only touched when `replace` says so.
  */
 export async function attachJournalHistory(
@@ -106,10 +168,12 @@ export async function attachJournalHistory(
         'The destination holds history; attaching it must replace that history',
       );
     }
+    const owners = await mapOwners(source, destination, options.owner);
     await destination.commit([
+      ...owners.edits,
       {
         kind: 'adoptAll',
-        rows: liveRows(source, options.isCancelled, options.owner),
+        rows: liveRows(source, options.isCancelled, options.owner, owners.ids),
         nextLabel: source.published?.nextLabel ?? 1n,
       },
     ]);

@@ -15,6 +15,7 @@ import {
   type Failures,
 } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { OwnerDictionary } from '../../journal/ownerDictionary.js';
 import { HistoryAttachmentError } from './attachHistoryJournal.js';
 import type { IContent } from './IContent.js';
 import {
@@ -40,6 +41,26 @@ async function owners(session: JournalSession): Promise<number[]> {
   const found: number[] = [];
   for await (const entry of session.rows()) found.push(entry.entry.owner);
   return found;
+}
+
+/** Gives the journal the owner ids 1, 2, ... for the origins, in order. */
+async function registerOwners(
+  session: JournalSession,
+  origins: readonly string[],
+): Promise<void> {
+  const dictionary = await OwnerDictionary.load(session.store);
+  for (const origin of origins) {
+    const registration = dictionary.prepare(origin);
+    await session.store.commit([...registration.edits]);
+    dictionary.confirm(registration);
+  }
+}
+
+async function originsOf(
+  session: JournalSession,
+): Promise<Array<string | undefined>> {
+  const dictionary = await OwnerDictionary.load(session.store);
+  return (await owners(session)).map((id) => dictionary.originOf(id));
 }
 
 describe('journal history transfer', () => {
@@ -145,6 +166,7 @@ describe('journal history transfer', () => {
   describe('attaching one history to another journal', () => {
     async function seededSource(): Promise<JournalSession> {
       const source = await session('source.llxj');
+      await registerOwners(source, ['agent:one', 'agent:two']);
       await source.append([row('one-a')], { owner: 1 });
       await source.append([row('shared')], { owner: 0 });
       await source.append([row('two-a')], { owner: 2 });
@@ -197,6 +219,73 @@ describe('journal history transfer', () => {
           committedRows: 3,
           destinationRewound: false,
         });
+      }));
+
+    it('maps owners through their origins when the two journals number them differently', () =>
+      withCleanup(async () => {
+        const source = await seededSource();
+        const destination = await session('destination.llxj');
+        await registerOwners(destination, ['agent:two', 'agent:three']);
+
+        await attachJournalHistory(source.store, destination.store, {
+          replace: false,
+          isCancelled: () => false,
+        });
+
+        expect(await texts(destination)).toStrictEqual([
+          'one-a',
+          'shared',
+          'two-a',
+          'one-b',
+        ]);
+        expect(await originsOf(destination)).toStrictEqual([
+          'agent:one',
+          undefined,
+          'agent:two',
+          'agent:one',
+        ]);
+        // The destination keeps its own numbering; the origin it did not have gets the next id.
+        const dictionary = await OwnerDictionary.load(destination.store);
+        expect(dictionary.idOf('agent:two')).toBe(1);
+        expect(dictionary.idOf('agent:three')).toBe(2);
+        expect(dictionary.idOf('agent:one')).toBe(3);
+      }));
+
+    it('registers only the origin of the owner it takes when it filters by owner', () =>
+      withCleanup(async () => {
+        const source = await seededSource();
+        const destination = await session('destination.llxj');
+        await registerOwners(destination, ['agent:two']);
+
+        await attachJournalHistory(source.store, destination.store, {
+          replace: false,
+          owner: 1,
+          isCancelled: () => false,
+        });
+
+        expect(await originsOf(destination)).toStrictEqual([
+          'agent:one',
+          undefined,
+          'agent:one',
+        ]);
+        const dictionary = await OwnerDictionary.load(destination.store);
+        expect(dictionary.idOf('agent:one')).toBe(2);
+        expect(dictionary.originOf(3)).toBeUndefined();
+      }));
+
+    it('refuses a row whose owner the source dictionary does not name', () =>
+      withCleanup(async () => {
+        const source = await session('source.llxj');
+        await source.append([row('stray')], { owner: 7 });
+        const destination = await session('destination.llxj');
+
+        const attempt = attachJournalHistory(source.store, destination.store, {
+          replace: false,
+          isCancelled: () => false,
+        });
+
+        await expect(attempt).rejects.toBeInstanceOf(HistoryAttachmentError);
+        expect(await texts(destination)).toStrictEqual([]);
       }));
 
     it('refuses a destination that holds history unless it is to be replaced', () =>

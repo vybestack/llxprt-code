@@ -66,6 +66,11 @@ export class OwnerDictionary {
     return new OwnerDictionary(origins, ids, next);
   }
 
+  /** Every owner id with its origin, in id order. */
+  entries(): IterableIterator<[number, string]> {
+    return this.origins.entries();
+  }
+
   idOf(origin: string): number | undefined {
     return this.ids.get(origin);
   }
