@@ -20,7 +20,7 @@
  * A {@link SessionGroup} deduplicates a transient raw+archive pair that
  * represent the same logical session, so the corpus is never double-counted
  * for age/count ranking (finding B).  Group identity is derived from the
- * chats directory and the shared base name (`session-<id>.jsonl`), where an
+ * chats directory and the shared base name (`session-<id>.<ext>`), where an
  * archive's base name is its file name without the trailing `.gz`.
  *
  * The group's recording time is the **original** session age (oldest file),
@@ -36,15 +36,7 @@ import type {
   SessionCandidate,
 } from './cleanupTypes.js';
 import { SessionLockManager } from '../SessionLockManager.js';
-
-/** Archive file-name suffix. */
-const ARCHIVE_SUFFIX = '.jsonl.gz';
-
-/** Base JSONL suffix shared by both raw and archive file names. */
-const JSONL_SUFFIX = '.jsonl';
-
-/** Compression-suffix length derived from the shared suffix constants. */
-const COMPRESSION_SUFFIX_LEN = ARCHIVE_SUFFIX.length - JSONL_SUFFIX.length;
+import { ARCHIVE_COMPRESSION_SUFFIX } from '../sessionFileExtension.js';
 
 /**
  * A logical session: at most one raw recording and at most one cold archive
@@ -54,7 +46,7 @@ export interface SessionGroup {
   /** Stable identity: `<chatsDir>|<baseName>`. */
   readonly sessionKey: string;
   readonly chatsDir: string;
-  /** `session-<id>.jsonl` (archive base name strips the `.gz`). */
+  /** `session-<id>.<ext>` (archive base name strips the `.gz`). */
   readonly baseName: string;
   readonly projectHashDir: string;
   readonly raw: SessionCandidate | null;
@@ -105,8 +97,8 @@ export function compareGroupsNewestFirst(
 /** Strip the trailing compression suffix from an archive file name to recover the base name. */
 function baseNameOf(candidate: SessionCandidate): string {
   return candidate.kind === 'archive' &&
-    candidate.fileName.endsWith(ARCHIVE_SUFFIX)
-    ? candidate.fileName.slice(0, -COMPRESSION_SUFFIX_LEN)
+    candidate.fileName.endsWith(ARCHIVE_COMPRESSION_SUFFIX)
+    ? candidate.fileName.slice(0, -ARCHIVE_COMPRESSION_SUFFIX.length)
     : candidate.fileName;
 }
 

@@ -32,6 +32,8 @@
  */
 
 import { readFirstLineFromFile } from '../SessionDiscovery.js';
+import { readJournalFileFacts } from '../journalSessionListing.js';
+import { SESSION_FILE_EXTENSION } from '../sessionFileExtension.js';
 import { isValidSafeSessionId } from './sessionSafety.js';
 
 /** Payload fields the janitor extracts from the session_start header. */
@@ -73,4 +75,42 @@ export async function readSessionJsonlHeader(
   const projectHash =
     typeof payload.projectHash === 'string' ? payload.projectHash : undefined;
   return { sessionId: payload.sessionId, startTime, projectHash };
+}
+
+/**
+ * Read the session facts of a journal recording through the read-only journal
+ * view (no row is read). Returns `null` for a file that holds no committed
+ * session or cannot be opened as a journal, and for an unsafe session id: the
+ * file is external input, and an unreadable recording stays protected (AC-7).
+ */
+async function readJournalHeader(
+  filePath: string,
+): Promise<SessionHeaderInfo | null> {
+  let found;
+  try {
+    found = await readJournalFileFacts(filePath);
+  } catch {
+    return null;
+  }
+  if (found === undefined) return null;
+  const { sessionId, start } = found.facts;
+  if (!isValidSafeSessionId(sessionId)) return null;
+  return {
+    sessionId,
+    startTime: start.startTime,
+    projectHash: start.projectHash,
+  };
+}
+
+/**
+ * Read the header of a raw session recording of either format, chosen by the
+ * file extension: `.llxj` through the journal reader, anything else through
+ * the JSONL header reader.
+ */
+export async function readSessionHeaderInfo(
+  filePath: string,
+): Promise<SessionHeaderInfo | null> {
+  return filePath.endsWith(SESSION_FILE_EXTENSION)
+    ? readJournalHeader(filePath)
+    : readSessionJsonlHeader(filePath);
 }

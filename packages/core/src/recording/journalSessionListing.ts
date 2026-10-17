@@ -8,7 +8,7 @@ import { stateReaderOf } from '../journal/journalReaderState.js';
 import {
   RETIRED_SESSION_EXTENSION,
   SESSION_FILE_EXTENSION,
-} from './sessionFileName.js';
+} from './sessionFileExtension.js';
 import {
   SESSION_KEYS,
   decodePreviewFact,

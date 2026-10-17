@@ -1,11 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { SESSION_FILE_ID_PREFIX_LENGTH } from './SessionRecordingService.js';
-
-/** The extension of a journal session file (design 2.1). S09 replaces the `.jsonl` matchers with it. */
-export const SESSION_FILE_EXTENSION = '.llxj';
-
-/** The extension of the retired JSONL session files. Discovery lists them as unreadable and nothing else reads them. */
-export const RETIRED_SESSION_EXTENSION = '.jsonl';
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 
 /** `session-<timestamp>-<instance>-<id prefix>.llxj`, unique per recorder instance. */
 export function journalSessionFileName(

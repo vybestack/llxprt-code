@@ -12,7 +12,7 @@ import {
   JournalRecordingService,
   type JournalRecordingConfig,
 } from './journalRecordingService.js';
-import { SESSION_FILE_EXTENSION } from './sessionFileName.js';
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 import {
   SESSION_KEYS,
   decodeDirectoriesFact,

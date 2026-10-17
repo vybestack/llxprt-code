@@ -18,13 +18,20 @@ import type { Dirent, Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { SessionCandidate } from './cleanupTypes.js';
-import { readSessionJsonlHeader } from './sessionHeaderReader.js';
+import {
+  selectBackend,
+  type HistoryBackend,
+} from '../../services/history/historyBackendSelect.js';
+import {
+  ARCHIVE_COMPRESSION_SUFFIX,
+  RETIRED_SESSION_EXTENSION,
+  sessionFileExtension,
+} from '../sessionFileExtension.js';
+import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 
 const PROJECT_HASH_RE = /^[0-9a-f]{64}$/;
 export const ARCHIVE_DIR_NAME = 'archive';
 const SESSION_PREFIX = 'session-';
-const SESSION_JSONL_SUFFIX = '.jsonl';
-const ARCHIVE_SUFFIX = '.jsonl.gz';
 
 export interface SessionScanLimits {
   readonly maxProjects: number;
@@ -47,6 +54,8 @@ export interface ScanResult {
 
 interface ScanBudget {
   readonly limits: SessionScanLimits;
+  /** The backend whose session files the scan lists, read once per scan. */
+  readonly backend: HistoryBackend;
   files: number;
   bytes: number;
   skipped: number;
@@ -116,16 +125,33 @@ function reserveCandidateBudget(fileStat: Stats, budget: ScanBudget): boolean {
   return true;
 }
 
-function rawFileName(name: string): boolean {
+/**
+ * The raw session files the janitor lists: the files of the selected backend,
+ * plus, on the journal backend, the retired `.jsonl` files. A retired file is a
+ * candidate without a session id (it is never opened), so it is unreadable and
+ * protected like any other recording whose identity cannot be established.
+ */
+function rawFileName(name: string, backend: HistoryBackend): boolean {
+  if (!name.startsWith(SESSION_PREFIX)) return false;
+  if (name.endsWith(ARCHIVE_COMPRESSION_SUFFIX)) return false;
   return (
-    name.startsWith(SESSION_PREFIX) &&
-    name.endsWith(SESSION_JSONL_SUFFIX) &&
-    !name.endsWith(ARCHIVE_SUFFIX)
+    name.endsWith(sessionFileExtension(backend)) ||
+    (backend === 'journal' && name.endsWith(RETIRED_SESSION_EXTENSION))
   );
 }
 
-function archiveFileName(name: string): boolean {
-  return name.startsWith(SESSION_PREFIX) && name.endsWith(ARCHIVE_SUFFIX);
+function archiveFileName(name: string, backend: HistoryBackend): boolean {
+  if (!name.startsWith(SESSION_PREFIX)) return false;
+  return (
+    name.endsWith(sessionFileExtension(backend) + ARCHIVE_COMPRESSION_SUFFIX) ||
+    (backend === 'journal' &&
+      name.endsWith(RETIRED_SESSION_EXTENSION + ARCHIVE_COMPRESSION_SUFFIX))
+  );
+}
+
+/** A retired JSONL file on the journal backend: listed, never opened. */
+function isRetiredName(name: string, backend: HistoryBackend): boolean {
+  return backend === 'journal' && name.endsWith(RETIRED_SESSION_EXTENSION);
 }
 
 async function scanRawSessionEntry(
@@ -135,13 +161,16 @@ async function scanRawSessionEntry(
   currentSessionId: string | undefined,
   budget: ScanBudget,
 ): Promise<SessionCandidate | undefined> {
-  if (!entry.isFile() || !rawFileName(entry.name)) return undefined;
+  if (!entry.isFile() || !rawFileName(entry.name, budget.backend))
+    return undefined;
   const filePath = path.join(chatsDir, entry.name);
   try {
     const fileStat = await fs.lstat(filePath);
     if (fileStat.isSymbolicLink() || !fileStat.isFile()) return undefined;
     if (!reserveCandidateBudget(fileStat, budget)) return undefined;
-    const header = await readSessionJsonlHeader(filePath);
+    const header = isRetiredName(entry.name, budget.backend)
+      ? null
+      : await readSessionHeaderInfo(filePath);
     return {
       kind: 'raw',
       filePath,
@@ -205,7 +234,8 @@ async function scanArchiveSessionEntry(
   projectHashDir: string,
   budget: ScanBudget,
 ): Promise<SessionCandidate | undefined> {
-  if (!entry.isFile() || !archiveFileName(entry.name)) return undefined;
+  if (!entry.isFile() || !archiveFileName(entry.name, budget.backend))
+    return undefined;
   const filePath = path.join(archiveDir, entry.name);
   try {
     const fileStat = await fs.lstat(filePath);
@@ -343,6 +373,7 @@ export async function scanGlobalSessions(
 ): Promise<ScanResult> {
   const budget: ScanBudget = {
     limits: validatedLimits(limits),
+    backend: selectBackend(),
     files: 0,
     bytes: 0,
     skipped: 0,

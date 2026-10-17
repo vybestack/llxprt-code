@@ -13,6 +13,7 @@ import { createGunzip } from 'node:zlib';
 import type { IContent } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
+import { isJournalFileName } from '../sessionFileExtension.js';
 
 const PROJECT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 const CONTENT_ID_PATTERN = /"contentId"\s*:\s*"(sha256:[0-9a-f]{64})"/g;
@@ -114,30 +115,52 @@ async function scanTextStream(
   collectSerializedContentIds(tail + decoder.end(), contentIds);
 }
 
+/**
+ * The ownership files the scan reads. Reclamation only protects, so it reads
+ * every format that can be on disk whatever the backend: the retired `.jsonl`
+ * files stay until they age out and still name blobs.
+ */
+function isOwnershipFile(filePath: string): boolean {
+  return (
+    filePath.endsWith('.json') ||
+    filePath.endsWith('.jsonl') ||
+    filePath.endsWith('.gz') ||
+    isJournalFileName(filePath)
+  );
+}
+
+/**
+ * Whether a file counts against the byte limits. Those limits stop a text
+ * scan from reading an unbounded file, and they leave a project unreclaimed
+ * when they trip. A journal is streamed in 64 KiB chunks whatever its size,
+ * and it grows with its history (old versions stay until compaction), so
+ * refusing a large one would leak every blob of its project for good. A
+ * journal file or archive counts toward the file limit only.
+ */
+function isByteLimited(filePath: string): boolean {
+  return !isJournalFileName(filePath);
+}
+
 async function collectFileContentIds(
   filePath: string,
   contentIds: Set<string>,
   limits: MediaReclamationLimits,
   budget: ProjectScanBudget,
 ): Promise<void> {
-  if (
-    !filePath.endsWith('.json') &&
-    !filePath.endsWith('.jsonl') &&
-    !filePath.endsWith('.gz')
-  ) {
-    return;
-  }
+  if (!isOwnershipFile(filePath)) return;
   const fileStat = await lstat(filePath);
   if (!fileStat.isFile() || fileStat.isSymbolicLink()) return;
+  const byteLimited = isByteLimited(filePath);
   if (
     budget.files >= limits.maxFilesPerProject ||
-    fileStat.size > limits.maxBytesPerFile ||
-    fileStat.size > limits.maxBytesPerProject - budget.bytes
+    (byteLimited &&
+      (fileStat.size > limits.maxBytesPerFile ||
+        fileStat.size > limits.maxBytesPerProject - budget.bytes))
   ) {
     throw new Error('Ownership data exceeds media reclamation scan limits');
   }
   budget.files += 1;
-  budget.bytes += fileStat.size;
+  if (byteLimited) budget.bytes += fileStat.size;
   const source = createReadStream(filePath, {
     highWaterMark: SCAN_CHUNK_BYTES,
   });
@@ -145,11 +168,15 @@ async function collectFileContentIds(
     await scanTextStream(
       source.pipe(createGunzip({ chunkSize: SCAN_CHUNK_BYTES })),
       contentIds,
-      limits.maxDecompressedBytesPerFile,
+      byteLimited ? limits.maxDecompressedBytesPerFile : Infinity,
     );
     return;
   }
-  await scanTextStream(source, contentIds, limits.maxBytesPerFile);
+  await scanTextStream(
+    source,
+    contentIds,
+    byteLimited ? limits.maxBytesPerFile : Infinity,
+  );
 }
 
 async function collectOwnedContentIds(
