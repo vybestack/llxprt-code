@@ -70,7 +70,7 @@ export {
   planHistoryMutation,
   planDensityMutation,
 } from './planHistoryMutation.js';
-import { invalidateResponsesStatefulChain, type IContent } from './IContent.js';
+import type { IContent } from './IContent.js';
 import { recordPublicationOwners } from './historyPublicationOwners.js';
 import {
   admitHistoryPending,
@@ -89,16 +89,20 @@ import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
   HistoryClearRequest,
   HistoryCompensationMark,
-  HistoryJournalAdoption,
   HistoryJournalOp,
   HistoryMutationMark,
   HistoryPublicationScope,
   HistoryRemoveTailRequest,
   HistoryRepair,
   HistoryRepairRequest,
+  HistoryResumeRequest,
   HistoryStorePort,
 } from './historyStorePort.js';
 import { clearHistoryRows } from './historyClearRows.js';
+import {
+  adoptResumeOnJsonl,
+  type HistoryJournalAdoption,
+} from './historyResumeAdoption.js';
 import { removeHistoryTail } from './historyRemoveTail.js';
 import { repairHistoryRows } from './historyValidationRepair.js';
 import { withDetachedHistoryCheckpoint } from './detachedHistoryCheckpoint.js';
@@ -129,9 +133,8 @@ import {
 } from '../../recording/replaceTransaction.js';
 import {
   applyFoldEvent,
-  foldEvents,
+  foldAboveResumeBoundary,
   opToEvent,
-  parseFoldEvents,
 } from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
 import {
@@ -596,6 +599,11 @@ export class HistoryJournalStore implements HistoryStorePort {
     }
   }
 
+  /** Resumes onto a replayed cursor; see {@link adoptResumeOnJsonl}. */
+  adoptResume(request: HistoryResumeRequest): Promise<string[]> {
+    return adoptResumeOnJsonl(this, request);
+  }
+
   /**
    * Switch to a validated durable range without reading or copying content.
    * The caller retains ownership of the adopted recorder. Rollback restores
@@ -980,28 +988,11 @@ export class HistoryJournalStore implements HistoryStorePort {
       : Math.min(buffer.length, this.binding.durableTail);
     if (limit <= 0) return [];
     const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
-    const boundary = this.binding.resumeBoundary ?? 0;
-    if (boundary === 0)
-      return foldEvents(
-        parseFoldEvents(folded.toString('utf8')),
-        [],
-        tx,
-        false,
-      );
-    const restored = invalidateResponsesStatefulChain(
-      foldEvents(
-        parseFoldEvents(
-          this.binding.projection === undefined
-            ? folded.subarray(0, boundary).toString('utf8')
-            : fs.readFileSync(this.binding.projection.filePath, 'utf8'),
-        ),
-      ),
-    );
-    return foldEvents(
-      parseFoldEvents(folded.subarray(boundary).toString('utf8')),
-      [...restored],
+    return foldAboveResumeBoundary(
+      folded,
+      this.binding.resumeBoundary ?? 0,
+      this.binding.projection?.filePath,
       tx,
-      false,
     );
   }
 }

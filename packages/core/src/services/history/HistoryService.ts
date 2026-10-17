@@ -29,9 +29,8 @@ export type {
   HistoryDumpSource,
   HistoryDumpSnapshot,
 } from './historyDumpSnapshot.js';
-import { adoptResumeJournal } from './historyResumeAdoption.js';
 import { publishResumeRestoration } from './historyResumeProjection.js';
-import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
+import type { ResumeBoot } from './historyStorePort.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent, ToolResponseBlock } from './IContent.js';
@@ -145,7 +144,7 @@ export class HistoryService extends HistoryServiceReads {
   }
   async adoptResumeBoot(
     recording: RecordingPort,
-    boot: ResumeCursorBoot,
+    boot: ResumeBoot,
     afterPublication: () => void | Promise<void> = () => {},
   ): Promise<string[]> {
     if (this.isCompressing) {
@@ -171,7 +170,7 @@ export class HistoryService extends HistoryServiceReads {
 
   private async adoptResumeBootInternal(
     recording: RecordingPort,
-    boot: ResumeCursorBoot,
+    boot: ResumeBoot,
     afterPublication: () => void | Promise<void>,
   ): Promise<string[]> {
     await this.waitForTokenUpdates();
@@ -183,8 +182,7 @@ export class HistoryService extends HistoryServiceReads {
       range: this.getContextRange(),
     };
     let published = false;
-    return adoptResumeJournal({
-      journal: this.journal,
+    return this.journal.adoptResume({
       recording,
       boot,
       mediaOwner: this.mediaOwner,

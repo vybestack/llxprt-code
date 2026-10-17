@@ -25,6 +25,7 @@ import type {
   HistoryPublicationScope,
   HistoryRemoveTailRequest,
   HistoryRepairRequest,
+  HistoryResumeRequest,
 } from './historyStorePort.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
@@ -81,6 +82,7 @@ import {
   type JournalCompensationMark,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import { adoptResumeOnJournal } from '../../recording/journalResumeAdoption.js';
 import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 import { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { SessionPreviews, recorderAcceptsRow } from './sessionPreviews.js';
@@ -159,6 +161,11 @@ export class JournalHistoryStore {
     return this.exclusive(() =>
       adoptOnto(this.adoptionHost(), recorder, point),
     );
+  }
+
+  /** Resumes onto a journal recorder from the point its file was opened at; see {@link adoptResumeOnJournal}. */
+  adoptResume(request: HistoryResumeRequest): Promise<string[]> {
+    return adoptResumeOnJournal(this, request);
   }
 
   isAdoptingRecorder(recorder: JournalRecordingService): boolean {

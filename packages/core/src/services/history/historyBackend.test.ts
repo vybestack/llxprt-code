@@ -16,7 +16,7 @@ const PORT_METHODS = [
   'journalPath',
   'attachJournal',
   'detachJournal',
-  'adoptJournal',
+  'adoptResume',
   'apply',
   'openPublication',
   'withPublicationOrdinals',

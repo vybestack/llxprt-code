@@ -1,7 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryStorePort } from './historyStorePort.js';
+import type { HistoryResumeRequest } from './historyStorePort.js';
+import type { CommitWatermark } from '../../recording/types.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
+import type {
+  RecordingPort,
+  SessionRecordingPort,
+} from '../../recording/recordingPort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import type {
   HistoryMediaOwner,
@@ -76,8 +80,52 @@ export async function deriveResumeState(
   };
 }
 
+/** A switch of the JSONL journal binding that can still be taken back. */
+export interface HistoryJournalAdoption {
+  useDurableProjection(watermark: CommitWatermark): void;
+  prepareCommit(): void;
+  commit(): Promise<void>;
+  rollback(): void;
+}
+
+/** What the JSONL adoption needs from the store it switches. */
+export interface JsonlAdoptionHost {
+  adoptJournal(
+    recorder: RecordingPort,
+    watermark: CommitWatermark,
+    stripResumeMarkers: boolean,
+    projection: ResumeProjection,
+  ): HistoryJournalAdoption;
+}
+
+/** The JSONL recorder is the only kind with a commit watermark. */
+function isJsonlRecorder(
+  recording: SessionRecordingPort,
+): recording is RecordingPort {
+  return 'onCommitWatermark' in recording;
+}
+
+/**
+ * Resumes the JSONL store onto a replayed cursor. A journal resume point or a
+ * journal recorder is a backend mismatch and fails fast.
+ */
+export function adoptResumeOnJsonl(
+  journal: JsonlAdoptionHost,
+  request: HistoryResumeRequest,
+): Promise<string[]> {
+  const { recording, boot } = request;
+  if ('nextLabel' in boot || !isJsonlRecorder(recording)) {
+    return Promise.reject(
+      new Error(
+        'Recorder/backend mismatch: the JSONL history store resumes only from a JSONL recorder and its replayed cursor',
+      ),
+    );
+  }
+  return adoptResumeJournal({ ...request, journal, recording, boot });
+}
+
 export async function adoptResumeJournal(input: {
-  journal: HistoryStorePort;
+  journal: JsonlAdoptionHost;
   recording: RecordingPort;
   boot: ResumeCursorBoot;
   mediaOwner?: HistoryMediaOwner;
@@ -89,7 +137,7 @@ export async function adoptResumeJournal(input: {
   if (input.mediaOwner && !input.mediaOwner.prepareReferenceReplacement)
     throw new Error('History media owner does not support journal adoption');
   let media: PreparedHistoryBatchEffect | undefined;
-  let adoption: ReturnType<HistoryStorePort['adoptJournal']> | undefined;
+  let adoption: HistoryJournalAdoption | undefined;
   let projection: ResumeProjection | undefined;
   try {
     const state = await deriveResumeState(input.boot, input.estimate);

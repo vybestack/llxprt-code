@@ -20,7 +20,9 @@ import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { HistoryRowSummary } from './historySummaryTracker.js';
-import type { ResumeProjection } from './historyResumeProjection.js';
+import type { ResumeDerivedState } from './historyResumeAdoption.js';
+import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
+import type { ResumePoint } from '../../recording/journalResume.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 import type {
   DetachedHistoryHost,
@@ -34,9 +36,11 @@ import type {
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { OpenReplaceTracker } from './historyReplaceOps.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
 import type {
-  CommitWatermark,
+  RecordingPort,
+  SessionRecordingPort,
+} from '../../recording/recordingPort.js';
+import type {
   CompressionDetailPayload,
   DensityMutationPayload,
   SyntheticInsertPayload,
@@ -89,11 +93,24 @@ type HistoryJournalOpBody =
     }
   | { readonly kind: 'density'; readonly payload: DensityMutationPayload };
 
-export interface HistoryJournalAdoption {
-  useDurableProjection(watermark: CommitWatermark): void;
-  prepareCommit(): void;
-  commit(): Promise<void>;
-  rollback(): void;
+/** What a resume boots from: the replayed cursor of the JSONL stack, or the version a journal was opened at. */
+export type ResumeBoot = ResumeCursorBoot | ResumePoint;
+
+/**
+ * One resume adoption (decision G5): the policy of HistoryService rides in the
+ * callbacks, the rows, the swap of the recorder and its rollback are the
+ * store's. The store checks that `recording` and `boot` are its own kind.
+ */
+export interface HistoryResumeRequest {
+  readonly recording: SessionRecordingPort;
+  readonly boot: ResumeBoot;
+  readonly mediaOwner?: HistoryMediaOwner;
+  readonly estimate: (contents: readonly IContent[]) => Promise<number>;
+  /** Puts the state derived from the resumed rows into the service. */
+  readonly publish: (state: ResumeDerivedState) => void;
+  /** Takes back what `publish` changed. */
+  readonly restore: () => void;
+  readonly afterPublication: () => void | Promise<void>;
 }
 
 /** Opaque journal position; see {@link HistoryStorePort.mutationMark}. */
@@ -172,12 +189,11 @@ export interface HistoryStorePort {
     origin?: string,
   ): Promise<void>;
   detachJournal(recorder: RecordingPort): Promise<void>;
-  adoptJournal(
-    recorder: RecordingPort,
-    watermark: CommitWatermark,
-    stripResumeMarkers?: boolean,
-    projection?: ResumeProjection,
-  ): HistoryJournalAdoption;
+  /**
+   * Resumes this history onto `recording`. Resolves with the warnings of the
+   * cleanup after the swap; a failure rolls everything back and rejects.
+   */
+  adoptResume(request: HistoryResumeRequest): Promise<string[]>;
 
   // Writes and publication.
   apply(op: HistoryJournalOp): void;

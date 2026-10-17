@@ -3,6 +3,10 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import { createHistoryStore } from '../services/history/historyBackend.js';
+import type { ResumeDerivedState } from '../services/history/historyResumeAdoption.js';
+import type { HistoryStorePort } from '../services/history/historyStorePort.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { JournalAdoption } from '../services/history/journalAdoption.js';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
@@ -254,6 +258,130 @@ describe('adopting a resumed journal while recorders are bound', () => {
       'after',
     ]);
     expect((await bytesOf(first.recording)).equals(firstBytes)).toBe(true);
+  });
+
+  describe('adoptResume on the port', () => {
+    function request(
+      resumed: JournalResumeResult,
+      log: string[],
+      afterPublication: () => void = () => log.push('after'),
+    ): Parameters<HistoryStorePort['adoptResume']>[0] {
+      return {
+        recording: resumed.recording,
+        boot: resumed.resumePoint,
+        estimate: (rows) => Promise.resolve(rows.length * 10),
+        publish: () => log.push('publish'),
+        restore: () => log.push('restore'),
+        afterPublication,
+      };
+    }
+
+    it('adopts a resume onto a history whose live recorder is bound, publishing the derived state once', async () => {
+      const live = recorder('session-live');
+      const store = await liveStore();
+      const port: Pick<HistoryStorePort, 'adoptResume'> = store;
+      store.apply({ kind: 'content', content: userRow('live one') });
+      await store.attachJournal(live, true);
+      await settle(store);
+      const resumed = await resumeRecorded([userRow('ask'), aiRow('answer')]);
+      const states: ResumeDerivedState[] = [];
+      const log: string[] = [];
+
+      const warnings = await port.adoptResume({
+        ...request(resumed, log),
+        publish: (state) => states.push(state),
+      });
+      store.apply({ kind: 'content', content: userRow('next') });
+      await settle(store);
+
+      expect(warnings).toStrictEqual([]);
+      expect(states).toHaveLength(1);
+      expect(states[0].tokens).toBe(20);
+      expect(store.isRecorder(live)).toBe(false);
+      expect(await fileTexts(resumed.recording)).toStrictEqual([
+        'ask',
+        'answer',
+        'next',
+      ]);
+    });
+
+    it('rolls everything back when a step after the swap fails, and the live recorder keeps writing', async () => {
+      const live = recorder('session-live');
+      const store = await liveStore();
+      store.apply({ kind: 'content', content: userRow('live one') });
+      await store.attachJournal(live, true);
+      await settle(store);
+      const resumed = await resumeRecorded([userRow('ask')]);
+      const log: string[] = [];
+      let retired = 0;
+      store.onRetired(() => (retired += 1));
+
+      await expect(
+        store.adoptResume(
+          request(resumed, log, () => {
+            throw new Error('after publication failed');
+          }),
+        ),
+      ).rejects.toThrow('after publication failed');
+      store.apply({ kind: 'content', content: userRow('live two') });
+      await settle(store);
+
+      expect(log).toStrictEqual(['publish', 'restore']);
+      expect(retired).toBe(0);
+      expect(store.isRecorder(live)).toBe(true);
+      expect(await fileTexts(live)).toStrictEqual(['live one', 'live two']);
+    });
+
+    it('is refused by the journal store for a JSONL recorder', async () => {
+      const resumed = await resumeRecorded([userRow('ask')]);
+      const jsonl = new SessionRecordingService({
+        sessionId: 'session-jsonl',
+        projectHash: PROJECT,
+        chatsDir: chatsDirIn(directory()),
+        workspaceDirs: ['/work/a'],
+        provider: 'anthropic',
+        model: 'model-1',
+      });
+      const store = await liveStore();
+
+      await expect(
+        store.adoptResume({ ...request(resumed, []), recording: jsonl }),
+      ).rejects.toThrow('Recorder/backend mismatch');
+      await jsonl.dispose();
+    });
+
+    it('is refused by the JSONL store for a journal resume point, even with its own kind of recorder', async () => {
+      const resumed = await resumeRecorded([userRow('ask')]);
+      const jsonl = new SessionRecordingService({
+        sessionId: 'session-jsonl',
+        projectHash: PROJECT,
+        chatsDir: chatsDirIn(directory()),
+        workspaceDirs: ['/work/a'],
+        provider: 'anthropic',
+        model: 'model-1',
+      });
+      const old = createHistoryStore({}, 'old');
+      try {
+        await expect(
+          old.adoptResume({ ...request(resumed, []), recording: jsonl }),
+        ).rejects.toThrow('Recorder/backend mismatch');
+      } finally {
+        await old.dispose();
+        await jsonl.dispose();
+      }
+    });
+
+    it('is refused by the JSONL store, which resumes only from its own recorder and cursor', async () => {
+      const resumed = await resumeRecorded([userRow('ask')]);
+      const old = createHistoryStore({}, 'old');
+      try {
+        await expect(old.adoptResume(request(resumed, []))).rejects.toThrow(
+          'Recorder/backend mismatch',
+        );
+      } finally {
+        await old.dispose();
+      }
+    });
   });
 
   describe('the resume boundary on every read', () => {

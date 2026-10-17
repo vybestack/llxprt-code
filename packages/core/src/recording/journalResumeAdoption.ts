@@ -13,7 +13,8 @@ import { SpanWindow } from '../services/history/historySpanWindow.js';
 import type { JournalAdoption } from '../services/history/journalAdoption.js';
 import type { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
-import type { JournalRecordingService } from './journalRecordingService.js';
+import type { HistoryResumeRequest } from '../services/history/historyStorePort.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import { resumedRows, type ResumePoint } from './journalResume.js';
 
 /** What the service derives from a resumed history: one pass, nothing kept but these. */
@@ -143,6 +144,33 @@ export async function adoptResumedJournal(
     }
   }
   return warnings;
+}
+
+/**
+ * The journal store's side of the port method: a JSONL recorder or a replayed
+ * cursor is a backend mismatch and fails fast.
+ */
+export function adoptResumeOnJournal(
+  journal: JournalHistoryStore,
+  request: HistoryResumeRequest,
+): Promise<string[]> {
+  const { recording, boot } = request;
+  if (
+    !('nextLabel' in boot) ||
+    !(recording instanceof JournalRecordingService)
+  ) {
+    return Promise.reject(
+      new Error(
+        'Recorder/backend mismatch: the journal history store resumes only from a journal recorder and its resume point',
+      ),
+    );
+  }
+  return adoptResumedJournal({
+    ...request,
+    journal,
+    recording,
+    resumePoint: boot,
+  });
 }
 
 async function rollBack(

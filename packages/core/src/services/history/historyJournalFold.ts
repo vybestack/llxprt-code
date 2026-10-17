@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readFileSync } from 'node:fs';
 import {
   isRecord,
   fieldOf,
@@ -462,4 +463,35 @@ export function parseFoldEvents(text: string): Array<FoldEvent | null> {
     events.push(parseFoldLine(lines[index], index === 0));
   }
   return events;
+}
+
+/**
+ * Folds the durable bytes of a resumed journal. Bytes below `boundary` were
+ * written by an earlier process: they come from the projection file when
+ * there is one, and their Responses chain markers are cleared. Bytes at and
+ * above it are folded as written.
+ */
+export function foldAboveResumeBoundary(
+  folded: Buffer,
+  boundary: number,
+  projectionPath: string | undefined,
+  tx: ReplaceTransactionFold,
+): IContent[] {
+  if (boundary === 0)
+    return foldEvents(parseFoldEvents(folded.toString('utf8')), [], tx, false);
+  const restored = invalidateResponsesStatefulChain(
+    foldEvents(
+      parseFoldEvents(
+        projectionPath === undefined
+          ? folded.subarray(0, boundary).toString('utf8')
+          : readFileSync(projectionPath, 'utf8'),
+      ),
+    ),
+  );
+  return foldEvents(
+    parseFoldEvents(folded.subarray(boundary).toString('utf8')),
+    [...restored],
+    tx,
+    false,
+  );
 }
