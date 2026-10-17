@@ -6,7 +6,7 @@ import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RowOwnership } from '../../../../recording/rowOwnership.js';
 import { createRowCounters } from '../../../../recording/journalCounters.js';
-import { HistoryService } from '../../HistoryService.js';
+import { SnapshotProbeHistory } from './old-store-snapshot-history.js';
 import type { IContent } from '../../IContent.js';
 import {
   AdmissionFailureRecorder,
@@ -14,8 +14,8 @@ import {
   rollbackRow,
 } from '../../chronology-rollback-test-helpers.js';
 
-export class BatchStreamHistory extends HistoryService {
-  constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
+export class BatchStreamHistory extends SnapshotProbeHistory {
+  constructor(options?: ConstructorParameters<typeof SnapshotProbeHistory>[0]) {
     super(options);
     forbidHistoryMaterializationForTest(
       this,

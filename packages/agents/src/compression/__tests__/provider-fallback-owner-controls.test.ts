@@ -15,13 +15,11 @@ describe('fallback snapshot retaining controls', () => {
         const ownership = new RowOwnership();
         const retained: IContent[] = [];
         try {
-          await history.withRawHistorySnapshot(async (snapshot) => {
-            for (const row of snapshot) {
-              const held = copy ? { ...row } : row;
-              retained.push(held);
-              ownership.retain(held);
-            }
-          });
+          for await (const row of history.streamRawHistory()) {
+            const held = copy ? { ...row } : row;
+            retained.push(held);
+            ownership.retain(held);
+          }
           expect(ownership.snapshot().liveRows).toBe(size);
           expect(ownership.snapshot().liveSerializedBytes).toBeGreaterThan(
             size * 2048,

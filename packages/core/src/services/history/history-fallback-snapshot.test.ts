@@ -23,14 +23,14 @@ describe('scoped raw fallback snapshot', () => {
       history.add(rollbackRow(0));
       const before = scratch();
       await expect(
-        history.withRawHistorySnapshot(async () => {
+        history.withSnapshot(async () => {
           throw new Error('consumer failed');
         }),
       ).rejects.toThrow('consumer failed');
       const abort = new AbortController();
       abort.abort(new Error('cancelled snapshot'));
       await expect(
-        history.withRawHistorySnapshot(async () => {
+        history.withSnapshot(async () => {
           throw new Error('must not run');
         }, abort.signal),
       ).rejects.toThrow('cancelled snapshot');

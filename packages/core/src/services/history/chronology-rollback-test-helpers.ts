@@ -9,7 +9,8 @@ import type {
   SessionRecordLine,
 } from '../../recording/types.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import { HistoryService } from './HistoryService.js';
+import type { HistoryService } from './HistoryService.js';
+import { SnapshotProbeHistory } from './__tests__/support/old-store-snapshot-history.js';
 import { JournalResolver } from '../../recording/journalResolver.js';
 import type { ContextRange } from './historyEventTypes.js';
 import type { IContent } from './IContent.js';
@@ -123,7 +124,7 @@ export function mediaParticipant(
 
 export async function withRollbackFixture<T>(
   action: (
-    history: HistoryService,
+    history: SnapshotProbeHistory,
     recorder: AdmissionFailureRecorder,
     releaseWriter: () => void,
   ) => Promise<T>,
@@ -150,7 +151,7 @@ export async function withRollbackFixture<T>(
       },
     },
   });
-  const history = new HistoryService({ recording: recorder });
+  const history = new SnapshotProbeHistory({ recording: recorder });
   history.setTokenizerFactory(exactTokenizer());
   try {
     return await action(history, recorder, releaseWriter);

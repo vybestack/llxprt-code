@@ -67,7 +67,7 @@ for (const [size, bytes] of [
         const readers: Array<Generator<IContent, void, unknown>> = [];
         const failure = new Error('held snapshot callback');
         const operation = rejectedValue(
-          fixture.history.withRawHistorySnapshot(async (snapshot) => {
+          fixture.history.withSnapshot(async (snapshot) => {
             held.snapshot = snapshot;
             readers.push(snapshot[Symbol.iterator]());
             expect(readers[0].next().value).toStrictEqual(
@@ -91,7 +91,7 @@ for (const [size, bytes] of [
           await detachedDurableDigest(fixture.recorder),
         );
         expect(live.count).toBe(size);
-        await fixture.history.withRawHistorySnapshot(async (snapshot) => {
+        await fixture.history.withSnapshot(async (snapshot) => {
           expect(snapshot.length).toBe(size);
           expect(snapshot.readRow(0).blocks).toStrictEqual(
             detachedRow(0, bytes).blocks,
@@ -109,7 +109,7 @@ describe('held closed snapshot caller and disposal', () => {
       await active.operation;
       const held: { snapshot?: HistoryMutationSnapshot; rows?: IContent[] } =
         {};
-      await fixture.history.withRawHistorySnapshot(async (snapshot) => {
+      await fixture.history.withSnapshot(async (snapshot) => {
         held.snapshot = snapshot;
         held.rows = [...snapshot];
       });
@@ -127,7 +127,7 @@ describe('held closed snapshot caller and disposal', () => {
   it('disposes a partially consumed snapshot reader before the callback exits', async () => {
     await withDetachedFixture(async (fixture) => {
       await fixture.history.detachedValues.replace([detachedRow(0)]);
-      await fixture.history.withRawHistorySnapshot(async (snapshot) => {
+      await fixture.history.withSnapshot(async (snapshot) => {
         const reader = snapshot[Symbol.iterator]();
         expect(reader.next().done).toBe(false);
         reader[Symbol.dispose]();

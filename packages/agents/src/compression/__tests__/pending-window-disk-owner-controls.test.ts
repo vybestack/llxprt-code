@@ -22,13 +22,11 @@ describe('pending-window retained owner controls', () => {
           const owners = new RowOwnership();
           const retained: IContent[] = [];
           try {
-            await history.withRawHistorySnapshot(async (snapshot) => {
-              for (const row of snapshot) {
-                const owner = copy ? { ...row } : row;
-                retained.push(owner);
-                owners.retain(owner);
-              }
-            });
+            for await (const row of history.streamRawHistory()) {
+              const owner = copy ? { ...row } : row;
+              retained.push(owner);
+              owners.retain(owner);
+            }
             expect(owners.snapshot().liveRows).toBeGreaterThan(440);
             expect(owners.snapshot().liveSerializedBytes).toBeGreaterThan(0);
             expect(

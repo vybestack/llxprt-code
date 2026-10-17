@@ -38,7 +38,7 @@ describe('fallback capture storage', () => {
         });
       try {
         await expect(
-          history.withRawHistorySnapshot(async () => {
+          history.withSnapshot(async () => {
             throw new Error('unexpected consumer');
           }),
         ).rejects.toThrow('snapshot storage fault');
@@ -61,7 +61,7 @@ describe('fallback capture writes', () => {
       const write = vi.spyOn(fs, 'writeSync').mockImplementationOnce(() => 0);
       try {
         await expect(
-          history.withRawHistorySnapshot(async () => {
+          history.withSnapshot(async () => {
             throw new Error('unexpected publication');
           }),
         ).rejects.toThrow('Short numeric row write');
@@ -95,7 +95,7 @@ describe('fallback capture cancellation', () => {
       );
       try {
         await expect(
-          history.withRawHistorySnapshot(async () => {
+          history.withSnapshot(async () => {
             throw new Error('unexpected publication');
           }, controller.signal),
         ).rejects.toThrow('mid-capture cancel');

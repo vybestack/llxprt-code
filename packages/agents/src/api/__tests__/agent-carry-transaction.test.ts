@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { statSync } from 'node:fs';
 import { describe, expect, it, vi } from 'bun:test';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import {
@@ -6,6 +7,12 @@ import {
   historyDigest,
   withAgentCarry,
 } from './helpers/agent-carry-fixture.js';
+
+/** Size of the durable journal file: a rewrite of the source would change it. */
+function durableBytes(journalPath: string | null): number {
+  if (journalPath === null) throw new Error('Missing carried source journal');
+  return statSync(journalPath).size;
+}
 
 async function verifyUnchangedDurableSource(size: number): Promise<number> {
   let paused = false;
@@ -24,9 +31,8 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
       // the durable source is still the previous client's.
       const source = previous.getHistoryService();
       if (source === null) throw new Error('Missing carried source');
-      const before = await source.withRawHistorySnapshot(
-        async (snapshot) => snapshot.durableTail,
-      );
+      await source.waitForCommit();
+      const before = durableBytes(source.journalPath());
       const failure = vi
         .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
         .mockImplementationOnce(async () => {
@@ -45,9 +51,8 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         next.proceed.open();
       }
       await source.waitForOwnershipSettlement();
-      const after = await source.withRawHistorySnapshot(
-        async (snapshot) => snapshot.durableTail,
-      );
+      await source.waitForCommit();
+      const after = durableBytes(source.journalPath());
       expect(after - before).toBe(0);
       expect(next.admissions).toBe(1);
       expect(next.getHistoryService()).toBeNull();

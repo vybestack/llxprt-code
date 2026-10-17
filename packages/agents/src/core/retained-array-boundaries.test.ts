@@ -4,7 +4,7 @@ import { setTimeout } from 'node:timers/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '../../../core/src/services/history/HistoryService.js';
+import { SnapshotProbeHistory } from '../../../core/src/services/history/__tests__/support/old-store-snapshot-history.js';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
 import {
   AdmissionFailureRecorder,
@@ -49,7 +49,7 @@ async function earliestPendingFailure(size: number): Promise<number> {
     },
   });
   const owners = new RowOwnership();
-  const history = new HistoryService({
+  const history = new SnapshotProbeHistory({
     recording: recorder,
     mutationOwnership: owners,
   });

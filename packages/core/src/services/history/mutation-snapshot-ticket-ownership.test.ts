@@ -14,7 +14,7 @@ describe('mutation snapshot disk ticket ownership', () => {
         history.add(input);
         let beforeClose = -1;
         try {
-          await history.withRawHistorySnapshot(async (snapshot) => {
+          await history.withSnapshot(async (snapshot) => {
             expect(snapshot.length).toBe(1);
             const first = snapshot.readRow(0);
             const second = snapshot.readRow(0);
@@ -45,7 +45,7 @@ describe('mutation snapshot disk ticket ownership', () => {
         for (const row of input) history.add(row);
         let beforeClose = -1;
         try {
-          await history.withRawHistorySnapshot(async (snapshot) => {
+          await history.withSnapshot(async (snapshot) => {
             expect(snapshot.length).toBe(input.length);
             let index = 0;
             for (const row of snapshot)

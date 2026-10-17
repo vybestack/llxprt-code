@@ -110,13 +110,6 @@ export class HistoryService extends HistoryServiceReads {
     return this.journal.openDumpSnapshot();
   }
 
-  withRawHistorySnapshot<T>(
-    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    return this.journal.withMutationSnapshot(execute, signal);
-  }
-
   async adoptResumeBoot(
     recording: RecordingPort,
     boot: ResumeBoot,

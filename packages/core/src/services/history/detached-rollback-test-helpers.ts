@@ -4,7 +4,7 @@ import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { HistoryService } from './HistoryService.js';
+import { SnapshotProbeHistory } from './__tests__/support/old-store-snapshot-history.js';
 import { JournalResolver } from '../../recording/journalResolver.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import {
@@ -39,7 +39,7 @@ export async function* detachedRows(
 }
 
 export interface DetachedFixture {
-  readonly history: HistoryService;
+  readonly history: SnapshotProbeHistory;
   readonly recorder: AdmissionFailureRecorder;
   readonly owners: RowOwnership;
   readonly releaseWriter: () => void;
@@ -70,7 +70,7 @@ export async function withDetachedFixture<T>(
     },
   });
   const owners = new RowOwnership();
-  const history = new HistoryService({
+  const history = new SnapshotProbeHistory({
     recording: recorder,
     mutationOwnership: owners,
   });

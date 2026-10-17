@@ -66,7 +66,7 @@ describe('fallback partial filesystem writes', () => {
       await recorder.flush();
       const restore = partialSnapshotWrites();
       try {
-        await history.withRawHistorySnapshot(async (snapshot) => {
+        await history.withSnapshot(async (snapshot) => {
           expect(snapshot.readRow(0).blocks).toStrictEqual(
             rollbackRow(0).blocks,
           );
