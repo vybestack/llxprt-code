@@ -25,6 +25,8 @@ function isMarker(value: unknown): value is ChronologyMarker {
 interface OriginalMarker {
   readonly hadMetadata: boolean;
   readonly chronology?: ChronologyMarker;
+  /** The ordinal of the history row this row was derived from, when the writer recorded one. */
+  readonly sourceOrdinal?: number;
 }
 
 export class DetachedHistoryJournal implements Iterable<IContent> {
@@ -89,7 +91,12 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     return this.rowOrigins;
   }
 
-  append(row: IContent): void {
+  /**
+   * Appends `row`. `sourceOrdinal` is the position, in the history the
+   * candidate is built from, of the row this one is derived from; a publisher
+   * reads it back with {@link sourceOrdinalAt} so the row keeps that row's owner.
+   */
+  append(row: IContent, sourceOrdinal?: number): void {
     this.assertOpen();
     this.ownership?.retain(row);
     try {
@@ -97,6 +104,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
         JSON.stringify({
           hadMetadata: row.metadata !== undefined,
           chronology: row.metadata?.chronology,
+          sourceOrdinal,
         }),
       );
       const bytes = Buffer.from(JSON.stringify(row));
@@ -164,9 +172,24 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     if (!isRecord(value) || typeof value.hadMetadata !== 'boolean')
       throw new Error('Invalid detached marker record');
     const marker = value.chronology;
-    if (marker === undefined) return { hadMetadata: value.hadMetadata };
-    if (!isMarker(marker)) throw new Error('Invalid detached marker value');
-    return { hadMetadata: value.hadMetadata, chronology: marker };
+    const sourceOrdinal = value.sourceOrdinal;
+    if (sourceOrdinal !== undefined && typeof sourceOrdinal !== 'number')
+      throw new Error('Invalid detached source ordinal');
+    if (marker !== undefined && !isMarker(marker))
+      throw new Error('Invalid detached marker value');
+    return {
+      hadMetadata: value.hadMetadata,
+      ...(marker === undefined ? {} : { chronology: marker }),
+      ...(sourceOrdinal === undefined ? {} : { sourceOrdinal }),
+    };
+  }
+
+  /** The history ordinal row `index` was derived from; fails when its writer recorded none. */
+  sourceOrdinalAt(index: number): number {
+    const { sourceOrdinal } = this.readOriginalMarker(index);
+    if (sourceOrdinal === undefined)
+      throw new Error(`Detached journal row ${index} has no source ordinal`);
+    return sourceOrdinal;
   }
 
   *[Symbol.iterator](): Generator<IContent, void, unknown> {

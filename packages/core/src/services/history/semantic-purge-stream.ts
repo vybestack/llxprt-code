@@ -264,8 +264,10 @@ export class SemanticMediaPurgeStreamCoordinator {
           } catch (error: unknown) {
             throw new PrecommitFailure(error);
           }
+          // The replacement has the rows of the target, one for one.
+          let ordinal = 0;
           for await (const row of replacement.streamRows(signal))
-            await sink.appendValue(row);
+            await sink.appendDerived(ordinal++, row);
         },
         undefined,
         { signal },

@@ -49,6 +49,13 @@ export interface DetachedHistorySink {
    * that awaits every call cannot run ahead of the store consuming its output.
    */
   appendValue(row: IContent): Promise<void>;
+  /**
+   * Appends a row that is the source row at `sourceOrdinal` carried over
+   * (possibly rewritten): the journal store writes it under that row's owner
+   * and keeps the row's own chronology marker. `appendValue` is for rows that
+   * do not come from a source row and are owned by the operation's origin.
+   */
+  appendDerived(sourceOrdinal: number, row: IContent): Promise<void>;
   appendReplacement(sourceOrdinal: number, row: IContent): Promise<void>;
   removeValue(sourceOrdinal: number): Promise<void>;
 }

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { pulledRows } from './journalDetachedStream.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
@@ -84,11 +85,12 @@ export class JournalDetachedPublication {
   async publishDrafts(
     rows: AsyncIterable<RowDraft>,
     signal?: AbortSignal,
+    ownerEdits: readonly VersionEdit[] = [],
   ): Promise<void> {
     try {
       signal?.throwIfAborted();
       this.admittedCount++;
-      this.lastAck = await this.store.replaceDrafts(rows, signal);
+      this.lastAck = await this.store.replaceDrafts(rows, signal, ownerEdits);
       signal?.throwIfAborted();
     } catch (error) {
       this.failure = error;
@@ -106,17 +108,22 @@ export class JournalDetachedPublication {
     }
   }
 
-  /** Appends one row as its own group and waits for its ack. */
-  async appendOne(content: IContent): Promise<void> {
+  /** Appends one row, under `origin`, as its own group and waits for its ack. */
+  async appendOne(content: IContent, origin?: string): Promise<void> {
     try {
       this.admittedCount++;
-      this.store.apply({ kind: 'content', content });
+      this.store.apply({ kind: 'content', content, origin });
       await this.store.waitForDurable();
       this.lastAck = this.store.lastAck;
     } catch (error) {
       this.failure = error;
       throw error;
     }
+  }
+
+  /** Drops the owner id taken for rows no group was written for. */
+  discardOwnerRegistration(): void {
+    this.store.discardOwnerRegistration();
   }
 
   /** Puts the version captured at construction back; nothing is written when no group was acked. */

@@ -104,15 +104,23 @@ export function createHistoryProviderFileBindingStore(
           throw new Error(
             `Cannot bind provider file to missing media content ${contentId}`,
           );
+        let ordinal = 0;
         for await (const row of source.streamRows())
-          await sink.appendValue(bindRow(row, contentId, retainedReference));
+          await sink.appendDerived(
+            ordinal++,
+            bindRow(row, contentId, retainedReference),
+          );
       });
     },
     unbind: (contentId, reference) => {
       const retainedReference = Object.freeze({ ...reference });
       return history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
         for await (const row of source.streamRows())
-          await sink.appendValue(unbindRow(row, contentId, retainedReference));
+          await sink.appendDerived(
+            ordinal++,
+            unbindRow(row, contentId, retainedReference),
+          );
       });
     },
   };

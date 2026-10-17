@@ -19,8 +19,8 @@ import {
 } from './journalDetachedPrefix.js';
 import type { JournalDetachedPublication } from './journalDetachedPublication.js';
 import { pullFeed, type PullFeed } from './journalDetachedStream.js';
-import type { RowOwnerTags } from './journalDetachedCapture.js';
-import { encodeContentRow, UNOWNED_ROW } from './journalRowCodec.js';
+import type { ResolvedOwner } from './journalOwners.js';
+import { encodeContentRow } from './journalRowCodec.js';
 
 /** The chronology number of an entry; a row without a marker counts as 0, as the span rules do. */
 export function entrySeq(entry: RowEntry): number {
@@ -39,8 +39,10 @@ export interface CandidateContext {
   readonly appendOnly: boolean;
   readonly baseTokens: number;
   readonly media: PullFeed<MediaReferenceBlock, void> | undefined;
-  /** Owners of the rows the transform was handed (see {@link RowOwnerTags}). */
-  readonly tags: RowOwnerTags;
+  /** Owner of the rows the transform builds (replace mode): the operation's origin, or unowned. */
+  readonly owner: ResolvedOwner;
+  /** The operation's origin; append mode writes its rows under it. */
+  readonly origin: string | undefined;
 }
 
 /**
@@ -89,7 +91,12 @@ export class JournalCandidate {
     return {
       appendValue: async (row) => {
         assertActive();
-        await this.accept(row, this.ctx.tags.get(row) ?? UNOWNED_ROW);
+        await this.accept(row, this.ctx.owner.id);
+      },
+      appendDerived: async (ordinal, row) => {
+        assertActive();
+        // A row carried over from the source keeps the owner of the entry it comes from (design 5.1).
+        await this.accept(row, (await snapshot.entryAt(ordinal)).owner);
       },
       appendReplacement: async (ordinal, row) => {
         assertActive();
@@ -130,6 +137,7 @@ export class JournalCandidate {
       await this.feed.close();
       return;
     }
+    this.discardUnrecordedOwner();
     const { rows } = this.ctx.snapshot;
     if (this.count < rows)
       await this.ctx.publication.rewindTail(rows - this.count);
@@ -137,6 +145,7 @@ export class JournalCandidate {
 
   /** The transform failed: the group, if one was opened, stops before its trailer. */
   async abort(error: unknown): Promise<void> {
+    if (this.feed === undefined) this.discardUnrecordedOwner();
     await this.feed?.abort(error);
     await this.entries.return();
   }
@@ -159,11 +168,17 @@ export class JournalCandidate {
     this.tokens += await host.estimate([row], modelName, signal);
     this.range.add(row);
     this.lastSeq = row.metadata?.chronology?.seq ?? 0;
-    if (appendOnly) await this.ctx.publication.appendOne(row);
+    if (appendOnly) await this.ctx.publication.appendOne(row, this.ctx.origin);
     else await this.place(encodeContentRow(row, { owner }));
     for (const reference of collectMediaReferences([row]))
       await this.ctx.media?.put(reference);
     this.count++;
+  }
+
+  /** No group was written, so the group that was to record a new owner id never existed. */
+  private discardUnrecordedOwner(): void {
+    if (this.ctx.owner.edits.length > 0)
+      this.ctx.publication.discardOwnerRegistration();
   }
 
   private async place(draft: RowDraft): Promise<void> {
@@ -193,7 +208,7 @@ export class JournalCandidate {
   private async openGroup(): Promise<void> {
     const { snapshot, publication, signal } = this.ctx;
     const feed = pullFeed<RowDraft, void>((rows) =>
-      publication.publishDrafts(rows, signal),
+      publication.publishDrafts(rows, signal, this.ctx.owner.edits),
     );
     this.feed = feed;
     let copied = 0;

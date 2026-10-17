@@ -16,6 +16,11 @@ export function detachedHistorySink(
       validateHistoryEntry(row, next.length);
       next.append(row);
     },
+    appendDerived: async (_ordinal, row): Promise<void> => {
+      assertActive();
+      validateHistoryEntry(row, next.length);
+      next.append(row);
+    },
     appendReplacement: async (ordinal, row): Promise<void> => {
       assertActive();
       validateHistoryEntry(row, next.length);

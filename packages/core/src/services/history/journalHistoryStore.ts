@@ -259,14 +259,30 @@ export class JournalHistoryStore {
   async replaceDrafts(
     rows: AsyncIterable<RowDraft>,
     signal?: AbortSignal,
+    ownerEdits: readonly VersionEdit[] = [],
   ): Promise<CommitAck> {
     this.assertUsable();
     signal?.throwIfAborted();
     return this.requireAck(
       this.enqueueTurn(undefined, () =>
-        Promise.resolve([{ kind: 'replace', rows }]),
+        Promise.resolve([...ownerEdits, { kind: 'replace', rows }]),
       ),
     );
+  }
+
+  /**
+   * The owner id of `origin` for rows a caller encodes before their group
+   * exists. The edits that register a new id must go in the group that
+   * writes those rows (see {@link replaceDrafts}); when no such group is
+   * written the caller calls {@link discardOwnerRegistration}.
+   */
+  resolveOwner(origin: string | undefined): Promise<ResolvedOwner> {
+    return this.owners.resolve(origin);
+  }
+
+  /** Drops an owner id {@link resolveOwner} took that no group recorded. */
+  discardOwnerRegistration(): void {
+    this.owners.invalidate();
   }
 
   /**

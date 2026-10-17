@@ -29,4 +29,18 @@ describe('ordinal detached value journal', () => {
     }
     expect(() => journal.readRow(0)).toThrow('closed');
   });
+
+  it('records the history ordinal a row was derived from and fails for a row without one', () => {
+    const journal = new DetachedHistoryJournal();
+    try {
+      journal.append(detachedRow(0), 7);
+      journal.append(detachedRow(1), 0);
+      journal.append(detachedRow(2));
+      expect(journal.sourceOrdinalAt(0)).toBe(7);
+      expect(journal.sourceOrdinalAt(1)).toBe(0);
+      expect(() => journal.sourceOrdinalAt(2)).toThrow('no source ordinal');
+    } finally {
+      journal.close();
+    }
+  });
 });

@@ -5,6 +5,7 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
 import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
 import type { IContent } from './IContent.js';
+import { historyOriginId } from './historyOriginId.js';
 import { openOwnedJournal, type SeedRow } from './journalOwnedFixture.js';
 
 /** Rows 0..n-1 owned by the origins in `owners`, repeating. */
@@ -17,6 +18,14 @@ function ownedSeed(
     origin: owners[index % owners.length],
   }));
 }
+
+/** Replaces the whole history by one new summary row. */
+const summaryOnly: DetachedHistoryTransform = async (_source, sink) => {
+  await sink.appendValue({
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'summary' }],
+  });
+};
 
 function textOf(row: IContent): string {
   const block = row.blocks[0];
@@ -38,7 +47,7 @@ describe('detached publication keeps the owner of every row', () => {
           if (index === 1) await sink.removeValue(index);
           else if (index === 3)
             await sink.appendReplacement(index, detachedRow(90, 64));
-          else await sink.appendValue(row);
+          else await sink.appendDerived(index, row);
           index++;
         }
       };
@@ -74,7 +83,8 @@ describe('detached publication keeps the owner of every row', () => {
         });
         let index = 0;
         for await (const row of source.streamRows()) {
-          if (index++ >= 4) await sink.appendValue(row);
+          if (index >= 4) await sink.appendDerived(index, row);
+          index++;
         }
       };
       await owned.store.publishDetached(
@@ -132,6 +142,135 @@ describe('detached publication keeps the owner of every row', () => {
     },
   );
 
+  it.each([3, 64, 65])(
+    'keeps every owner when %i retained rows are handed to the sink as copies',
+    async (count) => {
+      const owners = ['a', 'b', undefined];
+      const owned = await openOwnedJournal(
+        path.join(directory(), `copies-${count}.llxj`),
+        ownedSeed(count, owners),
+      );
+      try {
+        const carryCopies: DetachedHistoryTransform = async (source, sink) => {
+          let index = 0;
+          for await (const row of source.streamRows()) {
+            // The agents modules sanitize each row into a new object before appending it.
+            await sink.appendDerived(index++, {
+              ...row,
+              blocks: [...row.blocks],
+              metadata: { ...row.metadata, reason: 'retained' },
+            });
+          }
+        };
+        await owned.store.publishDetached(
+          { transform: carryCopies },
+          owned.host,
+          undefined,
+          {},
+        );
+        expect(await owned.originsOfRows()).toStrictEqual(
+          Array.from({ length: count }, (_, i) => owners[i % owners.length]),
+        );
+      } finally {
+        await owned.dispose();
+      }
+    },
+  );
+
+  it('writes rows that come from no source row under the origin the operation names', async () => {
+    const owned = await openOwnedJournal(
+      path.join(directory(), 'origin.llxj'),
+      ownedSeed(6, ['a', 'a', 'a', 'b', 'b', undefined]),
+    );
+    const origin = {};
+    try {
+      const compress: DetachedHistoryTransform = async (source, sink) => {
+        await sink.appendValue({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'summary' }],
+        });
+        let index = 0;
+        for await (const row of source.streamRows()) {
+          if (index >= 4) await sink.appendDerived(index, { ...row });
+          index++;
+        }
+      };
+      await owned.store.publishDetached(
+        { transform: compress },
+        owned.host,
+        undefined,
+        { origin },
+      );
+      expect(await owned.originsOfRows()).toStrictEqual([
+        historyOriginId(origin),
+        'b',
+        undefined,
+      ]);
+    } finally {
+      await owned.dispose();
+    }
+  });
+
+  it('records no owner id for an origin whose rows were never written', async () => {
+    const owned = await openOwnedJournal(
+      path.join(directory(), 'unrecorded.llxj'),
+      ownedSeed(4, ['a', 'a', 'b', 'b']),
+    );
+    const origin = {};
+    try {
+      const keepAll: DetachedHistoryTransform = async (source, sink) => {
+        let index = 0;
+        for await (const row of source.streamRows())
+          await sink.appendDerived(index++, row);
+      };
+      await owned.store.publishDetached(
+        { transform: keepAll },
+        owned.host,
+        undefined,
+        { origin },
+      );
+      await owned.store.publishDetached(
+        { transform: summaryOnly },
+        owned.host,
+        undefined,
+        { origin },
+      );
+      expect(await owned.originsOfRows()).toStrictEqual([
+        historyOriginId(origin),
+      ]);
+    } finally {
+      await owned.dispose();
+    }
+  });
+
+  it('appends under the origin the operation names', async () => {
+    const owned = await openOwnedJournal(
+      path.join(directory(), 'append.llxj'),
+      ownedSeed(2, ['a', 'b']),
+    );
+    const origin = {};
+    try {
+      await owned.store.publishDetached(
+        {
+          append: true,
+          transform: async (_source, sink) => {
+            await sink.appendValue(detachedRow(50, 64));
+          },
+        },
+        owned.host,
+        undefined,
+        { origin },
+      );
+      expect(await owned.originsOfRows()).toStrictEqual([
+        'a',
+        'b',
+        historyOriginId(origin),
+      ]);
+    } finally {
+      await owned.dispose();
+    }
+  });
+
   it('puts owned rows back, with their owners, when a rollback checkpoint restores', async () => {
     const owned = await openOwnedJournal(
       path.join(directory(), 'rollback.llxj'),
@@ -144,14 +283,8 @@ describe('detached publication keeps the owner of every row', () => {
         owned.host,
         now,
         async (restore) => {
-          const compress: DetachedHistoryTransform = async (_source, sink) => {
-            await sink.appendValue({
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'summary' }],
-            });
-          };
           await owned.store.publishDetached(
-            { transform: compress },
+            { transform: summaryOnly },
             owned.host,
             undefined,
             {},
