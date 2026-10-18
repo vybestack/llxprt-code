@@ -17,6 +17,7 @@ import {
   MCPServerStatus,
 } from '@vybestack/llxprt-code-mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 import {
@@ -129,9 +130,6 @@ async function getServerStatus(
 }
 
 export async function listMcpServers(): Promise<void> {
-  const { loadInstalledRuntimePlugins } = await import(
-    '@vybestack/llxprt-code-providers/composition.js'
-  );
   const contributions = await loadInstalledRuntimePlugins();
   const authFactories = buildMcpAuthFactoryRegistry(
     contributions.getMcpAuthFactories().map((entry) => entry.contribution),

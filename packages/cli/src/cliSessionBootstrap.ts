@@ -2,6 +2,7 @@ import type {
   CredentialAuthority,
   OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
@@ -816,9 +817,6 @@ function ownCliPolicy(owner: RuntimePolicyOwner): RuntimePolicyOwner {
 }
 
 async function discoverCliProviderContributions() {
-  const { loadInstalledRuntimePlugins } = await import(
-    '@vybestack/llxprt-code-providers/composition.js'
-  );
   const providerContributions = await loadInstalledRuntimePlugins();
   const authFactories = buildMcpAuthFactoryRegistry(
     providerContributions
