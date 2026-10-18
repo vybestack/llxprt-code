@@ -40,6 +40,7 @@ import {
   type KeyBinding,
 } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -546,7 +547,9 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        agent: await createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
         readAgentRecordingPath: () => undefined,
         generateSubagentPrompt: async () => '',
         settings: mockSettings,
@@ -576,7 +579,9 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        agent: await createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
         readAgentRecordingPath: () => undefined,
         generateSubagentPrompt: async () => '',
         settings: mockSettings,
@@ -611,7 +616,9 @@ describe('AppContainer.keybindings', () => {
           mockConfig as unknown as UiRuntimeBareSource,
           await createUiSessionOwner(),
         ),
-        agent: await createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
         readAgentRecordingPath: () => undefined,
         generateSubagentPrompt: async () => '',
         settings: mockSettings,

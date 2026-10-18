@@ -28,7 +28,6 @@ import type {
   RegisterSubagentCommand,
   ResumeOwnedCommand,
 } from './hooks/commandSessionOperations.js';
-import type { UseSlashCommandProcessorCoreArgs } from './hooks/useSlashCommandProcessorCore.js';
 import {
   createBuiltinCommandLoaderFactory,
   createRegisteredCommandLoader,
@@ -111,7 +110,12 @@ import { ShellCommandDisplayProvider } from './contexts/ShellCommandDisplayConte
 import { inkRenderOptions } from './inkRenderOptions.js';
 import { isMouseEventsEnabled } from './mouseEventsEnabled.js';
 import { appReducer, initialAppState } from './reducers/appReducer.js';
-import { AppContainer } from './AppContainer.js';
+import { AppContainer, type AppContainerProps } from './AppContainer.js';
+import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
+import {
+  createCliModelIdentityRuntime,
+  resolveContentPrefixIdentity,
+} from './utils/modelIdentity.js';
 
 interface AppProps {
   uiRuntime: UiRuntime;
@@ -205,6 +209,54 @@ export class AppWrapper extends Component<AppProps> {
       throw new Error('Agent recording reader was not initialized');
     return this.#readAgentRecordingPath;
   }
+
+  private readonly appendHistory: AppContainerProps['appendHistory'] = (
+    ...args
+  ) => this.props.agent.addHistory(...args);
+  private readonly readHistory: AppContainerProps['readHistory'] = (...args) =>
+    this.props.agent.getHistory(...args);
+  private readonly stream: AppContainerProps['stream'] = (...args) =>
+    this.props.agent.stream(...args);
+  private readonly injectSteer: AppContainerProps['injectSteer'] = (...args) =>
+    this.props.agent.injectSteer(...args);
+  private readonly getProviderContextLimit: AppContainerProps['getProviderContextLimit'] =
+    (...args) => this.props.agent.getProviderContextLimit(...args);
+  private readonly disposeInput: AppContainerProps['disposeInput'] = () =>
+    this.props.agent.dispose();
+  private readonly readApprovalMode: AppContainerProps['readApprovalMode'] =
+    () => this.props.agent.getApprovalMode();
+  private readonly setApprovalMode: AppContainerProps['setApprovalMode'] = (
+    ...args
+  ) => this.props.agent.setApprovalMode(...args);
+  private readonly generatePromptContent: AppContainerProps['generatePromptContent'] =
+    (...args) => this.props.agent.agentClient.generateContent(...args);
+  private readonly readClientHistory: AppContainerProps['readClientHistory'] =
+    () => this.props.agent.agentClient.getHistoryService();
+  private readonly readTokenHistory: AppContainerProps['readTokenHistory'] =
+    () => {
+      const client = this.props.agent.agentClient;
+      return client.hasChatInitialized() === true
+        ? (client.getHistoryService() ?? null)
+        : null;
+    };
+  private readonly readProviderMetrics: AppContainerProps['readProviderMetrics'] =
+    () => this.props.agent.providerReads.getActiveProviderMetrics();
+  private readonly readSessionTokenUsage: AppContainerProps['readSessionTokenUsage'] =
+    () => this.props.agent.providerReads.getSessionTokenUsage();
+  private readonly readPolicyRules: AppContainerProps['readPolicyRules'] = () =>
+    bindPolicyRulesReader(this.props.agent.policy, () =>
+      this.props.slashCommandRuntime.getApprovalMode(),
+    )();
+  private readonly getContentPrefixIdentity: AppContainerProps['getContentPrefixIdentity'] =
+    () => {
+      try {
+        return resolveContentPrefixIdentity(
+          createCliModelIdentityRuntime(this.props.agent),
+        );
+      } catch {
+        return null;
+      }
+    };
 
   private generateSubagentPrompt(): ReturnType<typeof bindAutoPromptOperation> {
     const agent = this.props.agent;
@@ -651,15 +703,59 @@ export class AppWrapper extends Component<AppProps> {
     );
   }
 
-  override render() {
-    const props = this.props;
-    const registerCredentials = this.capture();
+  private renderAppWithState(
+    registerCredentials: CredentialCommandRegistration,
+  ): ReactNode {
+    const { agent, ...props } = this.props;
     if (this.#registry === undefined)
       throw new Error('Application command discovery was not registered');
     if (this.#history === undefined)
       throw new Error('Application history was not registered');
     if (this.#sessionCommands === undefined)
       throw new Error('Application session commands were not registered');
+    return (
+      <AppWithState
+        {...props}
+        {...this.#registry}
+        {...this.#sessionCommands}
+        session={agent.session}
+        mediaStore={agent.agentClient.mediaStore}
+        readClientHistory={this.readClientHistory}
+        readHistory={this.readHistory}
+        stream={this.stream}
+        appendHistory={this.appendHistory}
+        injectSteer={this.injectSteer}
+        getProviderContextLimit={this.getProviderContextLimit}
+        getContentPrefixIdentity={this.getContentPrefixIdentity}
+        tools={agent.tools}
+        mcp={agent.mcp}
+        metrics={agent.metrics}
+        tasks={agent.tasks}
+        disposeInput={this.disposeInput}
+        readApprovalMode={this.readApprovalMode}
+        setApprovalMode={this.setApprovalMode}
+        generatePromptContent={this.generatePromptContent}
+        readPolicyRules={this.readPolicyRules}
+        subagentDefinitions={agent.workspace.subagentDefinitions}
+        subagentWrites={agent.workspace.subagentWrites}
+        profileDefinitions={agent.workspace.profileDefinitions}
+        triggerSessionStart={this.#sessionCommands.startCommandSession}
+        recordRecordingEvent={this.#sessionCommands.recordCommandEvent}
+        readTokenHistory={this.readTokenHistory}
+        readProviderMetrics={this.readProviderMetrics}
+        readSessionTokenUsage={this.readSessionTokenUsage}
+        historyReads={this.#history}
+        registerCredentials={registerCredentials}
+        readAgentRecordingPath={this.readAgentRecordingPath()}
+        generateSubagentPrompt={this.generateSubagentPrompt()}
+      />
+    );
+  }
+
+  override render() {
+    const props = this.props;
+    const registerCredentials = this.capture();
+    const metrics = props.agent.metrics;
     const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
     const mouseEventsEnabled = isMouseEventsEnabled(
       renderOptions,
@@ -670,7 +766,7 @@ export class AppWrapper extends Component<AppProps> {
       <KeypressProvider>
         <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
           <ScrollProvider>
-            <SessionStatsProvider metrics={props.agent.metrics}>
+            <SessionStatsProvider metrics={metrics}>
               <VimModeProvider settings={props.settings}>
                 <ShellCommandDisplayProvider
                   alwaysDisplayFullShellCommand={
@@ -687,15 +783,7 @@ export class AppWrapper extends Component<AppProps> {
                           refresh={props.providerAliasRefresh}
                         >
                           <OverflowProvider>
-                            <AppWithState
-                              {...props}
-                              {...this.#registry}
-                              {...this.#sessionCommands}
-                              historyReads={this.#history}
-                              registerCredentials={registerCredentials}
-                              readAgentRecordingPath={this.readAgentRecordingPath()}
-                              generateSubagentPrompt={this.generateSubagentPrompt()}
-                            />
+                            {this.renderAppWithState(registerCredentials)}
                           </OverflowProvider>
                         </ProviderAliasRefreshProvider>
                       </OAuthControlProvider>,
@@ -711,33 +799,8 @@ export class AppWrapper extends Component<AppProps> {
   }
 }
 
-/**
- * AppWithState manages the app reducer state and wraps AppContainer.
- */
 const AppWithState = (
-  props: AppProps &
-    Pick<
-      UseSlashCommandProcessorCoreArgs,
-      | 'registerWorkspaceCommands'
-      | 'registerChatCommands'
-      | 'registerSubagentCommand'
-      | 'resumeOwnedCommand'
-      | 'replaceCommandHistory'
-      | 'readCommandHistoryService'
-      | 'recordCommandEvent'
-      | 'isMcpDiscoveryPending'
-      | 'endCommandSession'
-      | 'startNewCommandSession'
-      | 'startCommandSession'
-      | 'listCommandTools'
-    > & { historyReads: RegisteredHistoryReads } & {
-      registerCredentials: CredentialCommandRegistration;
-      readBuiltinCommands: ReadBuiltinCommands;
-      loadRegisteredCommands: LoadRegisteredCommands;
-      subscribeCommandChanges: SubscribeCommandChanges;
-      readAgentRecordingPath: () => string | undefined;
-      generateSubagentPrompt: (description: string) => Promise<string>;
-    },
+  props: Omit<AppContainerProps, 'appState' | 'appDispatch'>,
 ) => {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
 

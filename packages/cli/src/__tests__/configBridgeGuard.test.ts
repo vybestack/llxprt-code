@@ -165,6 +165,7 @@ describe('#2373 config boundary guard', () => {
     );
     const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
     const runtime = read('ui/AppContainerRuntime.tsx');
+    const app = read('ui/App.tsx');
 
     expect(bootstrap).toMatch(/subscribeHistoryTokens:\s*Parameters/);
     expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
@@ -181,8 +182,8 @@ describe('#2373 config boundary guard', () => {
     expect(input).not.toMatch(/AppBootstrapResult\['config'\]/);
     expect(input).not.toMatch(/useAgentStream\([^)]*\bslashCommandRuntime\b/);
 
-    expect(runtime).toMatch(
-      /disposeInput:\s*useBound\(agent, agent\.dispose\)/,
+    expect(`${runtime}\n${app}`).toMatch(
+      /disposeInput:\s*props\.disposeInput[\s\S]*disposeInput:\s*AppContainerProps\['disposeInput'\]\s*=\s*\(\)\s*=>\s*this\.props\.agent\.dispose\(\)/,
     );
     expect(runtime).toMatch(/readLlxprtMdFileCount:\s*useBound/);
     expect(runtime).not.toMatch(/bootstrap\.config/);
