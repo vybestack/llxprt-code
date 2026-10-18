@@ -24,6 +24,7 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     private readonly snapshot: VersionSnapshot,
     private readonly resumeBoundary?: bigint,
     private readonly counters?: JournalReadCounters,
+    private readonly onClose: () => void = () => {},
   ) {}
 
   async *rows(): AsyncGenerator<IContent, void, unknown> {
@@ -63,6 +64,7 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       this.closed = true;
       for (const release of [...this.held]) release();
       this.snapshot.close();
+      this.onClose();
     }
     return Promise.resolve();
   }

@@ -48,4 +48,21 @@ describe('a disposed journal history store', () => {
     const store = await disposedStore();
     await expect(store.materialize()).rejects.toThrow('disposed');
   });
+
+  it('closes a dump snapshot that is still open, so that reading it fails as closed', async () => {
+    const session = await JournalSession.create(
+      path.join(directory(), 'open-dump.llxj'),
+      { journal: testJournalSeams({}).dependencies },
+    );
+    const store = new JournalHistoryStore(session);
+    store.apply({
+      kind: 'content',
+      content: { speaker: 'human', blocks: [{ type: 'text', text: 'row' }] },
+    });
+    const dump = await store.openDumpSnapshot();
+
+    await store.dispose();
+
+    await expect(dump.rows().next()).rejects.toThrow('closed');
+  });
 });

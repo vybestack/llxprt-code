@@ -144,6 +144,8 @@ export class JournalHistoryStore implements HistoryStorePort {
   private failure: { readonly error: unknown } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
+  /** Dumps not yet closed: they read the file, so disposing closes them first. */
+  private readonly openDumps = new Set<JournalDumpSnapshot>();
   private readonly publication = new JournalPublication();
   private journal: OpenJournal | undefined;
   /** Settles when the journal is open; rejects with the reason it could not be. */
@@ -698,11 +700,14 @@ export class JournalHistoryStore implements HistoryStorePort {
   async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     this.assertUsable();
     await this.waitForDurable();
-    return new JournalDumpSnapshot(
+    const dump: JournalDumpSnapshot = new JournalDumpSnapshot(
       await this.session.store.snapshot(),
       this.boundary,
       this.options.counters,
+      () => this.openDumps.delete(dump),
     );
+    this.openDumps.add(dump);
+    return dump;
   }
 
   /**
@@ -904,6 +909,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     this.disposed = true;
     await this.queue;
     await this.startup;
+    for (const dump of [...this.openDumps]) await dump.close();
     const open = this.journal;
     if (open === undefined) return;
     try {
