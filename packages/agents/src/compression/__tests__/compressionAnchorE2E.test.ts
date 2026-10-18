@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -64,9 +64,9 @@ function aiMsg(text: string): IContent {
  * whose chronology.seq === cacheAnchorSeq (exact identity, per Defect 2 fix).
  * The head is everything up to and including that entry.
  */
-function extractHeadByAnchor(hs: HistoryService): string[] {
+async function extractHeadByAnchor(hs: HistoryService): Promise<string[]> {
   const anchorSeq = hs.getCacheAnchorSeq();
-  const curated = curatedHistoryForTest(hs);
+  const curated = await curatedHistoryAfterCommit(hs);
   let headEnd = 0;
   if (anchorSeq > 0) {
     const anchorIndex = curated.findIndex(
@@ -159,7 +159,7 @@ describe('E2E: CompressionHandler.performCompression keeps prefix monotonically 
       // Extract the preserved head using the cache anchor: find the entry whose
       // chronology.seq === cacheAnchorSeq (exact identity, per Defect 2 fix).
       // The head is everything up to and including that entry.
-      const currentHead = extractHeadByAnchor(historyService);
+      const currentHead = await extractHeadByAnchor(historyService);
 
       // The previous head must be a COMPLETE prefix of the current head. The
       // anchor may remain fixed for a cycle, but it must never move backward,

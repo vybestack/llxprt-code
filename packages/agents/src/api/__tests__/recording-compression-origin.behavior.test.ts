@@ -6,6 +6,10 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
@@ -13,6 +17,33 @@ import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../../compression/TopDownTruncationStrategy.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
+
+async function recordingRows(path: string): Promise<IContent[]> {
+  if (isJournalFileName(path)) {
+    let result: IContent[] = [];
+    await collectJournalFileRowsForAssertions(path, (rows) => {
+      result = [...rows];
+    });
+    return result;
+  }
+  const resolver = await JournalResolver.open(path);
+  try {
+    const rows: IContent[] = [];
+    for await (const entry of resolver.resolve()) rows.push(entry.content);
+    return rows;
+  } finally {
+    await resolver.close();
+  }
+}
+
+async function replacementRecordingText(
+  path: string,
+  rows: readonly IContent[],
+): Promise<string> {
+  return isJournalFileName(path)
+    ? JSON.stringify(rows)
+    : readFile(path, 'utf8');
+}
 
 function recordingPath(state: { readonly path?: string }): string {
   if (!state.path) throw new Error('Missing recording path');
@@ -268,11 +299,12 @@ describe('shared history compression recording origin', () => {
         const bPath = recordingPath(sibling.session.getRecording());
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        // The journal rows carry the publishing owner: the committed summary
-        // stays in the compressing owner's journal only, and the rejected
-        // candidate reached neither.
-        const a = await readFile(aPath, 'utf8');
-        const b = await readFile(bPath, 'utf8');
+        const aRows = await recordingRows(aPath);
+        const bRows = await recordingRows(bPath);
+        expect(aRows).toContainEqual(summary);
+        expect(bRows).not.toContainEqual(summary);
+        const a = await replacementRecordingText(aPath, aRows);
+        const b = await replacementRecordingText(bPath, bRows);
         expect(a).toContain('owned-summary-1');
         expect(b).not.toContain('owned-summary-1');
         expect(a).not.toContain('rejected-summary');
