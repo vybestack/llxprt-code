@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,76 +38,71 @@ function admittedImage(store: LocalMediaStore): Promise<IContent[]> {
 }
 
 describe('binding bridge local media reservations', () => {
-  it.skipIf(journalBackendSelected)(
-    'keeps the history reservation through binding rollback and releases it when history is cleared',
-    async () => {
-      const root = await mkdtemp(join(tmpdir(), 'binding-reservations-'));
-      const store = new LocalMediaStore({
-        rootDirectory: root,
-        quotaBytes: 1024,
-      });
-      try {
-        await withDetachedFixture(async ({ history, recorder }) => {
-          const rows = await admittedImage(store);
-          const reference = rows[0].blocks[0];
-          if (reference.type !== 'media' || reference.encoding !== 'reference')
-            throw new Error('Expected admitted reference');
-          await history.registerMediaOwner(new HistoryMediaOwnership(store));
-          await history.addBatch(rows);
-          await history.waitForCommit();
-          const expected = await detachedDigest(history.streamRawHistory());
-          const beforeReservation = await store.hasReservations(
-            reference.contentId,
-          );
-          const failure = new Error('real owner binding rollback');
-          history.once('tokensUpdated', () => {
-            throw failure;
-          });
-          expect(
-            await rejectedValue(
-              createHistoryProviderFileBindingStore(history).bind(
-                reference.contentId,
-                bindingFile,
-              ),
-            ),
-          ).toBe(failure);
-          expect(
-            await detachedDigest(history.streamRawHistory()),
-          ).toStrictEqual(expected);
-          expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-          const rollbackReservation = await store.hasReservations(
-            reference.contentId,
-          );
-          expect(await store.readVerified(reference)).toStrictEqual(
-            new Uint8Array(Buffer.from(png, 'base64')),
-          );
-          await createHistoryProviderFileBindingStore(history).bind(
-            reference.contentId,
-            bindingFile,
-          );
-          const boundReservation = await store.hasReservations(
-            reference.contentId,
-          );
-          await history.clear();
-          await history.waitForOwnershipSettlement();
-          expect({
-            beforeReservation,
-            rollbackReservation,
-            boundReservation,
-            clearedReservation: await store.hasReservations(
-              reference.contentId,
-            ),
-          }).toStrictEqual({
-            beforeReservation: true,
-            rollbackReservation: true,
-            boundReservation: true,
-            clearedReservation: false,
-          });
+  it('keeps the history reservation through binding rollback and releases it when history is cleared', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'binding-reservations-'));
+    const store = new LocalMediaStore({
+      rootDirectory: root,
+      quotaBytes: 1024,
+    });
+    try {
+      await withDetachedFixture(async ({ history, recorder }) => {
+        const rows = await admittedImage(store);
+        const reference = rows[0].blocks[0];
+        if (reference.type !== 'media' || reference.encoding !== 'reference')
+          throw new Error('Expected admitted reference');
+        await history.registerMediaOwner(new HistoryMediaOwnership(store));
+        await history.addBatch(rows);
+        await history.waitForCommit();
+        const expected = await detachedDigest(history.streamRawHistory());
+        const beforeReservation = await store.hasReservations(
+          reference.contentId,
+        );
+        const failure = new Error('real owner binding rollback');
+        history.once('tokensUpdated', () => {
+          throw failure;
         });
-      } finally {
-        await store.close();
-        await rm(root, { recursive: true, force: true });
-      }
-    },
-  );
+        expect(
+          await rejectedValue(
+            createHistoryProviderFileBindingStore(history).bind(
+              reference.contentId,
+              bindingFile,
+            ),
+          ),
+        ).toBe(failure);
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          expected,
+        );
+        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+        const rollbackReservation = await store.hasReservations(
+          reference.contentId,
+        );
+        expect(await store.readVerified(reference)).toStrictEqual(
+          new Uint8Array(Buffer.from(png, 'base64')),
+        );
+        await createHistoryProviderFileBindingStore(history).bind(
+          reference.contentId,
+          bindingFile,
+        );
+        const boundReservation = await store.hasReservations(
+          reference.contentId,
+        );
+        await history.clear();
+        await history.waitForOwnershipSettlement();
+        expect({
+          beforeReservation,
+          rollbackReservation,
+          boundReservation,
+          clearedReservation: await store.hasReservations(reference.contentId),
+        }).toStrictEqual({
+          beforeReservation: true,
+          rollbackReservation: true,
+          boundReservation: true,
+          clearedReservation: false,
+        });
+      });
+    } finally {
+      await store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

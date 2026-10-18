@@ -16,7 +16,6 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  */
 
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import { createUserMessage, type IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
@@ -151,26 +150,24 @@ describe('HistoryService replaceAll serialization', () => {
     await expectConsistentTokenCount(service);
   });
 
-  it.skipIf(journalBackendSelected)(
-    'applies clear after an in-flight replacement',
-    async () => {
-      const service = new HistoryService();
-      const blocked = createBlockedTokenizerFactory();
-      service.setTokenizerFactory(blocked.factory);
-      const estimationStarted = blocked.blockNext();
+  it('applies clear after an in-flight replacement', async () => {
+    const service = new HistoryService();
+    const blocked = createBlockedTokenizerFactory();
+    service.setTokenizerFactory(blocked.factory);
+    const estimationStarted = blocked.blockNext();
 
-      const replacing = service.replaceAll([createUserMessage('replacement')]);
-      await estimationStarted;
-      await service.clear();
-      blocked.release();
-      await replacing;
+    const replacing = service.replaceAll([createUserMessage('replacement')]);
+    await estimationStarted;
+    const clearing = service.clear();
+    blocked.release();
+    await replacing;
+    await clearing;
 
-      await collectRowsForAssertions(service.streamRawHistory(), (all) => {
-        expect(all).toStrictEqual([]);
-      });
-      await expectConsistentTokenCount(service);
-    },
-  );
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
+    await expectConsistentTokenCount(service);
+  });
 
   it('rolls back an add when a content listener rejects it', async () => {
     const service = new HistoryService();

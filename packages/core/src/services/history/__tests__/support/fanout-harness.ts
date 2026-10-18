@@ -63,7 +63,7 @@ export class FanoutHarness {
   }
 
   history(): HistoryService {
-    const created = new HistoryService();
+    const created = new HistoryService({ backend: 'old' });
     this.histories.push(created);
     return created;
   }

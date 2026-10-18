@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import {
   withRemovalFixture,
   removalReferences,
@@ -30,39 +29,36 @@ async function withoutWriterAck(operation: Promise<unknown>): Promise<string> {
 }
 
 describe('settled history with a caller-paused writer', () => {
-  it.skipIf(journalBackendSelected)(
-    'rolls back pop observer failure without waiting for a writer owned by the caller',
-    async () => {
-      await withRemovalFixture(
-        async (
-          { history, recorder, pauseWriter, waitForPausedWrite, releaseWriter },
-          store,
-        ) => {
-          const [shared, removed] = await removalReferences(store);
-          const input = [removalRow(0, shared), removalRow(1, removed)];
-          for (const content of input)
-            await recorder.commit('content', { content });
-          await history.settleMediaOwnership();
-          const rejectPop = (): void => {
-            throw new Error('paused pop observer failed');
-          };
-          history.on('tokensUpdated', rejectPop);
-          pauseWriter();
-          const popping = history.pop();
-          try {
-            await waitForPausedWrite;
-            expect(await withoutWriterAck(popping)).toBe(
-              'paused pop observer failed',
-            );
-            await assertRemovalRows(history.streamRawHistory(), input);
-            expect(await store.hasReservations(removed.contentId)).toBe(true);
-          } finally {
-            history.off('tokensUpdated', rejectPop);
-            releaseWriter();
-            await popping.catch(() => undefined);
-          }
-        },
-      );
-    },
-  );
+  it('rolls back pop observer failure without waiting for a writer owned by the caller', async () => {
+    await withRemovalFixture(
+      async (
+        { history, recorder, pauseWriter, waitForPausedWrite, releaseWriter },
+        store,
+      ) => {
+        const [shared, removed] = await removalReferences(store);
+        const input = [removalRow(0, shared), removalRow(1, removed)];
+        for (const content of input)
+          await recorder.commit('content', { content });
+        await history.settleMediaOwnership();
+        const rejectPop = (): void => {
+          throw new Error('paused pop observer failed');
+        };
+        history.on('tokensUpdated', rejectPop);
+        pauseWriter();
+        const popping = history.pop();
+        try {
+          await waitForPausedWrite;
+          expect(await withoutWriterAck(popping)).toBe(
+            'paused pop observer failed',
+          );
+          await assertRemovalRows(history.streamRawHistory(), input);
+          expect(await store.hasReservations(removed.contentId)).toBe(true);
+        } finally {
+          history.off('tokensUpdated', rejectPop);
+          releaseWriter();
+          await popping.catch(() => undefined);
+        }
+      },
+    );
+  });
 });

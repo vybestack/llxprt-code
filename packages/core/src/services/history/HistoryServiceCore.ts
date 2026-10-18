@@ -246,7 +246,7 @@ export abstract class HistoryServiceCore
   protected constructor(options: HistoryServiceJournalOptions = {}) {
     super();
     this.mutationOwnership = options.mutationOwnership;
-    this.journal = createHistoryStore(options);
+    this.journal = createHistoryStore(options, options.backend);
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,

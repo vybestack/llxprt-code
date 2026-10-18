@@ -62,6 +62,7 @@ export async function withSynchronousFixture<T>(
   const owners = new BatchOwnerCensus();
   const reads = createRowCounters();
   const history = new HistoryService({
+    backend: 'old',
     recording: recorder,
     mutationOwnership: owners,
     attachmentCounters: { ...reads.counters, ownership: owners },

@@ -10,6 +10,7 @@ import {
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
+import type { HistoryBackend } from './historyBackendSelect.js';
 import type { IContent } from './IContent.js';
 import type { HistoryService } from './HistoryService.js';
 
@@ -190,10 +191,16 @@ async function observeDensity(
   return result;
 }
 
+/**
+ * `backend` names the store the fixture builds; omitted, the environment
+ * selects it. The owner callbacks observed here are the old store's media
+ * owner protocol (`prepareReplacement` over previous and next row iterables).
+ */
 export async function pausedDensity(
   size: number,
   trap: boolean,
   kind: 'density' | 'transform' = 'density',
+  backend?: HistoryBackend,
 ): Promise<Awaited<ReturnType<typeof observeDensity>>> {
   const transaction = new RowOwnership();
   const result = await withCoreSuffixFixture(
@@ -203,6 +210,8 @@ export async function pausedDensity(
     2048,
     ownerFixtureRow,
     transaction,
+    undefined,
+    backend,
   );
   const output = process.env.CHRONOLOGY_DENSITY_OWNER_OUTPUT;
   if (output !== undefined)

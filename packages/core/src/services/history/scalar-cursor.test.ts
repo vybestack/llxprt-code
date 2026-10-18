@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import {
   submitTicketRows,
   seedTicketRows,
@@ -33,7 +32,7 @@ import {
 const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 
 describe('pinned synchronous history cursor', () => {
-  it.skipIf(journalBackendSelected).each([512, 8192])(
+  it.each([512, 8192])(
     'pins %i rows across reentrant append and rewind',
     async (size) => {
       await withBatchFixture(
@@ -98,65 +97,60 @@ describe('pinned synchronous history cursor', () => {
 });
 
 describe('scalar cursor callback lifecycle', () => {
-  it.skipIf(journalBackendSelected)(
-    'releases rows and pinned descriptors on return, callback fault and abort',
-    async () => {
-      await withBatchFixture(async ({ recorder, owners, reads }) => {
-        await recorder.commit('content', { content: batchRow(0) });
-        const journal = new HistoryJournalStore(recorder, {
-          ...reads.counters,
-          ownership: owners,
-        });
-        const controller = new AbortController();
-        try {
-          const first = journal.withReadRows((cursor) => {
-            for (const row of cursor.rows()) return row;
-            return undefined;
-          });
-          expect(first).toStrictEqual(batchRow(0));
-          journal.withReadRows((cursor) => {
-            const iterator = cursor.rows();
-            expect(iterator.next().value).toStrictEqual(batchRow(0));
-          });
-          expectNoScalarOwners(owners);
-          expect(() =>
-            journal.withReadRows((cursor) => {
-              for (const row of cursor.rows()) {
-                expect(row.speaker).toBe('human');
-                throw new Error('callback fault');
-              }
-            }),
-          ).toThrow('callback fault');
-          expect(() =>
-            journal.withReadRows((cursor) => {
-              for (const row of cursor.rows()) {
-                expect(row.speaker).toBe('human');
-                controller.abort(new Error('cursor abort'));
-              }
-            }, controller.signal),
-          ).toThrow('cursor abort');
-          expect(() =>
-            journal.withReadRows(() => 0, controller.signal),
-          ).toThrow('cursor abort');
-          expectNoScalarOwners(owners);
-          expect(journal.withReadRows((cursor) => cursor.length)).toBe(1);
-          expect(reads.snapshot().peakDecodedRows).toBe(1);
-        } finally {
-          await journal.dispose();
-        }
+  it('releases rows and pinned descriptors on return, callback fault and abort', async () => {
+    await withBatchFixture(async ({ recorder, owners, reads }) => {
+      await recorder.commit('content', { content: batchRow(0) });
+      const journal = new HistoryJournalStore(recorder, {
+        ...reads.counters,
+        ownership: owners,
       });
-    },
-  );
+      const controller = new AbortController();
+      try {
+        const first = journal.withReadRows((cursor) => {
+          for (const row of cursor.rows()) return row;
+          return undefined;
+        });
+        expect(first).toStrictEqual(batchRow(0));
+        journal.withReadRows((cursor) => {
+          const iterator = cursor.rows();
+          expect(iterator.next().value).toStrictEqual(batchRow(0));
+        });
+        expectNoScalarOwners(owners);
+        expect(() =>
+          journal.withReadRows((cursor) => {
+            for (const row of cursor.rows()) {
+              expect(row.speaker).toBe('human');
+              throw new Error('callback fault');
+            }
+          }),
+        ).toThrow('callback fault');
+        expect(() =>
+          journal.withReadRows((cursor) => {
+            for (const row of cursor.rows()) {
+              expect(row.speaker).toBe('human');
+              controller.abort(new Error('cursor abort'));
+            }
+          }, controller.signal),
+        ).toThrow('cursor abort');
+        expect(() => journal.withReadRows(() => 0, controller.signal)).toThrow(
+          'cursor abort',
+        );
+        expectNoScalarOwners(owners);
+        expect(journal.withReadRows((cursor) => cursor.length)).toBe(1);
+        expect(reads.snapshot().peakDecodedRows).toBe(1);
+      } finally {
+        await journal.dispose();
+      }
+    });
+  });
 });
 
 describe('scalar cursor retaining controls', () => {
-  it
-    .skipIf(journalBackendSelected)
-    .each(
-      [512, 8192].flatMap((size) =>
-        [false, true].map((copy) => ({ size, copy })),
-      ),
-    )(
+  it.each(
+    [512, 8192].flatMap((size) =>
+      [false, true].map((copy) => ({ size, copy })),
+    ),
+  )(
     'does not excuse $size retained consumer rows copy=$copy',
     async ({ size, copy }) => {
       await withBatchFixture(async ({ recorder }) => {

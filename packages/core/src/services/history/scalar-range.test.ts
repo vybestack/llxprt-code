@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import {
   batchRow,
   withBatchFixture,
@@ -24,7 +23,7 @@ function summaryRow(
 }
 
 describe('scalar chronology and filter semantics', () => {
-  it.skipIf(journalBackendSelected).each([false, true])(
+  it.each([false, true])(
     'uses positional boundaries and omits derived summary spans only for legacy membership=%s',
     async (legacy) => {
       await withBatchFixture(async ({ history, recorder }) => {

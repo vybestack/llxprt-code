@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { HistoryService } from '../../HistoryService.js';
+import {
+  HistoryService,
+  type HistoryServiceJournalOptions,
+} from '../../HistoryService.js';
 import { HistoryJournalStore } from '../../historyJournalStore.js';
 import type { HistoryMutationSnapshot } from '../../historyMutationSnapshot.js';
 
@@ -10,6 +13,10 @@ import type { HistoryMutationSnapshot } from '../../historyMutationSnapshot.js';
  * through the whole-operation port methods.
  */
 export class SnapshotProbeHistory extends HistoryService {
+  constructor(options: HistoryServiceJournalOptions = {}) {
+    super({ ...options, backend: 'old' });
+  }
+
   withSnapshot<T>(
     execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
     signal?: AbortSignal,

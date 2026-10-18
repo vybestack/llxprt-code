@@ -10,7 +10,18 @@ import {
   type DetachedRows,
 } from './detachedRowShapes.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
+import { applyAppendDrafts, encodeAppended } from './journalOps.js';
 import type { JournalCompensationMark } from './journalPublication.js';
+
+/** Encoded bytes after which an append group is written, so a long append holds a bounded part in memory. */
+const APPEND_GROUP_BYTES = 4 * 1024 * 1024;
+
+function encodedBytes(draft: RowDraft): number {
+  return draft.blocks.reduce(
+    (sum, block) => sum + block.bytes.length,
+    draft.meta.length,
+  );
+}
 
 /**
  * Publishes a detached candidate on the journal store. A general replacement
@@ -27,6 +38,9 @@ export class JournalDetachedPublication {
   lastAck: CommitAck | undefined;
   private readonly mark: JournalCompensationMark;
   private released = false;
+  private pendingAppends: RowDraft[] = [];
+  private pendingAppendBytes = 0;
+  private appendOrigin: string | undefined;
   /** The failure this publication's own groups reported; compensation resolves exactly that one. */
   private failure: unknown;
 
@@ -109,17 +123,45 @@ export class JournalDetachedPublication {
     }
   }
 
-  /** Appends one row, under `origin`, as its own group and waits for its ack. */
+  /**
+   * Takes one row to append under `origin`. Rows are encoded as they come and
+   * written together as one group, one durable commit, when the encoded bytes
+   * held reach {@link APPEND_GROUP_BYTES} or {@link flushAppends} is called, so
+   * no more than that much of a long append is held at once.
+   */
   async appendOne(content: IContent, origin?: string): Promise<void> {
     try {
-      this.admittedCount++;
-      this.store.apply({ kind: 'content', content, origin });
-      await this.store.waitForDurable();
-      this.lastAck = this.store.lastAck;
+      const draft = encodeAppended(this.store.writes, content, origin);
+      this.pendingAppends.push(draft);
+      this.pendingAppendBytes += encodedBytes(draft);
+      this.appendOrigin = origin;
+      if (this.pendingAppendBytes >= APPEND_GROUP_BYTES)
+        await this.writePendingAppends();
     } catch (error) {
       this.failure = error;
       throw error;
     }
+  }
+
+  /** Writes the rows {@link appendOne} still holds; call it once the transform has returned. */
+  async flushAppends(): Promise<void> {
+    try {
+      await this.writePendingAppends();
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
+
+  private async writePendingAppends(): Promise<void> {
+    if (this.pendingAppends.length === 0) return;
+    const drafts = this.pendingAppends;
+    this.pendingAppends = [];
+    this.pendingAppendBytes = 0;
+    this.admittedCount++;
+    applyAppendDrafts(this.store.writes, drafts, this.appendOrigin);
+    await this.store.waitForDurable();
+    this.lastAck = this.store.lastAck;
   }
 
   /** Drops the owner id taken for rows no group was written for. */

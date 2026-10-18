@@ -6,6 +6,10 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import {
+  HISTORY_BACKEND_ENV,
+  type HistoryBackend,
+} from '../../historyBackendSelect.js';
+import {
   createRowCounters,
   type RowCounters,
 } from '../../../../recording/journalCounters.js';
@@ -32,21 +36,30 @@ function createHistoryService(
   return new HistoryService(options);
 }
 
+/**
+ * `backend` names the store and recorder the fixture builds; omitted, the
+ * environment selects them. A test of the old store's internals names `'old'`.
+ */
 export function createCoreSuffixFixtureGraph(
   root: string,
   mutationOwnership = new RowOwnership(),
   createService: (
     options: HistoryServiceJournalOptions,
   ) => HistoryService = createHistoryService,
+  backend?: HistoryBackend,
 ): CoreSuffixFixtureGraph {
-  const recording = createRecorderForTest({
-    sessionId: 'suffix-test',
-    projectHash: 'suffix-test',
-    chatsDir: root,
-  });
+  const recording = createRecorderForTest(
+    {
+      sessionId: 'suffix-test',
+      projectHash: 'suffix-test',
+      chatsDir: root,
+    },
+    backend === undefined ? process.env : { [HISTORY_BACKEND_ENV]: backend },
+  );
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const service = createService({
+    backend,
     recording,
     attachmentCounters: { ...counters.counters, ownership },
     mutationOwnership,
@@ -74,11 +87,17 @@ export async function withCoreSuffixFixture<T>(
   createService: (
     options: HistoryServiceJournalOptions,
   ) => HistoryService = createHistoryService,
+  backend?: HistoryBackend,
 ): Promise<T> {
   return withSuffixFixtureGraph(
     size,
     (root) =>
-      createCoreSuffixFixtureGraph(root, mutationOwnership, createService),
+      createCoreSuffixFixtureGraph(
+        root,
+        mutationOwnership,
+        createService,
+        backend,
+      ),
     action,
     payloadBytes,
     makeRow,

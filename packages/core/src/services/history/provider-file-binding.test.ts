@@ -6,7 +6,6 @@
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { HistoryService } from './HistoryService.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import type {
@@ -80,13 +79,10 @@ describe('HistoryService provider file binding', () => {
     expect(actual).toStrictEqual(expected0);
   });
 
-  it.skipIf(journalBackendSelected)(
-    'isolates retained provider metadata from later caller mutation',
-    async () => {
-      const { actual, expected0 } = await observeDensityCase5();
-      expect(actual).toStrictEqual(expected0);
-    },
-  );
+  it('isolates retained provider metadata from later caller mutation', async () => {
+    const { actual, expected0 } = await observeDensityCase5();
+    expect(actual).toStrictEqual(expected0);
+  });
 });
 
 async function observeDensityCase1() {
@@ -212,7 +208,9 @@ async function observeDensityCase4() {
 }
 
 async function observeDensityCase5() {
-  const history = new HistoryService();
+  // Frozen retained objects are the old store's layout; the journal store
+  // decodes a copy per read (provider-file-binding.journal.test.ts).
+  const history = new HistoryService({ backend: 'old' });
   history.add({ speaker: 'human', blocks: [mediaReference()] });
   const callerOwned = { ...PROVIDER_FILE };
 

@@ -154,7 +154,8 @@ export class JournalHistoryStore implements HistoryStorePort {
   private readonly startup: Promise<void>;
   /** Shared by the mirrors of successive primaries, so a swap keeps the listeners. */
   private readonly retirement = new Set<() => void>();
-  private readonly writes: JournalWriteHost = {
+  /** What a publication needs to queue its own groups (see journalOps.ts); every queued group is checked for a usable store. */
+  readonly writes: JournalWriteHost = {
     rows: () => this.tentativeRows,
     owners: () => this.owners,
     enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
@@ -964,6 +965,7 @@ export class JournalHistoryStore implements HistoryStorePort {
    * show the count that was promised.
    */
   private enqueue(rowsAfter: number, build: EditBuilder): void {
+    this.assertUsable();
     void this.enqueueTurn(rowsAfter, build);
   }
 

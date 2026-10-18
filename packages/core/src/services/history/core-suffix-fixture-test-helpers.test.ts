@@ -28,7 +28,6 @@ import {
   createCoreSuffixFixtureGraph,
   type CoreSuffixFixtureGraph,
 } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { pausedDensity } from './chronology-rollback-owner-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 
@@ -78,7 +77,7 @@ describe('source-owned suffix fixture boundary', () => {
     }, 120_000);
 
     it(`keeps typed rollback observations and restores all ${size} rows`, async () => {
-      const result = await pausedDensity(size, false);
+      const result = await pausedDensity(size, false, 'density', 'old');
       const liveRows: number = result.previous.liveRows;
       expect(liveRows).toBe(0);
       expect(result.traversed).toBe(size);
@@ -93,7 +92,7 @@ describe('source-owned suffix fixture boundary', () => {
   }
 
   it('exposes both violations from the 8192-row eager previous-owner trap', async () => {
-    const result = await pausedDensity(8192, true);
+    const result = await pausedDensity(8192, true, 'density', 'old');
     expect(result.traversed).toBe(8192);
     expect(result.previous.peakRows).toBeGreaterThan(440);
     expect(result.previous.peakSerializedBytes).toBeGreaterThan(
@@ -180,170 +179,161 @@ async function verifySourceJournal(
 }
 
 describe('source factory record and flush', () => {
-  it.skipIf(journalBackendSelected)(
-    'uses source factory options for durable seeds, queued recording and typed results',
-    async () => {
-      let captured: SessionRecordingPort | undefined;
-      const transaction = new RowOwnership();
-      const result = await withCoreSuffixFixture(
-        2,
-        async (history: HistoryService, previous: RowOwnership) => {
-          const recording = sourceRecorder(captured);
-          expect(history).toBeInstanceOf(FactoryHistory);
-          expect(recording).toBeInstanceOf(SessionRecordingService);
-          expect(previous).toBeInstanceOf(RowOwnership);
-          expect({
-            bytes: recording.getPendingByteCount(),
-            records: recording.getPendingRecordCount(),
-          }).toStrictEqual({ bytes: 0, records: 0 });
-          await verifySourceJournal(recording, 2, 64);
-          recording.recordContent(suffixRow(2, 64));
-          expect(recording.getPendingByteCount()).toBeGreaterThan(0);
-          await recording.flush();
-          expect(recording.getPendingByteCount()).toBe(0);
-          await verifySourceJournal(recording, 3, 64);
-          const file = recording.getFilePath();
-          if (file === null) throw new Error('Missing flushed source journal');
-          return statSync(file).size;
-        },
-        64,
-        suffixRow,
-        transaction,
-        (options: HistoryServiceJournalOptions) => {
-          captured = options.recording;
-          expect(options.mutationOwnership).toBe(transaction);
-          expect(options.attachmentCounters?.ownership).toBeInstanceOf(
-            RowOwnership,
-          );
-          return new FactoryHistory(options);
-        },
-      );
-      const durableBytes: number = result;
-      expect(durableBytes).toBeGreaterThan(3 * 64);
-      expect(sourceRecorder(captured).isActive()).toBe(false);
-      expect(transaction.snapshot().liveRows).toBe(0);
-    },
-  );
+  it('uses source factory options for durable seeds, queued recording and typed results', async () => {
+    let captured: SessionRecordingPort | undefined;
+    const transaction = new RowOwnership();
+    const result = await withCoreSuffixFixture(
+      2,
+      async (history: HistoryService, previous: RowOwnership) => {
+        const recording = sourceRecorder(captured);
+        expect(history).toBeInstanceOf(FactoryHistory);
+        expect(recording).toBeInstanceOf(SessionRecordingService);
+        expect(previous).toBeInstanceOf(RowOwnership);
+        expect({
+          bytes: recording.getPendingByteCount(),
+          records: recording.getPendingRecordCount(),
+        }).toStrictEqual({ bytes: 0, records: 0 });
+        await verifySourceJournal(recording, 2, 64);
+        recording.recordContent(suffixRow(2, 64));
+        expect(recording.getPendingByteCount()).toBeGreaterThan(0);
+        await recording.flush();
+        expect(recording.getPendingByteCount()).toBe(0);
+        await verifySourceJournal(recording, 3, 64);
+        const file = recording.getFilePath();
+        if (file === null) throw new Error('Missing flushed source journal');
+        return statSync(file).size;
+      },
+      64,
+      suffixRow,
+      transaction,
+      (options: HistoryServiceJournalOptions) => {
+        captured = options.recording;
+        expect(options.mutationOwnership).toBe(transaction);
+        expect(options.attachmentCounters?.ownership).toBeInstanceOf(
+          RowOwnership,
+        );
+        return new FactoryHistory(options);
+      },
+      'old',
+    );
+    const durableBytes: number = result;
+    expect(durableBytes).toBeGreaterThan(3 * 64);
+    expect(sourceRecorder(captured).isActive()).toBe(false);
+    expect(transaction.snapshot().liveRows).toBe(0);
+  });
 });
 
 describe('source factory history publication', () => {
-  it.skipIf(journalBackendSelected)(
-    'publishes an append in the same turn and reopens it after the durability barrier',
-    async () => {
-      let captured: SessionRecordingPort | undefined;
-      await withCoreSuffixFixture(
-        2,
-        async (history: HistoryService, previous: RowOwnership) => {
-          const recording = sourceRecorder(captured);
-          expect(history).toBeInstanceOf(FactoryHistory);
-          let publications = 0;
-          history.on('contentAdded', () => publications++);
-          history.add(suffixRow(2, 64));
-          expect(history.length()).toBe(3);
-          expect(publications).toBe(1);
-          await history.waitForCommit();
-          await verifySourceJournal(recording, 3, 64);
-          let seen = 0;
-          for await (const row of history.streamRawHistory())
-            expect(row).toStrictEqual(suffixRow(seen++, 64));
-          expect(seen).toBe(3);
-          expect(previous.snapshot().liveRows).toBe(0);
-          expect(previous.snapshot().peakRows).toBeLessThanOrEqual(440);
-          expect(previous.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
-            8 * 1024 * 1024,
-          );
-        },
-        64,
-        suffixRow,
-        undefined,
-        (options: HistoryServiceJournalOptions) => {
-          captured = options.recording;
-          return new FactoryHistory(options);
-        },
-      );
-    },
-  );
+  it('publishes an append in the same turn and reopens it after the durability barrier', async () => {
+    let captured: SessionRecordingPort | undefined;
+    await withCoreSuffixFixture(
+      2,
+      async (history: HistoryService, previous: RowOwnership) => {
+        const recording = sourceRecorder(captured);
+        expect(history).toBeInstanceOf(FactoryHistory);
+        let publications = 0;
+        history.on('contentAdded', () => publications++);
+        history.add(suffixRow(2, 64));
+        expect(history.length()).toBe(3);
+        expect(publications).toBe(1);
+        await history.waitForCommit();
+        await verifySourceJournal(recording, 3, 64);
+        let seen = 0;
+        for await (const row of history.streamRawHistory())
+          expect(row).toStrictEqual(suffixRow(seen++, 64));
+        expect(seen).toBe(3);
+        expect(previous.snapshot().liveRows).toBe(0);
+        expect(previous.snapshot().peakRows).toBeLessThanOrEqual(440);
+        expect(previous.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
+          8 * 1024 * 1024,
+        );
+      },
+      64,
+      suffixRow,
+      undefined,
+      (options: HistoryServiceJournalOptions) => {
+        captured = options.recording;
+        return new FactoryHistory(options);
+      },
+      'old',
+    );
+  });
 });
 
 describe('source factory writer failure', () => {
-  it.skipIf(journalBackendSelected)(
-    'surfaces a real append failure through flush and poisoned commit and releases queue bytes',
-    async () => {
-      let captured: SessionRecordingPort | undefined;
-      await withCoreSuffixFixture(
-        1,
-        async (history: HistoryService, previous: RowOwnership) => {
-          const recording = sourceRecorder(captured);
-          expect(history).toBeInstanceOf(FactoryHistory);
-          const file = recording.getFilePath();
-          if (file === null) throw new Error('Missing source journal');
-          renameSync(file, file + '.preserved');
-          mkdirSync(file);
-          recording.recordContent(suffixRow(1));
-          expect(recording.getPendingByteCount()).toBeGreaterThan(0);
-          const failure = await rejectedValue(recording.flush());
-          expect(failure).toMatchObject({ code: 'EISDIR' });
-          await expect(
-            recording.commit('content', { content: suffixRow(2) }),
-          ).rejects.toBe(failure);
-          expect(recording.getPendingByteCount()).toBe(0);
-          expect(recording.getPendingRecordCount()).toBe(0);
-          expect(recording.isActive()).toBe(false);
-          expect(previous.snapshot().liveRows).toBe(0);
+  it('surfaces a real append failure through flush and poisoned commit and releases queue bytes', async () => {
+    let captured: SessionRecordingPort | undefined;
+    await withCoreSuffixFixture(
+      1,
+      async (history: HistoryService, previous: RowOwnership) => {
+        const recording = sourceRecorder(captured);
+        expect(history).toBeInstanceOf(FactoryHistory);
+        const file = recording.getFilePath();
+        if (file === null) throw new Error('Missing source journal');
+        renameSync(file, file + '.preserved');
+        mkdirSync(file);
+        recording.recordContent(suffixRow(1));
+        expect(recording.getPendingByteCount()).toBeGreaterThan(0);
+        const failure = await rejectedValue(recording.flush());
+        expect(failure).toMatchObject({ code: 'EISDIR' });
+        await expect(
+          recording.commit('content', { content: suffixRow(2) }),
+        ).rejects.toBe(failure);
+        expect(recording.getPendingByteCount()).toBe(0);
+        expect(recording.getPendingRecordCount()).toBe(0);
+        expect(recording.isActive()).toBe(false);
+        expect(previous.snapshot().liveRows).toBe(0);
+      },
+      0,
+      suffixRow,
+      undefined,
+      (options: HistoryServiceJournalOptions) => {
+        captured = options.recording;
+        return new FactoryHistory(options);
+      },
+      'old',
+    );
+    expect(sourceRecorder(captured).getPendingByteCount()).toBe(0);
+  });
+});
+
+describe('source factory seed failure cleanup', () => {
+  it('preserves a row-generation failure and closes the source recorder before the callback', async () => {
+    let captured: SessionRecordingPort | undefined;
+    let root = '';
+    let seedBytes = 0;
+    const failure = new Error('source factory row generation failure');
+    await expect(
+      withCoreSuffixFixture(
+        2,
+        async () => {
+          throw new Error('Callback ran after seed failure');
         },
-        0,
-        suffixRow,
+        64,
+        (index, bytes) => {
+          if (index === 1) {
+            const file = sourceRecorder(captured).getFilePath();
+            if (file === null) throw new Error('Missing seeded source journal');
+            root = dirname(file);
+            seedBytes = statSync(file).size;
+            throw failure;
+          }
+          return suffixRow(index, bytes);
+        },
         undefined,
         (options: HistoryServiceJournalOptions) => {
           captured = options.recording;
           return new FactoryHistory(options);
         },
-      );
-      expect(sourceRecorder(captured).getPendingByteCount()).toBe(0);
-    },
-  );
-});
-
-describe('source factory seed failure cleanup', () => {
-  it.skipIf(journalBackendSelected)(
-    'preserves a row-generation failure and closes the source recorder before the callback',
-    async () => {
-      let captured: SessionRecordingPort | undefined;
-      let root = '';
-      let seedBytes = 0;
-      const failure = new Error('source factory row generation failure');
-      await expect(
-        withCoreSuffixFixture(
-          2,
-          async () => {
-            throw new Error('Callback ran after seed failure');
-          },
-          64,
-          (index, bytes) => {
-            if (index === 1) {
-              const file = sourceRecorder(captured).getFilePath();
-              if (file === null)
-                throw new Error('Missing seeded source journal');
-              root = dirname(file);
-              seedBytes = statSync(file).size;
-              throw failure;
-            }
-            return suffixRow(index, bytes);
-          },
-          undefined,
-          (options: HistoryServiceJournalOptions) => {
-            captured = options.recording;
-            return new FactoryHistory(options);
-          },
-        ),
-      ).rejects.toBe(failure);
-      expect(sourceRecorder(captured).isActive()).toBe(false);
-      expect(sourceRecorder(captured).getPendingByteCount()).toBe(0);
-      expect(seedBytes).toBeGreaterThan(64);
-      expect(root.length).toBeGreaterThan(0);
-      expect(existsSync(root)).toBe(false);
-    },
-  );
+        'old',
+      ),
+    ).rejects.toBe(failure);
+    expect(sourceRecorder(captured).isActive()).toBe(false);
+    expect(sourceRecorder(captured).getPendingByteCount()).toBe(0);
+    expect(seedBytes).toBeGreaterThan(64);
+    expect(root.length).toBeGreaterThan(0);
+    expect(existsSync(root)).toBe(false);
+  });
 });
 
 describe('source factory graph construction', () => {

@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import {
   detachedDigest,
@@ -76,36 +75,32 @@ async function bindingFault(size: number, stage: string): Promise<number> {
 
 describe('provider binding detached production bridge', () => {
   for (const size of [512, 8192]) {
-    it.skipIf(journalBackendSelected)(
-      `binds ${size} real mixed rows through the value engine and durably publishes before returning`,
-      async () => {
-        await withDetachedFixture(async (fixture) => {
-          const { history, recorder, owners } = fixture;
-          await seed(fixture, size);
-          const range = expectedRange(size);
-          history.setBaseTokenOffset(73);
-          await createHistoryProviderFileBindingStore(history).bind(
-            bindingContentId,
-            bindingFile,
-          );
-          const expected = await detachedDigest(
-            bindingBridgeRows(size, 2048, true),
-          );
-          expect(
-            await detachedDigest(history.streamRawHistory()),
-          ).toStrictEqual(expected);
-          expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-          expect(history.getTotalTokens()).toBe(size * 4 + 73);
-          expect(history.getContextRange()).toStrictEqual(range);
-          expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
-          expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
-            8 * 1024 * 1024,
-          );
-          expect(owners.snapshot().liveRows).toBe(0);
-        });
-      },
-      180_000,
-    );
+    it(`binds ${size} real mixed rows through the value engine and durably publishes before returning`, async () => {
+      await withDetachedFixture(async (fixture) => {
+        const { history, recorder, owners } = fixture;
+        await seed(fixture, size);
+        const range = expectedRange(size);
+        history.setBaseTokenOffset(73);
+        await createHistoryProviderFileBindingStore(history).bind(
+          bindingContentId,
+          bindingFile,
+        );
+        const expected = await detachedDigest(
+          bindingBridgeRows(size, 2048, true),
+        );
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          expected,
+        );
+        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+        expect(history.getTotalTokens()).toBe(size * 4 + 73);
+        expect(history.getContextRange()).toStrictEqual(range);
+        expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
+        expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
+          8 * 1024 * 1024,
+        );
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
+    }, 180_000);
     for (const stage of [
       'zero',
       'prefix',
@@ -114,75 +109,63 @@ describe('provider binding detached production bridge', () => {
       'finalize',
       'observer',
     ])
-      it.skipIf(journalBackendSelected)(
-        `restores ${size} rows after ${stage} failure without hiding the primary error`,
-        async () => {
-          expect(await bindingFault(size, stage)).toBe(size);
-        },
-        180_000,
-      );
+      it(`restores ${size} rows after ${stage} failure without hiding the primary error`, async () => {
+        expect(await bindingFault(size, stage)).toBe(size);
+      }, 180_000);
   }
 });
 
 describe('provider binding value edge cases', () => {
-  it.skipIf(journalBackendSelected)(
-    'accepts and restores a nine-MiB source value without changing caller metadata',
-    async () => {
-      await withDetachedFixture(async ({ history, recorder, owners }) => {
-        const row = bindingBridgeRow(0, 9 * 1024 * 1024);
-        const expected = await detachedDigest(
-          bindingBridgeRows(1, 9 * 1024 * 1024),
-        );
-        Object.freeze(row.metadata?.chronology);
-        Object.freeze(row.metadata);
-        await recorder.commit('content', { content: row });
-        await history.recalculateTotalTokens();
-        const failure = new Error('large binding rollback');
-        history.once('tokensUpdated', () => {
-          throw failure;
-        });
-        expect(
-          await rejectedValue(
-            createHistoryProviderFileBindingStore(history).bind(
-              bindingContentId,
-              bindingFile,
-            ),
-          ),
-        ).toBe(failure);
-        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-          expected,
-        );
-        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-        expect(row).toStrictEqual(bindingBridgeRow(0, 9 * 1024 * 1024));
-        expect(history.getTotalTokens()).toBe(4);
-        expect(owners.snapshot().liveRows).toBe(0);
+  it('accepts and restores a nine-MiB source value without changing caller metadata', async () => {
+    await withDetachedFixture(async ({ history, recorder, owners }) => {
+      const row = bindingBridgeRow(0, 9 * 1024 * 1024);
+      const expected = await detachedDigest(
+        bindingBridgeRows(1, 9 * 1024 * 1024),
+      );
+      Object.freeze(row.metadata?.chronology);
+      Object.freeze(row.metadata);
+      await recorder.commit('content', { content: row });
+      await history.recalculateTotalTokens();
+      const failure = new Error('large binding rollback');
+      history.once('tokensUpdated', () => {
+        throw failure;
       });
-    },
-    180_000,
-  );
-  it.skipIf(journalBackendSelected)(
-    'rejects missing media before publishing and leaves duplicate public ids intact',
-    async () => {
-      await withDetachedFixture(async (fixture) => {
-        await seed(fixture, 512);
-        const expected = await detachedDigest(bindingBridgeRows(512));
-        await expect(
-          createHistoryProviderFileBindingStore(fixture.history).bind(
-            'missing',
+      expect(
+        await rejectedValue(
+          createHistoryProviderFileBindingStore(history).bind(
+            bindingContentId,
             bindingFile,
           ),
-        ).rejects.toThrow(
-          'Cannot bind provider file to missing media content missing',
-        );
-        expect(
-          await detachedDigest(fixture.history.streamRawHistory()),
-        ).toStrictEqual(expected);
-        expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
-          expected,
-        );
-        expect(fixture.owners.snapshot().liveRows).toBe(0);
-      });
-    },
-    180_000,
-  );
+        ),
+      ).toBe(failure);
+      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+        expected,
+      );
+      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      expect(row).toStrictEqual(bindingBridgeRow(0, 9 * 1024 * 1024));
+      expect(history.getTotalTokens()).toBe(4);
+      expect(owners.snapshot().liveRows).toBe(0);
+    });
+  }, 180_000);
+  it('rejects missing media before publishing and leaves duplicate public ids intact', async () => {
+    await withDetachedFixture(async (fixture) => {
+      await seed(fixture, 512);
+      const expected = await detachedDigest(bindingBridgeRows(512));
+      await expect(
+        createHistoryProviderFileBindingStore(fixture.history).bind(
+          'missing',
+          bindingFile,
+        ),
+      ).rejects.toThrow(
+        'Cannot bind provider file to missing media content missing',
+      );
+      expect(
+        await detachedDigest(fixture.history.streamRawHistory()),
+      ).toStrictEqual(expected);
+      expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
+        expected,
+      );
+      expect(fixture.owners.snapshot().liveRows).toBe(0);
+    });
+  }, 180_000);
 });

@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { readdirSync } from 'node:fs';
 import { withSynchronousFixture } from './synchronous-ticket-test-helpers.js';
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
@@ -17,29 +16,26 @@ function expectRetired(before: string[]): void {
 }
 
 describe('synchronous ticket durable retirement', () => {
-  it.skipIf(journalBackendSelected)(
-    'retires idle value spools only after durable acknowledgement while allowing later adds',
-    async () => {
-      const before = ticketFiles();
-      await withSynchronousFixture(async (fixture) => {
-        fixture.pauseWriter();
-        fixture.history.add(batchRow(0));
-        await fixture.waitForPausedWrite;
-        expect(ticketFiles().length).toBeGreaterThan(before.length);
-        fixture.releaseWriter();
-        await fixture.history.waitForCommit();
-        await fixture.history.waitForTokenUpdates();
-        expectRetired(before);
-        fixture.history.add(batchRow(1));
-        await fixture.history.waitForCommit();
-        await fixture.history.waitForTokenUpdates();
-        let ordinal = 0;
-        for await (const row of fixture.history.streamRawHistory()) {
-          expect(row.blocks).toStrictEqual(batchRow(ordinal++).blocks);
-        }
-        expect(ordinal).toBe(2);
-        expectRetired(before);
-      });
-    },
-  );
+  it('retires idle value spools only after durable acknowledgement while allowing later adds', async () => {
+    const before = ticketFiles();
+    await withSynchronousFixture(async (fixture) => {
+      fixture.pauseWriter();
+      fixture.history.add(batchRow(0));
+      await fixture.waitForPausedWrite;
+      expect(ticketFiles().length).toBeGreaterThan(before.length);
+      fixture.releaseWriter();
+      await fixture.history.waitForCommit();
+      await fixture.history.waitForTokenUpdates();
+      expectRetired(before);
+      fixture.history.add(batchRow(1));
+      await fixture.history.waitForCommit();
+      await fixture.history.waitForTokenUpdates();
+      let ordinal = 0;
+      for await (const row of fixture.history.streamRawHistory()) {
+        expect(row.blocks).toStrictEqual(batchRow(ordinal++).blocks);
+      }
+      expect(ordinal).toBe(2);
+      expectRetired(before);
+    });
+  });
 });

@@ -31,8 +31,16 @@ import type { DensitySpanRows } from './densitySpanRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import type { HistoryBackend } from './historyBackendSelect.js';
 
 export interface HistoryServiceJournalOptions {
+  /**
+   * The store to build. Omitted, the environment selects it
+   * (`LLXPRT_HISTORY_BACKEND`). A test of the old store's internals names
+   * `'old'` so it runs under every environment. Part of the temporary backend
+   * switch that S15 deletes.
+   */
+  readonly backend?: HistoryBackend;
   readonly recording?: SessionRecordingPort;
   readonly attachmentCounters?: JournalReadCounters;
   readonly mutationOwnership?: RowOwnership;

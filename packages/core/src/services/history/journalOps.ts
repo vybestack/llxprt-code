@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
 import type { DensityMutationPayload } from '../../recording/types.js';
+import type { RowDraft } from '../../journal/rowDraft.js';
 import type { IContent } from './IContent.js';
 import type { HistoryJournalOp } from './historyStorePort.js';
 import { planDensity } from './journalHistoryEdits.js';
@@ -79,14 +80,39 @@ function applyContent(
       'Rows of a replace transaction are not implemented in the journal store yet',
     );
   }
-  // Encoded now: the chronology stamper writes the entry's metadata in place after the call.
+  applyAppendDrafts(host, [encodeAppended(host, content, origin)], origin);
+}
+
+/**
+ * The draft of a row about to be appended. Encoded now: the chronology
+ * stamper writes the entry's metadata in place after the call. The row is
+ * offered as the session preview of `origin` here, as it is the row's first
+ * appearance.
+ */
+export function encodeAppended(
+  host: JournalWriteHost,
+  content: IContent,
+  origin: string | undefined,
+): RowDraft {
   const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
   host.offerPreview(content, origin);
-  host.enqueue(host.rows() + 1, async () => {
+  return draft;
+}
+
+/** Queues `drafts` (from {@link encodeAppended}) as one append group, which is one durable commit. */
+export function applyAppendDrafts(
+  host: JournalWriteHost,
+  drafts: readonly RowDraft[],
+  origin: string | undefined,
+): void {
+  host.enqueue(host.rows() + drafts.length, async () => {
     const owner = await host.owners().resolve(origin);
     return [
       ...owner.edits,
-      { kind: 'append', rows: [{ ...draft, owner: owner.id }] },
+      {
+        kind: 'append',
+        rows: drafts.map((draft) => ({ ...draft, owner: owner.id })),
+      },
     ];
   });
 }

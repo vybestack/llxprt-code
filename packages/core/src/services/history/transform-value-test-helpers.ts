@@ -153,6 +153,7 @@ export async function withValueTransformFixture<T>(
   });
   const owners = new BatchOwnerCensus();
   const history = new HistoryService({
+    backend: 'old',
     recording: recorder,
     mutationOwnership: owners,
   });

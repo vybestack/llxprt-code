@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import {
   submitTicketRows,
   expectTicketCallersReleased,
@@ -38,7 +37,7 @@ function row(index: number): IContent {
 }
 
 describe('maintained scalar length during synchronous admission', () => {
-  it.skipIf(journalBackendSelected).each([512, 8192])(
+  it.each([512, 8192])(
     'publishes %i ordered adds before the first await with one empty boundary',
     async (size) => {
       await withRollbackFixture(async (history, recorder, releaseWriter) => {
@@ -113,66 +112,57 @@ async function checkPendingLength(): Promise<number> {
 }
 
 describe('pending scalar owner lifetime', () => {
-  it.skipIf(journalBackendSelected)(
-    'charges pending owners without acquiring them again for repeated length reads',
-    async () => {
-      expect(await checkPendingLength()).toBe(512);
-    },
-  );
+  it('charges pending owners without acquiring them again for repeated length reads', async () => {
+    expect(await checkPendingLength()).toBe(512);
+  });
 
-  it.skipIf(journalBackendSelected)(
-    'restores emptiness after observer compensation and after compression replay',
-    async () => {
-      await withRollbackFixture(async (history, _recorder, releaseWriter) => {
-        const failure = new Error('observer failed');
-        const reject = (): void => {
-          throw failure;
-        };
-        history.on('contentAdded', reject);
-        expect(() => history.add(row(0))).toThrow(failure);
-        const compensatedLength = history.length();
-        history.off('contentAdded', reject);
-        const boundaries: ContextRange[] = [];
-        history.on('contextRangeChanged', (range) => boundaries.push(range));
-        history.startCompression();
-        history.add(row(1));
-        history.add(row(2));
-        const queuedLength = history.length();
-        history.endCompression();
-        const replayedLength = history.length();
-        expect(boundaries).toHaveLength(1);
-        releaseWriter();
-        await history.waitForCommit();
-        expect([
-          compensatedLength,
-          queuedLength,
-          replayedLength,
-          history.length(),
-        ]).toStrictEqual([0, 0, 2, 2]);
-      }, true);
-    },
-  );
+  it('restores emptiness after observer compensation and after compression replay', async () => {
+    await withRollbackFixture(async (history, _recorder, releaseWriter) => {
+      const failure = new Error('observer failed');
+      const reject = (): void => {
+        throw failure;
+      };
+      history.on('contentAdded', reject);
+      expect(() => history.add(row(0))).toThrow(failure);
+      const compensatedLength = history.length();
+      history.off('contentAdded', reject);
+      const boundaries: ContextRange[] = [];
+      history.on('contextRangeChanged', (range) => boundaries.push(range));
+      history.startCompression();
+      history.add(row(1));
+      history.add(row(2));
+      const queuedLength = history.length();
+      history.endCompression();
+      const replayedLength = history.length();
+      expect(boundaries).toHaveLength(1);
+      releaseWriter();
+      await history.waitForCommit();
+      expect([
+        compensatedLength,
+        queuedLength,
+        replayedLength,
+        history.length(),
+      ]).toStrictEqual([0, 0, 2, 2]);
+    }, true);
+  });
 
-  it.skipIf(journalBackendSelected)(
-    'does not advance the scalar count when admission throws',
-    async () => {
-      await withRollbackFixture(async (history, recorder, releaseWriter) => {
-        history.add(row(0));
-        recorder.failAdmissionAfter(0);
-        expect(() => history.add(row(1))).toThrow(recorder.failure);
-        expect(history.length()).toBe(1);
-        history.add(row(2));
-        const admittedLength = history.length();
-        releaseWriter();
-        await history.waitForCommit();
-        expect([admittedLength, history.length()]).toStrictEqual([2, 2]);
-      }, true);
-    },
-  );
+  it('does not advance the scalar count when admission throws', async () => {
+    await withRollbackFixture(async (history, recorder, releaseWriter) => {
+      history.add(row(0));
+      recorder.failAdmissionAfter(0);
+      expect(() => history.add(row(1))).toThrow(recorder.failure);
+      expect(history.length()).toBe(1);
+      history.add(row(2));
+      const admittedLength = history.length();
+      releaseWriter();
+      await history.waitForCommit();
+      expect([admittedLength, history.length()]).toStrictEqual([2, 2]);
+    }, true);
+  });
 });
 
 describe('pending scalar identity and pinned membership', () => {
-  it.skipIf(journalBackendSelected).each([512, 8192])(
+  it.each([512, 8192])(
     'keeps all %i caller rows pinned across a reentrant rewind and durable acknowledgement',
     async (size) => {
       await withRollbackFixture(async (_history, recorder, releaseWriter) => {

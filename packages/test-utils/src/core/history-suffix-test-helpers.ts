@@ -6,8 +6,7 @@ import { join } from 'node:path';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { createRecorderForTest } from './recorder-for-test.js';
 import {
   HistoryService,
@@ -52,37 +51,48 @@ export interface SuffixFixtureGraph<Service, Ownership, Counters> {
 const SEED_BATCH_ROWS = 256;
 
 /**
- * How a fixture's rows reach its history on the selected backend. The old
- * backend reads a history out of the recorder's file, so the rows are
+ * How a fixture's rows reach its history, by the kind of recorder it was given.
+ * The old backend reads a history out of the recorder's file, so the rows are
  * committed to the recorder before the first read. The journal backend writes
  * the recorder as a mirror of the history, so the rows are added to the
- * history and the recorder follows. Each journal operation is its own durable
- * commit, so the rows go in batches: one commit per batch, and no more than a
- * batch of rows in memory at once.
+ * history and the recorder follows. Every journal operation is its own durable
+ * commit, so runs of ordinary rows go in as batches (one commit each, and no
+ * more than a batch in memory). A row with no blocks is rejected by
+ * `addBatch`, though a fixture may need one, so it goes in through `add` in
+ * its place in the order.
  */
 export function suffixSeeder(
   recording: SessionRecordingPort,
   service: {
+    add(row: IContent): void;
     addBatch(rows: readonly IContent[]): Promise<void>;
     waitForCommit(): Promise<void>;
   },
 ): (rows: Iterable<IContent>) => Promise<void> {
-  if (selectBackend() === 'journal') {
+  if (!isJsonlRecorder(recording)) {
     return async (rows) => {
-      let chunk: IContent[] = [];
+      let run: IContent[] = [];
+      const flush = async (): Promise<void> => {
+        if (run.length === 0) return;
+        const batch = run;
+        run = [];
+        await service.addBatch(batch);
+      };
       for (const row of rows) {
-        chunk.push(row);
-        if (chunk.length < SEED_BATCH_ROWS) continue;
-        await service.addBatch(chunk);
-        chunk = [];
+        if (row.blocks.length === 0) {
+          await flush();
+          service.add(row);
+          continue;
+        }
+        run.push(row);
+        if (run.length === SEED_BATCH_ROWS) await flush();
       }
-      if (chunk.length > 0) await service.addBatch(chunk);
+      await flush();
       await service.waitForCommit();
     };
   }
-  const jsonl = requireJsonlRecorder(recording);
   return async (rows) => {
-    for (const row of rows) await jsonl.commit('content', { content: row });
+    for (const row of rows) await recording.commit('content', { content: row });
   };
 }
 

@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
@@ -14,33 +13,30 @@ function row(index: number): IContent {
 }
 
 describe('dump snapshot scoped values', () => {
-  it.skipIf(journalBackendSelected)(
-    'captures pending values before returning control to the caller',
-    async () => {
-      const history = new HistoryService();
-      const original = row(0);
+  it('captures pending values before returning control to the caller', async () => {
+    const history = new HistoryService({ backend: 'old' });
+    const original = row(0);
+    try {
+      history.add(original);
+      const expected = structuredClone(original);
+      const opening = history.openDumpSnapshot();
+      original.blocks = [{ type: 'text', text: 'changed after capture' }];
+      history.add(row(1));
+      const snapshot = await opening;
       try {
-        history.add(original);
-        const expected = structuredClone(original);
-        const opening = history.openDumpSnapshot();
-        original.blocks = [{ type: 'text', text: 'changed after capture' }];
-        history.add(row(1));
-        const snapshot = await opening;
-        try {
-          const values: IContent[] = [];
-          for await (const value of snapshot.rows()) values.push(value);
-          expect(values).toStrictEqual([expected]);
-          const trace = [];
-          for await (const entry of snapshot.chronology()) trace.push(entry);
-          expect(trace).toHaveLength(1);
-        } finally {
-          await snapshot.close();
-        }
+        const values: IContent[] = [];
+        for await (const value of snapshot.rows()) values.push(value);
+        expect(values).toStrictEqual([expected]);
+        const trace = [];
+        for await (const entry of snapshot.chronology()) trace.push(entry);
+        expect(trace).toHaveLength(1);
       } finally {
-        await history.dispose();
+        await snapshot.close();
       }
-    },
-  );
+    } finally {
+      await history.dispose();
+    }
+  });
 
   it('keeps repeated reads independent of mutations to a returned row', async () => {
     const history = new HistoryService();
@@ -73,39 +69,37 @@ describe('dump snapshot scoped values', () => {
 });
 
 describe('dump snapshot scoped reader closure', () => {
-  it.skipIf(journalBackendSelected)(
-    'closes suspended readers and releases their owners immediately',
-    async () => {
-      const ownership = new RowOwnership();
-      const counters = createRowCounters();
-      const history = new HistoryService({
-        attachmentCounters: { ...counters.counters, ownership },
-      });
+  it('closes suspended readers and releases their owners immediately', async () => {
+    const ownership = new RowOwnership();
+    const counters = createRowCounters();
+    const history = new HistoryService({
+      backend: 'old',
+      attachmentCounters: { ...counters.counters, ownership },
+    });
+    try {
+      history.add(row(0));
+      await history.waitForCommit();
+      const snapshot = await history.openDumpSnapshot();
+      const iterator = snapshot.rows()[Symbol.asyncIterator]();
       try {
-        history.add(row(0));
-        await history.waitForCommit();
-        const snapshot = await history.openDumpSnapshot();
-        const iterator = snapshot.rows()[Symbol.asyncIterator]();
-        try {
-          const result = await iterator.next();
-          expect(result.done).toBe(false);
-          expect(ownership.snapshot().liveRows).toBe(1);
-          await snapshot.close();
-          expect(ownership.snapshot().liveRows).toBe(0);
-          expect((await iterator.next()).done).toBe(true);
-          await snapshot.close();
-          await expect(
-            (async () => {
-              for await (const value of snapshot.rows()) void value;
-            })(),
-          ).rejects.toThrow('closed');
-        } finally {
-          await iterator.return?.();
-          await snapshot.close();
-        }
+        const result = await iterator.next();
+        expect(result.done).toBe(false);
+        expect(ownership.snapshot().liveRows).toBe(1);
+        await snapshot.close();
+        expect(ownership.snapshot().liveRows).toBe(0);
+        expect((await iterator.next()).done).toBe(true);
+        await snapshot.close();
+        await expect(
+          (async () => {
+            for await (const value of snapshot.rows()) void value;
+          })(),
+        ).rejects.toThrow('closed');
       } finally {
-        await history.dispose();
+        await iterator.return?.();
+        await snapshot.close();
       }
-    },
-  );
+    } finally {
+      await history.dispose();
+    }
+  });
 });

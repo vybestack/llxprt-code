@@ -51,8 +51,8 @@ export interface CandidateContext {
  * the previous version nothing is written; at the first row that differs the
  * `replace` group is opened and the head is copied into it as stored rows. At
  * the end a result that never differed writes nothing (same rows), one rewind
- * (a cut tail or an emptied history), or is already published (append mode
- * writes one group per row).
+ * (a cut tail or an emptied history), or is appended (append mode writes the
+ * rows as groups bounded in bytes, the last one at the end).
  */
 export class JournalCandidate {
   tokens: number;
@@ -132,7 +132,10 @@ export class JournalCandidate {
 
   /** Called once the transform has returned: closes the group, or writes the rewind a prefix needs. */
   async finish(): Promise<void> {
-    if (this.ctx.appendOnly) return;
+    if (this.ctx.appendOnly) {
+      await this.ctx.publication.flushAppends();
+      return;
+    }
     if (this.feed !== undefined) {
       await this.feed.close();
       return;

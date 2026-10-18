@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +11,7 @@ import {
   resumeSession,
   type ResumeResult,
 } from '../../recording/resumeSession.js';
+import { useBackendEnv } from '../../recording/__tests__/support/backendEnv.js';
 import {
   FanoutHarness,
   rowText,
@@ -38,7 +38,10 @@ async function resumedSession(): Promise<ResumeResult> {
 }
 
 describe('resuming one origin while another is mirrored', () => {
+  const selectBackendForTest = useBackendEnv();
   beforeEach(async () => {
+    // The fixture session is a JSONL file; session discovery follows the env.
+    selectBackendForTest('old');
     await harness.setup();
     root = await mkdtemp(join(tmpdir(), 'fanout-resume-'));
   });
@@ -49,39 +52,36 @@ describe('resuming one origin while another is mirrored', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it.skipIf(journalBackendSelected)(
-    'keeps the resumed recorder a filtered mirror of its own origin',
-    async () => {
-      const { service, ownerA, ownerB, b } = await harness.twoOrigins();
-      service.add(textRow('A-before'), undefined, ownerA);
-      service.add(textRow('B-before'), undefined, ownerB);
-      await service.waitForCommit();
+  it('keeps the resumed recorder a filtered mirror of its own origin', async () => {
+    const { service, ownerA, ownerB, b } = await harness.twoOrigins();
+    service.add(textRow('A-before'), undefined, ownerA);
+    service.add(textRow('B-before'), undefined, ownerB);
+    await service.waitForCommit();
 
-      const result = await resumedSession();
-      await service.adoptResumeBoot(result.recording, result.boot, () =>
-        service.attachJournal(result.recording, false, undefined, ownerA),
-      );
-      expect(service.journalPath()).not.toBe(result.boot.filePath);
+    const result = await resumedSession();
+    await service.adoptResumeBoot(result.recording, result.boot, () =>
+      service.attachJournal(result.recording, false, undefined, ownerA),
+    );
+    expect(service.journalPath()).not.toBe(result.boot.filePath);
 
-      service.add(textRow('A-after'), undefined, ownerA);
-      service.add(textRow('B-after'), undefined, ownerB);
-      await service.waitForCommit();
+    service.add(textRow('A-after'), undefined, ownerA);
+    service.add(textRow('B-after'), undefined, ownerB);
+    await service.waitForCommit();
 
-      const shared = (await harness.shared(service)).map(rowText);
-      expect(shared).toStrictEqual([
-        'row-0',
-        'row-1',
-        'row-2',
-        'A-after',
-        'B-after',
-      ]);
-      expect(await harness.replayed(result.recording)).toStrictEqual([
-        'row-0',
-        'row-1',
-        'row-2',
-        'A-after',
-      ]);
-      expect(await harness.replayed(b)).toStrictEqual(['B-after']);
-    },
-  );
+    const shared = (await harness.shared(service)).map(rowText);
+    expect(shared).toStrictEqual([
+      'row-0',
+      'row-1',
+      'row-2',
+      'A-after',
+      'B-after',
+    ]);
+    expect(await harness.replayed(result.recording)).toStrictEqual([
+      'row-0',
+      'row-1',
+      'row-2',
+      'A-after',
+    ]);
+    expect(await harness.replayed(b)).toStrictEqual(['B-after']);
+  });
 });
