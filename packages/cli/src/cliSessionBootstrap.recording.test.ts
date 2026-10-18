@@ -11,11 +11,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
+  ResumeCursorBoot,
   SessionRecordingService,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
 import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
 import { createOrResumeRecording } from './cliSessionBootstrap.js';
+import { pinHistoryBackend } from './services/__tests__/support/pinHistoryBackend.js';
+
+// The checkpoint fork still writes a JSONL child on every backend (W15 moves it).
+pinHistoryBackend('old');
 
 const PROJECT_HASH = 'startup-recording-test';
 
@@ -97,7 +102,8 @@ async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndep
     sessionClientFor(config),
   );
   try {
-    if (result.resumedBoot === null) throw new Error('Missing checkpoint boot');
+    if (!(result.resumedBoot instanceof ResumeCursorBoot))
+      throw new Error('Missing checkpoint boot');
     expect(result.discardOnFailure).toBe(true);
     expect(result.resumedSessionId).not.toBe('parent');
     expect(

@@ -26,6 +26,10 @@ import {
   collectLock,
   ResumeTestSetup,
 } from './performResume-test-helpers.js';
+import { pinHistoryBackend } from './support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 let chatsDir: string;
 let lockHandles: LockHandle[];

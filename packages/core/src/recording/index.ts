@@ -104,8 +104,10 @@ export {
 } from './unreadableRecordings.js';
 export {
   resumeSession,
+  resumeJsonlSession,
   ResumeCursorBoot,
   CONTINUE_LATEST,
+  type JsonlResumeResult,
   type ResumeBootHandle,
   type ResumeRequest,
   type ResumeResult,

@@ -23,6 +23,10 @@ import {
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import { performResume, type ResumeContext } from './performResume.js';
+import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 const PROJECT_HASH = 'perform-resume-rollback';
 const CURRENT_SESSION = 'current-session-0001';

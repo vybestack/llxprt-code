@@ -39,6 +39,10 @@ import {
   ResumeTestSetup,
 } from './performResume-test-helpers.js';
 import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
+import { pinHistoryBackend } from './support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 let chatsDir: string;
 let lockHandles: LockHandle[];

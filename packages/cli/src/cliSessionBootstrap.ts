@@ -21,7 +21,7 @@ import {
   getProjectHash,
   CONTINUE_LATEST,
   type ContinueTarget,
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type IContent,
   type LockHandle,
   clientMediaStore,
@@ -126,11 +126,11 @@ type RecordingClientOwner = {
 };
 
 /** Restored-prefix stream handed from owner-route resume to the UI. */
-export type OwnerResumedRows = Pick<ResumeCursorBoot, 'streamRows'>;
+export type OwnerResumedRows = Pick<ResumeBootHandle, 'streamRows'>;
 
 export interface ResolvedRecording {
   recordingService: SessionRecordingPort;
-  resumedBoot: ResumeCursorBoot | null;
+  resumedBoot: ResumeBootHandle | null;
   resumedLockHandle: LockHandle | null;
   /** The resumed session's ID, or null for new/fallback sessions. */
   resumedSessionId: string | null;

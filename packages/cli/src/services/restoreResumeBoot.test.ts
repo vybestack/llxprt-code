@@ -9,11 +9,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   SessionRecordingService,
-  resumeSession,
+  resumeJsonlSession,
   replaySession,
-  type ResumeResult,
+  type JsonlResumeResult as ResumeResult,
 } from '@vybestack/llxprt-code-core';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
+import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 let root: string;
 
@@ -37,7 +41,7 @@ describe('startup journal restoration', () => {
       blocks: [{ type: 'text', text: 'original' }],
     });
     await recording.dispose();
-    const result = await resumeSession({
+    const result = await resumeJsonlSession({
       continueRef: 'source',
       chatsDir: root,
       projectHash: 'project',
@@ -47,7 +51,7 @@ describe('startup journal restoration', () => {
     });
     if (!result.ok) throw new Error(result.error);
     resumed = result;
-    history = new HistoryService();
+    history = new HistoryService({ backend: 'old' });
   });
   afterEach(async () => {
     await history.dispose();

@@ -15,6 +15,10 @@ import {
   performResume,
   PROJECT_HASH,
 } from './performResume-test-helpers.js';
+import { pinHistoryBackend } from './support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 describe('checkpoint resume adoption', () => {
   const setup = new ResumeTestSetup();

@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import {
   SessionRecordingService,
-  resumeSession,
+  resumeJsonlSession,
   type IContent,
-  type ResumeResult,
+  type JsonlResumeResult as ResumeResult,
 } from '@vybestack/llxprt-code-core';
 import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import {
@@ -22,6 +22,10 @@ import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings of the old store.
+pinHistoryBackend('old');
 
 function phase(
   size: number,
@@ -80,7 +84,7 @@ async function withDiskResume(
   phase(size, 'recorded');
   const owners = new RowOwnership();
   const counters = createRowCounters();
-  const result = await resumeSession({
+  const result = await resumeJsonlSession({
     continueRef: 'source',
     chatsDir: root,
     projectHash: 'project',
