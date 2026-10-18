@@ -170,7 +170,12 @@ function flagsOf(content: IContent, options: EncodeRowOptions): number {
       ROW_FLAG.hasMedia,
     ) |
     flagIf(
-      has((b) => b.type === 'media' && b.mimeType.startsWith('image/')),
+      has(
+        (b) =>
+          b.type === 'media' &&
+          typeof b.mimeType === 'string' &&
+          b.mimeType.startsWith('image/'),
+      ),
       ROW_FLAG.hasImage,
     ) |
     flagIf(

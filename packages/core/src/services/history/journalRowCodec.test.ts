@@ -241,6 +241,12 @@ describe('row header fields', () => {
     expect(flag(ROW_FLAG.hasMedia, ai([MEDIA_REFERENCE]))).toBe(true);
     expect(flag(ROW_FLAG.hasImage, ai([MEDIA_REFERENCE]))).toBe(true);
     expect(flag(ROW_FLAG.hasImage, ROW_SHAPES[5][1])).toBe(false);
+    // Media from tools and servers can arrive without a usable MIME type; the
+    // row is stored and the consumer that needs the MIME reports it.
+    const noMime: ContentBlock = { ...MEDIA_REFERENCE };
+    Reflect.deleteProperty(noMime, 'mimeType');
+    expect(flag(ROW_FLAG.hasMedia, ai([noMime]))).toBe(true);
+    expect(flag(ROW_FLAG.hasImage, ai([noMime]))).toBe(false);
     expect(
       flag(
         ROW_FLAG.cacheAnchor,
