@@ -3,6 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
+import { bindRawBrowserSession } from '../components/browserResumeHost.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { AppContainerRuntimeProps } from '../AppContainerRuntime.js';
@@ -16,7 +22,8 @@ type AppOwnerProps = Pick<
   AppContainerRuntimeProps,
   | 'session'
   | 'mediaStore'
-  | 'readClientHistory'
+  | 'bindRawBrowserSession'
+  | 'isAgentClientPresent'
   | 'readHistory'
   | 'stream'
   | 'injectSteer'
@@ -37,7 +44,8 @@ type AppOwnerProps = Pick<
   | 'appendHistory'
   | 'recordRecordingEvent'
   | 'metrics'
-  | 'readTokenHistory'
+  | 'subscribeHistoryTokens'
+  | 'connectRecordingHistory'
   | 'readProviderMetrics'
   | 'readSessionTokenUsage'
 >;
@@ -46,7 +54,14 @@ export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
   return {
     session: agent.session,
     mediaStore: agent.agentClient.mediaStore,
-    readClientHistory: () => agent.agentClient.getHistoryService(),
+    isAgentClientPresent: () => Boolean(agent.agentClient),
+    bindRawBrowserSession: (config, swaps, logger) =>
+      bindRawBrowserSession(
+        config,
+        () => agent.agentClient.getHistoryService(),
+        swaps,
+        logger,
+      ),
     readHistory: agent.getHistory.bind(agent),
     stream: agent.stream.bind(agent),
     injectSteer: agent.injectSteer.bind(agent),
@@ -74,10 +89,20 @@ export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
       agent.session,
     ),
     metrics: agent.metrics,
-    readTokenHistory: () =>
-      agent.agentClient.hasChatInitialized()
-        ? (agent.agentClient.getHistoryService() ?? null)
-        : null,
+    subscribeHistoryTokens: bindHistoryTokenSubscription(
+      () =>
+        agent.agentClient.hasChatInitialized()
+          ? agent.agentClient.getHistoryService()
+          : null,
+      new DebugLogger('test:composition:tokens'),
+    ),
+    connectRecordingHistory: bindRecordingHistorySubscription(
+      () =>
+        agent.agentClient.hasChatInitialized()
+          ? agent.agentClient.getHistoryService()
+          : null,
+      new DebugLogger('test:composition:recording'),
+    ),
     readProviderMetrics: agent.providerReads.getActiveProviderMetrics.bind(
       agent.providerReads,
     ),
@@ -104,7 +129,14 @@ export function appContainerTestAgentProps(
       flushRecording: async () => {},
     },
     mediaStore: owner.agentClient.mediaStore,
-    readClientHistory: () => owner.agentClient.getHistoryService(),
+    isAgentClientPresent: () => Boolean(owner.agentClient),
+    bindRawBrowserSession: (config, swaps, logger) =>
+      bindRawBrowserSession(
+        config,
+        () => owner.agentClient.getHistoryService(),
+        swaps,
+        logger,
+      ),
     readHistory: async () => [],
     stream: unavailableOperation,
     injectSteer: () => {},
@@ -142,7 +174,14 @@ export function appContainerTestAgentProps(
       setLastPromptTokenCount: () => {},
       setTokenTrackingMetrics: () => {},
     },
-    readTokenHistory: () => null,
+    subscribeHistoryTokens: bindHistoryTokenSubscription(
+      () => null,
+      new DebugLogger('test:composition:tokens'),
+    ),
+    connectRecordingHistory: bindRecordingHistorySubscription(
+      () => null,
+      new DebugLogger('test:composition:recording'),
+    ),
     readProviderMetrics: () => ({}),
     readSessionTokenUsage: () => ({
       input: 0,
