@@ -71,6 +71,7 @@ import {
 } from './turnJsonUtils.js';
 import { buildCitationEvent } from './turnCitations.js';
 import { buildErrorReportContext } from './turnErrorReportContext.js';
+import { historySourceFailure } from './historySourceError.js';
 import {
   beginWatchdogBoundedAcquisition,
   closeLateAcquiredIterator,
@@ -537,6 +538,9 @@ export class Turn {
       yield { type: AgentEventType.UserCancelled };
       return;
     }
+
+    const sourceFailure = historySourceFailure(e);
+    if (sourceFailure !== undefined) throw sourceFailure.error;
 
     if (idleFlag.timedOut && observedProviderError !== undefined) {
       yield {

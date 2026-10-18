@@ -21,6 +21,7 @@ import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
 import { streamDiskSource } from './streamprocessor-disk-source.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+import { historySourceFailure } from './historySourceError.js';
 
 export interface TurnSourceRequestInput {
   readonly runtime: AgentRuntimeContext;
@@ -86,6 +87,9 @@ export async function sendTurnSource(
     shouldRetryOnError: shouldRetryDirectProviderError,
     send: (prepared, attemptIndex) =>
       singleResponse(() => input.attempt(prepared, attemptIndex)),
+  }).catch((error: unknown) => {
+    const source = historySourceFailure(error);
+    throw source === undefined ? error : source.error;
   });
   let response: IContent | undefined;
   for await (const chunk of stream) response = chunk;

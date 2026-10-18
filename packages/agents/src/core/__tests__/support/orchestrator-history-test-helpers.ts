@@ -36,6 +36,18 @@ export class ControlledOrchestratorHistory extends HistoryService {
     );
   }
 
+  override prepareCuratedForProviderSnapshot(
+    ...[tail, options, override]: Parameters<
+      HistoryService['prepareCuratedForProviderSnapshot']
+    >
+  ): ReturnType<HistoryService['prepareCuratedForProviderSnapshot']> {
+    return super.prepareCuratedForProviderSnapshot(
+      tail,
+      options,
+      override ?? this.streamRawHistory(options?.signal),
+    );
+  }
+
   override async *streamRawHistory(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
@@ -45,7 +57,12 @@ export class ControlledOrchestratorHistory extends HistoryService {
     let count = 0;
     for await (const row of super.streamRawHistory(signal)) {
       count++;
-      hash.update(JSON.stringify(row));
+      hash.update(
+        JSON.stringify({
+          ...row,
+          metadata: { chronology: row.metadata?.chronology, ...row.metadata },
+        }),
+      );
       if (first && this.retaining !== undefined) {
         const owned = this.retaining === 'copy' ? structuredClone(row) : row;
         this.consumer.retain(owned);

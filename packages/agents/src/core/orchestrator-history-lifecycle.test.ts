@@ -70,6 +70,14 @@ for (const size of [512, 8192]) {
         const fault = new Error('history reader disk failure');
         history.pauseAfter = 31;
         history.fault = fault;
+        const events: string[] = [];
+        for (const event of [
+          'contentAdded',
+          'contentBatchAdded',
+          'tokensUpdated',
+          'contextRangeChanged',
+        ])
+          history.on(event, () => events.push(event));
         const result = sendHistoryTurn(client).then(
           () => undefined,
           (error: unknown) => error,
@@ -77,6 +85,7 @@ for (const size of [512, 8192]) {
         await history.paused.promise;
         history.release.resolve();
         expect(await result).toBe(fault);
+        expect(events).toStrictEqual([]);
         expect(reader.snapshot().liveRows).toBe(0);
         let count = 0;
         for await (const _row of history.streamRawHistory()) count++;

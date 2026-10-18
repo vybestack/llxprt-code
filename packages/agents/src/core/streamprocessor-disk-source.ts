@@ -8,6 +8,7 @@ import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/co
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
+import { HistorySourceError } from './historySourceError.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { SourcePendingRows } from '../compression/source-candidate.js';
@@ -110,11 +111,15 @@ export async function streamDiskSource(
     input.userContent,
     input.history,
   );
-  const snapshot = await input.history.prepareCuratedForProviderSnapshot(
-    preparedPending,
-    { signal: input.signal },
-    input.historyOverride,
-  );
+  const snapshot = await input.history
+    .prepareCuratedForProviderSnapshot(
+      preparedPending,
+      { signal: input.signal },
+      input.historyOverride,
+    )
+    .catch((error: unknown) => {
+      throw new HistorySourceError(error);
+    });
   const source = await sourceBeforeModelHook({
     owner: hookOwner,
     snapshot,
