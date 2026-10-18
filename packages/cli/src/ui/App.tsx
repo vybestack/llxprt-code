@@ -186,7 +186,20 @@ export class AppWrapper extends Component<AppProps> {
     | undefined;
   #history: RegisteredHistoryReads | undefined;
   #registration: CredentialCommandRegistration | undefined;
+  #recordingPathAgent: Agent | undefined;
+  #readAgentRecordingPath: (() => string | undefined) | undefined;
   readonly #toolkeys = createToolkeyCommands();
+
+  private readAgentRecordingPath(): () => string | undefined {
+    if (this.#recordingPathAgent !== this.props.agent) {
+      const session = this.props.agent.session;
+      this.#recordingPathAgent = this.props.agent;
+      this.#readAgentRecordingPath = () => session.getRecording().path;
+    }
+    if (this.#readAgentRecordingPath === undefined)
+      throw new Error('Agent recording reader was not initialized');
+    return this.#readAgentRecordingPath;
+  }
 
   private capture() {
     const props = this.props;
@@ -653,6 +666,7 @@ export class AppWrapper extends Component<AppProps> {
                               {...this.#sessionCommands}
                               historyReads={this.#history}
                               registerCredentials={registerCredentials}
+                              readAgentRecordingPath={this.readAgentRecordingPath()}
                             />
                           </OverflowProvider>
                         </ProviderAliasRefreshProvider>
@@ -693,6 +707,7 @@ const AppWithState = (
       readBuiltinCommands: ReadBuiltinCommands;
       loadRegisteredCommands: LoadRegisteredCommands;
       subscribeCommandChanges: SubscribeCommandChanges;
+      readAgentRecordingPath: () => string | undefined;
     },
 ) => {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);

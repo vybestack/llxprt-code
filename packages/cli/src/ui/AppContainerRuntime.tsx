@@ -152,6 +152,7 @@ export interface AppContainerRuntimeProps
    * The single interactive Agent threaded from the composition root.
    */
   agent: Agent;
+  readAgentRecordingPath: () => string | undefined;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -535,13 +536,17 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     () =>
       getInteractiveTranscriptPath(
         bootstrap.recordingOwner,
-        () => props.agent.session.getRecording().path,
+        props.readAgentRecordingPath,
         () =>
           bootstrap.recordingSwapCallbacks
             ?.getCurrentRecording()
             ?.getFilePath() ?? undefined,
       ),
-    [bootstrap.recordingOwner, bootstrap.recordingSwapCallbacks, props.agent],
+    [
+      bootstrap.recordingOwner,
+      bootstrap.recordingSwapCallbacks,
+      props.readAgentRecordingPath,
+    ],
   );
   return renderAppRuntimeView(
     props.runtimeMessageBus,

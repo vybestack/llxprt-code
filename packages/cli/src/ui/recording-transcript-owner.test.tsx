@@ -13,14 +13,17 @@ import { Colors } from './colors.js';
 import { withRecordingLifetimeFixture } from '../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
-function Transcript({ agent }: { agent: Agent }) {
+function Transcript({
+  readRecordingPath,
+}: {
+  readRecordingPath: () => string | undefined;
+}) {
   return (
     <Text color={Colors.Foreground}>
       {getInteractiveTranscriptPath(
         'agent',
-        () => agent.session.getRecording().path,
+        readRecordingPath,
         () => undefined,
       ) ?? 'disabled'}
     </Text>
@@ -36,7 +39,11 @@ describe('interactive owner transcript', () => {
       await agent.session.setRecording({ enabled: true });
       const original = agent.session.getRecording().path;
       if (!original) throw new Error('Expected original owner transcript');
-      const first = render(<Transcript agent={agent} />);
+      const first = render(
+        <Transcript
+          readRecordingPath={() => agent.session.getRecording().path}
+        />,
+      );
       expect(
         first.lastFrame()?.split(String.fromCharCode(10)).join(''),
       ).toContain(original);
@@ -52,7 +59,11 @@ describe('interactive owner transcript', () => {
       const forkPath = agent.session.getRecording().path;
       if (!forkPath) throw new Error('Expected fork transcript');
       expect(forkPath).not.toBe(original);
-      const fork = render(<Transcript agent={agent} />);
+      const fork = render(
+        <Transcript
+          readRecordingPath={() => agent.session.getRecording().path}
+        />,
+      );
       expect(
         fork.lastFrame()?.split(String.fromCharCode(10)).join(''),
       ).toContain(forkPath);
@@ -71,7 +82,11 @@ describe('interactive owner transcript', () => {
         'allowed',
         next.session.listBrowserTargetsDetailed.bind(next.session),
       );
-      const resumed = render(<Transcript agent={next} />);
+      const resumed = render(
+        <Transcript
+          readRecordingPath={() => next.session.getRecording().path}
+        />,
+      );
       expect(
         resumed.lastFrame()?.split(String.fromCharCode(10)).join(''),
       ).toContain(next.session.getRecording().path);
