@@ -79,12 +79,20 @@ if (mode === 'tiny') {
   // command such as echo then fails with EAGAIN whenever the reader is
   // behind, which is what happens under host load (#3877). writeSync on the
   // fd blocks until the reader catches up and leaves the pipe's mode alone.
+  // writeSync can return a short count, so keep writing until it is all out.
+  const writeAll = (fd, text) => {
+    const bytes = Buffer.from(text);
+    let offset = 0;
+    while (offset < bytes.length) {
+      offset += writeSync(fd, bytes, offset, bytes.length - offset);
+    }
+  };
   const data = 'A'.repeat(size);
   if (stream === 'both') {
-    writeSync(1, data);
-    writeSync(2, 'ERR:' + data.slice(0, Math.min(size, 1024)));
+    writeAll(1, data);
+    writeAll(2, 'ERR:' + data.slice(0, Math.min(size, 1024)));
   } else {
-    writeSync(stream === 'stderr' ? 2 : 1, data);
+    writeAll(stream === 'stderr' ? 2 : 1, data);
   }
 }
 `;
