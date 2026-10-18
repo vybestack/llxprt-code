@@ -578,6 +578,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
     signal?.throwIfAborted();
+    this.assertUsable();
     await this.waitForDurable();
     const snapshot = await this.session.store.snapshot();
     try {
@@ -676,6 +677,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   private async withDurableSnapshot<T>(
     read: (snapshot: VersionSnapshot) => Promise<T>,
   ): Promise<T> {
+    this.assertUsable();
     await this.waitForDurable();
     const snapshot = await this.session.store.snapshot();
     try {
@@ -694,6 +696,7 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** A dump of the rows once the queue is durable; it reads the file, so it holds no row. */
   async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
+    this.assertUsable();
     await this.waitForDurable();
     return new JournalDumpSnapshot(
       await this.session.store.snapshot(),
