@@ -16,6 +16,7 @@ const schema = z.object({
   external: z.number(),
   heldRows: z.number(),
   heldBytes: z.number(),
+  traversed: z.number(),
   trapRows: z.number(),
 });
 function measure(size: number, trap: boolean): z.infer<typeof schema> {
@@ -36,6 +37,8 @@ function measure(size: number, trap: boolean): z.infer<typeof schema> {
   const result = schema.parse(JSON.parse(child.stdout.trim()));
   if (result.size !== size || result.trap !== trap)
     throw new Error('Different probe workload');
+  expect(result.traversed).toBe(size);
+  expect(result.trapRows).toBe(trap ? size : 0);
   const output = process.env.CHRONOLOGY_ROLLBACK_PROBE_OUTPUT;
   if (output !== undefined)
     appendFileSync(output, `${JSON.stringify(result)}\n`);

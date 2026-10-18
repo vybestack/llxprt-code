@@ -2,10 +2,10 @@
 import { describe, expect, it } from 'bun:test';
 import { pausedDensity } from './chronology-rollback-owner-test-helpers.js';
 
-describe('density rollback previous-owner disk migration', () => {
+describe('old row-iterable density rollback previous-owner disk migration', () => {
   for (const size of [512, 8192]) {
     it(`traverses and restores every ${size} media/tool row without retaining the previous projection`, async () => {
-      const result = await pausedDensity(size, false);
+      const result = await pausedDensity(size, false, 'density', 'old');
       expect(result.traversed).toBe(size);
       expect(result.bytes).toBeGreaterThan(size * 2048);
       expect(result.previous.peakRows).toBeLessThanOrEqual(440);
@@ -15,7 +15,7 @@ describe('density rollback previous-owner disk migration', () => {
     }, 120_000);
   }
   it('rejects an explicitly eager previous owner at both fixed-fixture bounds', async () => {
-    const result = await pausedDensity(8192, true);
+    const result = await pausedDensity(8192, true, 'density', 'old');
     expect(result.traversed).toBe(8192);
     expect(result.previous.peakRows).toBeGreaterThan(440);
     expect(result.previous.peakSerializedBytes).toBeGreaterThan(
@@ -24,16 +24,16 @@ describe('density rollback previous-owner disk migration', () => {
   }, 120_000);
 });
 
-describe('density rollback full transaction owner bounds', () => {
+describe('old row-iterable density rollback full transaction owner bounds', () => {
   for (const size of [512, 8192]) {
     it(`bounds every transaction and caller-owned replacement object at ${size} rows during the publication pause`, async () => {
-      const result = await pausedDensity(size, false);
+      const result = await pausedDensity(size, false, 'density', 'old');
       expect(result.transaction.liveRows).toBeGreaterThan(0);
       expect(result.transaction.liveRows).toBeLessThanOrEqual(440);
     }, 120_000);
   }
   it('bounds transaction and caller-owned serialized payload at the full fixture scale', async () => {
-    const result = await pausedDensity(8192, false);
+    const result = await pausedDensity(8192, false, 'density', 'old');
     expect(result.transaction.liveSerializedBytes).toBeGreaterThan(0);
     expect(result.transaction.liveSerializedBytes).toBeLessThanOrEqual(
       8 * 1024 * 1024,

@@ -114,6 +114,18 @@ async function publishOwnerRows(
   throw primary;
 }
 
+async function waitForOwnerPause(
+  ready: Promise<void>,
+  operation: Promise<unknown>,
+): Promise<void> {
+  await Promise.race([
+    ready,
+    operation.then((error) => {
+      throw error ?? new Error('Density publication ended before pause');
+    }),
+  ]);
+}
+
 async function observeDensity(
   history: HistoryService,
   previous: RowOwnership,
@@ -175,7 +187,7 @@ async function observeDensity(
           },
         }),
   );
-  await ready;
+  await waitForOwnerPause(ready, operation);
   const result = {
     previous: previous.snapshot(),
     transaction: transaction.snapshot(),

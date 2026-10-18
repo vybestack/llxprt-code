@@ -9,7 +9,32 @@ import {
   rollbackRow,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import { retainHistoryForMemoryTrap } from './retaining-history-test-helper.js';
+import type { HistoryMediaOwner } from '../../packages/core/src/services/history/historyBatchContracts.js';
+
+function probeParticipant(
+  prepare: HistoryMediaOwner['prepareReplacement'],
+): HistoryMediaOwner {
+  return {
+    ...mediaParticipant(prepare),
+    prepareReferenceReplacement: (references) => ({
+      publish: async (): Promise<void> => {
+        for await (const reference of references) {
+          if (reference.encoding !== 'reference')
+            throw new Error('Expected an admitted media reference');
+        }
+      },
+      rollback: () => undefined,
+    }),
+  };
+}
+
+async function retainRows(
+  source: AsyncIterable<IContent>,
+): Promise<readonly IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of source) rows.push(row);
+  return rows;
+}
 
 async function settled(): Promise<{ heap: number; external: number }> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -31,7 +56,7 @@ if (!Number.isSafeInteger(size) || size < 1)
   throw new Error('Expected positive row count');
 await withSuffixFixture(32, async (service) => {
   await service.registerMediaOwner(
-    mediaParticipant(() => ({
+    probeParticipant(() => ({
       publish: () => undefined,
       rollback: () => undefined,
     })),
@@ -59,7 +84,7 @@ await withSuffixFixture(
     let heldRows = 0;
     let heldBytes = 0;
     await service.registerMediaOwner(
-      mediaParticipant((input) => {
+      probeParticipant((input) => {
         heldRows = input.previous.length;
         for (const row of input.previous)
           heldBytes += Buffer.byteLength(JSON.stringify(row));
@@ -68,15 +93,19 @@ await withSuffixFixture(
     );
     service.setTokenizerFactory(exactTokenizer());
     const before = await settled();
-    const retained: readonly IContent[] = trap
-      ? retainHistoryForMemoryTrap(service)
-      : [];
+    const retained = trap ? await retainRows(service.streamRawHistory()) : [];
+    let traversed = 0;
     const failure = new Error('rollback probe publication failure');
     const operation = rejectedValue(
       service.detachedValues.transform(
         async (source, sink) => {
-          for await (const row of source.streamRows())
-            await sink.appendValue(row);
+          for await (const row of source.streamRows()) {
+            traversed++;
+            await sink.appendValue({
+              ...row,
+              blocks: [...row.blocks, { type: 'text', text: 'candidate' }],
+            });
+          }
         },
         undefined,
         {
@@ -89,7 +118,12 @@ await withSuffixFixture(
         },
       ),
     );
-    await ready;
+    await Promise.race([
+      ready,
+      operation.then((error) => {
+        throw error ?? new Error('Publication ended before the probe pause');
+      }),
+    ]);
     try {
       const held = await settled();
       process.stdout.write(
@@ -100,6 +134,7 @@ await withSuffixFixture(
           external: held.external - before.external,
           heldRows,
           heldBytes,
+          traversed,
           trapRows: retained.length,
         }) + '\n',
       );
@@ -109,9 +144,20 @@ await withSuffixFixture(
     }
     if ((await operation) !== failure)
       throw new Error('Rollback probe lost its primary failure');
+    let restored = 0;
+    for await (const row of service.streamRawHistory()) {
+      if (JSON.stringify(row) !== JSON.stringify(fixtureRow(restored, 2048)))
+        throw new Error(`Rollback changed row ${restored}`);
+      restored++;
+    }
+    if (restored !== size) throw new Error('Rollback changed the row count');
   },
   2048,
-  (index, bytes) => ({
+  fixtureRow,
+);
+
+function fixtureRow(index: number, bytes: number): IContent {
+  return {
     ...rollbackRow(index, bytes),
     metadata: {
       chronology: {
@@ -121,5 +167,5 @@ await withSuffixFixture(
         recordedAt: 0,
       },
     },
-  }),
-);
+  };
+}
