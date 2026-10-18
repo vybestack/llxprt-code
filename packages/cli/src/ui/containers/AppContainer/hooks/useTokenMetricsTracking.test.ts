@@ -5,14 +5,12 @@
  */
 
 import { act, useMemo } from 'react';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './historyTokenSubscriptions.js';
+import { bindHistoryTokenSubscription } from './historyTokenSubscriptions.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
+import { bindBootstrapRecordingHistory } from './useBootstrapRuntime.js';
 
 const realLlxprtCodeTelemetryModule = {
   ...(await import('@vybestack/llxprt-code-telemetry')),
@@ -226,10 +224,10 @@ describe('useTokenMetricsTracking', () => {
 
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
-        metrics: metricSource,
-        ...useBindings(config),
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -267,10 +265,10 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        metrics: metricSource,
-        ...useBindings(config),
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -320,10 +318,10 @@ describe('useTokenMetricsTracking', () => {
 
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
-        metrics: metricSource,
-        ...useBindings(config),
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -379,10 +377,10 @@ describe('useTokenMetricsTracking', () => {
     });
     renderHook(() =>
       useTokenMetricsTracking({
-        metrics: metricSource,
-        ...useBindings(config),
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -423,10 +421,10 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
-        metrics: metricSource,
-        ...useBindings(config),
+        setTokenTrackingMetrics:
+          metricSource.setTokenTrackingMetrics.bind(metricSource),
+        ...useBindings(config, recordingIntegrationRef as never),
         updateHistoryTokenCount,
-        recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
@@ -463,13 +461,12 @@ describe('useTokenMetricsTracking', () => {
     const { rerender, unmount } = renderHook(
       ({ uiRuntime }) =>
         useTokenMetricsTracking({
-          metrics: metricSource,
-          ...useBindings(uiRuntime),
-          recordingOwner: 'agent',
+          setTokenTrackingMetrics:
+            metricSource.setTokenTrackingMetrics.bind(metricSource),
+          ...useBindings(uiRuntime, recordingIntegrationRef as never, 'agent'),
           updateHistoryTokenCount: (value) => {
             published.push(value);
           },
-          recordingIntegrationRef: recordingIntegrationRef as never,
         }),
       { initialProps: { uiRuntime: firstRuntime } },
     );
@@ -494,7 +491,11 @@ describe('useTokenMetricsTracking', () => {
   });
 });
 
-function useBindings(config: ConfigStub) {
+function useBindings(
+  config: ConfigStub,
+  recordingIntegrationRef?: Parameters<typeof bindBootstrapRecordingHistory>[3],
+  recordingOwner?: 'agent' | 'raw',
+) {
   const runtime: RuntimeApiStub = useRuntimeApiMock();
   const logger = useMemo(() => new DebugLogger('tokens-test'), []);
   const readHistory = useMemo(
@@ -512,8 +513,14 @@ function useBindings(config: ConfigStub) {
       [readHistory, logger],
     ),
     subscribeRecordingHistory: useMemo(
-      () => bindRecordingHistorySubscription(readHistory, logger),
-      [readHistory, logger],
+      () =>
+        bindBootstrapRecordingHistory(
+          readHistory,
+          logger,
+          recordingOwner,
+          recordingIntegrationRef,
+        ),
+      [readHistory, logger, recordingOwner, recordingIntegrationRef],
     ),
     readProviderMetrics: runtime.getActiveProviderMetrics,
     readSessionTokenUsage: runtime.getSessionTokenUsage,

@@ -21,12 +21,7 @@ import {
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-
-import type {
-  HistoryTokenSubscription,
-  RecordingHistorySubscription,
-} from './historyTokenSubscriptions.js';
+import type { HistoryTokenSubscription } from './historyTokenSubscriptions.js';
 import {
   shouldUpdateTokenMetrics,
   toTokenMetricsSnapshot,
@@ -43,13 +38,11 @@ export interface TokenMetrics {
 
 interface UseTokenMetricsTrackingOptions {
   subscribeHistoryTokens: HistoryTokenSubscription;
-  subscribeRecordingHistory: RecordingHistorySubscription;
+  subscribeRecordingHistory: () => () => void;
   readProviderMetrics: GetActiveProviderMetricsOperation;
   readSessionTokenUsage: GetSessionTokenUsageOperation;
-  metrics: SessionMetricUpdates;
+  setTokenTrackingMetrics: SessionMetricUpdates['setTokenTrackingMetrics'];
   updateHistoryTokenCount: (count: number) => void;
-  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  recordingOwner?: 'agent' | 'raw';
 }
 
 export interface UseTokenMetricsTrackingResult {
@@ -58,7 +51,7 @@ export interface UseTokenMetricsTrackingResult {
 function useTokenMetricsPoll(
   readProviderMetrics: UseTokenMetricsTrackingOptions['readProviderMetrics'],
   readSessionTokenUsage: UseTokenMetricsTrackingOptions['readSessionTokenUsage'],
-  metricsSource: SessionMetricUpdates,
+  setTokenTrackingMetrics: SessionMetricUpdates['setTokenTrackingMetrics'],
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
@@ -95,7 +88,7 @@ function useTokenMetricsPoll(
         tokensPerSecond: snapshot.tokensPerSecond,
       });
 
-      metricsSource.setTokenTrackingMetrics({
+      setTokenTrackingMetrics({
         tokensPerMinute: snapshot.tokensPerMinute,
         throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
         timeToFirstToken: snapshot.timeToFirstToken,
@@ -110,34 +103,28 @@ function useTokenMetricsPoll(
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, [readProviderMetrics, readSessionTokenUsage, metricsSource]);
+  }, [readProviderMetrics, readSessionTokenUsage, setTokenTrackingMetrics]);
 
   return tokenMetrics;
 }
 
 export function useTokenMetricsTracking({
-  metrics,
+  setTokenTrackingMetrics,
   subscribeHistoryTokens,
   subscribeRecordingHistory,
   readProviderMetrics,
   readSessionTokenUsage,
   updateHistoryTokenCount,
-  recordingIntegrationRef,
-  recordingOwner,
 }: UseTokenMetricsTrackingOptions): UseTokenMetricsTrackingResult {
   useEffect(
     () => subscribeHistoryTokens(updateHistoryTokenCount),
     [subscribeHistoryTokens, updateHistoryTokenCount],
   );
-  useEffect(() => {
-    if (recordingOwner === 'agent' || !recordingIntegrationRef?.current)
-      return undefined;
-    return subscribeRecordingHistory(recordingIntegrationRef);
-  }, [subscribeRecordingHistory, recordingIntegrationRef, recordingOwner]);
+  useEffect(subscribeRecordingHistory, [subscribeRecordingHistory]);
   const tokenMetrics = useTokenMetricsPoll(
     readProviderMetrics,
     readSessionTokenUsage,
-    metrics,
+    setTokenTrackingMetrics,
   );
   return { tokenMetrics };
 }
