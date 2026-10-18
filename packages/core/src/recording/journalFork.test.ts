@@ -4,6 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { forkJournalFromCheckpoint } from './journalFork.js';
+import { JournalResumeBoot } from './journalResume.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { SESSION_KEYS, decodeSessionFact } from './sessionMetaKeys.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
@@ -111,6 +112,39 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
           return true;
         }),
       ).toBe(true);
+    } finally {
+      await result.recording.dispose().catch(() => undefined);
+    }
+  });
+
+  it('hands the child over as a resume point and a boot that streams the cloned rows', async () => {
+    setBackend('journal');
+    const chats = chatsDirIn(directory());
+    await recordJournal(chats, 'src', {
+      rows: [userRow('one'), userRow('two')],
+      checkpoints: ['cp'],
+      rowsAfterCheckpoints: [userRow('three')],
+    });
+    const target = await checkpointTarget(chats, 'cp');
+
+    const result = await forkJournalFromCheckpoint(request(chats, target));
+
+    if (!result.ok) throw new Error(result.error);
+    try {
+      const published = (await result.recording.session()).store.published;
+      if (published === undefined) throw new Error('the child has no version');
+      expect(result.resumePoint).toStrictEqual({
+        commitSeq: published.commitSeq,
+        rows: 2,
+        nextLabel: published.nextLabel,
+      });
+      expect(result.boot).toBeInstanceOf(JournalResumeBoot);
+      const streamed: string[] = [];
+      for await (const row of result.boot.streamRows()) {
+        const block = row.blocks[0];
+        streamed.push(block.type === 'text' ? block.text : '');
+      }
+      expect(streamed).toStrictEqual(['one', 'two']);
     } finally {
       await result.recording.dispose().catch(() => undefined);
     }

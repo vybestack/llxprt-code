@@ -126,7 +126,7 @@ function recordingConfig(
 }
 
 /** The version the opened file is at now; rows below `nextLabel` are the earlier process's. */
-async function pointOf(
+export async function resumePointOf(
   recording: JournalRecordingService,
 ): Promise<ResumePoint> {
   const { store } = await recording.session();
@@ -196,7 +196,7 @@ async function bootLocked(
       recording,
       lockHandle,
       metadata,
-      resumePoint: await pointOf(recording),
+      resumePoint: await resumePointOf(recording),
     };
   } catch (error) {
     await recording.dispose();

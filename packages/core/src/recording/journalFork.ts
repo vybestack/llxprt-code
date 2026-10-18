@@ -14,6 +14,11 @@ import {
   JournalRecordingService,
   type JournalRecordingConfig,
 } from './journalRecordingService.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+  type ResumePoint,
+} from './journalResume.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { journalSessionFileName } from './sessionFileName.js';
 import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
@@ -42,6 +47,9 @@ export interface JournalForkResult {
   readonly recording: JournalRecordingService;
   readonly lockHandle: LockHandle;
   readonly metadata: SessionMetadata;
+  /** The version the child was opened at, for the history that adopts it (S10 item 2). */
+  readonly resumePoint: ResumePoint;
+  readonly boot: JournalResumeBoot;
 }
 
 export interface JournalForkError {
@@ -228,7 +236,15 @@ async function createChild(
     };
     recording = await JournalRecordingService.open(config, childPath);
     recording.adoptLock(lock);
-    return { ok: true, recording, lockHandle: lock, metadata };
+    const resumePoint = await resumePointOf(recording);
+    return {
+      ok: true,
+      recording,
+      lockHandle: lock,
+      metadata,
+      resumePoint,
+      boot: new JournalResumeBoot(recording, resumePoint),
+    };
   } catch (error) {
     return failedChild(error, [
       () => recording?.dispose(),
