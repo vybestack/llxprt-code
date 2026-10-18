@@ -230,6 +230,7 @@ function useAppDialogsRuntime(
     settingsStore,
     turnStore,
   } = stores;
+  const setProvider = useSetProvider();
   return useAppDialogs({
     config: props.slashCommandRuntime,
     recordRecordingEvent: useBound(
@@ -238,8 +239,8 @@ function useAppDialogsRuntime(
     ),
     switchProviderAfterAuth: useCallback(
       (provider: string) =>
-        props.agent.setProvider(provider, undefined, { autoOAuth: false }),
-      [props.agent],
+        setProvider(provider, undefined, { autoOAuth: false }),
+      [setProvider],
     ),
     listTools: props.listCommandTools,
     generatePrompt: useAutoPromptOperation(
@@ -287,7 +288,7 @@ function useAppDialogsRuntime(
     saveProfileSnapshot: useSaveProfileSnapshot(),
     setActiveModel: useSetActiveModel(),
     setDefaultProfileName: useSetDefaultProfileName(),
-    setProvider: useSetProvider(),
+    setProvider,
     updateActiveProviderApiKey: useUpdateActiveProviderApiKey(),
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
