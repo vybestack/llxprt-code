@@ -29,6 +29,8 @@ function gatedTokenizer(): {
   let gate = Promise.resolve();
   return {
     factory: {
+      estimatePrompt: () =>
+        Promise.reject(new Error('Prompt estimates are not used here')),
       getTokenizer: () => ({
         countTokens: async (content: unknown) => {
           if (blocking) {

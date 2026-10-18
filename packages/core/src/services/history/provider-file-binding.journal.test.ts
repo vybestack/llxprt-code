@@ -74,7 +74,9 @@ describe('HistoryService provider file binding on the journal store', () => {
     await history.dispose();
   });
 
-  async function boundFiles(): Promise<unknown> {
+  async function boundFiles(): Promise<
+    readonly ProviderFileReferenceMetadata[] | undefined
+  > {
     const [content] = await collectRawHistory(history);
     const block = content.blocks[0];
     return block.type === 'media' && block.encoding === 'reference'
@@ -103,8 +105,9 @@ describe('HistoryService provider file binding on the journal store', () => {
       PROVIDER_FILE,
     );
 
-    const first = (await boundFiles()) as ProviderFileReferenceMetadata[];
-    first[0].fileId = 'reader-mutated';
+    const first = await boundFiles();
+    if (first === undefined) throw new Error('No bound metadata');
+    Object.assign(first[0], { fileId: 'reader-mutated' });
 
     expect(await boundFiles()).toStrictEqual([PROVIDER_FILE]);
   });

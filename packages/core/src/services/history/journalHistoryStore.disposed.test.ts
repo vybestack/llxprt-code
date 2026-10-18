@@ -63,6 +63,8 @@ describe('a disposed journal history store', () => {
 
     await store.dispose();
 
-    await expect(dump.rows().next()).rejects.toThrow('closed');
+    await expect(dump.rows()[Symbol.asyncIterator]().next()).rejects.toThrow(
+      'closed',
+    );
   });
 });
