@@ -29,7 +29,8 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
  * @requirement:REQ-001, REQ-017
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import type { AgentIdeControl } from './ide-control-contract.js';
+export type { AgentIdeControl } from './ide-control-contract.js';
 
 import type { ChildToolDisplayCallbacks } from '../session/childToolDisplay.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -726,24 +727,6 @@ export interface AgentAuthControl {
   detailedStatus(provider: string): Promise<AuthProviderDetail>;
   getHigherPriorityAuth(provider: string): Promise<string | null>;
   listBucketStatuses(provider: string): Promise<readonly AuthBucketStatus[]>;
-}
-
-export interface AgentIdeControl {
-  isTrustedFolder(): boolean;
-  getIdeTrust(): boolean | undefined;
-  setTrustedFolderLive(trusted: boolean): Promise<void>;
-  whenTrustTransitionSettled(): Promise<void>;
-  getIdeClient(): IdeClient | undefined;
-  getIdeMode(): boolean;
-  setIdeMode(enabled: boolean): void;
-  setIdeClientConnected(): Promise<void>;
-  setIdeClientDisconnected(): Promise<void>;
-  current(): IdeInfo | null;
-  detected(): readonly IdeInfo[];
-  trust(name: string): Promise<void>;
-  status(): IdeStatus;
-  openEditor(): Promise<void>;
-  closeEditor(): Promise<void>;
 }
 
 export interface AgentSessionControl {

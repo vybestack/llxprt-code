@@ -730,7 +730,10 @@ export type {
   WorkspaceTrustReadPort,
 } from './services/workspace-trust-reader.js';
 export type { WorkspaceTrustTransition } from './services/workspace-trust-transition.js';
-export type { WorkspaceIdePort } from './services/workspace-ide-owner.js';
+export type {
+  WorkspaceIdePort,
+  WorkspaceIdeConnection,
+} from './services/workspace-ide-owner.js';
 
 export { WorkspaceTrustLifecycle } from './services/workspace-trust-lifecycle.js';
 export { initializeParser } from './utils/shell-parser.js';
