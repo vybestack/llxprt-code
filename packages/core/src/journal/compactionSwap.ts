@@ -54,7 +54,37 @@ export interface VerifiedCandidate {
   readonly trailer: TrailerHeader;
 }
 
+/** The candidate of a file with no name: the open descriptor is the only way to reach it. */
+export interface UnlinkedCandidate {
+  readonly handle: JournalFileHandle;
+  readonly syncMarker: Uint8Array;
+  readonly size: number;
+  readonly trailer: TrailerHeader;
+}
+
 export type SwapOutcome = 'swapped' | 'refused';
+
+/**
+ * The swap for a file with no name (design 4.12): nothing is renamed, so the
+ * writer gives up its descriptor for the candidate's and the old descriptor is
+ * closed, which deletes the old file. The caller holds the commit queue and
+ * no read is in flight, as for `CompactionSwap`.
+ */
+export async function swapInUnlinkedCandidate(
+  writer: JournalGroupWriter,
+  ops: FileOperations,
+  candidate: UnlinkedCandidate,
+): Promise<'swapped'> {
+  const old = writer.detach();
+  writer.attach({
+    handle: candidate.handle,
+    syncMarker: candidate.syncMarker,
+    writeOffset: candidate.size,
+    published: candidate.trailer,
+  });
+  await ops.close(old);
+  return 'swapped';
+}
 
 export interface CommittedFile {
   readonly header: JournalHeader;

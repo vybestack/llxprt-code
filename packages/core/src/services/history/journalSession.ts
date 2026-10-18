@@ -112,10 +112,7 @@ export class JournalSession {
           ),
       },
     });
-    return new JournalSession(
-      await JournalStore.create('(unlinked journal)', deps),
-      false,
-    );
+    return new JournalSession(await JournalStore.createUnlinked(deps), false);
   }
 
   get path(): string {

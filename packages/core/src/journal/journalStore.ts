@@ -14,6 +14,7 @@ import {
 import {
   CompactionSwap,
   realFileOperations,
+  swapInUnlinkedCandidate,
   type FileOperations,
   type SwapOutcome,
 } from './compactionSwap.js';
@@ -52,7 +53,10 @@ import {
 import { readVersionAt } from './trailerAccess.js';
 import { versionOf, type Version } from './version.js';
 import { VersionSnapshot } from './versionSnapshot.js';
-import { writeCompactionCandidate } from './storeCompaction.js';
+import {
+  writeCompactionCandidate,
+  writeUnlinkedCompactionCandidate,
+} from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
 
 /** What the store is built from: the file seams, the hash, the two normalizers and the planner. */
@@ -69,6 +73,9 @@ export interface JournalStoreDependencies {
   /** Whether the file has outgrown its version (design 4.11); a test lowers the floor through it. */
   readonly compactionDue?: (version: Version, notBefore: number) => boolean;
 }
+
+/** What a store with no file name is called in its errors. */
+export const UNLINKED_JOURNAL_LABEL = '(unlinked journal)';
 
 function noop(): void {
   // Settles the tail of the commit queue; the caller sees the commit's own outcome.
@@ -140,6 +147,8 @@ export class JournalStore {
     readonly path: string,
     private readonly writer: JournalGroupWriter,
     private readonly deps: JournalStoreDependencies,
+    /** The file has no name: `path` is a label, and a compaction swaps descriptors instead of renaming. */
+    private readonly unlinked = false,
   ) {
     this.fileOperations =
       deps.fileOperations ?? realFileOperations(deps.journal.open);
@@ -157,6 +166,22 @@ export class JournalStore {
       path,
       await createJournal(path, deps.journal),
       deps,
+    );
+  }
+
+  /**
+   * A new journal in a file with no name (design 4.12). `deps.journal.open`
+   * makes the file and ignores the path, which is only the label the store
+   * goes by.
+   */
+  static async createUnlinked(
+    deps: JournalStoreDependencies,
+  ): Promise<JournalStore> {
+    return new JournalStore(
+      UNLINKED_JOURNAL_LABEL,
+      await createJournal(UNLINKED_JOURNAL_LABEL, deps.journal),
+      deps,
+      true,
     );
   }
 
@@ -426,6 +451,22 @@ export class JournalStore {
 
   private async compactOnce(): Promise<SwapOutcome> {
     const published = this.requireVersion();
+    if (this.unlinked) {
+      const candidate = await writeUnlinkedCompactionCandidate(
+        this.path,
+        this.requireAccess(),
+        published,
+        this.deps.journal,
+        this.deps.idDeps.hasher,
+      );
+      const swapped = await swapInUnlinkedCandidate(
+        this.writer,
+        this.fileOperations,
+        candidate,
+      );
+      this.restartOnNewFile();
+      return swapped;
+    }
     const candidate = await writeCompactionCandidate(
       this.path,
       this.requireAccess(),

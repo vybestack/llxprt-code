@@ -18,6 +18,7 @@ import type { IdTrieNode } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
 import { KeyedMapReader } from './keyedMap.js';
 import { readMapEntries, readValueBody, type MapEntry } from './mapEntries.js';
+import type { JournalFileHandle } from './positionalFile.js';
 import { OFFSET } from './offsetFields.js';
 import { createRecordAccess, type RecordAccess } from './recordAccess.js';
 import { emptyCopyStats, remapOffset, type CopyStats } from './recordCopy.js';
@@ -230,6 +231,37 @@ async function withNewFile(
   }
 }
 
+/** A finished copy in a file with no name, and the descriptor that is the only way to reach it. */
+export interface UnlinkedCopy {
+  readonly result: CopyResult;
+  readonly handle: JournalFileHandle;
+}
+
+/**
+ * `withNewFile` for a file with no name: closing its descriptor would delete
+ * the file, so on success the descriptor is handed to the caller open.
+ */
+async function withKeptUnlinkedFile(
+  path: string,
+  source: RecordAccess,
+  deps: CopyDependencies,
+  observer: CopyObserver | undefined,
+  work: (session: CopySession) => Promise<void>,
+): Promise<UnlinkedCopy> {
+  const writer = await createJournal(path, deps.journal);
+  let kept: UnlinkedCopy;
+  try {
+    const session = new CopySession(writer, source, path, deps, observer);
+    await work(session);
+    kept = { result: session.result(path), handle: writer.detach() };
+  } catch (error) {
+    await writer.close();
+    throw error;
+  }
+  await writer.close();
+  return kept;
+}
+
 /**
  * Clones one version into a new file (design 4.8): the rows, id facts, meta
  * map and state map it reaches, with every offset remapped. The new file holds
@@ -300,30 +332,55 @@ export function compactionCopy(
   deps: CopyDependencies,
   observer?: CopyObserver,
 ): Promise<CopyResult> {
-  return withNewFile(path, source, deps, observer, async (session) => {
-    for await (const entry of readMapEntries(
-      source,
-      session.sourceCache,
-      current.roots.stateRoot,
-    )) {
-      if (isCheckpointKey(entry.key)) {
-        const version = await unrelocatedCheckpoint(source, session, entry);
-        if (version !== undefined) {
-          await session.copyVersion({
-            version,
-            policy: 'portable',
-            keepIdentity: true,
-            recording: true,
-          });
-        }
+  return withNewFile(path, source, deps, observer, (session) =>
+    copyLiveVersions(session, source, current),
+  );
+}
+
+/**
+ * `compactionCopy` into a file with no name (the bare store). `path` only
+ * labels the copy; `deps.journal.open` makes the file, and the descriptor
+ * comes back open.
+ */
+export function compactionCopyUnlinked(
+  source: RecordAccess,
+  current: Version,
+  path: string,
+  deps: CopyDependencies,
+  observer?: CopyObserver,
+): Promise<UnlinkedCopy> {
+  return withKeptUnlinkedFile(path, source, deps, observer, (session) =>
+    copyLiveVersions(session, source, current),
+  );
+}
+
+async function copyLiveVersions(
+  session: CopySession,
+  source: RecordAccess,
+  current: Version,
+): Promise<void> {
+  for await (const entry of readMapEntries(
+    source,
+    session.sourceCache,
+    current.roots.stateRoot,
+  )) {
+    if (isCheckpointKey(entry.key)) {
+      const version = await unrelocatedCheckpoint(source, session, entry);
+      if (version !== undefined) {
+        await session.copyVersion({
+          version,
+          policy: 'portable',
+          keepIdentity: true,
+          recording: true,
+        });
       }
     }
-    await session.copyVersion({
-      version: current,
-      policy: 'retained',
-      keepIdentity: true,
-      recording: false,
-    });
+  }
+  await session.copyVersion({
+    version: current,
+    policy: 'retained',
+    keepIdentity: true,
+    recording: false,
   });
 }
 
