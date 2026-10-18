@@ -641,9 +641,15 @@ export class JournalHistoryStore implements HistoryStorePort {
     return contextRangeOf(this.contextBoundary(), accumulated);
   }
 
-  /** Durable once the queue is acked; this store holds no storage that only held rows in flight. */
-  waitForCommit(): Promise<void> {
-    return this.waitForDurable();
+  /**
+   * The commit boundary (WIRING G11): the queue is acked and every bound
+   * recorder file holds the acked groups. A recorder's own `flush()` does not
+   * wait for mirror deliveries, so without the settle the rows of the last
+   * turn could be missing from the session file when the next request starts.
+   */
+  async waitForCommit(): Promise<void> {
+    await this.waitForDurable();
+    await this.settleFanout();
   }
 
   /** The newest row, or the newest of `speaker`, once the queue is durable; nothing is kept. */
@@ -708,11 +714,14 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.withDurableSnapshot(async (snapshot) => {
       this.assertSettled(snapshot, 'cleared');
       const spans = await spansAfterClear(snapshot, request.spans);
-      if (snapshot.rows > 0)
+      if (snapshot.rows > 0) {
         applyOperation(this.writes, {
           kind: 'rewind',
           itemsRemoved: snapshot.rows,
         });
+        // The service publishes after the ack, so what its observers read is the emptied version.
+        await this.waitForDurable();
+      }
       await publishClear(request, spans, () => this.restoreTo(snapshot));
     });
   }

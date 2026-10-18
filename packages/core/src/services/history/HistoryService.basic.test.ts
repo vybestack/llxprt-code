@@ -470,7 +470,7 @@ describe('HistoryService: track conversation statistics', () => {
   const service = new HistoryService();
   afterEach(() => service.dispose());
 
-  it('should track conversation statistics', () => {
+  it('should track conversation statistics', async () => {
     // Add various message types
     service.add(createUserMessage('Question 1'));
     service.add({
@@ -492,6 +492,7 @@ describe('HistoryService: track conversation statistics', () => {
         usage: { promptTokens: 15, completionTokens: 25, totalTokens: 40 },
       },
     });
+    await service.waitForCommit();
 
     const stats = service.getStatistics();
     expect(stats.totalMessages).toBe(5);

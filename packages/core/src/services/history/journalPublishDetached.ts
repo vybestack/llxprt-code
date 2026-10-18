@@ -143,17 +143,24 @@ async function publishOver(
     throw new AggregateError(closing, 'Detached mutation cleanup failed');
 }
 
-/** The interior spans after the candidate: the density spans and the span the rewind removed. */
+/**
+ * The interior spans after the candidate: the density spans, the span the
+ * rewind removed and the spans of the summary rows it holds. The service's span
+ * window is the only source of removed interior spans on the journal path (the
+ * trailer aggregate has none, WIRING G2), so the compressed spans the rows name
+ * enter it here, in the same set the context range event reports.
+ */
 async function projectedSpans(
   candidate: JournalCandidate,
   densitySpans: DensitySpanRows,
   state: ReturnType<DetachedHistoryHost['snapshot']>,
-): Promise<ReturnType<DensitySpanRows['project']>> {
+): Promise<RemovedInteriorSpan[]> {
   const rewound = await candidate.rewoundSpan();
-  return densitySpans.project(
+  const projected = densitySpans.project(
     state.spans,
     rewound === undefined ? [] : mergeRemovedInteriorSpans([rewound]),
   );
+  return candidate.range.snapshot(projected).removedInterior;
 }
 
 function mediaFeed(

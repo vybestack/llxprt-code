@@ -54,6 +54,7 @@ describe('HistoryService context range', () => {
       service.add(textContent('human', text));
     }
     await service.waitForTokenUpdates();
+    await service.waitForCommit();
     const range = service.getContextRange();
     expect(range.totalEntries).toBe(5);
     expect(range.firstSeq).toBe(await seqOf(service, 4));
