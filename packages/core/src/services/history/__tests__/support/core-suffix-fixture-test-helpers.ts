@@ -1,14 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   suffixRow,
+  suffixSeeder,
   withSuffixFixtureGraph,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import {
   createRowCounters,
   type RowCounters,
 } from '../../../../recording/journalCounters.js';
 import { RowOwnership } from '../../../../recording/rowOwnership.js';
-import { SessionRecordingService } from '../../../../recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
 import {
   HistoryService,
   type HistoryServiceJournalOptions,
@@ -17,7 +19,8 @@ import type { IContent } from '../../IContent.js';
 
 export interface CoreSuffixFixtureGraph {
   readonly service: HistoryService;
-  readonly recording: SessionRecordingService;
+  readonly recording: SessionRecordingPort;
+  seed(rows: Iterable<IContent>): Promise<void>;
   readonly ownership: RowOwnership;
   readonly mutationOwnership: RowOwnership;
   readonly counters: RowCounters;
@@ -36,13 +39,10 @@ export function createCoreSuffixFixtureGraph(
     options: HistoryServiceJournalOptions,
   ) => HistoryService = createHistoryService,
 ): CoreSuffixFixtureGraph {
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     sessionId: 'suffix-test',
     projectHash: 'suffix-test',
     chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
   });
   const ownership = new RowOwnership();
   const counters = createRowCounters();
@@ -51,7 +51,14 @@ export function createCoreSuffixFixtureGraph(
     attachmentCounters: { ...counters.counters, ownership },
     mutationOwnership,
   });
-  return { service, recording, ownership, mutationOwnership, counters };
+  return {
+    service,
+    recording,
+    ownership,
+    mutationOwnership,
+    counters,
+    seed: suffixSeeder(recording, service),
+  };
 }
 
 export async function withCoreSuffixFixture<T>(

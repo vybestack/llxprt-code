@@ -154,6 +154,21 @@ describe('JournalHistoryStore over an opener', () => {
     expect(mirrored).toStrictEqual(['first', 'second']);
   });
 
+  it('names the file of the recorder it is bound to as the file the history is recorded in', async () => {
+    const recorder = journalRecorder();
+    const store = lazyStore(() => JournalSession.createUnlinked(), {
+      recording: recorder,
+    });
+    expect(store.journalPath()).toBeNull();
+    store.apply({ kind: 'content', content: row('human', 'first', 1) });
+    await store.waitForDurable();
+    await store.settleFanout();
+
+    const path = store.journalPath();
+    expect(path).not.toBeNull();
+    expect(path).toBe(recorder.getFilePath());
+  });
+
   it('fails the queue when the recorder it was given cannot be bound', async () => {
     const recorder = journalRecorder();
     const seeded = await recorder.session();

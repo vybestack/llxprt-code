@@ -282,6 +282,30 @@
       "bun": "./src/recording/SessionRecordingService.ts",
       "import": "./dist/src/recording/SessionRecordingService.js"
     },
+    "./recording/recordingPort.js": {
+      "bun": "./src/recording/recordingPort.ts",
+      "import": "./dist/src/recording/recordingPort.js"
+    },
+    "./recording/types.js": {
+      "bun": "./src/recording/types.ts",
+      "import": "./dist/src/recording/types.js"
+    },
+    "./recording/sessionRecorderFactory.js": {
+      "bun": "./src/recording/sessionRecorderFactory.ts",
+      "import": "./dist/src/recording/sessionRecorderFactory.js"
+    },
+    "./recording/sessionFileExtension.js": {
+      "bun": "./src/recording/sessionFileExtension.ts",
+      "import": "./dist/src/recording/sessionFileExtension.js"
+    },
+    "./services/history/recorderBackend.js": {
+      "bun": "./src/services/history/recorderBackend.ts",
+      "import": "./dist/src/services/history/recorderBackend.js"
+    },
+    "./services/history/historyBackendSelect.js": {
+      "bun": "./src/services/history/historyBackendSelect.ts",
+      "import": "./dist/src/services/history/historyBackendSelect.js"
+    },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"

@@ -64,6 +64,16 @@
       "bun": "./src/core/history-suffix-test-helpers.ts",
       "import": "./dist/src/core/history-suffix-test-helpers.js"
     },
+    "./core/recorder-for-test.js": {
+      "types": "./dist/src/core/recorder-for-test.d.ts",
+      "bun": "./src/core/recorder-for-test.ts",
+      "import": "./dist/src/core/recorder-for-test.js"
+    },
+    "./core/backend-test-gates.js": {
+      "types": "./dist/src/core/backend-test-gates.d.ts",
+      "bun": "./src/core/backend-test-gates.ts",
+      "import": "./dist/src/core/backend-test-gates.js"
+    },
     "./core/collect-raw-history.js": {
       "types": "./dist/src/core/collect-raw-history.d.ts",
       "bun": "./src/core/collect-raw-history.ts",

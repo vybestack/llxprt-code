@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { createRecorderForTest } from './recorder-for-test.js';
 import {
   HistoryService,
   type HistoryServiceJournalOptions,
@@ -41,9 +44,31 @@ export interface SuffixFixtureGraph<Service, Ownership, Counters> {
   readonly service: Service;
   readonly ownership: Ownership;
   readonly counters: Counters;
-  readonly recording: {
-    commit(type: 'content', payload: { content: IContent }): Promise<object>;
-    dispose(): Promise<void>;
+  readonly recording: { dispose(): Promise<void> };
+  /** Puts the rows into the history, durably, before the action runs. */
+  seed(rows: Iterable<IContent>): Promise<void>;
+}
+
+/**
+ * How a fixture's rows reach its history on the selected backend. The old
+ * backend reads a history out of the recorder's file, so the rows are
+ * committed to the recorder before the first read. The journal backend writes
+ * the recorder as a mirror of the history, so the rows are added to the
+ * history and the recorder follows.
+ */
+export function suffixSeeder(
+  recording: SessionRecordingPort,
+  service: { add(row: IContent): void; waitForCommit(): Promise<void> },
+): (rows: Iterable<IContent>) => Promise<void> {
+  if (selectBackend() === 'journal') {
+    return async (rows) => {
+      for (const row of rows) service.add(row);
+      await service.waitForCommit();
+    };
+  }
+  const jsonl = requireJsonlRecorder(recording);
+  return async (rows) => {
+    for (const row of rows) await jsonl.commit('content', { content: row });
   };
 }
 
@@ -67,13 +92,14 @@ export async function withSuffixFixtureGraph<
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'history-suffix-test-'));
   try {
-    const { service, recording, ownership, counters } = createGraph(root);
+    const { service, recording, ownership, counters, seed } = createGraph(root);
     try {
-      for (let index = 0; index < size; index++) {
-        await recording.commit('content', {
-          content: makeRow(index, payloadBytes),
-        });
-      }
+      await seed(
+        (function* (): Generator<IContent> {
+          for (let index = 0; index < size; index++)
+            yield makeRow(index, payloadBytes);
+        })(),
+      );
       return await action(service, ownership, counters);
     } finally {
       await service.dispose();
@@ -101,13 +127,10 @@ export async function withSuffixFixture<T>(
   return withSuffixFixtureGraph(
     size,
     (root) => {
-      const recording = new SessionRecordingService({
+      const recording = createRecorderForTest({
         sessionId: 'suffix-test',
         projectHash: 'suffix-test',
         chatsDir: root,
-        workspaceDirs: [root],
-        provider: 'test',
-        model: 'test',
       });
       const ownership = new RowOwnership();
       const counters = createRowCounters();
@@ -116,7 +139,13 @@ export async function withSuffixFixture<T>(
         attachmentCounters: { ...counters.counters, ownership },
         mutationOwnership,
       });
-      return { service, recording, ownership, counters };
+      return {
+        service,
+        recording,
+        ownership,
+        counters,
+        seed: suffixSeeder(recording, service),
+      };
     },
     action,
     payloadBytes,

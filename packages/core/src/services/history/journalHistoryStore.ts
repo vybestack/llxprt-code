@@ -304,10 +304,17 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.ack;
   }
 
-  /** The file the history is recorded in; null while the journal is not open and for the bare store, which has no named file. */
+  /**
+   * The file the history is recorded in: the named file of the store, else the
+   * file of the recorder bound first. Null while the journal is not open and
+   * for a bare store, which has neither.
+   */
   journalPath(): string | null {
-    const session = this.journal?.session;
-    return session?.named === true ? session.path : null;
+    const open = this.journal;
+    if (open === undefined) return null;
+    return open.session.named
+      ? open.session.path
+      : open.mirrors.firstRecorderPath();
   }
 
   /** A journal clear is asynchronous: the service holds its mutation queue until it settles (D-W7-5). */

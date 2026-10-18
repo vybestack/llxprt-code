@@ -2,28 +2,28 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import {
   suffixRow,
+  suffixSeeder,
   withSuffixFixture,
   withSuffixFixtureGraph,
 } from './history-suffix-test-helpers.js';
+import { createRecorderForTest } from './recorder-for-test.js';
 
 function realGraph(root: string): {
   service: HistoryService;
-  recording: SessionRecordingService;
+  recording: SessionRecordingPort;
   ownership: RowOwnership;
   counters: ReturnType<typeof createRowCounters>;
+  seed: ReturnType<typeof suffixSeeder>;
 } {
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     sessionId: 'suffix-test',
     projectHash: 'suffix-test',
     chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
   });
   const ownership = new RowOwnership();
   const counters = createRowCounters();
@@ -31,7 +31,13 @@ function realGraph(root: string): {
     recording,
     attachmentCounters: { ...counters.counters, ownership },
   });
-  return { service, recording, ownership, counters };
+  return {
+    service,
+    recording,
+    ownership,
+    counters,
+    seed: suffixSeeder(recording, service),
+  };
 }
 
 describe('suffix fixture journal lifecycle', () => {

@@ -170,6 +170,12 @@ export class JournalMirrors {
     }
   }
 
+  /** The file of the recorder bound first, which holds the rows of the primary origin; null when none is bound. */
+  firstRecorderPath(): string | null {
+    for (const { session } of this.recorders.values()) return session.path;
+    return null;
+  }
+
   isRecorder(recorder: JournalRecordingService): boolean {
     return this.recorders.has(recorder);
   }

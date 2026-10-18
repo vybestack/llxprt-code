@@ -7,7 +7,7 @@ import {
   collectJournalRowsForAssertions,
   collectRowsForAssertions,
 } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { SessionRecordingService } from '../../../../recording/SessionRecordingService.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { ContentBlock, IContent } from '../../IContent.js';
 
@@ -279,13 +279,11 @@ export async function runMutationSequence(
   steps: readonly MutationStep[],
 ): Promise<StepObservation[]> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mutation-sequence-'));
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     sessionId: 'mutation-sequence',
     projectHash: 'mutation-sequence',
     chatsDir: path.join(root, 'chats'),
     workspaceDirs: [],
-    provider: 'test',
-    model: 'test',
   });
   const history = new HistoryService({ recording });
   const observed: StepObservation[] = [];

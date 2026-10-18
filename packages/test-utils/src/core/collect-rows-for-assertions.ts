@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
+import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -24,6 +25,11 @@ export async function collectRowsForAssertions(
   }
 }
 
+/**
+ * The rows the recorder's file holds once everything is durable, read apart
+ * from the history service: the old backend's JSONL file through the resolver,
+ * the journal backend's file through the journal store.
+ */
 async function* journalRowsForAssertions(history: {
   waitForCommit(): Promise<void>;
   journalPath(): string | null;
@@ -31,6 +37,10 @@ async function* journalRowsForAssertions(history: {
   await history.waitForCommit();
   const path = history.journalPath();
   if (path === null) throw new Error('Expected a committed test journal');
+  if (isJournalFileName(path)) {
+    yield* journalFileRows(path);
+    return;
+  }
   const resolver = await JournalResolver.open(path);
   try {
     for await (const entry of resolver.resolve()) yield entry.content;
