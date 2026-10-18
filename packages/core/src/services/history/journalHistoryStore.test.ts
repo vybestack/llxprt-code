@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
+import { journalPathOf } from './__tests__/support/journalPathOf.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
 import {
@@ -83,7 +84,7 @@ describe('journal history store', () => {
     expect(store.getLength()).toBe(1);
     expect(durable).toBe(false);
     expect(store.lastAck).toBeUndefined();
-    const outside = await openJournalReadOnly(store.journalPath());
+    const outside = await openJournalReadOnly(journalPathOf(store));
     expect(outside.trailer).toBeUndefined();
     await outside.close();
 
@@ -91,7 +92,7 @@ describe('journal history store', () => {
     await waiting;
     expect(durable).toBe(true);
     expect(store.lastAck?.commitSeq).toBe(1);
-    const after = await openJournalReadOnly(store.journalPath());
+    const after = await openJournalReadOnly(journalPathOf(store));
     expect(after.trailer?.commitSeq).toBe(1);
     await after.close();
   });

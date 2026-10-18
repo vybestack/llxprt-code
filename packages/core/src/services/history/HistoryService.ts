@@ -340,23 +340,18 @@ export class HistoryService extends HistoryServiceReads {
    */
   async clear(): Promise<void> {
     const rebuilding = this.isCompressing && this.inRebuildScope;
-    const clearAndRelease = (): Promise<void> => {
-      let cleared: Promise<void> = Promise.resolve();
-      this.runSynchronousHistoryMutation(() => {
-        try {
-          cleared = this.clearInternal(rebuilding);
-        } finally {
-          if (!rebuilding) this.enqueueSynchronousOwnershipSettlement();
-        }
-      });
-      return cleared;
-    };
+    const clearAndRelease = (): Promise<void> =>
+      this.journal.clearIsAsynchronous === true
+        ? this.clearHoldingQueue(rebuilding)
+        : this.clearInTurn(rebuilding);
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
       await new Promise<void>((resolve, reject) => {
         this.queueCompressionOperation(() => {
           try {
-            clearAndRelease().then(resolve, reject);
+            const cleared = clearAndRelease();
+            this.queuedClears.track(cleared);
+            cleared.then(resolve, reject);
           } catch (error: unknown) {
             reject(error);
             throw error;
@@ -367,6 +362,34 @@ export class HistoryService extends HistoryServiceReads {
     }
 
     await clearAndRelease();
+  }
+
+  /** The old store clears inside the synchronous turn, so a failure throws out of it. */
+  private clearInTurn(rebuilding: boolean): Promise<void> {
+    let cleared: Promise<void> = Promise.resolve();
+    this.runSynchronousHistoryMutation(() => {
+      try {
+        cleared = this.clearInternal(rebuilding);
+      } finally {
+        if (!rebuilding) this.enqueueSynchronousOwnershipSettlement();
+      }
+    });
+    return cleared;
+  }
+
+  /**
+   * A journal clear runs after it is started, so the mutation queue is held
+   * until it settles: what is added meanwhile follows the clear and is not
+   * swept up by it (D-W7-5).
+   */
+  private clearHoldingQueue(rebuilding: boolean): Promise<void> {
+    return this.enqueueAsynchronousHistoryMutation(async () => {
+      try {
+        await this.clearInternal(rebuilding);
+      } finally {
+        if (!rebuilding) this.enqueueSynchronousOwnershipSettlement();
+      }
+    });
   }
 
   private clearInternal(rebuilding: boolean): Promise<void> {
@@ -739,12 +762,13 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   /**
-   * Wait for all pending operations to complete
-   * For synchronous operations, this is now a no-op but kept for API compatibility
+   * Waits for the clears queued under the compression lock and reports the
+   * failure of any that failed, once. Every other operation is applied or
+   * queued in the mutation FIFO when it is called, so there is nothing else to
+   * wait for.
    */
   async waitForPendingOperations(): Promise<void> {
-    // Since operations are now synchronous, nothing to wait for
-    return Promise.resolve();
+    await this.queuedClears.settle();
   }
 
   /**

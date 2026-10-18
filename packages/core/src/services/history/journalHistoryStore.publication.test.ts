@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fsp from 'node:fs/promises';
+import { journalPathOf } from './__tests__/support/journalPathOf.js';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
@@ -124,7 +125,7 @@ describe('journal history store publication and compensation', () => {
     const rows = await store.materialize();
     expect(texts(rows).slice(0, 2)).toStrictEqual(['r0', 'r1']);
     expect(rows).toHaveLength(300);
-    expect((await trailerOf(store.journalPath()))?.mutation).toBe(
+    expect((await trailerOf(journalPathOf(store)))?.mutation).toBe(
       MUTATION.replace,
     );
   });
@@ -141,7 +142,7 @@ describe('journal history store publication and compensation', () => {
 
       expect(publication.durable).toBe(false);
       expect(publication.lastAck).toBeUndefined();
-      expect((await trailerOf(store.journalPath()))?.commitSeq).toBe(2);
+      expect((await trailerOf(journalPathOf(store)))?.commitSeq).toBe(2);
     } finally {
       // A failed expectation must not leave the write gated, or the store never closes.
       seams.release();
@@ -153,7 +154,7 @@ describe('journal history store publication and compensation', () => {
 
     await publication.compensate();
     expect(publication.durable).toBe(false);
-    const after = await trailerOf(store.journalPath());
+    const after = await trailerOf(journalPathOf(store));
     expect(after?.mutation).toBe(MUTATION.restore);
     expect(after?.rootAggregate.rows).toBe(2);
     expect(texts(await store.materialize())).toStrictEqual([
@@ -164,7 +165,7 @@ describe('journal history store publication and compensation', () => {
 
   it('opens to the previous version or the full replacement after a cut at every byte offset of the group (defect 1)', async () => {
     const { store } = await withOld('cut.llxj');
-    const file = store.journalPath();
+    const file = journalPathOf(store);
     const before = new Uint8Array(await fsp.readFile(file));
     await store.replaceFrom(NEW, NEW.length);
     const after = new Uint8Array(await fsp.readFile(file));
@@ -294,7 +295,7 @@ describe('journal history store publication and compensation', () => {
       store.replaceFrom(NEW, NEW.length, controller.signal),
     ).rejects.toThrow('cancelled');
     expect(store.getLength()).toBe(2);
-    expect((await trailerOf(store.journalPath()))?.commitSeq).toBe(2);
+    expect((await trailerOf(journalPathOf(store)))?.commitSeq).toBe(2);
   });
 
   describe('detached publication shapes', () => {
@@ -305,7 +306,7 @@ describe('journal history store publication and compensation', () => {
       await publication.publish(OLD, [...OLD]);
 
       expect(publication.admittedCount).toBe(0);
-      expect((await trailerOf(store.journalPath()))?.commitSeq).toBe(2);
+      expect((await trailerOf(journalPathOf(store)))?.commitSeq).toBe(2);
     });
 
     it('cuts a dropped tail with one rewind and an emptied history with one rewind', async () => {
@@ -313,7 +314,7 @@ describe('journal history store publication and compensation', () => {
       const publication = new JournalDetachedPublication(store);
 
       await publication.publish(OLD, OLD.slice(0, 1));
-      expect((await trailerOf(store.journalPath()))?.mutation).toBe(
+      expect((await trailerOf(journalPathOf(store)))?.mutation).toBe(
         MUTATION.pop,
       );
       await publication.publish(OLD.slice(0, 1), []);

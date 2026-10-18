@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
+import { journalPathOf } from './__tests__/support/journalPathOf.js';
 import { describe, expect, it } from 'bun:test';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
@@ -80,7 +81,7 @@ describe('a transform streamed into one replace group', () => {
       ),
     ).rejects.toBe(boom);
 
-    const reader = await openJournalReadOnly(store.journalPath());
+    const reader = await openJournalReadOnly(journalPathOf(store));
     try {
       expect(reader.trailer?.commitSeq).toBe(2);
       expect(reader.trailer?.rootAggregate.rows).toBe(2);
@@ -101,7 +102,7 @@ describe('a transform streamed into one replace group', () => {
         }),
       ),
     ).rejects.toBe(boom);
-    const reader = await openJournalReadOnly(store.journalPath());
+    const reader = await openJournalReadOnly(journalPathOf(store));
     try {
       expect(reader.trailer?.rootAggregate.rows).toBe(2);
     } finally {

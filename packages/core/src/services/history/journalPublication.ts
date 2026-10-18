@@ -100,7 +100,7 @@ export function ownerChangeEdits(
 /** Like {@link ownerChangeEdits}, naming origins; an unknown origin gets the next id, recorded in the same group. */
 export function originChangeEdits(
   sorted: readonly PositionedOrigin[],
-  owners: JournalOwners,
+  owners: () => JournalOwners,
 ): EditBuilder {
   return async (snapshot) => {
     const labels = await labelsAt(
@@ -110,7 +110,7 @@ export function originChangeEdits(
     const edits: VersionEdit[] = [];
     const owned: Array<{ label: bigint; owner: number }> = [];
     for (const [at, label] of labels.entries()) {
-      const resolved = await owners.resolve(sorted[at].origin);
+      const resolved = await owners().resolve(sorted[at].origin);
       edits.push(...resolved.edits);
       owned.push({ label, owner: resolved.id });
     }

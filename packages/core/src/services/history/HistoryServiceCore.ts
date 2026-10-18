@@ -90,6 +90,7 @@ import {
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { QueuedClearFailures } from './queuedClearFailures.js';
 
 // Preserve the CompressionConfig type export from the same path for consumers.
 export type { CompressionConfig };
@@ -193,6 +194,7 @@ export abstract class HistoryServiceCore
   private ownershipFailure: unknown;
   protected logger = new DebugLogger('llxprt:history:service');
   protected readonly mutationOwnership?: RowOwnership;
+  protected readonly queuedClears = new QueuedClearFailures();
 
   protected chronology = new ChronologyStamper();
 
@@ -320,6 +322,7 @@ export abstract class HistoryServiceCore
     await this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.waitForCommit(),
     );
+    await this.queuedClears.settle();
   }
 
   /**

@@ -276,9 +276,11 @@ async function batchCase8(): Promise<number> {
   ]);
   await tokenizer.waitUntilSecond;
 
-  await history.clear();
+  // clear() resolves once it has been applied, and it is applied after the batch.
+  const cleared = history.clear();
   tokenizer.releaseSecond();
   await batch;
+  await cleared;
   await history.waitForTokenUpdates();
 
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {

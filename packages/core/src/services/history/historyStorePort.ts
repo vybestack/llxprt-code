@@ -234,6 +234,15 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  /**
+   * True when `clear` finishes after it returns, so the service must keep its
+   * mutation queue held until the promise settles. Absent for the old store,
+   * which clears inside the synchronous turn that calls it and reports a
+   * failure by throwing from that turn (the #2852 never-drop flush depends on
+   * it); the field leaves with the old store.
+   */
+  readonly clearIsAsynchronous?: boolean;
+
   // Recorder binding, fan-out and late attach.
   onRetired(listener: () => void): () => void;
   isRecorder(recorder: SessionRecordingPort): boolean;

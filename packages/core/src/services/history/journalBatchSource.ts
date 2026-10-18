@@ -1,7 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import { countDecodedRow } from './journalRowCounters.js';
 
 export type CommittedBatchRowSource = HistoryBatchRowSource;
 
@@ -17,6 +19,7 @@ export function committedBatchSource(
   snapshot: VersionSnapshot,
   count: number,
   resumeBoundary?: bigint,
+  counters?: JournalReadCounters,
 ): CommittedBatchRowSource {
   if (count > snapshot.rows) {
     throw new Error(
@@ -44,7 +47,16 @@ export function committedBatchSource(
       passes += 1;
       try {
         for await (const entry of snapshot.entries(start)) {
-          yield decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
+          const row = decodeStoredRow(
+            await snapshot.readRow(entry),
+            resumeBoundary,
+          );
+          const release = countDecodedRow(row, counters);
+          try {
+            yield row;
+          } finally {
+            release();
+          }
         }
       } finally {
         passes -= 1;

@@ -65,7 +65,11 @@ export interface AppendOptions {
  * directions, so what is held is the conversion of one row.
  */
 export class JournalSession {
-  private constructor(readonly store: JournalStore) {}
+  private constructor(
+    readonly store: JournalStore,
+    /** False for the bare store, whose file has no name to read it by. */
+    readonly named: boolean,
+  ) {}
 
   /** A new journal file at `path`. */
   static async create(
@@ -74,6 +78,7 @@ export class JournalSession {
   ): Promise<JournalSession> {
     return new JournalSession(
       await JournalStore.create(path, await storeDependencies(options)),
+      true,
     );
   }
 
@@ -84,6 +89,7 @@ export class JournalSession {
   ): Promise<JournalSession> {
     return new JournalSession(
       await JournalStore.open(path, await storeDependencies(options)),
+      true,
     );
   }
 
@@ -108,6 +114,7 @@ export class JournalSession {
     });
     return new JournalSession(
       await JournalStore.create('(unlinked journal)', deps),
+      false,
     );
   }
 

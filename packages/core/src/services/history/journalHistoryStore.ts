@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
-import { FIRST_NEXT_LABEL } from '../../journal/labels.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
@@ -9,7 +8,6 @@ import {
   checkedPositions,
   inheritingDraft,
   labelsAt,
-  planDensity,
   publishClear,
   spansAfterClear,
   type PositionedContent,
@@ -56,11 +54,7 @@ import {
 import { JournalMirrors } from './journalMirrors.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
 import { suffixStart } from './journalSuffix.js';
-import {
-  decodeStoredRow,
-  encodeContentRow,
-  UNOWNED_ROW,
-} from './journalRowCodec.js';
+import { decodeStoredRow } from './journalRowCodec.js';
 import {
   committedBatchSource,
   type CommittedBatchRowSource,
@@ -84,12 +78,13 @@ import type {
 } from './detachedHistoryMutation.js';
 import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalSession } from './journalSession.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import { countDecodedRow } from './journalRowCounters.js';
 import {
   encodedRows,
   JournalPublication,
   originChangeEdits,
   ownerChangeEdits,
-  syntheticInsertEdits,
   type EditBuilder,
   JournalCompensationMark,
 } from './journalPublication.js';
@@ -101,13 +96,30 @@ import { previewOfContent } from '../../recording/sessionMetaKeys.js';
 import { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { SessionPreviews } from './sessionPreviews.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
-import type { DensityMutationPayload } from '../../recording/types.js';
+import { applyOperation, type JournalWriteHost } from './journalOps.js';
 
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
 export interface JournalRepair {
   readonly inserted: IContent[];
   rollback(): Promise<void>;
   close(): void;
+}
+
+/** Opens the journal a store keeps its rows in; it must yield an empty journal. */
+export type JournalSessionOpener = () => Promise<JournalSession>;
+
+export interface JournalHistoryStoreOptions {
+  /** Bound as a mirror right after the journal is open (decision D-W7-3). */
+  readonly recording?: JournalRecordingService;
+  /** Observes every row the stream and batch readers decode (WIRING G9). */
+  readonly counters?: JournalReadCounters;
+}
+
+/** What opening the journal builds: the file and the bookkeeping over it. */
+interface OpenJournal {
+  readonly session: JournalSession;
+  readonly owners: JournalOwners;
+  readonly mirrors: JournalMirrors;
 }
 
 /**
@@ -121,36 +133,102 @@ export interface JournalRepair {
  * The first failure of the queue is kept. It rejects `waitForDurable` and
  * every later `apply` throws it, because later operations were planned on a
  * count that no longer holds.
+ *
+ * Given an opener instead of a session, the store accepts operations at once:
+ * opening the journal is the first step of the queue, the count starts at 0,
+ * and a failure to open is the failure of the queue (decision D-W7-1).
  */
 export class JournalHistoryStore implements HistoryStorePort {
-  private tentativeRows: number;
-  private queue: Promise<void> = Promise.resolve();
+  private tentativeRows = 0;
+  private queue: Promise<void>;
   private failure: { readonly error: unknown } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
   private readonly publication = new JournalPublication();
-  private owners: JournalOwners;
-  private mirrorSet: JournalMirrors;
+  private journal: OpenJournal | undefined;
+  /** Settles when the journal is open; rejects with the reason it could not be. */
+  private readonly opened: Promise<void>;
+  /** Settles when the journal is open and the recorder given at construction is bound; never rejects. */
+  private readonly startup: Promise<void>;
+  /** Shared by the mirrors of successive primaries, so a swap keeps the listeners. */
+  private readonly retirement = new Set<() => void>();
+  private readonly writes: JournalWriteHost = {
+    rows: () => this.tentativeRows,
+    owners: () => this.owners,
+    enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
+    offerPreview: (content, origin) => this.offerPreview(content, origin),
+  };
   private adopted: JournalRecordingService | undefined;
   private boundary: bigint | undefined;
   private previews = new SessionPreviews();
   private readonly adoptedWrites = new PendingRecorderWrites();
 
-  constructor(private session: JournalSession) {
-    this.tentativeRows = session.store.published?.rows ?? 0;
-    this.owners = new JournalOwners(session.store);
-    this.mirrorSet = this.mirrorsOf(session, this.owners);
+  constructor(
+    source: JournalSession | JournalSessionOpener,
+    private readonly options: JournalHistoryStoreOptions = {},
+  ) {
+    if (typeof source === 'function') {
+      this.opened = source().then((session) => this.install(session));
+      this.queue = this.opened.catch((error: unknown) => {
+        this.failure = { error };
+      });
+    } else {
+      this.install(source);
+      this.tentativeRows = source.store.published?.rows ?? 0;
+      this.opened = Promise.resolve();
+      this.queue = Promise.resolve();
+    }
+    this.startup = this.opened
+      .then(() => this.bindStartupRecorder())
+      .catch((error: unknown) => {
+        this.failure ??= { error };
+      });
+  }
+
+  private install(session: JournalSession): void {
+    const owners = new JournalOwners(session.store);
+    this.journal = {
+      session,
+      owners,
+      mirrors: this.mirrorsOf(session, owners, this.retirement),
+    };
+  }
+
+  private bindStartupRecorder(): Promise<void> {
+    const { recording } = this.options;
+    return recording === undefined
+      ? Promise.resolve()
+      : this.attachJournal(recording);
+  }
+
+  /** The open journal; before it is open, or when it could not be, the reason. */
+  private requireOpen(): OpenJournal {
+    if (this.journal === undefined) {
+      throw (
+        this.failure?.error ??
+        new Error('The journal history store is not open yet')
+      );
+    }
+    return this.journal;
+  }
+
+  private get session(): JournalSession {
+    return this.requireOpen().session;
+  }
+
+  private get owners(): JournalOwners {
+    return this.requireOpen().owners;
   }
 
   /** The per-agent mirror files bound to this history. */
   get mirrors(): JournalMirrors {
-    return this.mirrorSet;
+    return this.requireOpen().mirrors;
   }
 
   private mirrorsOf(
     session: JournalSession,
     owners: JournalOwners,
-    listeners?: Set<() => void>,
+    listeners: Set<() => void>,
   ): JournalMirrors {
     return new JournalMirrors(
       session.store,
@@ -196,16 +274,18 @@ export class JournalHistoryStore implements HistoryStorePort {
       state: () => ({
         session: this.session,
         owners: this.owners,
-        mirrors: this.mirrorSet,
+        mirrors: this.mirrors,
         rows: this.tentativeRows,
         adopted: this.adopted,
         previews: this.previews,
         resumeBoundary: this.boundary,
       }),
       install: (state) => {
-        this.session = state.session;
-        this.owners = state.owners;
-        this.mirrorSet = state.mirrors;
+        this.journal = {
+          session: state.session,
+          owners: state.owners,
+          mirrors: state.mirrors,
+        };
         this.tentativeRows = state.rows;
         this.adopted = state.adopted;
         this.previews = state.previews;
@@ -222,9 +302,14 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.ack;
   }
 
-  journalPath(): string {
-    return this.session.path;
+  /** The file the history is recorded in; null while the journal is not open and for the bare store, which has no named file. */
+  journalPath(): string | null {
+    const session = this.journal?.session;
+    return session?.named === true ? session.path : null;
   }
+
+  /** A journal clear is asynchronous: the service holds its mutation queue until it settles (D-W7-5). */
+  readonly clearIsAsynchronous = true;
 
   /** Rows once everything queued is applied; equals the published count when the queue is empty. */
   getLength(): number {
@@ -233,43 +318,7 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();
-    // Only rows an op writes carry its origin; a rewind, a density and a detail name who asked, not who owns.
-    switch (op.kind) {
-      case 'content':
-        this.applyContent(op.content, op.tx, op.origin);
-        return;
-      case 'rewind':
-        this.applyRewind(op.itemsRemoved);
-        return;
-      case 'compressed':
-        this.applyCompressed(op.summary, op.origin);
-        return;
-      case 'syntheticInsert':
-        this.applySyntheticInsert(
-          op.payload.content,
-          op.payload.afterSeq,
-          op.origin,
-        );
-        return;
-      case 'compressionDetail':
-        // The span a compression destroyed is in the summary row's metadata (design 4.4).
-        return;
-      case 'density':
-        this.applyDensity(op.payload);
-        return;
-      case 'replaceBegin':
-      case 'replaceCommit':
-      case 'replaceAbort':
-        throw new Error(
-          `The "${op.kind}" operation is not implemented in the journal store yet`,
-        );
-      default: {
-        const unmapped: never = op;
-        throw new Error(
-          `Unmapped history operation ${JSON.stringify(unmapped)}`,
-        );
-      }
-    }
+    applyOperation(this.writes, op);
   }
 
   /**
@@ -307,7 +356,10 @@ export class JournalHistoryStore implements HistoryStorePort {
     this.assertUsable();
     const sorted = checkedPositions(changes, this.tentativeRows);
     if (sorted.length > 0)
-      this.enqueue(this.tentativeRows, originChangeEdits(sorted, this.owners));
+      this.enqueue(
+        this.tentativeRows,
+        originChangeEdits(sorted, () => this.owners),
+      );
   }
 
   /** Sets entry fields of rows (design 8.2); the rows and their order do not change. */
@@ -470,27 +522,33 @@ export class JournalHistoryStore implements HistoryStorePort {
     origin?: string,
   ): Promise<void> {
     const recorder = requireJournalRecorder(session);
-    return this.mirrors
-      .attachRecorder(recorder, replace, onAttached, origin)
+    return this.opened
+      .then(() =>
+        this.mirrors.attachRecorder(recorder, replace, onAttached, origin),
+      )
       .then(() => this.previews.recordFirstFor(recorder, origin));
   }
 
   detachJournal(recorder: SessionRecordingPort): Promise<void> {
-    return this.mirrors.detachRecorder(requireJournalRecorder(recorder));
+    const journalRecorder = requireJournalRecorder(recorder);
+    return this.opened.then(() => this.mirrors.detachRecorder(journalRecorder));
   }
 
+  /** Whether the recorder is bound now; a recorder given at construction is bound once the journal is open. */
   isRecorder(recorder: SessionRecordingPort): boolean {
-    return this.mirrors.isRecorder(requireJournalRecorder(recorder));
+    const journalRecorder = requireJournalRecorder(recorder);
+    return this.journal?.mirrors.isRecorder(journalRecorder) ?? false;
   }
 
   /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */
   async settleFanout(): Promise<void> {
+    await this.startup;
     await this.queue;
     await this.mirrors.flush();
   }
 
   primaryOriginId(): string | undefined {
-    return this.mirrors.primaryOriginId();
+    return this.journal?.mirrors.primaryOriginId();
   }
 
   adoptedOrigin(origin: string | undefined): void {
@@ -498,11 +556,13 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   onRetired(listener: () => void): () => void {
-    return this.mirrors.onRetired(listener);
+    this.retirement.add(listener);
+    return () => this.retirement.delete(listener);
   }
 
   /** Resolves when every operation applied so far is acked; throws the first failure of the queue. */
   async waitForDurable(): Promise<void> {
+    await this.startup;
     await this.queue;
     await this.adoptedWrites.settle();
     if (this.failure !== undefined) throw this.failure.error;
@@ -525,7 +585,16 @@ export class JournalHistoryStore implements HistoryStorePort {
       const start = await suffixStart(snapshot, query, signal, this.boundary);
       for await (const entry of snapshot.entries(start)) {
         signal?.throwIfAborted();
-        yield decodeStoredRow(await snapshot.readRow(entry), this.boundary);
+        const row = decodeStoredRow(
+          await snapshot.readRow(entry),
+          this.boundary,
+        );
+        const release = countDecodedRow(row, this.options.counters);
+        try {
+          yield row;
+        } finally {
+          release();
+        }
       }
       signal?.throwIfAborted();
     } finally {
@@ -545,6 +614,7 @@ export class JournalHistoryStore implements HistoryStorePort {
         snapshot,
         count ?? snapshot.rows,
         this.boundary,
+        this.options.counters,
       );
     } catch (error) {
       snapshot.close();
@@ -558,12 +628,12 @@ export class JournalHistoryStore implements HistoryStorePort {
    * them waits for the queue first.
    */
   statistics(): ConversationStatistics {
-    return statisticsOf(this.session.store.published?.aggregate);
+    return statisticsOf(this.journal?.session.store.published?.aggregate);
   }
 
   /** The chronology boundary of the last acked version, from its trailer; see {@link statistics}. */
   contextBoundary(): ContextBoundary {
-    return contextBoundaryOf(this.session.store.published?.aggregate);
+    return contextBoundaryOf(this.journal?.session.store.published?.aggregate);
   }
 
   /** The boundary joined with the interior spans the service accumulated (WIRING G2). */
@@ -638,7 +708,11 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.withDurableSnapshot(async (snapshot) => {
       this.assertSettled(snapshot, 'cleared');
       const spans = await spansAfterClear(snapshot, request.spans);
-      if (snapshot.rows > 0) this.applyRewind(snapshot.rows);
+      if (snapshot.rows > 0)
+        applyOperation(this.writes, {
+          kind: 'rewind',
+          itemsRemoved: snapshot.rows,
+        });
       await publishClear(request, spans, () => this.restoreTo(snapshot));
     });
   }
@@ -816,34 +890,15 @@ export class JournalHistoryStore implements HistoryStorePort {
     if (this.disposed) return;
     this.disposed = true;
     await this.queue;
+    await this.startup;
+    const open = this.journal;
+    if (open === undefined) return;
     try {
-      await this.mirrors.retire();
+      await open.mirrors.retire();
     } finally {
       // An adopted file is the recorder's; the recorder closes it.
-      if (this.adopted === undefined) await this.session.close();
+      if (this.adopted === undefined) await open.session.close();
     }
-  }
-
-  private applyContent(
-    content: IContent,
-    tx: string | undefined,
-    origin: string | undefined,
-  ): void {
-    if (tx !== undefined) {
-      throw new Error(
-        'Rows of a replace transaction are not implemented in the journal store yet',
-      );
-    }
-    // Encoded now: the chronology stamper writes the entry's metadata in place after the call.
-    const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
-    this.offerPreview(content, origin);
-    this.enqueue(this.tentativeRows + 1, async () => {
-      const owner = await this.owners.resolve(origin);
-      return [
-        ...owner.edits,
-        { kind: 'append', rows: [{ ...draft, owner: owner.id }] },
-      ];
-    });
   }
 
   /**
@@ -860,70 +915,8 @@ export class JournalHistoryStore implements HistoryStorePort {
       this.adopted.recordFirstUserPreview(text);
       this.adoptedWrites.track(this.adopted.flush());
     }
-    this.mirrorSet.announcePreview(origin, text);
-  }
-
-  private applyDensity(payload: DensityMutationPayload): void {
-    const planned = planDensity(payload);
-    if (planned.empty) return;
-    if (planned.removedRows > this.tentativeRows) {
-      throw new Error(
-        `A density removing ${planned.removedRows} rows exceeds the ${this.tentativeRows} rows of the history`,
-      );
-    }
-    this.enqueue(this.tentativeRows - planned.removedRows, planned.build);
-  }
-
-  private applyRewind(itemsRemoved: number): void {
-    if (
-      !Number.isInteger(itemsRemoved) ||
-      itemsRemoved < 0 ||
-      itemsRemoved > this.tentativeRows
-    ) {
-      throw new Error(
-        `A rewind of ${itemsRemoved} rows exceeds the ${this.tentativeRows} rows of the history`,
-      );
-    }
-    if (itemsRemoved === 0) return;
-    // The count is authoritative and the cut is the label of the row at that position (design 4.3).
-    this.enqueue(this.tentativeRows - itemsRemoved, async (snapshot) => {
-      const first = await snapshot.entryAt(snapshot.rows - itemsRemoved);
-      return [
-        { kind: 'pop', cutLabel: first.label, expectedRemoved: itemsRemoved },
-      ];
-    });
-  }
-
-  private applyCompressed(summary: IContent, origin: string | undefined): void {
-    const draft = encodeContentRow(summary, { owner: UNOWNED_ROW });
-    // A compression replaces the whole history; the rows to keep are appended after it.
-    this.enqueue(1, async (snapshot) => {
-      const owner = await this.owners.resolve(origin);
-      return [
-        ...owner.edits,
-        {
-          kind: 'compress',
-          summary: { ...draft, owner: owner.id },
-          retainFromLabel: snapshot.version?.nextLabel ?? FIRST_NEXT_LABEL,
-          expectedReplaced: snapshot.rows,
-        },
-      ];
-    });
-  }
-
-  private applySyntheticInsert(
-    content: IContent,
-    afterSeq: number,
-    origin: string | undefined,
-  ): void {
-    if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) {
-      throw new Error(`Invalid synthetic insert anchor ${afterSeq}`);
-    }
-    const draft = encodeContentRow(content, { owner: UNOWNED_ROW });
-    this.enqueue(
-      this.tentativeRows + 1,
-      syntheticInsertEdits(draft, afterSeq, origin, () => this.owners),
-    );
+    // Recorders bind after the journal is open, and then take the offered preview.
+    this.journal?.mirrors.announcePreview(origin, text);
   }
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
