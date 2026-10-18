@@ -10,6 +10,7 @@ import {
   ROW_ID_KIND,
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
+import { sanitizeParams } from './historyCloneUtils.js';
 import { isCuratedContent } from './historyCuration.js';
 import {
   invalidateResponsesStatefulChain,
@@ -198,7 +199,20 @@ function encodeBlock(block: ContentBlock): DraftBlock {
       `Unknown block type ${String((block as { type: unknown }).type)}`,
     );
   }
-  return { type, bytes: ENCODER.encode(JSON.stringify(block)) };
+  return { type, bytes: ENCODER.encode(JSON.stringify(serializable(block))) };
+}
+
+/**
+ * Tool payloads come from tools and servers, so they can refer to themselves.
+ * They are stored as `sanitizeParams` yields them, the form the old store
+ * wrote and the provider paths expect.
+ */
+function serializable(block: ContentBlock): ContentBlock {
+  if (block.type === 'tool_call')
+    return { ...block, parameters: sanitizeParams(block.parameters) };
+  if (block.type === 'tool_response')
+    return { ...block, result: sanitizeParams(block.result) };
+  return block;
 }
 
 /**
