@@ -340,10 +340,15 @@ export class HistoryService extends HistoryServiceReads {
    */
   async clear(): Promise<void> {
     const rebuilding = this.isCompressing && this.inRebuildScope;
-    const clearAndRelease = (): Promise<void> =>
-      this.journal.clearIsAsynchronous === true
-        ? this.clearHoldingQueue(rebuilding)
-        : this.clearInTurn(rebuilding);
+    const clearAndRelease = (): Promise<void> => {
+      if (this.journal.clearIsAsynchronous !== true)
+        return this.clearInTurn(rebuilding);
+      // The clear is applied a queue turn after this call. A provider token
+      // count requested before it describes rows it removes, so it is
+      // dropped now, as the old store's synchronous clear drops it.
+      this.invalidatePendingSyncs();
+      return this.clearHoldingQueue(rebuilding);
+    };
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
       await new Promise<void>((resolve, reject) => {
