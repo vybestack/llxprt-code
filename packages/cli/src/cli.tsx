@@ -354,7 +354,13 @@ class ForegroundSessionHost {
   private readonly settingsService: SettingsService;
   async run(): Promise<void> {
     const agent = await this.#foreground;
-    await connectIdeClientIfEnabled(agent.ide);
+    await connectIdeClientIfEnabled(
+      () => agent.ide.getIdeMode(),
+      async () => {
+        const ideClient = agent.ide.getIdeClient();
+        if (ideClient) await ideClient.connect();
+      },
+    );
     const warnings: string[] = [];
     const history = await setupOwnerSessionRecording(
       this.config,
