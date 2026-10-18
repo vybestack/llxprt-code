@@ -5,7 +5,7 @@ import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { OAuthProfileReads } from './oauth-profile-reads.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -46,7 +46,7 @@ export interface SessionAuthPolicy {
 
 export interface OAuthManagerRuntimeMessageBusDeps {
   readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
-  readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;
+  readonly profileReads?: OAuthProfileReads;
   readSessionAuthPolicy?: () => SessionAuthPolicy;
   messageBus?: MessageBus;
   config?: Config;

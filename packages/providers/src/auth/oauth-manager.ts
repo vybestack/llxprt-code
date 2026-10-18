@@ -10,7 +10,6 @@ import {
   type InteractiveAuthHostHandler,
   type InteractiveAuthSessionStatus,
 } from './interactive-auth-coordinator.js';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SessionAuthPolicy } from './types.js';
 /**
  * @license
@@ -46,7 +45,10 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
-import { createOAuthProfileReads } from './oauth-profile-reads.js';
+import {
+  createOAuthProfileReads,
+  type OAuthProfileReads,
+} from './oauth-profile-reads.js';
 import { OAuthForegroundLifetime } from './oauth-foreground-lifetime.js';
 import { closeOwnedTokenStore } from './proxy/credential-store-factory.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
@@ -167,7 +169,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
   private readonly readSessionAuthPolicy: () => SessionAuthPolicy;
-  private readonly profileReads: Pick<ProfileManager, 'loadProfile'>;
+  private readonly profileReads: OAuthProfileReads;
   private readonly browserProfileStore: BrowserProfileAssociationStore;
 
   /**
