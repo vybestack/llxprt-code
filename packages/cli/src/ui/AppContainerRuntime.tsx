@@ -206,7 +206,6 @@ export function useAppStores(runtime: Pick<SlashCommandRuntime, 'getModel'>): {
 
 /** Guidance nudge for sessions without an active provider configured. */
 function useUnconfiguredGuidance(
-  props: AppContainerRuntimeProps,
   turnStore: TurnStore,
   dialogStore: DialogStore,
 ): void {
@@ -533,7 +532,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     terminalStore,
     settingsStore,
   });
-  useUnconfiguredGuidance(props, turnStore, dialogStore);
+  useUnconfiguredGuidance(turnStore, dialogStore);
   const readTranscript = useCallback(
     () =>
       getInteractiveTranscriptPath(
