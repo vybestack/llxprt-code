@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { expectTicketCallersReleased } from './ticket-owner-contract-test-helpers.js';
 import {
   captureTicketWrite,
@@ -126,7 +127,7 @@ async function checkPendingScalarAppend(
 }
 
 describe('scalar queries over mixed disk history', () => {
-  it.each([512, 8192])(
+  it.skipIf(journalBackendSelected).each([512, 8192])(
     'derives counts, last speakers and range from all %i rows without eager history',
     async (size) => {
       await withBatchFixture(
@@ -191,48 +192,58 @@ describe('scalar queries over mixed disk history', () => {
 });
 
 describe('scalar empty and single-row membership', () => {
-  it('reports empty membership and reads a first atomic append without a history copy', async () => {
-    await withBatchFixture(async ({ history, owners }) => {
-      expect(history.length()).toBe(0);
-      expect(history.isEmpty()).toBe(true);
-      expect(await history.getLastAIContent()).toBeUndefined();
-      expect(await history.getLastUserContent()).toBeUndefined();
-      expect(history.getStatistics().totalMessages).toBe(0);
-      expect(await history.pop()).toBeUndefined();
-      await history.addBatch([batchRow(0)]);
-      expect(history.length()).toBe(1);
-      expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
-      await history.waitForTokenUpdates();
-      await history.waitForCommit();
-      expect(history.getTotalTokens()).toBe(4);
-      expectNoScalarOwners(owners);
-    });
-  });
+  it.skipIf(journalBackendSelected)(
+    'reports empty membership and reads a first atomic append without a history copy',
+    async () => {
+      await withBatchFixture(async ({ history, owners }) => {
+        expect(history.length()).toBe(0);
+        expect(history.isEmpty()).toBe(true);
+        expect(await history.getLastAIContent()).toBeUndefined();
+        expect(await history.getLastUserContent()).toBeUndefined();
+        expect(history.getStatistics().totalMessages).toBe(0);
+        expect(await history.pop()).toBeUndefined();
+        await history.addBatch([batchRow(0)]);
+        expect(history.length()).toBe(1);
+        expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
+        await history.waitForTokenUpdates();
+        await history.waitForCommit();
+        expect(history.getTotalTokens()).toBe(4);
+        expectNoScalarOwners(owners);
+      });
+    },
+  );
 
-  it('reads the first synchronous append without eager history in the empty check', async () => {
-    await withBatchFixture(async ({ history, owners }) => {
-      history.add(batchRow(0));
-      expect(history.length()).toBe(1);
-      expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
-      await history.waitForTokenUpdates();
-      await history.waitForCommit();
-      expect(history.getTotalTokens()).toBe(4);
-      expectNoScalarOwners(owners);
-    });
-  });
+  it.skipIf(journalBackendSelected)(
+    'reads the first synchronous append without eager history in the empty check',
+    async () => {
+      await withBatchFixture(async ({ history, owners }) => {
+        history.add(batchRow(0));
+        expect(history.length()).toBe(1);
+        expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
+        await history.waitForTokenUpdates();
+        await history.waitForCommit();
+        expect(history.getTotalTokens()).toBe(4);
+        expectNoScalarOwners(owners);
+      });
+    },
+  );
 
-  it('returns the entire valid last row above eight MiB without imposing a fixture cap', async () => {
-    await withBatchFixture(async ({ history, recorder, owners }) => {
-      const row = batchRow(0, 9 * 1024 * 1024);
-      await recorder.commit('content', { content: row });
-      expect(history.length()).toBe(1);
-      const last = await history.getLastUserContent();
-      expect(last).toStrictEqual(row);
-      expect(Buffer.byteLength(JSON.stringify(last))).toBeGreaterThan(
-        8 * 1024 * 1024,
-      );
-      expect(history.getContextRange().lastSeq).toBe(1);
-      expectNoScalarOwners(owners);
-    });
-  }, 180000);
+  it.skipIf(journalBackendSelected)(
+    'returns the entire valid last row above eight MiB without imposing a fixture cap',
+    async () => {
+      await withBatchFixture(async ({ history, recorder, owners }) => {
+        const row = batchRow(0, 9 * 1024 * 1024);
+        await recorder.commit('content', { content: row });
+        expect(history.length()).toBe(1);
+        const last = await history.getLastUserContent();
+        expect(last).toStrictEqual(row);
+        expect(Buffer.byteLength(JSON.stringify(last))).toBeGreaterThan(
+          8 * 1024 * 1024,
+        );
+        expect(history.getContextRange().lastSeq).toBe(1);
+        expectNoScalarOwners(owners);
+      });
+    },
+    180000,
+  );
 });

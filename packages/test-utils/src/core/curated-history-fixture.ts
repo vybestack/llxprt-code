@@ -2,6 +2,7 @@
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectRawHistory } from './collect-raw-history.js';
 import { collectRowsForAssertions } from './collect-rows-for-assertions.js';
 import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
 
@@ -12,6 +13,24 @@ export function curatedHistoryForTest(history: {
   return buildCuratedHistory(
     new DebugLogger('test:curated-fixture'),
     observeHistorySynchronouslyForTest(history),
+    false,
+  );
+}
+
+/**
+ * The curated history once every queued mutation is durable. The same oracle
+ * as {@link curatedHistoryForTest} for tests that run on either backend: the
+ * journal backend keeps no rows in memory, so a sample waits for the commit
+ * and reads the raw rows through the service.
+ */
+export async function curatedHistoryAfterCommit(history: {
+  waitForCommit(): Promise<void>;
+  streamRawHistory(): AsyncIterable<IContent>;
+}): Promise<IContent[]> {
+  await history.waitForCommit();
+  return buildCuratedHistory(
+    new DebugLogger('test:curated-fixture'),
+    await collectRawHistory(history),
     false,
   );
 }

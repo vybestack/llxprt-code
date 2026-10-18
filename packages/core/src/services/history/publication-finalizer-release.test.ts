@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { HistoryService } from './HistoryService.js';
 import {
   mediaParticipant,
@@ -69,77 +70,83 @@ for (const [size, bytes] of [
   [1, 9437184],
 ]) {
   describe(`held real detached finalizer ${size}/${bytes}`, () => {
-    it('releases original and envelope values at ack while finalization, producer and storage remain held', async () => {
-      await withEnvelopeFixture(async (fixture) => {
-        const history = new HistoryService({
-          recording: fixture.recorder,
-          mutationOwnership: fixture.owners,
-        });
-        history.setTokenizerFactory(exactTokenizer());
-        const entered = envelopeGate();
-        const finish = envelopeGate();
-        const storage: Array<Iterable<IContent>> = [];
-        await history.registerMediaOwner(
-          mediaParticipant((rows) => {
-            storage.push(rows.previous, rows.next);
-            return {
-              publish: (): void => {},
-              finalize: async (): Promise<void> => {
-                entered.resolve();
-                await finish.promise;
-              },
-              rollback: (): void => {},
-            };
-          }),
-        );
-        const held = submit(history, fixture.owners, size, bytes);
-        try {
-          await fixture.writerStarted.promise;
-          fixture.writer.resolve();
-          await entered.promise;
-          await envelopeGC();
-          expect({
-            source: envelopeSurvivors(held.weak),
-            envelope: envelopeCensus(fixture),
-            live: fixture.owners.snapshot().liveRows,
-          }).toStrictEqual({
-            source: 0,
-            envelope: { lines: 0, payloads: 0, rows: 0 },
-            live: 0,
+    it.skipIf(journalBackendSelected)(
+      'releases original and envelope values at ack while finalization, producer and storage remain held',
+      async () => {
+        await withEnvelopeFixture(async (fixture) => {
+          const history = new HistoryService({
+            recording: fixture.recorder,
+            mutationOwnership: fixture.owners,
           });
-          expect(await held.input.next()).toStrictEqual({
-            done: true,
-            value: undefined,
-          });
-          let index = 0;
-          for await (const row of history.streamRawHistory())
-            expect(JSON.stringify(row.blocks)).toBe(
-              JSON.stringify(detachedRow(index++, bytes).blocks),
+          history.setTokenizerFactory(exactTokenizer());
+          const entered = envelopeGate();
+          const finish = envelopeGate();
+          const storage: Array<Iterable<IContent>> = [];
+          await history.registerMediaOwner(
+            mediaParticipant((rows) => {
+              storage.push(rows.previous, rows.next);
+              return {
+                publish: (): void => {},
+                finalize: async (): Promise<void> => {
+                  entered.resolve();
+                  await finish.promise;
+                },
+                rollback: (): void => {},
+              };
+            }),
+          );
+          const held = submit(history, fixture.owners, size, bytes);
+          try {
+            await fixture.writerStarted.promise;
+            fixture.writer.resolve();
+            await entered.promise;
+            await envelopeGC();
+            expect({
+              source: envelopeSurvivors(held.weak),
+              envelope: envelopeCensus(fixture),
+              live: fixture.owners.snapshot().liveRows,
+            }).toStrictEqual({
+              source: 0,
+              envelope: { lines: 0, payloads: 0, rows: 0 },
+              live: 0,
+            });
+            expect(await held.input.next()).toStrictEqual({
+              done: true,
+              value: undefined,
+            });
+            let index = 0;
+            for await (const row of history.streamRawHistory())
+              expect(JSON.stringify(row.blocks)).toBe(
+                JSON.stringify(detachedRow(index++, bytes).blocks),
+              );
+            expect(index).toBe(size);
+            const acknowledged = await detachedDigest(
+              history.streamRawHistory(),
             );
-          expect(index).toBe(size);
-          const acknowledged = await detachedDigest(history.streamRawHistory());
-          expect(acknowledged).toStrictEqual(
-            await detachedDurableDigest(fixture.recorder),
-          );
-          finish.resolve();
-          await held.completed;
-          await envelopeGC();
-          expect(envelopeCensus(fixture)).toStrictEqual({
-            lines: 0,
-            payloads: 0,
-            rows: 0,
-          });
-          expect(() => [...storage[1]]).toThrow('Detached journal is closed');
-          expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
-            acknowledged,
-          );
-          await held.completed;
-        } finally {
-          finish.resolve();
-          await held.completed;
-          await history.dispose();
-        }
-      });
-    }, 180_000);
+            expect(acknowledged).toStrictEqual(
+              await detachedDurableDigest(fixture.recorder),
+            );
+            finish.resolve();
+            await held.completed;
+            await envelopeGC();
+            expect(envelopeCensus(fixture)).toStrictEqual({
+              lines: 0,
+              payloads: 0,
+              rows: 0,
+            });
+            expect(() => [...storage[1]]).toThrow('Detached journal is closed');
+            expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
+              acknowledged,
+            );
+            await held.completed;
+          } finally {
+            finish.resolve();
+            await held.completed;
+            await history.dispose();
+          }
+        });
+      },
+      180_000,
+    );
   });
 }

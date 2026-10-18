@@ -2,6 +2,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
@@ -248,143 +249,166 @@ describe('JournalHistoryStore.publishDetached', () => {
       ['an emptied result', keepNothing],
     ];
     for (const [name, transform] of cases) {
-      it(`for ${name}: same rows, tokens and context range`, async () => {
-        const expected = await viaOldStore(transform);
+      it.skipIf(journalBackendSelected)(
+        `for ${name}: same rows, tokens and context range`,
+        async () => {
+          const expected = await viaOldStore(transform);
+          const actual = await viaJournalStore(
+            path.join(directory(), 'equal.llxj'),
+            transform,
+          );
+          expect(actual.rows).toStrictEqual(expected.rows);
+          expect(actual.tokens).toBe(expected.tokens);
+          expect(actual.range).toStrictEqual(expected.range);
+        },
+      );
+    }
+
+    it.skipIf(journalBackendSelected)(
+      'records the spans a density pass leaves behind',
+      async () => {
         const actual = await viaJournalStore(
-          path.join(directory(), 'equal.llxj'),
-          transform,
+          path.join(directory(), 'spans.llxj'),
+          thinOut,
         );
-        expect(actual.rows).toStrictEqual(expected.rows);
-        expect(actual.tokens).toBe(expected.tokens);
-        expect(actual.range).toStrictEqual(expected.range);
-      });
-    }
-
-    it('records the spans a density pass leaves behind', async () => {
-      const actual = await viaJournalStore(
-        path.join(directory(), 'spans.llxj'),
-        thinOut,
-      );
-      expect(actual.range.removedInterior).toStrictEqual([
-        { start: 2, end: 2, reason: 'density-removed' },
-        { start: 3, end: 3, reason: 'density-replaced' },
-      ]);
-    });
-  });
-
-  it('writes no bytes for a result equal to the rows it started from', async () => {
-    const file = path.join(directory(), 'unchanged.llxj');
-    const { store, host, observed, dispose } = await openJournal(
-      file,
-      BIG_BYTES,
+        expect(actual.range.removedInterior).toStrictEqual([
+          { start: 2, end: 2, reason: 'density-removed' },
+          { start: 3, end: 3, reason: 'density-replaced' },
+        ]);
+      },
     );
-    try {
-      const sizeBefore = fs.statSync(file).size;
-      const commitBefore = await commitSeqOf(file);
-
-      await store.publishDetached({ transform: keepAll }, host, undefined, {});
-
-      expect(fs.statSync(file).size).toBe(sizeBefore);
-      expect(await commitSeqOf(file)).toBe(commitBefore);
-      expect(store.getLength()).toBe(SEED);
-      expect(observed.applied).toHaveLength(1);
-    } finally {
-      await dispose();
-    }
   });
 
-  it('writes one pop, not a rewritten group, for a result cut to its first rows', async () => {
-    const file = path.join(directory(), 'cut.llxj');
-    const { store, host, observed, dispose } = await openJournal(
-      file,
-      BIG_BYTES,
-    );
-    try {
-      const sizeBefore = fs.statSync(file).size;
-      const commitBefore = await commitSeqOf(file);
-
-      await store.publishDetached(
-        { transform: keepFirstThree },
-        host,
-        undefined,
-        {},
+  it.skipIf(journalBackendSelected)(
+    'writes no bytes for a result equal to the rows it started from',
+    async () => {
+      const file = path.join(directory(), 'unchanged.llxj');
+      const { store, host, observed, dispose } = await openJournal(
+        file,
+        BIG_BYTES,
       );
-
-      expect(await commitSeqOf(file)).toBe((commitBefore ?? 0) + 1);
-      expect(store.getLength()).toBe(3);
-      // A pop copies no row: three rewritten rows would add at least 3 * BIG_BYTES.
-      expect(fs.statSync(file).size - sizeBefore).toBeLessThan(BIG_BYTES / 2);
-      expect(shape(await store.materialize())).toStrictEqual(
-        shape(seedRows(BIG_BYTES).slice(0, 3)),
-      );
-      expect(last(observed.ranges)?.removedInterior).toStrictEqual([
-        { start: 4, end: SEED, reason: 'rewound' },
-      ]);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it('writes one clear for an emptied result', async () => {
-    const file = path.join(directory(), 'empty.llxj');
-    const { store, host, dispose } = await openJournal(file, BIG_BYTES);
-    try {
-      const sizeBefore = fs.statSync(file).size;
-      const commitBefore = await commitSeqOf(file);
-
-      await store.publishDetached(
-        { transform: keepNothing },
-        host,
-        undefined,
-        {},
-      );
-
-      expect(await commitSeqOf(file)).toBe((commitBefore ?? 0) + 1);
-      expect(store.getLength()).toBe(0);
-      expect(await store.materialize()).toStrictEqual([]);
-      expect(fs.statSync(file).size - sizeBefore).toBeLessThan(BIG_BYTES / 2);
-    } finally {
-      await dispose();
-    }
-  });
-
-  it('keeps the previous version published when the transform fails after two rows', async () => {
-    const file = path.join(directory(), 'failure.llxj');
-    const { store, host, stamper, observed, startTokens, dispose } =
-      await openJournal(file);
-    try {
-      const commitBefore = await commitSeqOf(file);
-      const chronologyBefore = stamper.snapshot();
-      const boom = new Error('transform failed after two rows');
-      const failing: DetachedHistoryTransform = async (_source, sink) => {
-        await sink.appendValue(detachedRow(50, SEED_BYTES));
-        await sink.appendValue(detachedRow(51, SEED_BYTES));
-        throw boom;
-      };
-
-      await expect(
-        store.publishDetached({ transform: failing }, host, undefined, {}),
-      ).rejects.toBe(boom);
-
-      expect(await commitSeqOf(file)).toBe(commitBefore);
-      expect(shape(await store.materialize())).toStrictEqual(
-        shape(seedRows(SEED_BYTES)),
-      );
-      expect(last(observed.applied)?.tokens).toBe(startTokens);
-      expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
-      expect(store.getLength()).toBe(SEED);
-      expect(observed.ranges).toStrictEqual([]);
-      // The aborted group stays an uncommitted tail; a reader sees only the committed version.
-      const reader = await openJournalReadOnly(file);
       try {
-        expect(reader.trailer?.rootAggregate.rows).toBe(SEED);
+        const sizeBefore = fs.statSync(file).size;
+        const commitBefore = await commitSeqOf(file);
+
+        await store.publishDetached(
+          { transform: keepAll },
+          host,
+          undefined,
+          {},
+        );
+
+        expect(fs.statSync(file).size).toBe(sizeBefore);
+        expect(await commitSeqOf(file)).toBe(commitBefore);
+        expect(store.getLength()).toBe(SEED);
+        expect(observed.applied).toHaveLength(1);
       } finally {
-        await reader.close();
+        await dispose();
       }
-    } finally {
-      await dispose();
-    }
-  });
+    },
+  );
+
+  it.skipIf(journalBackendSelected)(
+    'writes one pop, not a rewritten group, for a result cut to its first rows',
+    async () => {
+      const file = path.join(directory(), 'cut.llxj');
+      const { store, host, observed, dispose } = await openJournal(
+        file,
+        BIG_BYTES,
+      );
+      try {
+        const sizeBefore = fs.statSync(file).size;
+        const commitBefore = await commitSeqOf(file);
+
+        await store.publishDetached(
+          { transform: keepFirstThree },
+          host,
+          undefined,
+          {},
+        );
+
+        expect(await commitSeqOf(file)).toBe((commitBefore ?? 0) + 1);
+        expect(store.getLength()).toBe(3);
+        // A pop copies no row: three rewritten rows would add at least 3 * BIG_BYTES.
+        expect(fs.statSync(file).size - sizeBefore).toBeLessThan(BIG_BYTES / 2);
+        expect(shape(await store.materialize())).toStrictEqual(
+          shape(seedRows(BIG_BYTES).slice(0, 3)),
+        );
+        expect(last(observed.ranges)?.removedInterior).toStrictEqual([
+          { start: 4, end: SEED, reason: 'rewound' },
+        ]);
+      } finally {
+        await dispose();
+      }
+    },
+  );
+
+  it.skipIf(journalBackendSelected)(
+    'writes one clear for an emptied result',
+    async () => {
+      const file = path.join(directory(), 'empty.llxj');
+      const { store, host, dispose } = await openJournal(file, BIG_BYTES);
+      try {
+        const sizeBefore = fs.statSync(file).size;
+        const commitBefore = await commitSeqOf(file);
+
+        await store.publishDetached(
+          { transform: keepNothing },
+          host,
+          undefined,
+          {},
+        );
+
+        expect(await commitSeqOf(file)).toBe((commitBefore ?? 0) + 1);
+        expect(store.getLength()).toBe(0);
+        expect(await store.materialize()).toStrictEqual([]);
+        expect(fs.statSync(file).size - sizeBefore).toBeLessThan(BIG_BYTES / 2);
+      } finally {
+        await dispose();
+      }
+    },
+  );
+
+  it.skipIf(journalBackendSelected)(
+    'keeps the previous version published when the transform fails after two rows',
+    async () => {
+      const file = path.join(directory(), 'failure.llxj');
+      const { store, host, stamper, observed, startTokens, dispose } =
+        await openJournal(file);
+      try {
+        const commitBefore = await commitSeqOf(file);
+        const chronologyBefore = stamper.snapshot();
+        const boom = new Error('transform failed after two rows');
+        const failing: DetachedHistoryTransform = async (_source, sink) => {
+          await sink.appendValue(detachedRow(50, SEED_BYTES));
+          await sink.appendValue(detachedRow(51, SEED_BYTES));
+          throw boom;
+        };
+
+        await expect(
+          store.publishDetached({ transform: failing }, host, undefined, {}),
+        ).rejects.toBe(boom);
+
+        expect(await commitSeqOf(file)).toBe(commitBefore);
+        expect(shape(await store.materialize())).toStrictEqual(
+          shape(seedRows(SEED_BYTES)),
+        );
+        expect(last(observed.applied)?.tokens).toBe(startTokens);
+        expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
+        expect(store.getLength()).toBe(SEED);
+        expect(observed.ranges).toStrictEqual([]);
+        // The aborted group stays an uncommitted tail; a reader sees only the committed version.
+        const reader = await openJournalReadOnly(file);
+        try {
+          expect(reader.trailer?.rootAggregate.rows).toBe(SEED);
+        } finally {
+          await reader.close();
+        }
+      } finally {
+        await dispose();
+      }
+    },
+  );
 
   describe('with publishBatch', () => {
     async function readAll(source: HistoryBatchRowSource): Promise<IContent[]> {
@@ -393,125 +417,145 @@ describe('JournalHistoryStore.publishDetached', () => {
       return rows;
     }
 
-    it('announces the replacement once, after its trailer is acked, with the committed rows', async () => {
-      const file = path.join(directory(), 'batch-replace.llxj');
-      const { store, host, observed, dispose } = await openJournal(file);
-      try {
-        const before = await commitSeqOf(file);
-        await store.publishDetached(
-          { transform: keepHeadThenReplace },
-          host,
-          undefined,
-          { publishBatch: true },
-        );
-        const after = await commitSeqOf(file);
-        if (after === undefined) throw new Error('Nothing was committed');
+    it.skipIf(journalBackendSelected)(
+      'announces the replacement once, after its trailer is acked, with the committed rows',
+      async () => {
+        const file = path.join(directory(), 'batch-replace.llxj');
+        const { store, host, observed, dispose } = await openJournal(file);
+        try {
+          const before = await commitSeqOf(file);
+          await store.publishDetached(
+            { transform: keepHeadThenReplace },
+            host,
+            undefined,
+            { publishBatch: true },
+          );
+          const after = await commitSeqOf(file);
+          if (after === undefined) throw new Error('Nothing was committed');
 
-        expect(after).toBeGreaterThan(before ?? 0);
-        expect(observed.batches).toHaveLength(1);
-        const [batch] = observed.batches;
-        expect(batch.ackedCommitSeq).toBe(after);
-        expect(batch.source.length).toBe(5);
-        const committed = shape(await store.materialize());
-        expect(shape(await readAll(batch.source))).toStrictEqual(committed);
-      } finally {
-        await dispose();
-      }
-    });
+          expect(after).toBeGreaterThan(before ?? 0);
+          expect(observed.batches).toHaveLength(1);
+          const [batch] = observed.batches;
+          expect(batch.ackedCommitSeq).toBe(after);
+          expect(batch.source.length).toBe(5);
+          const committed = shape(await store.materialize());
+          expect(shape(await readAll(batch.source))).toStrictEqual(committed);
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('reads the rows of the announced version after later groups are published', async () => {
-      const file = path.join(directory(), 'batch-pinned.llxj');
-      const { store, host, observed, dispose } = await openJournal(file);
-      try {
-        await store.publishDetached(
-          { transform: keepHeadThenReplace },
-          host,
-          undefined,
-          { publishBatch: true },
-        );
-        const announced = shape(await store.materialize());
-        store.apply({ kind: 'content', content: detachedRow(90, SEED_BYTES) });
-        await store.waitForDurable();
+    it.skipIf(journalBackendSelected)(
+      'reads the rows of the announced version after later groups are published',
+      async () => {
+        const file = path.join(directory(), 'batch-pinned.llxj');
+        const { store, host, observed, dispose } = await openJournal(file);
+        try {
+          await store.publishDetached(
+            { transform: keepHeadThenReplace },
+            host,
+            undefined,
+            { publishBatch: true },
+          );
+          const announced = shape(await store.materialize());
+          store.apply({
+            kind: 'content',
+            content: detachedRow(90, SEED_BYTES),
+          });
+          await store.waitForDurable();
 
-        const [batch] = observed.batches;
-        expect(shape(await readAll(batch.source))).toStrictEqual(announced);
-        expect(shape(await readAll(batch.source))).toStrictEqual(announced);
-      } finally {
-        await dispose();
-      }
-    });
+          const [batch] = observed.batches;
+          expect(shape(await readAll(batch.source))).toStrictEqual(announced);
+          expect(shape(await readAll(batch.source))).toStrictEqual(announced);
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('announces only the appended rows in append mode, once, after the last ack', async () => {
-      const file = path.join(directory(), 'batch-append.llxj');
-      const { store, host, observed, dispose } = await openJournal(file);
-      try {
-        const appendTwo: DetachedHistoryTransform = async (_source, sink) => {
-          await sink.appendValue(detachedRow(60, SEED_BYTES));
-          await sink.appendValue(detachedRow(61, SEED_BYTES));
-        };
-        await store.publishDetached(
-          { transform: appendTwo, append: true },
-          host,
-          undefined,
-          { publishBatch: true },
-        );
-        const after = await commitSeqOf(file);
-        if (after === undefined) throw new Error('Nothing was committed');
+    it.skipIf(journalBackendSelected)(
+      'announces only the appended rows in append mode, once, after the last ack',
+      async () => {
+        const file = path.join(directory(), 'batch-append.llxj');
+        const { store, host, observed, dispose } = await openJournal(file);
+        try {
+          const appendTwo: DetachedHistoryTransform = async (_source, sink) => {
+            await sink.appendValue(detachedRow(60, SEED_BYTES));
+            await sink.appendValue(detachedRow(61, SEED_BYTES));
+          };
+          await store.publishDetached(
+            { transform: appendTwo, append: true },
+            host,
+            undefined,
+            { publishBatch: true },
+          );
+          const after = await commitSeqOf(file);
+          if (after === undefined) throw new Error('Nothing was committed');
 
-        expect(observed.batches).toHaveLength(1);
-        const [batch] = observed.batches;
-        expect(batch.ackedCommitSeq).toBe(after);
-        expect(batch.source.length).toBe(2);
-        const all = shape(await store.materialize());
-        expect(shape(await readAll(batch.source))).toStrictEqual(all.slice(-2));
-      } finally {
-        await dispose();
-      }
-    });
+          expect(observed.batches).toHaveLength(1);
+          const [batch] = observed.batches;
+          expect(batch.ackedCommitSeq).toBe(after);
+          expect(batch.source.length).toBe(2);
+          const all = shape(await store.materialize());
+          expect(shape(await readAll(batch.source))).toStrictEqual(
+            all.slice(-2),
+          );
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('announces nothing when the transform fails', async () => {
-      const file = path.join(directory(), 'batch-failure.llxj');
-      const { store, host, observed, dispose } = await openJournal(file);
-      try {
-        const boom = new Error('transform failed after one row');
-        const failing: DetachedHistoryTransform = async (_source, sink) => {
-          await sink.appendValue(detachedRow(50, SEED_BYTES));
-          throw boom;
-        };
-        await expect(
-          store.publishDetached({ transform: failing }, host, undefined, {
-            publishBatch: true,
-          }),
-        ).rejects.toBe(boom);
-        expect(observed.batches).toHaveLength(0);
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'announces nothing when the transform fails',
+      async () => {
+        const file = path.join(directory(), 'batch-failure.llxj');
+        const { store, host, observed, dispose } = await openJournal(file);
+        try {
+          const boom = new Error('transform failed after one row');
+          const failing: DetachedHistoryTransform = async (_source, sink) => {
+            await sink.appendValue(detachedRow(50, SEED_BYTES));
+            throw boom;
+          };
+          await expect(
+            store.publishDetached({ transform: failing }, host, undefined, {
+              publishBatch: true,
+            }),
+          ).rejects.toBe(boom);
+          expect(observed.batches).toHaveLength(0);
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('announces nothing when the publication is cancelled before its ack', async () => {
-      const file = path.join(directory(), 'batch-cancelled.llxj');
-      const { store, host, observed, dispose } = await openJournal(file);
-      try {
-        const controller = new AbortController();
-        const cancelling: DetachedHistoryTransform = async (source, sink) => {
-          for await (const row of source.streamRows()) {
-            await sink.appendValue(row);
-          }
-          await sink.appendValue(detachedRow(70, SEED_BYTES));
-          controller.abort(new Error('cancelled before the ack'));
-        };
-        await expect(
-          store.publishDetached({ transform: cancelling }, host, undefined, {
-            publishBatch: true,
-            signal: controller.signal,
-          }),
-        ).rejects.toThrow('cancelled before the ack');
-        expect(observed.batches).toHaveLength(0);
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'announces nothing when the publication is cancelled before its ack',
+      async () => {
+        const file = path.join(directory(), 'batch-cancelled.llxj');
+        const { store, host, observed, dispose } = await openJournal(file);
+        try {
+          const controller = new AbortController();
+          const cancelling: DetachedHistoryTransform = async (source, sink) => {
+            for await (const row of source.streamRows()) {
+              await sink.appendValue(row);
+            }
+            await sink.appendValue(detachedRow(70, SEED_BYTES));
+            controller.abort(new Error('cancelled before the ack'));
+          };
+          await expect(
+            store.publishDetached({ transform: cancelling }, host, undefined, {
+              publishBatch: true,
+              signal: controller.signal,
+            }),
+          ).rejects.toThrow('cancelled before the ack');
+          expect(observed.batches).toHaveLength(0);
+        } finally {
+          await dispose();
+        }
+      },
+    );
   });
 
   describe('checkpoints', () => {
@@ -524,114 +568,129 @@ describe('JournalHistoryStore.publishDetached', () => {
       return rows;
     }
 
-    it('hands out the committed rows as an async source that later publications do not change', async () => {
-      const { store, host, dispose } = await openJournal(
-        path.join(directory(), 'checkpoint.llxj'),
-      );
-      try {
-        await store.withCheckpoint(host, now, async (checkpoint) => {
-          expect(checkpoint.length).toBe(SEED);
-          await store.publishDetached(
-            { transform: keepFirstThree },
-            host,
-            undefined,
-            {},
-          );
-          expect(store.getLength()).toBe(3);
-          const seen = shape(await readAll(checkpoint));
-          expect(seen).toStrictEqual(shape(seedRows(SEED_BYTES)));
-          expect(shape(await readAll(checkpoint))).toStrictEqual(seen);
-        });
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'hands out the committed rows as an async source that later publications do not change',
+      async () => {
+        const { store, host, dispose } = await openJournal(
+          path.join(directory(), 'checkpoint.llxj'),
+        );
+        try {
+          await store.withCheckpoint(host, now, async (checkpoint) => {
+            expect(checkpoint.length).toBe(SEED);
+            await store.publishDetached(
+              { transform: keepFirstThree },
+              host,
+              undefined,
+              {},
+            );
+            expect(store.getLength()).toBe(3);
+            const seen = shape(await readAll(checkpoint));
+            expect(seen).toStrictEqual(shape(seedRows(SEED_BYTES)));
+            expect(shape(await readAll(checkpoint))).toStrictEqual(seen);
+          });
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('does not run the callback when the signal is already aborted', async () => {
-      const { store, host, dispose } = await openJournal(
-        path.join(directory(), 'checkpoint-abort.llxj'),
-      );
-      try {
-        const controller = new AbortController();
-        controller.abort(new Error('aborted before the checkpoint'));
-        let ran = false;
-        await expect(
-          store.withCheckpoint(
-            host,
-            now,
-            async () => {
-              ran = true;
-            },
-            controller.signal,
-          ),
-        ).rejects.toThrow('aborted before the checkpoint');
-        expect(ran).toBe(false);
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'does not run the callback when the signal is already aborted',
+      async () => {
+        const { store, host, dispose } = await openJournal(
+          path.join(directory(), 'checkpoint-abort.llxj'),
+        );
+        try {
+          const controller = new AbortController();
+          controller.abort(new Error('aborted before the checkpoint'));
+          let ran = false;
+          await expect(
+            store.withCheckpoint(
+              host,
+              now,
+              async () => {
+                ran = true;
+              },
+              controller.signal,
+            ),
+          ).rejects.toThrow('aborted before the checkpoint');
+          expect(ran).toBe(false);
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('restores the rows, tokens, spans and chronology of the checkpoint with one restore', async () => {
-      const file = path.join(directory(), 'rollback.llxj');
-      const { store, host, stamper, observed, startTokens, dispose } =
-        await openJournal(file);
-      try {
-        const chronologyBefore = stamper.snapshot();
-        await store.withRollbackCheckpoint(host, now, async (restore) => {
-          await store.publishDetached(
-            { transform: compressKeepingTail },
-            host,
-            undefined,
-            {},
-          );
-          expect(store.getLength()).toBe(4);
-          const commitAfterCompression = await commitSeqOf(file);
+    it.skipIf(journalBackendSelected)(
+      'restores the rows, tokens, spans and chronology of the checkpoint with one restore',
+      async () => {
+        const file = path.join(directory(), 'rollback.llxj');
+        const { store, host, stamper, observed, startTokens, dispose } =
+          await openJournal(file);
+        try {
+          const chronologyBefore = stamper.snapshot();
+          await store.withRollbackCheckpoint(host, now, async (restore) => {
+            await store.publishDetached(
+              { transform: compressKeepingTail },
+              host,
+              undefined,
+              {},
+            );
+            expect(store.getLength()).toBe(4);
+            const commitAfterCompression = await commitSeqOf(file);
 
-          await restore();
+            await restore();
 
-          expect(shape(await store.materialize())).toStrictEqual(
-            shape(seedRows(SEED_BYTES)),
-          );
-          expect(last(observed.applied)?.tokens).toBe(startTokens);
-          expect(last(observed.applied)?.spans).toStrictEqual([]);
-          expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
-          expect(last(observed.ranges)).toStrictEqual(
-            (await viaOldStore(keepAll)).range,
-          );
-          expect(await commitSeqOf(file)).toBe(
-            (commitAfterCompression ?? 0) + 1,
-          );
-        });
-      } finally {
-        await dispose();
-      }
-    });
+            expect(shape(await store.materialize())).toStrictEqual(
+              shape(seedRows(SEED_BYTES)),
+            );
+            expect(last(observed.applied)?.tokens).toBe(startTokens);
+            expect(last(observed.applied)?.spans).toStrictEqual([]);
+            expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
+            expect(last(observed.ranges)).toStrictEqual(
+              (await viaOldStore(keepAll)).range,
+            );
+            expect(await commitSeqOf(file)).toBe(
+              (commitAfterCompression ?? 0) + 1,
+            );
+          });
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('writes nothing when restoring a checkpoint nothing was published after', async () => {
-      const file = path.join(directory(), 'rollback-idle.llxj');
-      const { store, host, dispose } = await openJournal(file);
-      try {
-        const before = await commitSeqOf(file);
-        await store.withRollbackCheckpoint(host, now, (restore) => restore());
-        expect(await commitSeqOf(file)).toBe(before);
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'writes nothing when restoring a checkpoint nothing was published after',
+      async () => {
+        const file = path.join(directory(), 'rollback-idle.llxj');
+        const { store, host, dispose } = await openJournal(file);
+        try {
+          const before = await commitSeqOf(file);
+          await store.withRollbackCheckpoint(host, now, (restore) => restore());
+          expect(await commitSeqOf(file)).toBe(before);
+        } finally {
+          await dispose();
+        }
+      },
+    );
 
-    it('refuses to restore once the checkpoint scope has closed', async () => {
-      const { store, host, dispose } = await openJournal(
-        path.join(directory(), 'rollback-closed.llxj'),
-      );
-      try {
-        let escaped: (() => Promise<void>) | undefined;
-        await store.withRollbackCheckpoint(host, now, async (restore) => {
-          escaped = restore;
-        });
-        await expect(escaped?.()).rejects.toThrow('closed');
-      } finally {
-        await dispose();
-      }
-    });
+    it.skipIf(journalBackendSelected)(
+      'refuses to restore once the checkpoint scope has closed',
+      async () => {
+        const { store, host, dispose } = await openJournal(
+          path.join(directory(), 'rollback-closed.llxj'),
+        );
+        try {
+          let escaped: (() => Promise<void>) | undefined;
+          await store.withRollbackCheckpoint(host, now, async (restore) => {
+            escaped = restore;
+          });
+          await expect(escaped?.()).rejects.toThrow('closed');
+        } finally {
+          await dispose();
+        }
+      },
+    );
   });
 });

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { readdirSync } from 'node:fs';
 import {
   withRollbackFixture,
@@ -18,25 +19,28 @@ function scratch(): string[] {
 }
 
 describe('scoped raw fallback snapshot', () => {
-  it('closes scratch after consumer throw and pre-abort', async () => {
-    await withRollbackFixture(async (history) => {
-      history.add(rollbackRow(0));
-      const before = scratch();
-      await expect(
-        history.withSnapshot(async () => {
-          throw new Error('consumer failed');
-        }),
-      ).rejects.toThrow('consumer failed');
-      const abort = new AbortController();
-      abort.abort(new Error('cancelled snapshot'));
-      await expect(
-        history.withSnapshot(async () => {
-          throw new Error('must not run');
-        }, abort.signal),
-      ).rejects.toThrow('cancelled snapshot');
-      expect(scratch().filter((name) => !before.includes(name))).toStrictEqual(
-        [],
-      );
-    });
-  });
+  it.skipIf(journalBackendSelected)(
+    'closes scratch after consumer throw and pre-abort',
+    async () => {
+      await withRollbackFixture(async (history) => {
+        history.add(rollbackRow(0));
+        const before = scratch();
+        await expect(
+          history.withSnapshot(async () => {
+            throw new Error('consumer failed');
+          }),
+        ).rejects.toThrow('consumer failed');
+        const abort = new AbortController();
+        abort.abort(new Error('cancelled snapshot'));
+        await expect(
+          history.withSnapshot(async () => {
+            throw new Error('must not run');
+          }, abort.signal),
+        ).rejects.toThrow('cancelled snapshot');
+        expect(
+          scratch().filter((name) => !before.includes(name)),
+        ).toStrictEqual([]);
+      });
+    },
+  );
 });

@@ -9,3 +9,12 @@ export async function collectRawHistory(history: {
   for await (const row of history.streamRawHistory()) rows.push(row);
   return rows;
 }
+
+/** The raw rows once every queued mutation is durable, for tests that run on either backend. */
+export async function rawHistoryAfterCommit(history: {
+  waitForCommit(): Promise<void>;
+  streamRawHistory(): AsyncIterable<IContent>;
+}): Promise<IContent[]> {
+  await history.waitForCommit();
+  return collectRawHistory(history);
+}

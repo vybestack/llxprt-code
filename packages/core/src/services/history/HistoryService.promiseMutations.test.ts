@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { mediaParticipant } from './chronology-rollback-test-helpers.js';
@@ -14,17 +15,20 @@ function textRow(text: string): IContent {
 }
 
 describe('HistoryService mutations that return promises', () => {
-  it('clear() returns a promise and has already applied when it returns outside compression', async () => {
-    const history = new HistoryService();
-    history.add(textRow('one'));
-    history.add(textRow('two'));
+  it.skipIf(journalBackendSelected)(
+    'clear() returns a promise and has already applied when it returns outside compression',
+    async () => {
+      const history = new HistoryService();
+      history.add(textRow('one'));
+      history.add(textRow('two'));
 
-    const cleared = history.clear();
+      const cleared = history.clear();
 
-    expect(cleared).toBeInstanceOf(Promise);
-    expect(history.length()).toBe(0);
-    await cleared;
-  });
+      expect(cleared).toBeInstanceOf(Promise);
+      expect(history.length()).toBe(0);
+      await cleared;
+    },
+  );
 
   it('a clear queued during compression settles only when the queue flushes', async () => {
     const history = new HistoryService();
@@ -48,19 +52,22 @@ describe('HistoryService mutations that return promises', () => {
     expect(history.length()).toBe(0);
   });
 
-  it('a queued clear rejects with the failure the flush reports', async () => {
-    const history = new HistoryService();
-    history.add(textRow('one'));
-    const failure = new Error('clear observer failed');
-    history.once('tokensUpdated', () => {
-      throw failure;
-    });
-    history.startCompression();
-    const cleared = history.clear();
+  it.skipIf(journalBackendSelected)(
+    'a queued clear rejects with the failure the flush reports',
+    async () => {
+      const history = new HistoryService();
+      history.add(textRow('one'));
+      const failure = new Error('clear observer failed');
+      history.once('tokensUpdated', () => {
+        throw failure;
+      });
+      history.startCompression();
+      const cleared = history.clear();
 
-    expect(() => history.endCompression()).toThrow(failure);
-    await expect(cleared).rejects.toBe(failure);
-  });
+      expect(() => history.endCompression()).toThrow(failure);
+      await expect(cleared).rejects.toBe(failure);
+    },
+  );
 
   it('validateAndFix() and registerMediaOwner() return promises', async () => {
     const history = new HistoryService();

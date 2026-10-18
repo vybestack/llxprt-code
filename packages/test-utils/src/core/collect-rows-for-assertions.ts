@@ -2,6 +2,7 @@
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 type AssertRows = (rows: readonly IContent[]) => void | Promise<void>;
@@ -25,18 +26,30 @@ export async function collectRowsForAssertions(
   }
 }
 
+interface CommittedHistory {
+  waitForCommit(): Promise<void>;
+  journalPath(): string | null;
+  streamRawHistory(): AsyncIterable<IContent>;
+}
+
 /**
  * The rows the recorder's file holds once everything is durable, read apart
  * from the history service: the old backend's JSONL file through the resolver,
- * the journal backend's file through the journal store.
+ * the journal backend's file through the journal store. A journal history with
+ * no recorder keeps its rows in an unlinked file that has no path, so the
+ * service's own committed rows are the only way to read them.
  */
-async function* journalRowsForAssertions(history: {
-  waitForCommit(): Promise<void>;
-  journalPath(): string | null;
-}): AsyncGenerator<IContent> {
+async function* journalRowsForAssertions(
+  history: CommittedHistory,
+): AsyncGenerator<IContent> {
   await history.waitForCommit();
   const path = history.journalPath();
-  if (path === null) throw new Error('Expected a committed test journal');
+  if (path === null) {
+    if (selectBackend() !== 'journal')
+      throw new Error('Expected a committed test journal');
+    yield* history.streamRawHistory();
+    return;
+  }
   if (isJournalFileName(path)) {
     yield* journalFileRows(path);
     return;
@@ -50,10 +63,7 @@ async function* journalRowsForAssertions(history: {
 }
 
 export function collectJournalRowsForAssertions(
-  history: {
-    waitForCommit(): Promise<void>;
-    journalPath(): string | null;
-  },
+  history: CommittedHistory,
   assertRows: AssertRows,
 ): Promise<void> {
   return collectRowsForAssertions(

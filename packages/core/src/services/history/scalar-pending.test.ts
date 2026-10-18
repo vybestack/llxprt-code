@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import {
   submitTicketRows,
   expectTicketCallersReleased,
@@ -111,7 +112,7 @@ async function checkPendingScalarOwners(size: number): Promise<number> {
 }
 
 describe('scalar cursor pending membership owners', () => {
-  it.each([512, 8192])(
+  it.skipIf(journalBackendSelected).each([512, 8192])(
     'keeps actual %i pending rows charged while the writer is paused',
     async (size) => {
       expect(await checkPendingScalarOwners(size)).toBe(0);

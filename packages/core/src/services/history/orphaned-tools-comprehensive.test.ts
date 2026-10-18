@@ -1,5 +1,5 @@
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /*
  * @license
@@ -45,7 +45,7 @@ function facadeCallback0(): void {
   historyService = new HistoryService();
 }
 
-function facadeCallback1(): void {
+async function facadeCallback1(): Promise<void> {
   const toolCallId = historyService.generateHistoryId(
     'turn-test',
     0,
@@ -93,7 +93,7 @@ function facadeCallback1(): void {
     blocks: [{ type: 'text', text: 'Thanks' }],
   });
 
-  const curated = curatedHistoryForTest(historyService);
+  const curated = await curatedHistoryAfterCommit(historyService);
 
   // Should have exactly ONE tool response (the real one, no synthetics)
   const toolResponses = curated.filter((c) => c.speaker === 'tool');
@@ -109,7 +109,7 @@ function facadeCallback1(): void {
   expect(toolResponses[0].metadata?.synthetic).toBeUndefined();
 }
 
-function facadeCallback2(): void {
+async function facadeCallback2(): Promise<void> {
   const toolCallIds = [
     historyService.generateHistoryId('turn-test', 0, 'openai', 'raw-0', 'tool'),
     historyService.generateHistoryId('turn-test', 1, 'openai', 'raw-1', 'tool'),
@@ -150,7 +150,7 @@ function facadeCallback2(): void {
     });
   }
 
-  const curated = curatedHistoryForTest(historyService);
+  const curated = await curatedHistoryAfterCommit(historyService);
 
   const toolResponses = curated.filter((c) => c.speaker === 'tool');
   expect(toolResponses).toHaveLength(3);
@@ -255,8 +255,8 @@ async function facadeCallback4(): Promise<void> {
   expect(() => JSON.stringify(curated3)).not.toThrow();
 }
 
-function facadeCallback5(): void {
-  const curated = curatedHistoryForTest(historyService);
+async function facadeCallback5(): Promise<void> {
+  const curated = await curatedHistoryAfterCommit(historyService);
   expect(curated).toStrictEqual([]);
   expect(() => JSON.stringify(curated)).not.toThrow();
 }

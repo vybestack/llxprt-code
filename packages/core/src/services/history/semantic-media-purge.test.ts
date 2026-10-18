@@ -1,4 +1,4 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
@@ -110,9 +110,9 @@ function requireAggregateError(error: unknown): AggregateError {
   return error;
 }
 
-function expectOriginalHistory(history: HistoryService): void {
+async function expectOriginalHistory(history: HistoryService): Promise<void> {
   expect(
-    testHistory(history).map((entry) => ({
+    (await rawHistoryAfterCommit(history)).map((entry) => ({
       speaker: entry.speaker,
       id: entry.metadata?.id,
       responsesStored: entry.metadata?.responsesStored === true,
@@ -179,7 +179,7 @@ describe('SemanticMediaPurgeStreamCoordinator: does nothing until an explicit tr
 
     const transaction = await begin(coordinator, { mode: 'remove' });
 
-    expectOriginalHistory(history);
+    await expectOriginalHistory(history);
     expect((await collect(transaction?.candidate))[2]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
       secondImage,
@@ -455,7 +455,7 @@ describe('SemanticMediaPurgeStreamCoordinator: leaves history and frontier uncha
       const committed = await coordinator.commit(transaction, outcome);
 
       expect(committed).toBe(false);
-      expectOriginalHistory(history);
+      await expectOriginalHistory(history);
       expect(coordinator.frontier).toStrictEqual({
         contentIndex: 0,
         blockIndex: 0,
@@ -637,7 +637,7 @@ describe('SemanticMediaPurgeStreamCoordinator: rolls back when durable session s
     await expect(coordinator.commit(transaction, success)).rejects.toThrow(
       'recording unavailable',
     );
-    expectOriginalHistory(history);
+    await expectOriginalHistory(history);
     expect(coordinator.frontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
@@ -674,7 +674,7 @@ describe('SemanticMediaPurgeStreamCoordinator: compensates durable state when li
       'listener failure',
     );
 
-    expectOriginalHistory(history);
+    await expectOriginalHistory(history);
     expect(persisted).toHaveLength(2);
     expect(persisted[0]?.history).toBe(transaction.candidate);
     expect(persisted[1]?.history).toBe(transaction.base);
@@ -756,7 +756,7 @@ describe('SemanticMediaPurgeStreamCoordinator: reports both live replacement and
       'Error: listener failure',
       'Error: compensation unavailable',
     ]);
-    expectOriginalHistory(history);
+    await expectOriginalHistory(history);
     expect(coordinator.frontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,

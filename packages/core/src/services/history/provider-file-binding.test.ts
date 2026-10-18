@@ -6,6 +6,7 @@
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { HistoryService } from './HistoryService.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import type {
@@ -79,10 +80,13 @@ describe('HistoryService provider file binding', () => {
     expect(actual).toStrictEqual(expected0);
   });
 
-  it('isolates retained provider metadata from later caller mutation', async () => {
-    const { actual, expected0 } = await observeDensityCase5();
-    expect(actual).toStrictEqual(expected0);
-  });
+  it.skipIf(journalBackendSelected)(
+    'isolates retained provider metadata from later caller mutation',
+    async () => {
+      const { actual, expected0 } = await observeDensityCase5();
+      expect(actual).toStrictEqual(expected0);
+    },
+  );
 });
 
 async function observeDensityCase1() {

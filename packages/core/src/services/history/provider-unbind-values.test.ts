@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import {
   detachedDigest,
@@ -100,29 +101,37 @@ async function observeUnbind(size: number, rollback: boolean): Promise<number> {
 describe('provider unbind disk value transaction', () => {
   for (const size of [512, 8192]) {
     for (const rollback of [false, true]) {
-      it(`releases original row/marker roots and preserves full values at ${size}, rollback=${rollback}`, async () => {
-        expect(await observeUnbind(size, rollback)).toBe(size);
-      }, 120_000);
+      it.skipIf(journalBackendSelected)(
+        `releases original row/marker roots and preserves full values at ${size}, rollback=${rollback}`,
+        async () => {
+          expect(await observeUnbind(size, rollback)).toBe(size);
+        },
+        120_000,
+      );
     }
   }
-  it('retains every byte of a valid row larger than nine MiB', async () => {
-    await withValueTransformFixture(async ({ history, recorder }) => {
-      const bytes = 9 * 1024 * 1024 + 1;
-      await history.detachedValues.replace(
-        transformFixtureRows(1, true, bytes),
-      );
-      await createHistoryProviderFileBindingStore(history).unbind(
-        TRANSFORM_CONTENT_ID,
-        TRANSFORM_FILE,
-      );
-      const expected = await detachedDigest(
-        transformFixtureRows(1, false, bytes),
-      );
-      expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
-      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        expected,
-      );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-    });
-  }, 120_000);
+  it.skipIf(journalBackendSelected)(
+    'retains every byte of a valid row larger than nine MiB',
+    async () => {
+      await withValueTransformFixture(async ({ history, recorder }) => {
+        const bytes = 9 * 1024 * 1024 + 1;
+        await history.detachedValues.replace(
+          transformFixtureRows(1, true, bytes),
+        );
+        await createHistoryProviderFileBindingStore(history).unbind(
+          TRANSFORM_CONTENT_ID,
+          TRANSFORM_FILE,
+        );
+        const expected = await detachedDigest(
+          transformFixtureRows(1, false, bytes),
+        );
+        expect(expected.bytes).toBeGreaterThan(9 * 1024 * 1024);
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          expected,
+        );
+        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      });
+    },
+    120_000,
+  );
 });

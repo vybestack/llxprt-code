@@ -91,6 +91,19 @@ describe('test infrastructure on both history backends', () => {
         });
       });
 
+      it('reads the rows of a history that has no recorder once they are durable', async () => {
+        const service = new HistoryService();
+        try {
+          service.add(suffixRow(0));
+          service.add(suffixRow(1));
+          await collectJournalRowsForAssertions(service, (rows) => {
+            expect(rows).toStrictEqual([suffixRow(0), suffixRow(1)]);
+          });
+        } finally {
+          await service.dispose();
+        }
+      });
+
       it('guards the eager read of the service journal and restores it', async () => {
         await withSuffixFixture(2, async (history) => {
           const journal: object = Object(Reflect.get(history, 'journal'));

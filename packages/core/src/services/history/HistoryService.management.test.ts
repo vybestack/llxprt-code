@@ -1,9 +1,9 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {
   collectRowsForAssertions,
   collectJournalRowsForAssertions,
 } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /**
  * Copyright 2025 Vybestack LLC
@@ -208,13 +208,13 @@ async function managementCase3(
 async function managementCase4(service: HistoryService): Promise<void> {
   expect(service.isEmpty()).toBe(true);
   expect(service.length()).toBe(0);
-  expect(testHistory(service)).toStrictEqual([]);
-  expect(curatedHistoryForTest(service)).toStrictEqual([]);
+  expect(await rawHistoryAfterCommit(service)).toStrictEqual([]);
+  expect(await curatedHistoryAfterCommit(service)).toStrictEqual([]);
   expect(await service.pop()).toBeUndefined();
   expect(await service.getLastUserContent()).toBeUndefined();
 }
 
-function managementCase5(service: HistoryService): IContent[] {
+async function managementCase5(service: HistoryService): Promise<IContent[]> {
   // Add AI message with thinking
   service.add({
     speaker: 'ai',
@@ -228,12 +228,12 @@ function managementCase5(service: HistoryService): IContent[] {
     ],
   });
 
-  const history = testHistory(service);
+  const history = await rawHistoryAfterCommit(service);
   expect(history).toHaveLength(1);
   expect(history[0].blocks).toHaveLength(2);
 
   // Curated history might filter hidden thinking
-  const curated = curatedHistoryForTest(service);
+  const curated = await curatedHistoryAfterCommit(service);
   // Implementation could choose to filter hidden thinking blocks
   return curated;
 }
@@ -251,7 +251,7 @@ function managementCase6(service: HistoryService): void {
   });
 }
 
-function managementCase7(service: HistoryService): IContent[] {
+async function managementCase7(service: HistoryService): Promise<IContent[]> {
   service.add({
     speaker: 'human',
     blocks: [
@@ -266,7 +266,7 @@ function managementCase7(service: HistoryService): IContent[] {
     ],
   });
 
-  const history = testHistory(service);
+  const history = await rawHistoryAfterCommit(service);
   expect(history).toHaveLength(1);
   expect(history[0].blocks).toHaveLength(2);
   return history;
@@ -496,17 +496,17 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(await service.getLastAIContent()).toBeUndefined();
     });
 
-    it('should handle thinking blocks appropriately', () => {
-      expect(managementCase5(service)).toHaveLength(1);
+    it('should handle thinking blocks appropriately', async () => {
+      expect(await managementCase5(service)).toHaveLength(1);
     });
 
-    it('should treat unsigned Anthropic thinking blocks as invalid content', () => {
+    it('should treat unsigned Anthropic thinking blocks as invalid content', async () => {
       managementCase6(service);
-      expect(curatedHistoryForTest(service)).toStrictEqual([]);
+      expect(await curatedHistoryAfterCommit(service)).toStrictEqual([]);
     });
 
-    it('should handle media blocks', () => {
-      expect(managementCase7(service)[0].blocks[1].type).toBe('media');
+    it('should handle media blocks', async () => {
+      expect((await managementCase7(service))[0].blocks[1].type).toBe('media');
     });
   });
   describe('Orphan tool responses handling', () => {

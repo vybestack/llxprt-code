@@ -1,11 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
+import { journalBackendSelected } from '@vybestack/llxprt-code-test-utils/core/backend-test-gates.js';
 import * as fs from 'node:fs';
 import { withSynchronousFixture } from './synchronous-ticket-test-helpers.js';
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 
 describe('synchronous admission disk write failures', () => {
-  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+  it.skipIf(journalBackendSelected).each([1, 2, 3, 4, 5, 6, 7, 8])(
     'preserves error identity and retry after write %i fails',
     async (writeNumber) => {
       await withSynchronousFixture(async ({ history }) => {

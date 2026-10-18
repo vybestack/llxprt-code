@@ -49,20 +49,34 @@ export interface SuffixFixtureGraph<Service, Ownership, Counters> {
   seed(rows: Iterable<IContent>): Promise<void>;
 }
 
+const SEED_BATCH_ROWS = 256;
+
 /**
  * How a fixture's rows reach its history on the selected backend. The old
  * backend reads a history out of the recorder's file, so the rows are
  * committed to the recorder before the first read. The journal backend writes
  * the recorder as a mirror of the history, so the rows are added to the
- * history and the recorder follows.
+ * history and the recorder follows. Each journal operation is its own durable
+ * commit, so the rows go in batches: one commit per batch, and no more than a
+ * batch of rows in memory at once.
  */
 export function suffixSeeder(
   recording: SessionRecordingPort,
-  service: { add(row: IContent): void; waitForCommit(): Promise<void> },
+  service: {
+    addBatch(rows: readonly IContent[]): Promise<void>;
+    waitForCommit(): Promise<void>;
+  },
 ): (rows: Iterable<IContent>) => Promise<void> {
   if (selectBackend() === 'journal') {
     return async (rows) => {
-      for (const row of rows) service.add(row);
+      let chunk: IContent[] = [];
+      for (const row of rows) {
+        chunk.push(row);
+        if (chunk.length < SEED_BATCH_ROWS) continue;
+        await service.addBatch(chunk);
+        chunk = [];
+      }
+      if (chunk.length > 0) await service.addBatch(chunk);
       await service.waitForCommit();
     };
   }
