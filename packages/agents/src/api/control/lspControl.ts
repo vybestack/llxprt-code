@@ -22,14 +22,6 @@ import type {
 } from '../agent.js';
 import { formatError } from './errorUtils.js';
 
-/**
- * Inspection port supplied by the retained workspace runtime.
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
- */
-export interface LspControlDeps {
-  readonly inspection: WorkspaceLspInspection;
-}
-
 function unavailableServerStatus(
   server: LspServerConfig,
   reason?: string,
@@ -81,7 +73,7 @@ function projectConfiguredStatuses(
 }
 
 export class LspControl implements AgentLspControl {
-  constructor(private readonly deps: LspControlDeps) {}
+  constructor(private readonly inspection: WorkspaceLspInspection) {}
 
   async status(): Promise<LspStatusSnapshot> {
     try {
@@ -96,7 +88,7 @@ export class LspControl implements AgentLspControl {
   }
 
   private async readStatus(): Promise<LspStatusSnapshot> {
-    const health = await this.deps.inspection.read();
+    const health = await this.inspection.read();
     const lspConfig = health.configured;
 
     if (lspConfig === undefined) {

@@ -56,11 +56,27 @@ describe('Production workspace trust authority', () => {
       events.push(trusted);
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, listener);
-    const agent = await fromConfig({
+    const adoptedSettings1 = createSessionSettingsFixture(config);
+    const agent = await fromConfig(
       config,
-      ...createSessionSettingsFixture(config),
-      trustPort: trust,
-    });
+      adoptedSettings1.settingsService,
+      {},
+      adoptedSettings1.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      trust,
+    );
     let denied: Promise<void> | undefined;
     try {
       expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);

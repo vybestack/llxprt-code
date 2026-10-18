@@ -5,6 +5,10 @@
  */
 
 import { createHmac } from 'node:crypto';
+import {
+  deleteRetainedProviderFile,
+  type ProviderFileRemoteDeletion,
+} from './provider-file-deletion.js';
 import type { ProviderFileReferenceMetadata } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ZeroDataRetentionImplication } from './providerMediaTransportCapabilities.js';
 
@@ -159,6 +163,7 @@ function validateLimit(name: string, value: number): void {
 
 interface LifecycleOptions extends ProviderFileRetentionLimits {
   readonly now?: () => number;
+  readonly proxy?: string;
 }
 
 interface RetainInput {
@@ -168,7 +173,7 @@ interface RetainInput {
   readonly identity: ProviderFileIdentity;
   readonly policy: ProviderFilePolicy;
   readonly scopeId: string;
-  readonly deleteRemote: (fileId: string) => Promise<void>;
+  readonly deleteRemote: ProviderFileRemoteDeletion;
   readonly removeBinding?: (reference: ProviderFileReference) => Promise<void>;
 }
 
@@ -190,7 +195,7 @@ interface LifecycleEntry {
   readonly key: string;
   readonly cacheKey: string;
   readonly identity: ProviderFileIdentity;
-  readonly deleteRemote: (fileId: string) => Promise<void>;
+  readonly deleteRemote: ProviderFileRemoteDeletion;
   readonly removeBinding: (reference: ProviderFileReference) => Promise<void>;
   reference: ProviderFileReference;
   activeLeases: number;
@@ -263,6 +268,7 @@ export class ProviderFileLifecycle {
   >();
   private readonly cleanupWaiters: CleanupWaiter[] = [];
   private readonly now: () => number;
+  private readonly deletionProxy: string | undefined;
   private retainedBytes = 0;
   private mutationQueue: Promise<void> = Promise.resolve();
 
@@ -270,6 +276,7 @@ export class ProviderFileLifecycle {
     validateLimit('maxFiles', options.maxFiles);
     validateLimit('maxBytes', options.maxBytes);
     this.now = options.now ?? Date.now;
+    this.deletionProxy = options.proxy;
   }
 
   retainsScope(scope: ProviderFileScope, scopeId: string): boolean {
@@ -332,7 +339,7 @@ export class ProviderFileLifecycle {
   async restore(
     reference: ProviderFileReference,
     cacheKey: string,
-    deleteRemote: (fileId: string) => Promise<void>,
+    deleteRemote: ProviderFileRemoteDeletion,
     context: ProviderFileRestoreContext,
   ): Promise<
     | {
@@ -349,7 +356,7 @@ export class ProviderFileLifecycle {
   private restoreExclusive(
     reference: ProviderFileReference,
     cacheKey: string,
-    deleteRemote: (fileId: string) => Promise<void>,
+    deleteRemote: ProviderFileRemoteDeletion,
     context: ProviderFileRestoreContext,
   ):
     | {
@@ -720,7 +727,11 @@ export class ProviderFileLifecycle {
     try {
       entry.deletionAttempts += 1;
       await entry.removeBinding(entry.reference);
-      await entry.deleteRemote(entry.reference.fileId);
+      await deleteRetainedProviderFile(
+        entry.deleteRemote,
+        entry.reference.fileId,
+        this.deletionProxy,
+      );
       this.removeEntry(entry);
       return { deleted: 1, retainedRemotely: 0, deferred: 0, failed: 0 };
     } catch (error) {

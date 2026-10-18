@@ -170,21 +170,42 @@ describe('fromConfig bootstrap failure reporting', () => {
 
   it('surfaces a workspace initialization failure as the original error, not a cleanup wrapper', async () => {
     await adoptionOptions(credentials().authority);
-    const options = {
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      credentialAuthority: credentials().authority,
-      providerManager: manager,
-      activation: { provider: 'fake', model: 'fake-model' },
-    };
-    await blockCheckpointConfiguration(options.config.projectHistoryDir);
+    const optionsConfig: Parameters<typeof fromConfig>[0] =
+      builtFactorylessConfig;
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+      builtFactorylessSettings;
+    const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+      builtFactorylessSettingsOwner;
+    const optionsRuntimeFactoryBindings: Parameters<typeof fromConfig>[13] =
+      builtFactorylessFactories;
+    const optionsCredentialAuthority: Parameters<typeof fromConfig>[15] =
+      credentials().authority;
+    const optionsProviderManager: Parameters<typeof fromConfig>[4] = manager;
+    const optionsActivation: NonNullable<
+      Parameters<typeof fromConfig>[2]
+    >['activation'] = { provider: 'fake', model: 'fake-model' };
+    await blockCheckpointConfiguration(optionsConfig.projectHistoryDir);
     const failures = observeCheckpointFailures();
 
-    const outcome = await fromConfig(options).then(
+    const outcome = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      { activation: optionsActivation },
+      optionsSettingsOwner,
+      optionsProviderManager,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      optionsRuntimeFactoryBindings,
+      undefined,
+      optionsCredentialAuthority,
+      builtFactorylessPolicy,
+    ).then(
       () => undefined,
       (error: unknown) => error,
     );
@@ -201,30 +222,33 @@ describe('fromConfig bootstrap failure reporting', () => {
 
   it('keeps the primary message visible when a genuine cleanup failure is also reported', async () => {
     await adoptionOptions(credentials().authority);
-    const options = {
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      credentialAuthority: credentials().authority,
-      providerManager: manager,
-      activation: { provider: 'fake', model: 'fake-model' },
-    };
-    await blockCheckpointConfiguration(options.config.projectHistoryDir);
+    const optionsConfig: Parameters<typeof fromConfig>[0] =
+      builtFactorylessConfig;
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+      builtFactorylessSettings;
+    const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+      builtFactorylessSettingsOwner;
+    const optionsRuntimeFactoryBindings: Parameters<typeof fromConfig>[13] =
+      builtFactorylessFactories;
+    const optionsCredentialAuthority: Parameters<typeof fromConfig>[15] =
+      credentials().authority;
+    const optionsProviderManager: Parameters<typeof fromConfig>[4] = manager;
+    const optionsActivation: NonNullable<
+      Parameters<typeof fromConfig>[2]
+    >['activation'] = { provider: 'fake', model: 'fake-model' };
+    await blockCheckpointConfiguration(optionsConfig.projectHistoryDir);
     const policyWritePath = join(
       Storage.getUserPoliciesDir(),
       'auto-saved.toml.tmp',
     );
     await mkdir(policyWritePath, { recursive: true });
     const mcpRuntime = await assembleMcpRuntime(
-      options.config,
+      optionsConfig,
       undefined,
       {},
       undefined,
       'runtime',
-      options.settingsOwner,
+      optionsSettingsOwner,
     );
     mcpRuntime.messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
@@ -233,13 +257,25 @@ describe('fromConfig bootstrap failure reporting', () => {
     });
     const failures = observeCheckpointFailures();
 
-    const outcome = await fromConfig({
-      ...options,
+    const outcome = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      { activation: optionsActivation, mcpOwnership: 'agent' },
+      optionsSettingsOwner,
+      optionsProviderManager,
+      undefined,
+      mcpRuntime.messageBus,
       mcpRuntime,
-      mcpOwnership: 'agent',
-      policyOwner: mcpRuntime.policyOwner,
-      messageBus: mcpRuntime.messageBus,
-    }).then(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      optionsRuntimeFactoryBindings,
+      undefined,
+      optionsCredentialAuthority,
+      mcpRuntime.policyOwner,
+    ).then(
       () => undefined,
       (error: unknown) => error,
     );

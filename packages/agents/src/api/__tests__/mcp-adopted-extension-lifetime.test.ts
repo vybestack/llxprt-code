@@ -203,14 +203,18 @@ describe('MCP extension lifetime ownership', () => {
     await addExtension(loader);
     const catalog = builtMcp.toolSelection;
 
-    const agent = await fromConfig({
-      settingsOwner: builtSettingsOwner,
-      settingsService: builtSettings,
-      agentClient: builtOwner.getAgentClient(),
-      providerManager: builtManager,
-      config: builtConfig,
-      mcpRuntime: builtMcp,
-    });
+    const agent = await fromConfig(
+      builtConfig,
+      builtSettings,
+      {},
+      builtSettingsOwner,
+      builtManager,
+      undefined,
+      undefined,
+      builtMcp,
+      undefined,
+      builtOwner.getAgentClient(),
+    );
     try {
       await agent.dispose();
       expect(loader.list().map((extension) => extension.name)).toContain(
@@ -362,15 +366,38 @@ describe('MCP extension lifetime ownership', () => {
         await cleanupAfterFailure(primary, builtClose);
       }
 
-      const options = {
-        settingsService: builtSettings,
-        config: builtConfig,
-        providerManager: builtManager,
-        agentClient: builtOwner.getAgentClient(),
-        mcpRuntime: builtMcp,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtManager;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
+        builtOwner.getAgentClient();
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = builtMcp;
+      const first = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        undefined,
+        optionsProviderManager,
+        undefined,
+        undefined,
+        optionsMcpRuntime,
+        undefined,
+        optionsAgentClient,
+      );
+      const second = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        undefined,
+        optionsProviderManager,
+        undefined,
+        undefined,
+        optionsMcpRuntime,
+        undefined,
+        optionsAgentClient,
+      );
       const facades = reverse ? [second, first] : [first, second];
       const operations = builtMcp.extensionOperations;
       try {

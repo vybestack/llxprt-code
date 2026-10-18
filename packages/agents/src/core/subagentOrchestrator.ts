@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { ChildAgentLaunch } from '../api/child-agent-assembly.js';
-import { assembleChildAgent } from '../api/agentRuntimeAssembly.js';
+import { assembleChildAgent } from '../api/child-agent-assembly.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';

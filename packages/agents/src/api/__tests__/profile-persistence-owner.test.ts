@@ -303,15 +303,18 @@ describe('explicit profile persistence', () => {
       const adoptedManager = builtCallerManager;
       const settings = builtCallerSettings;
       settings.setCurrentProfileName('adopted-current');
-      const second = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      const second = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         agents.push(second);
         first.setModelParam('temperature', 0.2);

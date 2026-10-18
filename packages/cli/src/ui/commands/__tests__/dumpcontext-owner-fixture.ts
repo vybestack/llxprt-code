@@ -5,7 +5,7 @@
  */
 import type { CommandContext } from '../types.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { getProviderDumpMetadata } from '../../../runtime/providerInspection.js';
+import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
 export function bindDumpManager(
   context: CommandContext,
   runtimeApi: () => Record<string, unknown>,

@@ -450,18 +450,21 @@ describe('activation bootstrap ownership and queued work', () => {
       await built_operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
       await expect(
-        fromConfig({
-          settingsService: built_builtCallerSettings,
-          agentClient: built_builtCallerOwner.getAgentClient(),
-          providerManager: built_builtCallerManager,
-          config: built_builtCallerConfig,
-          mcpRuntime: built_builtCallerMcp,
-          activation: intent,
-          activationPreflight: {
+        fromConfig(
+          built_builtCallerConfig,
+          built_builtCallerSettings,
+          { activation: intent },
+          undefined,
+          built_builtCallerManager,
+          undefined,
+          undefined,
+          built_builtCallerMcp,
+          {
             operation: built_operation,
             token: result.token,
           },
-        }),
+          built_builtCallerOwner.getAgentClient(),
+        ),
       ).rejects.toThrow('Activation preflight token');
     } finally {
       await other_operation.dispose();

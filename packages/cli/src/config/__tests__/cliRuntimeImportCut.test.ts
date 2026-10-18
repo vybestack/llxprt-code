@@ -1,32 +1,33 @@
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import * as agents from '@vybestack/llxprt-code-agents';
+import {
+  spyOn,
+  afterEach,
+  afterEach as afterFixtureTest,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
+import {
+  createProviderInspection,
+  SessionProviderReads,
+} from '@vybestack/llxprt-code-agents';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
 import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
-import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
 const definitionFixture = installDefinitionRuntimeFixture();
 
-import {
-  assembleWorkspaceMemory,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
-import {
-  afterEach as afterFixtureTest,
-  afterEach,
-  describe,
-  expect,
-  it,
-} from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
@@ -38,19 +39,19 @@ function fixturePaths() {
   return fixtureFilesystem.paths;
 }
 
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { parseArguments } from '../cliArgParser.js';
-import { createTestMergedSettings } from '../settings.js';
+import { finalizeConfig } from '../postConfigRuntime.js';
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
 } from '../profileBootstrap.js';
-import { finalizeConfig } from '../postConfigRuntime.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createTestMergedSettings } from '../settings.js';
 
 const originalArgv = process.argv;
 const roots: string[] = [];
@@ -88,13 +89,19 @@ describe('CLI provider bootstrap across owners', () => {
       '../../ui/hooks/agentStream/__tests__/useSubmitQuery.providerIgnoreCancel.bun.tsx',
       '../../../../agents/src/api/profile-application/switchProfileProvider.ts',
       '../../../../agents/src/api/profileApplicationAssembly.ts',
-      '../../../../agents/src/api/agent-deps.ts',
+      '../../../../agents/src/api/agentImpl.ts',
       '../../../../agents/src/api/__tests__/helpers/profile-owner-fixture.ts',
     ];
     for (const file of files) {
       const source = await readFile(new URL(file, import.meta.url), 'utf8');
       expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
     }
+    await expect(
+      readFile(
+        new URL('../../../../agents/src/api/agent-deps.ts', import.meta.url),
+        'utf8',
+      ),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('keeps same-label pre/post Config handles separate and reapplies CLI overrides after switching', async () => {
@@ -122,9 +129,11 @@ describe('CLI provider bootstrap across owners', () => {
       const runtimeState = await prepareRuntimeForProfile(
         parseBootstrapArgs(args, {
           runtimeId: 'shared-cli-label',
-          credentialAuthority: new CredentialAuthority(),
-          settingsService,
         }),
+        new CredentialAuthority(),
+        settingsService,
+        undefined,
+        undefined,
       );
       const foreground: {
         manager?: RuntimeProviderManager;
@@ -166,50 +175,48 @@ describe('CLI provider bootstrap across owners', () => {
           targetDir: item.root,
           model: item.model,
         });
-        const trust = new WorkspaceTrustLifecycle({
-          localTrust: config.initialWorkspaceTrust,
+        const assemble = agents.assembleAgentActivationBootstrap;
+        const observation = spyOn(
+          agents,
+          'assembleAgentActivationBootstrap',
+        ).mockImplementation(async (...args) => {
+          const operation = await assemble(...args);
+          item.foreground.manager = args[2];
+          return operation;
         });
-        const filesystem = makeFixtureFilesystem({
-          targetDir: item.root,
-          isTrusted: () => trust.isTrustedFolder(),
-        });
-        await finalizeConfig({
-          workspaceTrust: trust,
-          trustCleanup: () => trust.dispose(),
-          memory: assembleWorkspaceMemory(config, filesystem, trust),
-          filesystem,
-          config,
-          runtimeState: item.runtimeState,
-          bootstrapArgs: item.args,
-          argv,
-          settings: {},
-          profileSettingsWithTools: {},
-          profileLoadResult: {
-            profileMergedSettings: createTestMergedSettings(),
-            profileModel: undefined,
-            profileProvider: undefined,
-            profileModelParams: undefined,
-            profileBaseUrl: undefined,
-            loadedProfile: null,
-            profileWarnings: [],
-            profileToLoad: undefined,
-          },
-          providerModelResult: { provider: item.provider, model: item.model },
-          defaultDisabledTools: [],
-          runtimeOverrides: {
-            credentialAuthority: new CredentialAuthority(),
-            settingsService: item.settingsService,
-            sessionSettingsOwner: item.settingsOwner,
-            onProviderManagerReady: (manager) => {
-              item.foreground.manager = manager;
+        await finalizeConfig(
+          {
+            config,
+            runtimeState: item.runtimeState,
+            bootstrapArgs: item.args,
+            argv,
+            settings: {},
+            profileSettingsWithTools: {},
+            profileLoadResult: {
+              profileMergedSettings: createTestMergedSettings(),
+              profileModel: undefined,
+              profileProvider: undefined,
+              profileModelParams: undefined,
+              profileBaseUrl: undefined,
+              loadedProfile: null,
+              profileWarnings: [],
+              profileToLoad: undefined,
             },
-            onActivationBootstrapReady: (operation) => {
-              item.foreground.activation = operation;
-            },
+            providerModelResult: { provider: item.provider, model: item.model },
+            defaultDisabledTools: [],
+
+            approvalMode: ApprovalMode.YOLO,
+            interactive: true,
           },
-          approvalMode: ApprovalMode.YOLO,
-          interactive: true,
-        });
+          item.settingsOwner,
+          (operation) => {
+            item.foreground.activation = operation;
+          },
+          undefined,
+          undefined,
+          true,
+        );
+        observation.mockRestore();
         const manager = item.foreground.manager;
         if (manager === undefined)
           throw new Error('Missing selected foreground manager');
@@ -223,8 +230,10 @@ describe('CLI provider bootstrap across owners', () => {
         );
         expect(
           createRuntimeOwnerFeatures(
-            config,
-            manager,
+            createProviderInspection(
+              () => item.settingsOwner.readSelectedEndpoint(),
+              manager,
+            ),
             fixturePaths().directories,
             async () => {
               throw new Error(
@@ -232,7 +241,6 @@ describe('CLI provider bootstrap across owners', () => {
               );
             },
             item.settingsOwner,
-            item.settingsService,
             definitionFixture(),
             {
               set: () => {
@@ -273,6 +281,14 @@ describe('CLI provider bootstrap across owners', () => {
                 throw new Error('Unexpected credential mutation');
               },
             },
+            () =>
+              new SessionProviderReads(
+                item.settingsOwner,
+                manager,
+                () => config.getModel(),
+                (provider) =>
+                  item.settingsService.getProviderSettings(provider),
+              ).readOpenAIInfo(),
           ).getActiveModelName(),
         ).toBe(item.model);
       }

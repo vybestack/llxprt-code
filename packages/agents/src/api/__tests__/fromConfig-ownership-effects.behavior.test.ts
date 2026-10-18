@@ -156,16 +156,25 @@ describe('fromConfig ownership effects', () => {
   it('keeps a caller token transport usable after disposing its owned OAuth facade', async () => {
     await fixture();
     const store = credentials().authority.createTokenStore();
-    const agent = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      credentialAuthority: credentials().authority,
-      tokenStore: store,
-    });
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      builtFactorylessSettingsOwner,
+      undefined,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      store,
+      credentials().authority,
+      builtFactorylessPolicy,
+    );
     cleanups.push(() => agent.dispose());
     await store.saveToken('fake', makeToken('caller-owned'));
     expect(await store.listProviders()).toContain('fake');
@@ -189,17 +198,25 @@ describe('fromConfig ownership effects', () => {
     );
     await mkdir(directory);
     const owner = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      credentialAuthority: credentials().authority,
-      sessionId: 'adopted-runtime-scope',
-      providerFileLifecycle: owner,
-    });
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      { sessionId: 'adopted-runtime-scope' },
+      builtFactorylessSettingsOwner,
+      undefined,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      owner,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      credentials().authority,
+      builtFactorylessPolicy,
+    );
     cleanups.push(() => agent.dispose());
     expect(agent.getRuntimeId()).not.toBe(
       builtFactorylessConfig.getSessionId(),
@@ -255,17 +272,25 @@ describe('fromConfig ownership effects', () => {
   it('joins concurrent disposal while a real file lease delays exactly-once owned token closure', async () => {
     await fixture();
     const owner = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      credentialAuthority: credentials().authority,
-      sessionId: 'concurrent-adoption-scope',
-      providerFileLifecycle: owner,
-    });
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      { sessionId: 'concurrent-adoption-scope' },
+      builtFactorylessSettingsOwner,
+      undefined,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      owner,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      credentials().authority,
+      builtFactorylessPolicy,
+    );
     cleanups.push(() => agent.dispose());
     const lease = await retainFile(
       owner,

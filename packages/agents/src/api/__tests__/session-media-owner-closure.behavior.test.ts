@@ -451,15 +451,18 @@ describe('public Agent session media ownership closure', () => {
     const client = builtCallerOwner.getAgentClient();
     await client.startChat();
     const store = requireMediaStore(builtCallerOwner.getAgentClient());
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      messageBus: builtCallerPolicy.session.messageBus,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     try {
       expect({
         retainedConfig: internalConfig(agent) === builtCallerConfig,

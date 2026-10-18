@@ -1,15 +1,24 @@
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
-import {
-  logUserPrompt,
-  logSlashCommand,
-} from '@vybestack/llxprt-code-telemetry';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
+export type SessionSettingsOperations = Pick<
+  SessionSettingsOwner,
+  | 'logUserPrompt'
+  | 'logSlashCommand'
+  | 'isTelemetryEnabled'
+  | 'flushTelemetry'
+  | 'readNamedParameter'
+  | 'readDefaultProfileName'
+  | 'readTelemetrySettings'
+  | 'updateTelemetrySettings'
+  | 'readConversationLoggingEnabled'
+  | 'subscribeModelChanges'
+>;
+
 import type {
   SettingsTelemetryState,
   StreamRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
 import type {
   Agent,
-  FromConfigOptions,
   SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
 /**
@@ -17,27 +26,9 @@ import type {
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  RuntimeProviderManager,
-  Config,
-} from '@vybestack/llxprt-code-core';
 
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
-import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import { assembleProfileDefinitions } from '@vybestack/llxprt-code-agents';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
-import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
-import { createProviderInspection } from './providerInspection.js';
-
-export function createProviderAliasRefresh(
-  manager: RuntimeProviderManager,
-): ProviderAliasRefresh {
-  return () => {
-    refreshAliasProviders(manager);
-    return Promise.resolve();
-  };
-}
 
 function bindProviderMutations(
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
@@ -59,12 +50,10 @@ function bindProviderMutations(
 }
 
 export function createRuntimeOwnerFeatures(
-  owner: Config,
-  manager: RuntimeProviderManager,
+  inspection: SessionProviderReads['inspection'],
   directories: () => readonly string[],
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
-  sessionSettings: SessionSettingsOwner,
-  settingsService: SettingsService,
+  sessionSettings: SessionSettingsOperations,
   definitions: Pick<Agent['workspace'], 'profileDefinitions' | 'profileWrites'>,
   modelParameters: Agent['modelParameters'],
   settings: Agent['settings'],
@@ -82,8 +71,8 @@ export function createRuntimeOwnerFeatures(
     | 'getActiveModelParams'
   >,
   keys: Pick<Agent['auth']['keys'], 'setRaw'>,
+  readOpenAI: RuntimeOwnerFeatures['getOpenAIProviderInfo'],
 ): RuntimeOwnerFeatures {
-  sessionSettings.assertSettingsIdentity(settingsService);
   return {
     listProviders: () => reads.listProviders(),
     getActiveModelParams: () => reads.getActiveModelParams(),
@@ -100,10 +89,7 @@ export function createRuntimeOwnerFeatures(
       definitions.profileDefinitions,
       definitions.profileWrites,
     ),
-    ...createProviderInspection(
-      () => sessionSettings.readSelectedEndpoint(),
-      manager,
-    ),
+    ...inspection,
     getActiveToolFormatState: () => toolFormat.getState(),
     setActiveToolFormatOverride: (format) => toolFormat.setOverride(format),
     getActiveProviderMetrics: () => reads.getActiveProviderMetrics(),
@@ -114,12 +100,8 @@ export function createRuntimeOwnerFeatures(
     clearSessionSetting: (key) => settings.clearSessionSetting(key),
     ...bindProviderMutations(changeModel, modelParameters, keys),
     getWorkspaceDirectories: () => [...directories()],
-    getDefaultProfileName: () =>
-      typeof settingsService.get('defaultProfile') === 'string'
-        ? String(settingsService.get('defaultProfile'))
-        : null,
-    getOpenAIProviderInfo: () =>
-      getOpenAIProviderInfo({ settingsService, config: owner }, manager),
+    getDefaultProfileName: () => sessionSettings.readDefaultProfileName(),
+    getOpenAIProviderInfo: readOpenAI,
   };
 }
 
@@ -129,9 +111,9 @@ export function buildSettingsRuntime(
     Agent,
     'getEphemeralSetting' | 'getActiveProfileName' | 'getProvider' | 'onStats'
   >,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): SettingsTelemetryState {
-  const selectedTelemetry = (): SessionSettingsOwner => {
+  const selectedTelemetry = (): SessionSettingsOperations => {
     if (telemetrySettings === undefined)
       throw new Error('UI telemetry requires selected session settings');
     return telemetrySettings;
@@ -140,12 +122,12 @@ export function buildSettingsRuntime(
     logUserPrompt: (event) => {
       if (telemetrySettings === undefined)
         throw new Error('UI prompt telemetry requires selected settings');
-      logUserPrompt(source, event, telemetrySettings.telemetry);
+      telemetrySettings.logUserPrompt(source, event);
     },
     logSlashCommand: (event) => {
       if (telemetrySettings === undefined)
         throw new Error('UI command telemetry requires selected settings');
-      logSlashCommand(source, event, telemetrySettings.telemetry);
+      telemetrySettings.logSlashCommand(source, event);
     },
     readCitations: () => agent.getEphemeralSetting('ui.showCitations'),
     readProfileName: () => agent.getActiveProfileName(),
@@ -164,7 +146,7 @@ export function buildSettingsRuntime(
     },
     getTelemetryLogPromptsEnabled: () =>
       selectedTelemetry().readTelemetrySettings().logPrompts === true,
-    getTelemetryEnabled: () => selectedTelemetry().telemetry.isEnabled(),
+    getTelemetryEnabled: () => selectedTelemetry().isTelemetryEnabled(),
     getTelemetryOutfile: () =>
       selectedTelemetry().readTelemetrySettings().outfile,
     getConversationLoggingEnabled: () =>

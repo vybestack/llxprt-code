@@ -527,25 +527,29 @@ describe('profile-preparation-cancellation', () => {
         refreshToken: async () => null,
       });
       await oauth.toggleOAuthEnabled('fake');
-      const agent = await fromConfig({
-        oauthManager: oauth,
-        providerFileLifecycle: builtCallerFiles,
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
-      const ownerB = await fromConfig({
-        settingsOwner: otherCallerSettingsOwner,
-        settingsService: otherCallerSettings,
-        providerManager: otherCallerManager,
-        config: otherCallerConfig,
-        mcpRuntime: otherCallerMcp,
-        messageBus: otherCallerPolicy.session.messageBus,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        oauth,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        builtCallerFiles,
+      );
+      const ownerB = await fromConfig(
+        otherCallerConfig,
+        otherCallerSettings,
+        {},
+        otherCallerSettingsOwner,
+        otherCallerManager,
+        undefined,
+        otherCallerPolicy.session.messageBus,
+        otherCallerMcp,
+      );
       const client = builtCallerOwner.getAgentClient();
       const before = agent.captureProfile();
       const notifications: unknown[] = [];
@@ -590,15 +594,18 @@ describe('profile-preparation-cancellation', () => {
         expect(new Set([client, builtCallerOwner.getAgentClient()]).size).toBe(
           1,
         );
-        const nextOwner = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          messageBus: builtCallerPolicy.session.messageBus,
-        });
+        const nextOwner = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          {},
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+        );
         try {
           const events = [];
           for await (const event of nextOwner.stream(

@@ -363,21 +363,28 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
     );
 
     try {
-      const pendingAgent = fromConfig({
-        tokenizerFactory: factory,
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        runtimeFactoryBindings: builtCallerFactories,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        activation: {
-          provider: 'fake',
-          model: 'ready-model',
-          authMode: 'auto',
+      const pendingAgent = fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {
+          activation: {
+            provider: 'fake',
+            model: 'ready-model',
+            authMode: 'auto',
+          },
         },
-      });
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        factory,
+        undefined,
+        builtCallerFactories,
+      );
       await preparationStarted.promise;
       let completed = false;
       const observedAgent = pendingAgent.then((agent) => {
@@ -434,17 +441,22 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
 
     try {
       await expect(
-        fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          runtimeFactoryBindings: builtCallerFactories,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          sessionId: runtimeId,
+        fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { sessionId: runtimeId },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          undefined,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+          undefined,
           tokenizerFactory,
-        }),
+          undefined,
+          builtCallerFactories,
+        ),
       ).rejects.toBe(failure);
       // Authoritative post-activation manager state ('fake'/'fake-model')
       // reached readiness — NOT the stale Config provider

@@ -52,7 +52,17 @@ async function hermeticStorage(): Promise<{
 async function makeKeys() {
   const { storage, dir } = await hermeticStorage();
   const { ToolKeysControl } = await import('../control/toolKeysControl.js');
-  const keys = new ToolKeysControl({ getStorage: () => storage });
+  const keys = new ToolKeysControl(
+    async (name) => ({
+      key: await storage.getKey(name),
+      keyFile: await storage.getKeyfilePath(name),
+    }),
+    (name, key) => storage.saveKey(name, key),
+    (name) => storage.deleteKey(name),
+    (name, file) => storage.setKeyfilePath(name, file),
+    (name) => storage.clearKeyfilePath(name),
+    (name) => storage.getKeyfilePath(name),
+  );
   return { keys, dir };
 }
 

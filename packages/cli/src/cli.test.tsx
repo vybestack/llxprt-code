@@ -3,11 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
+import {
+  AgentProfilePreflight,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
-import { createProviderSessionCapabilities as preflightCapabilities } from './integration-tests/__tests__/session-client-owner-fixture.js';
+
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
 import {
@@ -59,6 +62,7 @@ class MockProcessExitError extends Error {
 void vi.mock('./config/settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({
     merged: {
+      extensions: { disabled: [] },
       advanced: {},
       security: { auth: {} },
       ui: { useAlternateBuffer: true },
@@ -161,33 +165,17 @@ void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
-// Mock the Agent composition root so interactive-path tests do not construct a
-// real Agent via fromConfig (which would require a fully wired Config). The
-// fake exposes getMessageBus() because dispatch reads the session bus from the
-// Agent (#2378).
+const actualCreateForegroundAgent = createForegroundAgent;
+const foregroundAgents: Agent[] = [];
 void vi.mock('./cliAgentBootstrap.js', () => ({
-  createForegroundAgent: vi.fn(async () => ({
-    workspace: (await createUiSessionOwner()).workspace,
-    ide: (await createUiSessionOwner()).ide,
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getMessageBus: vi.fn(() => ({})),
-    session: {
-      setRecording: vi.fn(async () => {}),
-      getRecording: vi.fn(() => ({ enabled: true })),
+  createForegroundAgent: vi.fn(
+    async (...args: Parameters<typeof createForegroundAgent>) => {
+      const agent = await actualCreateForegroundAgent(...args);
+      foregroundAgents.push(agent);
+      return agent;
     },
-    tools: { get: vi.fn(() => undefined) },
-  })),
+  ),
 }));
-
-// Mock the public activation preflight so main() does not invoke real provider
-// runtime mutators. These tests verify surrounding CLI orchestration.
-const { preflightMock } = {
-  preflightMock: vi.fn().mockResolvedValue({
-    authFailed: false,
-    activeProvider: 'gemini',
-    infoMessages: [],
-  }),
-};
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -284,14 +272,6 @@ describe('cli.tsx main function', () => {
     loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
-    // Re-establish the default resolved value after afterEach's
-    // vi.restoreAllMocks() clears mock implementations.
-    preflightMock.mockResolvedValue({
-      authFailed: false,
-      activeProvider: 'gemini',
-      infoMessages: [],
-    });
-
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvLlxprtSandbox = process.env.LLXPRT_SANDBOX;
     originalEnvSandbox = process.env.SANDBOX;
@@ -303,6 +283,7 @@ describe('cli.tsx main function', () => {
   });
 
   afterEach(async () => {
+    for (const agent of foregroundAgents.splice(0)) await agent.dispose();
     for (const config of interactiveConfigs.splice(0)) {
       await config.dispose();
     }
@@ -531,8 +512,12 @@ describe('cli.tsx main function', () => {
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
+    const configuredWorkspace = vi.spyOn(
+      AgentProfilePreflight.prototype,
+      'prepareConfiguredWorkspace',
+    );
     const freshSessionId = randomUUID();
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
@@ -540,6 +525,7 @@ describe('cli.tsx main function', () => {
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: { autoConfigureMaxOldSpaceSize: false },
       },
       setValue: vi.fn(),
@@ -548,16 +534,7 @@ describe('cli.tsx main function', () => {
     } as unknown as LoadedSettings);
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => ({
-          ...(await preflightCapabilities(mockConfig, manager, store, owner)),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -583,7 +560,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,
@@ -646,7 +623,18 @@ describe('cli.tsx main function', () => {
     ).toHaveBeenCalledTimes(1);
     expect(
       createForegroundAgent as Mock<typeof createForegroundAgent>,
-    ).toHaveBeenCalledWith(expect.objectContaining({ config: mockConfig }));
+    ).toHaveBeenCalledWith(
+      configuredWorkspace.mock.contexts[0],
+      expect.any(Object),
+      expect.objectContaining({ provider: mockConfig.getProvider() }),
+      expect.any(Object),
+      expect.any(Object),
+    );
+
+    expect(configuredWorkspace).toHaveBeenCalledWith(
+      mockConfig,
+      expect.any(Function),
+    );
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();
@@ -666,7 +654,7 @@ describe('cli.tsx main function', () => {
   it('should call setupTerminalAndTheme when isInteractive is true', async () => {
     const freshSessionId = randomUUID();
     const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
@@ -674,6 +662,7 @@ describe('cli.tsx main function', () => {
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: { autoConfigureMaxOldSpaceSize: false },
       },
       setValue: vi.fn(),
@@ -682,16 +671,7 @@ describe('cli.tsx main function', () => {
     } as unknown as LoadedSettings);
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => ({
-          ...(await preflightCapabilities(mockConfig, manager, store, owner)),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -717,7 +697,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,
@@ -815,6 +795,7 @@ describe('cli.tsx deferred initialization', () => {
     relaunchMock.mockResolvedValue(0);
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
       },
       setValue: vi.fn(),
@@ -925,6 +906,7 @@ describe('cli.tsx deferred initialization', () => {
 
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 8192 },
       },
       setValue: vi.fn(),
@@ -956,6 +938,7 @@ describe('cli.tsx deferred initialization', () => {
 
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: { autoConfigureMaxOldSpaceSize: true, maxHeapSizeMB: 4096 },
       },
       setValue: vi.fn(),

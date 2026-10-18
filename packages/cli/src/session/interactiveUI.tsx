@@ -1,6 +1,6 @@
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+
 import {
-  type SessionSettingsOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
@@ -15,7 +15,6 @@ import {
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 import React, { type ErrorInfo } from 'react';
 import { render as inkRender } from 'ink';
@@ -70,11 +69,7 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from '../runtime/createOAuthControl.js';
+import { createRuntimeOwnerFeatures } from '../runtime/createRuntimeOwnerFeatures.js';
 import {
   buildUiRuntimeFromSource,
   buildSlashCommandRuntime,
@@ -302,10 +297,7 @@ function buildRenderElement(
   slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
   agent: Agent,
   runtimeOwner: Config,
-  runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
+  runtimeSettings: SessionSettingsOperations,
   settings: LoadedSettings,
   startupWarnings: string[],
   version: string,
@@ -317,23 +309,22 @@ function buildRenderElement(
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
   recordingOwner?: 'agent' | 'raw',
-  oauthManager?: OAuthManager,
 ): React.ReactElement {
   const runtimeOwnerFeatures = () =>
     createRuntimeOwnerFeatures(
-      runtimeOwner,
-      agent.providerManager,
+      agent.providerReads.inspection,
       () => agent.workspace.getDirectories(),
       createSessionModelCommand(agent),
-      runtimeSettings.owner,
-      runtimeSettings.store,
+      runtimeSettings,
       agent.workspace,
       agent.modelParameters,
       agent.settings,
       agent.toolFormat,
       agent.providerReads,
       agent.auth.keys,
+      () => agent.providerReads.readOpenAIInfo(),
     );
+  const runtimeOwnerFactory = { create: runtimeOwnerFeatures };
   return (
     <React.StrictMode>
       <ErrorBoundary onError={handleError}>
@@ -342,14 +333,9 @@ function buildRenderElement(
             uiRuntime={uiRuntime}
             slashCommandRuntime={slashCommandRuntime}
             agent={agent}
-            runtimeOwner={{ create: runtimeOwnerFeatures }}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
+            runtimeOwner={runtimeOwnerFactory}
+            providerAliasRefresh={agent.providerReads.refreshAliases}
+            oauthControl={agent.authentication}
             settings={settings}
             runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
@@ -397,11 +383,7 @@ function setupTerminalExitHandlers(
 }
 
 export interface OwnerInteractiveStartup {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -435,10 +417,7 @@ export function startInteractiveUI(
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
   sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
+  runtimeSettings?: SessionSettingsOperations,
 ): Promise<InteractiveInstanceCapability>;
 export async function startInteractiveUI(
   config: Config,
@@ -454,10 +433,7 @@ export async function startInteractiveUI(
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
   sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
+  runtimeSettings?: SessionSettingsOperations,
 ) {
   const ownerStartup =
     startup && 'recordingOwner' in startup ? startup : undefined;
@@ -494,7 +470,6 @@ export async function startInteractiveUI(
       'Interactive startup requires explicit session settings ownership',
     );
   return commitInteractiveStartup({
-    oauthManager: ownerStartup?.oauthManager,
     config,
     agent,
     settings,
@@ -593,16 +568,12 @@ interface StartupTransactionState {
  * perf owner successfully starts runs inside this one transaction.
  */
 export type CommitInteractiveStartupArgs = {
-  readonly oauthManager?: OAuthManager;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly config: Config;
   readonly agent: Agent;
   readonly settings: LoadedSettings;
@@ -647,10 +618,10 @@ export type CommitInteractiveStartupArgs = {
  */
 function composeUiBucketOperations(
   config: Config,
-  oauth: OAuthManager | undefined,
+  oauth: Agent['authentication'],
 ): BucketFailoverRuntime {
   const readProviderName = () => config.getProvider() ?? '';
-  return oauth instanceof OAuthManager
+  return oauth.isAvailable()
     ? {
         resetBuckets: () => oauth.resetBuckets(readProviderName(), false),
         resetBucketSession: () => oauth.resetBuckets(readProviderName(), true),
@@ -664,7 +635,7 @@ function composeUiBucketOperations(
 }
 
 function startupBucketOperations(args: CommitInteractiveStartupArgs) {
-  return composeUiBucketOperations(args.config, args.oauthManager);
+  return composeUiBucketOperations(args.config, args.agent.authentication);
 }
 
 function startupCommandRuntimes(
@@ -676,7 +647,7 @@ function startupCommandRuntimes(
     args.config,
     args.agent,
     operations,
-    args.runtimeSettings.owner,
+    args.runtimeSettings,
   );
   const slashCommandRuntime = ports.buildSlashRuntime(
     args.config,
@@ -686,7 +657,7 @@ function startupCommandRuntimes(
     operations,
     args.skillOperations,
     args.restartExtension,
-    args.runtimeSettings.owner,
+    args.runtimeSettings,
   );
   return { uiRuntime, slashCommandRuntime };
 }
@@ -740,7 +711,6 @@ export async function commitInteractiveStartup(
         args.suppressStartupWelcome,
         args.perfOwner,
         args.recordingOwner,
-        args.oauthManager,
       ),
       renderOptions,
     );

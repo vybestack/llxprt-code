@@ -1,3 +1,5 @@
+import * as agents from '@vybestack/llxprt-code-agents';
+import { spyOn } from 'bun:test';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -46,10 +48,7 @@ import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
-import {
-  loadPrecedenceProviderContributions,
-  registerPrecedenceProviders,
-} from './precedenceProviderContributions.js';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -156,6 +155,17 @@ async function runConfig(
   let providerManager: RuntimeProviderManager | undefined;
   const callLog: string[] = [];
   const switchErrors: unknown[] = [];
+  const assemble = agents.assembleAgentActivationBootstrap;
+  const observation = spyOn(
+    agents,
+    'assembleAgentActivationBootstrap',
+  ).mockImplementation(async (...args) => {
+    const operation = await assemble(...args);
+    providerManager = args[2];
+    oauthManager = args[3] ?? undefined;
+    callLog.push('manager-ready', 'oauth-ready');
+    return operation;
+  });
   const config = await loadCliConfig(
     settings,
     [],
@@ -163,37 +173,30 @@ async function runConfig(
     'test-session',
     parsedArgv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner: settingsOwner,
-      onActivationBootstrapReady: (operation) => {
-        operation.takeSettingsOwner(runtimeSettingsService);
-        retainedActivationOperations.push(operation);
-      },
-      onPreflightReady: (operation) => {
-        const preflight = operation.preflight.bind(operation);
-        operation.preflight = async (intent): ReturnType<typeof preflight> => {
-          callLog.push(`preflight:${intent.provider}`);
-          const result = await preflight(intent);
-          if (result.switchError !== undefined)
-            switchErrors.push(result.switchError);
-          callLog.push(`activated:${settingsOwner.readSelectedProvider()}`);
-          return result;
-        };
-      },
-      onOAuthManagerReady: (owner) => {
-        oauthManager = owner;
-        callLog.push('oauth-ready');
-      },
-      onProviderManagerReady: (manager) => {
-        registerPrecedenceProviders(manager);
-        providerManager = manager;
-        callLog.push('manager-ready');
-      },
-      providerContributions: await loadPrecedenceProviderContributions(),
+    undefined,
+    runtimeSettingsService,
+    settingsOwner,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
+    (operation) => {
+      operation.takeSettingsOwner(runtimeSettingsService);
+      retainedActivationOperations.push(operation);
+    },
+    undefined,
+    undefined,
+    (operation) => {
+      const preflight = operation.preflight.bind(operation);
+      operation.preflight = async (intent): ReturnType<typeof preflight> => {
+        callLog.push(`preflight:${intent.provider}`);
+        const result = await preflight(intent);
+        if (result.switchError !== undefined)
+          switchErrors.push(result.switchError);
+        callLog.push(`activated:${settingsOwner.readSelectedProvider()}`);
+        return result;
+      };
     },
   );
+  observation.mockRestore();
   if (providerManager === undefined)
     throw new Error('CLI startup did not publish its provider manager');
   expect(switchErrors).toHaveLength(0);

@@ -316,15 +316,18 @@ describe('fromConfig activation intent does not desync Agent facade (#2374 round
         model: 'intent-override-model',
         authMode: 'auto',
       };
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-      });
+      const agent: Agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         // POST-activation truth: the executor switched to 'fake' (registered +
         // active under the fake seam) and applied the intent's model override.

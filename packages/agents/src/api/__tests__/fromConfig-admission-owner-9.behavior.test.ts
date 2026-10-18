@@ -39,11 +39,7 @@ import {
   assembleAgentActivationBootstrap,
 } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import {
-  AgentConfig,
-  ProviderActivationIntent,
-  FromConfigOptions,
-} from '../config-types.js';
+import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { fromConfig } from '../fromConfig.js';
 
 /**
@@ -94,19 +90,17 @@ describe('fromConfig admission before resource effects', () => {
   });
 
   async function rejectWithoutAcquisition(
-    options: FromConfigOptions,
+    workspaceDirectory: string,
+    adopt: () => ReturnType<typeof fromConfig>,
   ): Promise<unknown> {
     const home = process.env.LLXPRT_CONFIG_HOME;
     if (home === undefined) throw new Error('Missing fixture config home');
     const before = (await readdir(home, { recursive: true })).sort();
     const workspaceBefore = (
-      await readdir(options.config.getTargetDir(), { recursive: true })
+      await readdir(workspaceDirectory, { recursive: true })
     ).sort();
     const transports = credentials().snapshot();
-    const outcome = await fromConfig({
-      ...options,
-      credentialAuthority: credentials().authority,
-    }).then(
+    const outcome = await adopt().then(
       async (agent) => {
         await agent.dispose();
         return undefined;
@@ -114,7 +108,7 @@ describe('fromConfig admission before resource effects', () => {
       (error: unknown) => error,
     );
     const after = await readdir(home, { recursive: true });
-    const workspaceAfter = await readdir(options.config.getTargetDir(), {
+    const workspaceAfter = await readdir(workspaceDirectory, {
       recursive: true,
     });
     expect([
@@ -509,22 +503,42 @@ describe('fromConfig admission before resource effects', () => {
       const result = await operation.preflight(intent);
       if (result.token === undefined)
         throw new Error('Missing preflight receipt');
+      const token = result.token;
       await expect(
-        rejectWithoutAcquisition({
-          settingsService:
-            mismatch === 'settings' ? otherCallerSettings : builtCallerSettings,
-          config: mismatch === 'config' ? otherCallerConfig : builtCallerConfig,
-          providerManager:
-            mismatch === 'manager' ? otherCallerManager : builtCallerManager,
-          messageBus:
-            mismatch === 'bus'
-              ? otherCallerPolicy.session.messageBus
-              : builtCallerPolicy.session.messageBus,
-          mcpRuntime: builtCallerMcp,
-          activation:
-            mismatch === 'intent' ? { ...intent, model: 'other' } : intent,
-          activationPreflight: { operation, token: result.token },
-        }),
+        rejectWithoutAcquisition(
+          (mismatch === 'config'
+            ? otherCallerConfig
+            : builtCallerConfig
+          ).getTargetDir(),
+          () =>
+            fromConfig(
+              mismatch === 'config' ? otherCallerConfig : builtCallerConfig,
+              mismatch === 'settings'
+                ? otherCallerSettings
+                : builtCallerSettings,
+              {
+                activation:
+                  mismatch === 'intent'
+                    ? { ...intent, model: 'other' }
+                    : intent,
+              },
+              undefined,
+              mismatch === 'manager' ? otherCallerManager : builtCallerManager,
+              undefined,
+              mismatch === 'bus'
+                ? otherCallerPolicy.session.messageBus
+                : builtCallerPolicy.session.messageBus,
+              builtCallerMcp,
+              { operation, token },
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              credentials().authority,
+            ),
+        ),
       ).resolves.toMatchObject({
         message: expect.stringMatching(
           mismatch === 'settings' ? /settings/i : /preflight/i,

@@ -130,17 +130,25 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
 
     const runtimeId = 'issue3222-fromconfig-factoryless';
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtFactorylessSettingsOwner,
-        settingsService: builtFactorylessSettings,
-        agentClient: builtFactorylessNoClient,
-        providerManager: builtFactorylessNoManager,
-        runtimeFactoryBindings: builtFactorylessFactories,
-        config: builtFactorylessConfig,
-        sessionId: runtimeId,
-        messageBus: builtFactorylessPolicy.session.messageBus,
-        policyOwner: builtFactorylessPolicy,
-      });
+      const agent: Agent = await fromConfig(
+        builtFactorylessConfig,
+        builtFactorylessSettings,
+        { sessionId: runtimeId },
+        builtFactorylessSettingsOwner,
+        builtFactorylessNoManager,
+        undefined,
+        builtFactorylessPolicy.session.messageBus,
+        undefined,
+        undefined,
+        builtFactorylessNoClient,
+        undefined,
+        undefined,
+        undefined,
+        builtFactorylessFactories,
+        undefined,
+        undefined,
+        builtFactorylessPolicy,
+      );
       try {
         const names = agent.tools.list().map((tool) => tool.name);
         expect(names).toContain('task');
@@ -245,16 +253,43 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
     );
 
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtFactorylessSettingsOwner,
-        settingsService: builtFactorylessSettings,
-        agentClient: builtFactorylessNoClient,
-        providerManager: builtFactorylessNoManager,
-        runtimeFactoryBindings: builtFactorylessFactories,
-        config: builtFactorylessConfig,
-        sessionId: runtimeId,
-        toolSchedulerFactory: callerFactories.toolSchedulerFactory,
-      });
+      const agent: Agent = await fromConfig(
+        builtFactorylessConfig,
+        builtFactorylessSettings,
+        { sessionId: runtimeId },
+        builtFactorylessSettingsOwner,
+        builtFactorylessNoManager,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        builtFactorylessNoClient,
+        undefined,
+        undefined,
+        undefined,
+        builtFactorylessFactories,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        callerFactories.toolSchedulerFactory,
+      );
       try {
         expect(callerClients.has(agent.agentClient)).toBe(true);
         expect(agent.tools.list().map((tool) => tool.name)).toContain('task');
@@ -364,16 +399,43 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
           );
 
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: builtFactorylessSettingsOwner,
-              settingsService: builtFactorylessSettings,
-              agentClient: builtFactorylessNoClient,
-              providerManager: builtFactorylessNoManager,
-              runtimeFactoryBindings: builtFactorylessFactories,
-              config: builtFactorylessConfig,
-              sessionId,
-              toolSchedulerFactory: callerFactories.toolSchedulerFactory,
-            });
+            const agent: Agent = await fromConfig(
+              builtFactorylessConfig,
+              builtFactorylessSettings,
+              { sessionId },
+              builtFactorylessSettingsOwner,
+              builtFactorylessNoManager,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              builtFactorylessNoClient,
+              undefined,
+              undefined,
+              undefined,
+              builtFactorylessFactories,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              callerFactories.toolSchedulerFactory,
+            );
             try {
               return (
                 callerClients.has(agent.agentClient) &&

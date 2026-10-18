@@ -5,7 +5,6 @@
  */
 import type { CliArgs } from './config/cliArgParser.js';
 
-import { createProviderSessionOwner } from './integration-tests/__tests__/session-client-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -43,6 +42,7 @@ void vi.mock('./config/settings.js', () => ({
   ...actual,
   loadSettings: vi.fn(() => ({
     merged: {
+      extensions: { disabled: [] },
       advanced: {},
       security: { auth: {} },
       ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
@@ -234,25 +234,10 @@ describe('cli main provider initialization', () => {
         perf: { enabled: false, memory: false },
       })),
     });
-
-    const { manager } = createBootstrapManager(mockConfig);
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => ({
-          ...(await bootstrapOperationCapabilities(
-            mockConfig,
-            manager,
-            store,
-            owner,
-          )),
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig, preflightMock),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -343,22 +328,9 @@ describe('cli main provider initialization', () => {
     });
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    const { manager, settingsService } = createBootstrapManager(config);
+    const { settingsService } = createBootstrapManager(config);
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        config,
-        async (store, owner) => ({
-          ...(await bootstrapOperationCapabilities(
-            config,
-            manager,
-            store,
-            owner,
-          )),
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(config, preflightMock),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -372,9 +344,7 @@ describe('cli main provider initialization', () => {
       extensions: [],
       sessionSummary: undefined,
     } as unknown as CliArgs);
-    const owner = await fromConfig({
-      settingsService,
-      config,
+    const owner = await fromConfig(config, settingsService, {
       sessionId: freshId,
       sessionIdentityOwnership: 'config',
     });
@@ -497,35 +467,6 @@ describe('cli main provider initialization', () => {
     expect(locksAfterExit).toHaveLength(0);
   }, 30000);
 });
-
-async function bootstrapOperationCapabilities(
-  config: Config,
-  manager: ProviderManager,
-  settingsService: SettingsService,
-  owner: Parameters<typeof createProviderSessionOwner>[3],
-) {
-  const operation = await createProviderSessionOwner(
-    config,
-    manager,
-    settingsService,
-    owner,
-  );
-  return {
-    providerFileLifecycle: operation.providerFileLifecycle,
-    messageBus: operation.messageBus,
-    workspaceDefinitions: operation.workspaceDefinitions,
-    workspaceTrust: operation.workspaceTrust,
-    trustCleanup: operation.trustCleanup,
-    workspaceMemory: operation.workspaceMemory,
-    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
-    workspaceFilesystem: operation.workspaceFilesystem,
-    sessionClient: operation.sessionClient,
-    takeMediaOwner: operation.takeMediaOwner.bind(operation),
-    settingsOwnerOwnership: operation.settingsOwnerOwnership,
-    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
-    takeSessionClient: operation.takeSessionClient.bind(operation),
-  };
-}
 
 let bootstrapManagers: ProviderManager[] = [];
 function createBootstrapManager(config: Config): {

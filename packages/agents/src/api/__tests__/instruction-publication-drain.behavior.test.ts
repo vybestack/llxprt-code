@@ -199,23 +199,28 @@ describe('admitted instruction publication disposal', () => {
         await cleanupAfterFailure(primary, callerClose);
       }
 
-      const agent = await fromConfig({
-        config: callerConfig,
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        mcpRuntime: callerMcp,
-        messageBus: callerMessageBus,
-      });
-      const peer = await fromConfig({
-        config: callerConfig,
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        providerManager: callerManager,
-        mcpRuntime: callerMcp,
-        messageBus: callerMessageBus,
-      });
+      const agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerMessageBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
+      const peer = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerMessageBus,
+        callerMcp,
+      );
       const entered = gate();
       const release = gate();
       const client = callerOwner.getAgentClient();

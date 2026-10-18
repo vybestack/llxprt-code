@@ -265,22 +265,27 @@ describe('preflight adoption boundaries', () => {
       };
       const result = await built_operation.preflight(activation);
       if (!result.token) throw new Error('Missing receipt');
-      const agent = await fromConfig({
-        settingsService: built_builtCallerSettings,
-        agentClient: built_builtCallerOwner.getAgentClient(),
-        providerManager: built_builtCallerManager,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation: {
-          authMode: 'auto',
-          provider: 'fake',
-          modelParams: { temperature: 0.3, nested: { b: 2, a: 1 } },
+      const agent = await fromConfig(
+        built_builtCallerConfig,
+        built_builtCallerSettings,
+        {
+          activation: {
+            authMode: 'auto',
+            provider: 'fake',
+            modelParams: { temperature: 0.3, nested: { b: 2, a: 1 } },
+          },
         },
-        activationPreflight: {
+        undefined,
+        built_builtCallerManager,
+        undefined,
+        undefined,
+        built_builtCallerMcp,
+        {
           operation: built_operation,
           token: result.token,
         },
-      });
+        built_builtCallerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();
     } finally {

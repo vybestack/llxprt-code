@@ -67,7 +67,9 @@ import {
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
-import { TaskLaunchOwner } from '../../../../agents/src/session/task-launch-owner.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { launchHeldNotificationTask } from '../../__tests__/task-notification-fixture.js';
+import { waitFor } from '../../__tests__/render.js';
 import { setImmediate } from 'node:timers/promises';
 import { clearCommand } from './clearCommand.js';
 import { continueCommand } from './continueCommand.js';
@@ -322,6 +324,7 @@ describe('clearCommand new session', () => {
 
   const builtReleases: Array<() => Promise<void>> = [];
   let agent: Agent;
+  let notifications: AsyncTaskManager;
   let context: CommandContext;
   let uiEvents: string[];
   let oldId: string;
@@ -354,17 +357,37 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     });
     builtReleases.push(builtCallerClose);
     builtCallerConfig.adoptSessionId(crypto.randomUUID());
-    agent = await fromConfig({
-      config: builtCallerConfig,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      messageBus: builtCallerPolicy.session.messageBus,
-      mcpRuntime: builtCallerMcp,
-      settingsService: builtCallerSettings,
-      providerFileLifecycle: builtCallerFiles,
-      sessionId: builtCallerConfig.getSessionId(),
-      sessionIdentityOwnership: 'config',
-    });
+    notifications = new AsyncTaskManager();
+    agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {
+        sessionId: builtCallerConfig.getSessionId(),
+        sessionIdentityOwnership: 'config',
+      },
+      undefined,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+      builtCallerFiles,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      notifications,
+    );
     await agent.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'old question' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'old answer' }] },
@@ -410,43 +433,30 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
   }
 
   it('reports pending background work without clearing the conversation or terminal', async () => {
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    )
-      throw new Error('Expected agent dependencies');
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    )
-      throw new Error('Expected task owner');
-    const owner = agent.deps.taskLaunchOwner;
-    await owner.start(async (launch, publish) => {
-      owner.manager.registerTask({
-        id: 'clear-blocker',
-        subagentName: 'worker',
-        goalPrompt: 'work',
-        abortController: launch.controller,
-      });
-      launch.register('clear-blocker');
-      publish({ llmContent: '', returnDisplay: '' });
-    });
-    await setImmediate();
-    const running = await clearAction(context, '');
-    expect(running).toMatchObject({ type: 'message', messageType: 'error' });
-    if (running?.type !== 'message') throw new Error('Expected error message');
-    expect(running.content).toContain('background tasks');
-    expect(running.content).toContain('finish or cancel');
-    owner.manager.failTask('clear-blocker', 'completion notice');
-    const pending = await clearAction(context, '');
-    expect(pending).toStrictEqual(running);
-    expect(agent.session.getSessionId()).toBe(oldId);
-    expect(
-      (await agent.getHistory()).flatMap((item) => item.blocks),
-    ).toContainEqual({ type: 'text', text: 'old question' });
-    expect(uiEvents).not.toContain('clear');
-    expect(uiEvents).not.toContain('tokens:0');
+    const child = await launchHeldNotificationTask(agent);
+    try {
+      await setImmediate();
+      const running = await clearAction(context, '');
+      expect(running).toMatchObject({ type: 'message', messageType: 'error' });
+      if (running?.type !== 'message')
+        throw new Error('Expected error message');
+      expect(running.content).toContain('background tasks');
+      expect(running.content).toContain('finish or cancel');
+      child.release(true);
+      await waitFor(() =>
+        expect(notifications.getPendingNotifications()).toHaveLength(1),
+      );
+      const pending = await clearAction(context, '');
+      expect(pending).toStrictEqual(running);
+      expect(agent.session.getSessionId()).toBe(oldId);
+      expect(
+        (await agent.getHistory()).flatMap((item) => item.blocks),
+      ).toContainEqual({ type: 'text', text: 'old question' });
+      expect(uiEvents).not.toContain('clear');
+      expect(uiEvents).not.toContain('tokens:0');
+    } finally {
+      await child.close();
+    }
   });
 
   it('ends the old session before starting the new one and updates Config identity', async () => {

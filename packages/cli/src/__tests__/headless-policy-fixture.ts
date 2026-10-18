@@ -14,7 +14,11 @@ import {
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import { runNonInteractive } from '../nonInteractiveCli.js';
+import {
+  runNonInteractive,
+  buildNonInteractiveActivationIntent,
+} from '../nonInteractiveCli.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
 
 export function makeHeadlessConfig(sessionId: string): {
   credentialAuthority: CredentialAuthority;
@@ -64,18 +68,46 @@ export async function runHeadlessPolicyFixture(
   runtimeSettings: NonNullable<
     Parameters<typeof runNonInteractive>[0]['runtimeSettings']
   >,
-  providerManager: NonNullable<
-    Parameters<typeof runNonInteractive>[0]['providerManager']
-  >,
+  providerManager: ProviderManager,
+  settingsService: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  credentialAuthority: CredentialAuthority,
 ): Promise<void> {
   const policyOwner = new RuntimePolicyOwner(params.config);
   try {
     await runNonInteractive({
       ...params,
       runtimeSettings: params.runtimeSettings ?? runtimeSettings,
-      providerManager,
-      runtimeMessageBus: policyOwner.session.messageBus,
-      policyOwner,
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      isTrustedFolder: () => policyOwner.trust.isTrustedFolder(),
+      acquireAgent: () =>
+        fromConfig(
+          params.config,
+          settingsService,
+          {
+            sessionId: params.config.getSessionId(),
+            sessionIdentityOwnership: 'config',
+            activation: buildNonInteractiveActivationIntent(
+              params.config,
+              params.settings,
+            ),
+            mcpOwnership: 'agent',
+          },
+          settingsOwner,
+          providerManager,
+          undefined,
+          policyOwner.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          credentialAuthority,
+          policyOwner,
+        ),
     });
   } finally {
     await policyOwner.dispose();

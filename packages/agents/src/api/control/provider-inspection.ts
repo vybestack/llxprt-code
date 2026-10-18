@@ -14,13 +14,8 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import { detectApiKeyProvider } from '@vybestack/llxprt-code-providers';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { firstNonEmptyString } from '../utils/coalesce.js';
-import {
-  getOptionalString,
-  hasFunction,
-  hasObject,
-} from '../utils/typeGuards.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
 const logger = new DebugLogger('llxprt:cli:stats');
 type ProviderWithBaseURL = {
   getBaseURL?: () => string | undefined;
@@ -342,4 +337,33 @@ export function createProviderInspection(
         : undefined;
     },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+function hasFunction<K extends string>(
+  value: unknown,
+  key: K,
+): value is Record<K, (...args: never[]) => unknown> {
+  return isRecord(value) && typeof value[key] === 'function';
+}
+function hasObject<K extends string>(
+  value: unknown,
+  key: K,
+): value is Record<K, Record<string, unknown>> {
+  return isRecord(value) && isRecord(value[key]);
+}
+function getOptionalString(value: unknown, key: string): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const field = value[key];
+  return typeof field === 'string' ? field : undefined;
+}
+function firstNonEmptyString(
+  ...values: ReadonlyArray<string | null | undefined>
+): string | undefined {
+  return (
+    values.find((value) => typeof value === 'string' && value.length > 0) ??
+    undefined
+  );
 }

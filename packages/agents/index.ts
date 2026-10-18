@@ -55,3 +55,24 @@ export {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,
 } from './src/api/provider-switch/provider-switch.js';
+
+export type { AgentForegroundHost } from './src/api/config-types.js';
+
+export {
+  assembleSessionAuthentication,
+  type AgentSessionAuthentication,
+} from './src/api/control/session-authentication.js';
+export {
+  discoverProviderBuckets,
+  type DiscoveredBucket,
+  type DiscoveredProvider,
+  type OAuthBucketDiscoveryManager,
+  type OAuthBucketDiscoveryTokenStore,
+} from './src/api/control/oauth-bucket-discovery.js';
+
+export {
+  createProviderInspection,
+  resolveActiveProviderForAlias,
+  detectFromProviderConfig,
+  getProviderDumpMetadata,
+} from './src/api/control/provider-inspection.js';

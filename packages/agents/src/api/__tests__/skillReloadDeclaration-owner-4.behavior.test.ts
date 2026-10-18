@@ -378,14 +378,18 @@ describe('workspace skill root lifetime @issue:2615', () => {
         await cleanupAfterFailure(primary, callerCallerClose);
       }
 
-      agent = await fromConfig({
-        config: callerCallerConfig,
-        settingsOwner: callerCallerSettingsOwner,
-        settingsService: callerCallerSettings,
-        providerManager: callerCallerManager,
-        agentClient: callerCallerOwner.getAgentClient(),
-        mcpRuntime: callerCallerMcp,
-      });
+      agent = await fromConfig(
+        callerCallerConfig,
+        callerCallerSettings,
+        {},
+        callerCallerSettingsOwner,
+        callerCallerManager,
+        undefined,
+        undefined,
+        callerCallerMcp,
+        undefined,
+        callerCallerOwner.getAgentClient(),
+      );
       cleanup = callerCallerClose;
     }
     try {
@@ -609,14 +613,18 @@ describe('workspace skill root lifetime @issue:2615', () => {
 
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        agentClient: builtCallerOwner.getAgentClient(),
-        mcpRuntime: builtCallerMcp,
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       expect(internalConfig(agent)).toBe(builtCallerConfig);
       await settle(agent);
       await agent.dispose();

@@ -233,16 +233,20 @@ describe('Live workspace authority in captured turns', () => {
           }),
           interactive: true,
         });
-        const agent = await fromConfig({
-          ...createSessionSettingsFixture(config),
+        const adoptedSettings1 = createSessionSettingsFixture(config);
+        const agent = await fromConfig(
           config,
-          sessionId: 'same-trust-label',
-          activation: {
-            provider: 'openai',
-            model: 'trust-conformance',
-            cliOverrides: { key: 'local-trust-only', baseUrl: endpoint.url },
+          adoptedSettings1.settingsService,
+          {
+            sessionId: 'same-trust-label',
+            activation: {
+              provider: 'openai',
+              model: 'trust-conformance',
+              cliOverrides: { key: 'local-trust-only', baseUrl: endpoint.url },
+            },
           },
-        });
+          adoptedSettings1.settingsOwner,
+        );
 
         owners = [...owners, { agent, config }];
         return { agent, config, endpoint, workingDir };

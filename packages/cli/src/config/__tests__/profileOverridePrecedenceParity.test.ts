@@ -1,3 +1,5 @@
+import * as agents from '@vybestack/llxprt-code-agents';
+import { spyOn } from 'bun:test';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -49,10 +51,7 @@ import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
-import {
-  loadPrecedenceProviderContributions,
-  registerPrecedenceProviders,
-} from './precedenceProviderContributions.js';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -168,6 +167,15 @@ async function runConfig(
     )
       providerSelections.push(newValue);
   });
+  const assemble = agents.assembleAgentActivationBootstrap;
+  const observation = spyOn(
+    agents,
+    'assembleAgentActivationBootstrap',
+  ).mockImplementation(async (...args) => {
+    const operation = await assemble(...args);
+    providerManager = args[2];
+    return operation;
+  });
   const config = await loadCliConfig(
     settings,
     [],
@@ -175,21 +183,17 @@ async function runConfig(
     'test-session',
     parsedArgv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner: settingsOwner,
-      onActivationBootstrapReady: (operation) => {
-        operation.takeSettingsOwner(runtimeSettingsService);
-        retainedActivationOperations.push(operation);
-      },
-      providerContributions: await loadPrecedenceProviderContributions(),
-      onProviderManagerReady: (manager) => {
-        registerPrecedenceProviders(manager);
-        providerManager = manager;
-      },
+    undefined,
+    runtimeSettingsService,
+    settingsOwner,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
+    (operation) => {
+      operation.takeSettingsOwner(runtimeSettingsService);
+      retainedActivationOperations.push(operation);
     },
   );
+  observation.mockRestore();
   if (providerManager === undefined)
     throw new Error('CLI startup did not publish its provider manager');
   return {

@@ -21,17 +21,11 @@ import { buildAgent, type Agent } from './helpers/agentHarness.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
   if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  )
-    throw new Error('Expected root dependencies');
-  if (
-    !('sessionClient' in agent.deps) ||
-    !(agent.deps.sessionClient instanceof SessionClientOwner)
+    !('ownerClient' in agent) ||
+    !(agent.ownerClient instanceof SessionClientOwner)
   )
     throw new Error('Expected root client owner');
-  return agent.deps.sessionClient;
+  return agent.ownerClient;
 }
 
 async function proxy(

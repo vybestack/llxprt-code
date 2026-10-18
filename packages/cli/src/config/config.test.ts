@@ -172,7 +172,10 @@ describe('when folder is NOT trusted', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -190,7 +193,10 @@ describe('when folder is NOT trusted', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -208,7 +214,10 @@ describe('when folder is NOT trusted', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -226,7 +235,10 @@ describe('when folder is NOT trusted', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -595,7 +607,10 @@ describe('parseArguments', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
 
     expect(config.isContinueSession()).toBe(true);
@@ -688,7 +703,10 @@ describe('loadCliConfig', () => {
         'core-tool-restriction',
         argv,
         undefined,
-        { credentialAuthority: new CredentialAuthority() },
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
       );
       expect(config.getCoreTools()).toStrictEqual(
         settings.tools?.core ?? settings.coreTools,
@@ -725,7 +743,10 @@ describe('loadCliConfig', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     const expectedIncludeDirectories = [
       path.resolve(path.sep, 'settings', 'path1'),

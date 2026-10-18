@@ -1,3 +1,4 @@
+import { assembleSessionAuthentication } from '../../../agents/src/api/control/session-authentication.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -86,9 +87,12 @@ class CountingScheduler implements PerfScheduler {
 }
 
 let testConfig: Config;
-let runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+let runtimeSettings: SessionSettingsOwner;
 
-const testAgent = {} as unknown as Agent;
+const testAgent = {
+  providerReads: { refreshAliases: async () => {} },
+  authentication: assembleSessionAuthentication(undefined, () => {}),
+} as unknown as Agent;
 const testSettings = {} as unknown as LoadedSettings;
 
 /**
@@ -170,7 +174,7 @@ describe('Finding B — transactional interactive startup', () => {
       debugMode: false,
     });
     const store = new SettingsService();
-    runtimeSettings = { store, owner: new SessionSettingsOwner(store) };
+    runtimeSettings = new SessionSettingsOwner(store);
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -178,7 +182,7 @@ describe('Finding B — transactional interactive startup', () => {
   });
 
   afterEach(async () => {
-    await runtimeSettings.owner.dispose();
+    await runtimeSettings.dispose();
     await testConfig.dispose();
     __resetInteractiveUIStateForTesting();
     setInteractiveStdoutObserver(null);

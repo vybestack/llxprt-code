@@ -236,15 +236,18 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         model: 'fake-model',
         authMode: 'auto',
       };
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        activation: intent,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        { activation: intent },
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.providerReads.getActiveProviderName()).toBe('fake');
       await agent.dispose();
@@ -278,15 +281,18 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         model: 'fake-model',
         authMode: 'auto',
       };
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        activation: intent,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        { activation: intent },
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         // The profile auth ephemerals MUST survive fromConfig — the provider
         // was already active WITH profile ephemerals, so fromConfig must NOT
@@ -314,15 +320,18 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         provider: 'fake',
         authMode: 'none',
       };
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        activation: intent,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        { activation: intent },
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();
     } finally {
@@ -334,15 +343,18 @@ describe('fromConfig executes the activation intent (#2374)', () => {
     await openCaller('plain-text.jsonl');
     try {
       const callerBus: MessageBus = callerPolicy.session.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        messageBus: callerBus,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();
     } finally {

@@ -403,15 +403,16 @@ describe('profile postcommit sibling lifetime', () => {
           buckets: [`${provider}-primary`, `${provider}-secondary`],
         },
       });
-    const agent = await fromConfig({
-      oauthManager: oauth,
-      settingsOwner: callerSettingsOwner,
-      settingsService: callerSettings,
-      providerManager: callerManager,
-      config: callerConfig,
-      mcpRuntime: callerMcp,
-      messageBus: callerPolicy.session.messageBus,
-    });
+    const agent = await fromConfig(
+      callerConfig,
+      callerSettings,
+      {},
+      callerSettingsOwner,
+      callerManager,
+      oauth,
+      callerPolicy.session.messageBus,
+      callerMcp,
+    );
     const transport = spyOn(globalThis, 'fetch').mockImplementation(
       async (input, init) => {
         if (

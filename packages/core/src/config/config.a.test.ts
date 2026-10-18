@@ -234,8 +234,10 @@ describe('Server Config (config.ts)', () => {
         config.projectHistoryDir,
         config.getCheckpointingEnabled(),
       );
-      await expect(checkpoints.initialize()).rejects.toThrow(gitError);
-      await expect(checkpoints.dispose()).rejects.toThrow(gitError);
+      const initialization = checkpoints.initialize();
+      const disposal = checkpoints.dispose();
+      await expect(initialization).rejects.toThrow(gitError);
+      await expect(disposal).rejects.toThrow(gitError);
     });
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {

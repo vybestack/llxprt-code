@@ -342,15 +342,39 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
       // Path A: the public fromConfig agent drives a turn over its OWN
       // Config + MessageBus + FakeProvider script so it does not drain the
       // Path B reference drive.
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      });
+      const agent: Agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => ToolConfirmationOutcome.ProceedOnce,
+      );
       return await withFixtureAgent(agent, async () => {
         const pathAEvents = await drain(agent.stream('hello'));
         const pathA = projectEvents(pathAEvents);

@@ -204,16 +204,24 @@ describe('failed adopted session binding', () => {
         retired.push(this);
       });
     try {
-      const failure = await fromConfig({
-        credentialAuthority: credentials().authority,
-        config: callerConfig,
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        providerManager: callerManager,
-        agentClient: callerOwner.getAgentClient(),
-        mcpRuntime: callerMcp,
-        messageBus: callerMessageBus,
-      }).then(
+      const failure = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerMessageBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
+      ).then(
         () => undefined,
         (error: unknown) => error,
       );

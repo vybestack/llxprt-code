@@ -19,7 +19,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import {
   buildAgent,
   internalConfig,
@@ -145,7 +145,7 @@ describe('headless selected telemetry export cleanup', () => {
           workspaceRoot: directory,
           hasPipedInput: true,
           readStdinData: () => Promise.resolve('local fake response'),
-          runtimeSettings: { owner, store: new SettingsService() },
+          runtimeSettings: owner,
         }),
       ]);
       expect(outcomes[0].status).toBe('rejected');

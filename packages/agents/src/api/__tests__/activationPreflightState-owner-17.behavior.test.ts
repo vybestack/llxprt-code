@@ -297,18 +297,21 @@ describe('preflight adoption boundaries', () => {
         authMode: 'none',
       });
       await built_provider.entered.promise;
-      const rejection = fromConfig({
-        settingsService: built_builtCallerSettings,
-        agentClient: built_builtCallerOwner.getAgentClient(),
-        providerManager: built_builtCallerManager,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation: intent,
-        activationPreflight: {
+      const rejection = fromConfig(
+        built_builtCallerConfig,
+        built_builtCallerSettings,
+        { activation: intent },
+        undefined,
+        built_builtCallerManager,
+        undefined,
+        undefined,
+        built_builtCallerMcp,
+        {
           operation: built_operation,
           token: previous.token,
         },
-      });
+        built_builtCallerOwner.getAgentClient(),
+      );
       built_provider.released.resolve();
       await expect(rejection).rejects.toThrow('Activation preflight token');
       expect((await retry).token).toBeUndefined();

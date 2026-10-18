@@ -53,13 +53,27 @@ describe('Workspace trust runtime composition', () => {
       config.getModel(),
     );
     const ide = new WorkspaceIdeOwner(config, trust, trust);
-    const agent = await fromConfig({
+    const agent = await fromConfig(
       config,
       settingsService,
+      {},
       settingsOwner,
-      trustPort: trust,
-      idePort: ide,
-    });
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      trust,
+      ide,
+    );
     workspaces.push({
       dispose: async () => {
         await agent.dispose();

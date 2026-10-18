@@ -364,17 +364,19 @@ class RecordingLifetime {
     this.#restoreTransport = () => transport.mockRestore();
   }
   private borrow = async (): Promise<Agent> => {
-    const agent = await fromConfig({
-      oauthManager: this.#selectedOAuth,
-      providerFileLifecycle: this.#files,
-      settingsService: this.#settings,
-      config: this.#config,
-      agentClient: this.#borrowedClient,
-      providerManager: this.#manager,
-      messageBus: this.#policy.session.messageBus,
-      mcpRuntime: this.#mcp,
-      sessionId: randomUUID() + '-recording-lifetime',
-    });
+    const agent = await fromConfig(
+      this.#config,
+      this.#settings,
+      { sessionId: randomUUID() + '-recording-lifetime' },
+      undefined,
+      this.#manager,
+      this.#selectedOAuth,
+      this.#policy.session.messageBus,
+      this.#mcp,
+      undefined,
+      this.#borrowedClient,
+      this.#files,
+    );
     this.#agents.push(agent);
     return agent;
   };

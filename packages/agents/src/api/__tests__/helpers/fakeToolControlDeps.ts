@@ -1,3 +1,6 @@
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import { createClientToolChannel } from '../../../session/clientToolChannel.js';
+import { ToolKeysControl } from '../../control/toolKeysControl.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 /**
@@ -35,7 +38,7 @@ import type {
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
-import type { ToolControlDeps } from '../../control/toolControl.js';
+import { ToolControl } from '../../control/toolControl.js';
 import { ShellJobOwner } from '../../../session/shell-job-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -66,7 +69,7 @@ export interface FakeRegistryToolEntry {
 }
 
 export interface ToolControlDepsHandle {
-  readonly deps: ToolControlDeps;
+  readonly control: ToolControl;
   readonly messageBus: MessageBus;
   /** Returns the last value written to the `tools.allowed` ephemeral setting. */
   lastAllowed(): readonly string[] | undefined;
@@ -127,8 +130,30 @@ function buildFakeRegistryTools(
   });
 }
 
+function createFixtureSelection(
+  allTools: AnyDeclarativeTool[],
+  enabledTools: AnyDeclarativeTool[],
+): ToolSelection {
+  const toolMap = new Map(allTools.map((t) => [t.name, t]));
+  return {
+    getAllToolNames: () => [...toolMap.keys()],
+    getFunctionDeclarations: () => allTools.map((tool) => tool.schema),
+    getFunctionDeclarationsFiltered: (names: string[]) =>
+      allTools
+        .filter((tool) => names.includes(tool.name))
+        .map((tool) => tool.schema),
+    getAllTools: () => allTools,
+    getEnabledTools: () => enabledTools,
+    getTool: (name: string): AnyDeclarativeTool | undefined =>
+      toolMap.get(name),
+  };
+}
+
 export function createToolControlDeps(
   tools: readonly FakeRegistryToolEntry[] = [],
+  recordCompletedToolCalls: ConstructorParameters<
+    typeof ToolControl
+  >[11] = unusedToolCompletion,
 ): ToolControlDepsHandle {
   const messageBus = new MessageBus();
   const editorCallbacksHolder = { editorCallbacks: noopEditorCallbacks };
@@ -154,19 +179,7 @@ export function createToolControlDeps(
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
 
-  const toolMap = new Map(allTools.map((t) => [t.name, t]));
-  const toolRegistry = {
-    getAllToolNames: () => [...toolMap.keys()],
-    getFunctionDeclarations: () => allTools.map((tool) => tool.schema),
-    getFunctionDeclarationsFiltered: (names: string[]) =>
-      allTools
-        .filter((tool) => names.includes(tool.name))
-        .map((tool) => tool.schema),
-    getAllTools: () => allTools,
-    getEnabledTools: () => enabledTools,
-    getTool: (name: string): AnyDeclarativeTool | undefined =>
-      toolMap.get(name),
-  };
+  const toolRegistry = createFixtureSelection(allTools, enabledTools);
 
   const config = new Config({
     sessionId: 'tool-control-fixture',
@@ -178,33 +191,43 @@ export function createToolControlDeps(
   const shellOwner = new ShellJobOwner(() =>
     resolveShellJobSettings(settingsService),
   );
+  settingsOwner.bindTelemetry(config);
   fixtureRoots.push({ config, settingsOwner, shellOwner });
-  const deps: ToolControlDeps = {
-    telemetry: settingsOwner.bindTelemetry(config),
-    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-    getToolGovernance: () => settingsOwner.readToolGovernance([]),
-    selection: toolRegistry,
-    setAllowedTools: (names) => {
+  const control = new ToolControl(
+    (readEditor, onComplete) =>
+      createClientToolChannel(
+        config,
+        messageBus,
+        readEditor,
+        onComplete,
+        toolRegistry,
+        undefined,
+        () => settingsOwner.readToolExecutionPolicy(),
+        () => settingsOwner.readToolGovernance([]),
+        undefined,
+        settingsOwner.telemetry,
+      ),
+    undefined,
+    undefined,
+    shellOwner,
+    undefined,
+    messageBus,
+    toolRegistry,
+    (names) => {
       settingsOwner.setAllowedTools(names);
     },
-    describeConfiguration: () => ({
+    () => ({
       registered: allTools.map((tool) => ({ displayName: tool.name })),
       unregistered: [],
     }),
-    messageBus,
-    config,
-    shellOwner,
     editorCallbacksHolder,
-    displayCallbacksHolder: {},
-    resolveClient: () => {
-      throw new Error('not used by ToolControl tests');
-    },
-    // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
-    keysDeps: { getStorage: () => getToolKeyStorage() },
-  };
+    {},
+    recordCompletedToolCalls,
+    createFixtureToolKeys(),
+  );
 
   return {
-    deps,
+    control,
     messageBus,
     lastAllowed: () => {
       const value = settingsOwner.readNamedParameter('tools.allowed');
@@ -215,4 +238,25 @@ export function createToolControlDeps(
     editorCallbacksHolder,
     responses: () => responses,
   };
+}
+
+function createFixtureToolKeys(): ToolKeysControl {
+  return new ToolKeysControl(
+    async (name) => {
+      const storage = getToolKeyStorage();
+      return {
+        key: await storage.getKey(name),
+        keyFile: await storage.getKeyfilePath(name),
+      };
+    },
+    (name, key) => getToolKeyStorage().saveKey(name, key),
+    (name) => getToolKeyStorage().deleteKey(name),
+    (name, file) => getToolKeyStorage().setKeyfilePath(name, file),
+    (name) => getToolKeyStorage().clearKeyfilePath(name),
+    (name) => getToolKeyStorage().getKeyfilePath(name),
+  );
+}
+
+function unusedToolCompletion(): never {
+  throw new Error('not used by ToolControl tests');
 }

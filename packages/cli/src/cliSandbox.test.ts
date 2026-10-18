@@ -1,3 +1,7 @@
+import {
+  prepareAgentPreflight,
+  captureAgentPreflightHostInput,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -251,7 +255,11 @@ describe('CLI sandbox', () => {
       } as SandboxHopOptions['settings'],
       argv,
       workspaceRoot: '/tmp/ws',
-      runtimeSettingsService: {} as SandboxHopOptions['runtimeSettingsService'],
+      prepareSandboxPreflight: () =>
+        prepareAgentPreflight(
+          captureAgentPreflightHostInput({ runtimeId: 'sandbox-hop-fixture' }),
+          new CredentialAuthority(),
+        ),
       credentialAuthority: new CredentialAuthority(),
       initialAuthFailed: false,
       readStdin: async () => '',

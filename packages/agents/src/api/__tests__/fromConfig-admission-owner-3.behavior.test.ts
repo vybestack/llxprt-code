@@ -115,16 +115,25 @@ describe('fromConfig admission before resource effects', () => {
     cleanups.push(builtFactorylessClose);
     const oauth = new OAuthManager(new MemoryTokenStore());
     cleanups.push(() => oauth.dispose());
-    const agent = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      oauthManager: oauth,
-      credentialAuthority: credentials().authority,
-    });
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      builtFactorylessSettingsOwner,
+      undefined,
+      oauth,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      credentials().authority,
+      builtFactorylessPolicy,
+    );
     cleanups.push(() => agent.dispose());
     expect(agent.getMessageBus()).toBe(
       builtFactorylessPolicy.session.messageBus,

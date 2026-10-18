@@ -61,7 +61,14 @@ describe('Explicit session client lifetime', () => {
     const builtDirectory = await realpath(
       await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
     );
-    const builtConfig = new Config(
+    let refuseInstructionReads = false;
+    const builtConfig = new (class extends Config {
+      override getProvidedInstructions(): string {
+        if (refuseInstructionReads)
+          throw new Error('Redundant instruction read');
+        return super.getProvidedInstructions();
+      }
+    })(
       toConfigParameters({
         provider: 'fake',
         model: 'fake-model',
@@ -188,19 +195,31 @@ describe('Explicit session client lifetime', () => {
 
     const client = builtOwner.getAgentClient();
     try {
+      refuseInstructionReads = true;
+      try {
+        expect(() =>
+          builtOwner.bindWorkspaceInstructions(builtMcp.workspaceMemory),
+        ).not.toThrow();
+      } finally {
+        refuseInstructionReads = false;
+      }
       await client.startChat();
       await client.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'borrowed conversation' }],
       });
-      const agent = await fromConfig({
-        settingsService: builtSettings,
-        config: builtConfig,
-        providerManager: builtManager,
-        messageBus: builtMessageBus,
-        mcpRuntime: builtMcp,
-        agentClient: client,
-      });
+      const agent = await fromConfig(
+        builtConfig,
+        builtSettings,
+        {},
+        undefined,
+        builtManager,
+        undefined,
+        builtMessageBus,
+        builtMcp,
+        undefined,
+        client,
+      );
       await agent.dispose();
       await builtMcp.refreshContext();
       await client.addHistory({
@@ -273,12 +292,16 @@ describe('Explicit session client lifetime', () => {
       expect(builtMcp.toolSelection.getFunctionDeclarations()).toStrictEqual(
         [],
       );
-      const agent = await fromConfig({
-        settingsService: builtSettings,
-        config: builtConfig,
-        messageBus: builtMessageBus,
-        mcpRuntime: mcp,
-      });
+      const agent = await fromConfig(
+        builtConfig,
+        builtSettings,
+        {},
+        undefined,
+        undefined,
+        undefined,
+        builtMessageBus,
+        mcp,
+      );
       try {
         await agent.setHistory([
           {

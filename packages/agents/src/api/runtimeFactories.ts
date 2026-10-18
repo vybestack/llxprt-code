@@ -30,7 +30,8 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
 
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { bindSchedulerOwner } from '../session/assembleSchedulerOwner.js';
-import { createChildToolAssembly } from '../session/childToolAssembly.js';
+import { withChildToolDisplay } from '../session/childToolAssembly.js';
+import { ChildToolDisplay } from '../session/childToolDisplay.js';
 import { ShellJobOwner } from '../session/shell-job-owner.js';
 import { LoopRunLifetime } from './loop-run-lifetime.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
@@ -228,8 +229,9 @@ export function createAgenticLoop(
   },
 ): AgenticLoopRunner {
   const shellOwner = new ShellJobOwner(options.readShellJobSettings);
-  const assembly = createChildToolAssembly(
+  const scheduler = withChildToolDisplay(
     (schedulerOptions) => new CoreToolScheduler(schedulerOptions),
+    new ChildToolDisplay(),
     options.taskLaunchOwner,
     shellOwner,
   );
@@ -240,7 +242,7 @@ export function createAgenticLoop(
       options.messageBus,
       options.interactiveMode ?? false,
       options.agentClient.tools,
-      assembly.schedulerFactory,
+      scheduler,
       options.readExecutionPolicy,
       options.getToolGovernance,
       undefined,

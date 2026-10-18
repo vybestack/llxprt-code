@@ -8,15 +8,12 @@ import { getErrorMessage, isNodeError } from './errors.js';
 import { URL } from 'node:url';
 import { createRequire } from 'node:module';
 import type * as Undici from 'undici';
+import { dispatchOwnedFetch } from './owned-fetch-request.js';
 
 const packageRequire = createRequire(
   createRequire(import.meta.url).resolve('undici/package.json'),
 );
-const {
-  Agent,
-  ProxyAgent,
-  fetch: undiciFetch,
-}: typeof Undici = packageRequire('./');
+const { Agent, ProxyAgent }: typeof Undici = packageRequire('./');
 
 export type NetworkFetch = (
   input: RequestInfo | URL,
@@ -102,6 +99,7 @@ export async function fetchWithTimeout(
 
 export class OwnedFetch {
   private readonly dispatcher;
+  private readonly cancellation = new AbortController();
   private closing: Promise<void> | undefined;
 
   constructor(proxy?: string) {
@@ -109,31 +107,20 @@ export class OwnedFetch {
   }
 
   readonly fetch: NetworkFetch = async (input, init) => {
-    if (this.closing !== undefined) throw new Error('Root fetch is closed');
+    if (this.closing !== undefined || this.cancellation.signal.aborted)
+      throw new Error('Root fetch is closed');
     const request = new Request(input, init);
-    const response = await undiciFetch(request.url, {
-      method: request.method,
-      headers: Object.fromEntries(request.headers),
-      body: request.body === null ? undefined : requestBody(request.body),
-      duplex: 'half',
-      signal: request.signal,
-      redirect: request.redirect,
-      dispatcher: this.dispatcher,
-    });
-    const native = new Response(
-      response.status === 204 ||
-      response.status === 205 ||
-      response.status === 304
-        ? null
-        : responseBody(response.body),
-      {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers),
-      },
+    return dispatchOwnedFetch(
+      this.dispatcher,
+      request,
+      AbortSignal.any([request.signal, this.cancellation.signal]),
+      captureReplayableBody(init?.body),
     );
-    return withResponseMetadata(native, response);
   };
+
+  closeAdmissionAndAbort(): void {
+    this.cancellation.abort();
+  }
 
   dispose(): Promise<void> {
     this.closing ??= this.dispatcher.close();
@@ -141,61 +128,17 @@ export class OwnedFetch {
   }
 }
 
-async function* requestBody(
-  body: ReadableStream<Uint8Array>,
-): AsyncIterable<Uint8Array> {
-  const reader = body.getReader();
-  try {
-    for (;;) {
-      const result = await reader.read();
-      if (result.done) return;
-      yield result.value;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function responseBody(
-  body: Awaited<ReturnType<typeof undiciFetch>>['body'],
-): ReadableStream<Uint8Array> | null {
-  if (body === null) return null;
-  const reader = body.getReader();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller): Promise<void> {
-      const result = await reader.read();
-      if (result.done) {
-        reader.releaseLock();
-        controller.close();
-      } else {
-        if (!(result.value instanceof Uint8Array))
-          throw new Error('Expected response bytes');
-        controller.enqueue(result.value);
-      }
-    },
-    async cancel(reason: unknown): Promise<void> {
-      try {
-        await reader.cancel(reason);
-      } finally {
-        reader.releaseLock();
-      }
-    },
-  });
-}
-
-function withResponseMetadata(
-  body: Response,
-  metadata: Pick<Response, 'url' | 'redirected' | 'type'>,
-): Response {
-  return new Proxy(body, {
-    get(target, property): unknown {
-      if (property === 'url') return metadata.url;
-      if (property === 'redirected') return metadata.redirected;
-      if (property === 'type') return metadata.type;
-      if (property === 'clone')
-        return () => withResponseMetadata(target.clone(), metadata);
-      const value: unknown = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
+function captureReplayableBody(
+  body: RequestInit['body'],
+): string | Uint8Array | undefined {
+  if (typeof body === 'string') return body;
+  if (body instanceof URLSearchParams) return body.toString();
+  if (body instanceof ArrayBuffer) return new Uint8Array(body.slice(0));
+  if (ArrayBuffer.isView(body))
+    return new Uint8Array(
+      body.buffer,
+      body.byteOffset,
+      body.byteLength,
+    ).slice();
+  return undefined;
 }

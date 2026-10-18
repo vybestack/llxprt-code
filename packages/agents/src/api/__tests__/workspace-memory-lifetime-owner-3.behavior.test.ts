@@ -178,16 +178,25 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     const result = await operation.preflight(intent);
     expect(result.authFailed).toBe(false);
     if (!result.token) throw new Error('Missing actual preflight token');
-    const facade = await fromConfig({
-      config: built_builtFactorylessConfig,
-      settingsService: built_builtFactorylessSettings,
-      settingsOwner: built_builtFactorylessSettingsOwner,
-      messageBus: built_builtFactorylessPolicy.session.messageBus,
-      policyOwner: built_builtFactorylessPolicy,
-      providerManager: manager,
-      activation: intent,
-      activationPreflight: { operation, token: result.token },
-    });
+    const facade = await fromConfig(
+      built_builtFactorylessConfig,
+      built_builtFactorylessSettings,
+      { activation: intent },
+      built_builtFactorylessSettingsOwner,
+      manager,
+      undefined,
+      built_builtFactorylessPolicy.session.messageBus,
+      undefined,
+      { operation, token: result.token },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      built_builtFactorylessPolicy,
+    );
     cleanups.push(() => facade.dispose());
     await writeFile(file, 'Transferred preflight instructions.');
     await facade.memory.refresh();

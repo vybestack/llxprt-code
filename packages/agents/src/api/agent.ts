@@ -1,3 +1,4 @@
+import type { AgentSessionAuthentication } from './control/session-authentication.js';
 import type { AgentProviderFileOperations } from './provider-file-domain.js';
 import type { AgentModelParametersControl } from './model-parameters.js';
 import type { AgentSettingsControl } from './control/settings-control.js';
@@ -1175,6 +1176,7 @@ export interface Agent extends AgentProviderFileOperations {
   readonly tools: AgentToolControl;
   readonly mcp: AgentMcpControl;
   readonly auth: AgentAuthControl;
+  readonly authentication: AgentSessionAuthentication;
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
   readonly metrics: SessionMetricOperations;

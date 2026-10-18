@@ -1,3 +1,7 @@
+import * as assembly from '../providerSwitchAssembly.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { spyOn } from 'bun:test';
+import type { MessageBus } from '@vybestack/llxprt-code-core';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 /**
  * @license
@@ -29,10 +33,9 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import {
   prepareAgentPreflight,
-  type AgentProfilePreflight,
+  AgentProfilePreflight,
 } from '../profile-preflight.js';
 import type { AgentActivationOperation } from '../activationPreflightState.js';
-import { fromConfig } from '../fromConfig.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 import { cleanupFailedCreatedAgent } from '../createAgent.js';
@@ -92,22 +95,44 @@ describe('preflight acquired lifetime', () => {
       await trust.dispose();
       await config.dispose();
     });
-    const attach = (
-      policy?: (value: RuntimePolicyOwner) => void,
+    const attach = async (
+      policy?: (value: MessageBus) => void,
       manager?: (value: RuntimeProviderManager) => void,
       oauth?: (value: OAuthManager | undefined) => void,
-    ) =>
-      operation.preparePostConfiguration(
-        config,
-        filesystem,
-        memory,
-        trust,
-        () => trust.dispose(),
-        undefined,
-        policy,
-        manager,
-        oauth,
-      );
+    ): Promise<void> => {
+      const configure = ProviderManager.prototype.setConfig;
+      const managerObservation = spyOn(
+        ProviderManager.prototype,
+        'setConfig',
+      ).mockImplementation(function (this: ProviderManager, config) {
+        configure.call(this, config);
+        manager?.(this);
+      });
+      const assemble = assembly.assembleAgentActivationBootstrap;
+      const activationObservation = spyOn(
+        assembly,
+        'assembleAgentActivationBootstrap',
+      ).mockImplementation(async (...args) => {
+        const activation = await assemble(...args);
+        if (activation.messageBus === undefined)
+          throw new Error('Missing policy bus');
+        policy?.(activation.messageBus);
+        oauth?.(activation.oauthManager);
+        return activation;
+      });
+      try {
+        await operation.preparePostConfiguration(
+          config,
+          filesystem,
+          memory,
+          trust,
+          () => trust.dispose(),
+        );
+      } finally {
+        managerObservation.mockRestore();
+        activationObservation.mockRestore();
+      }
+    };
     return { root, settings, operation, config, attach };
   }
 
@@ -285,8 +310,8 @@ describe('preflight acquired lifetime', () => {
   });
 
   it('preserves configured policy and OAuth for the receiving Agent after preflight disposal', async () => {
-    const { operation, config, settings, attach } = await fixture();
-    let policy: RuntimePolicyOwner | undefined;
+    const { operation, config, attach } = await fixture();
+    let policy: MessageBus | undefined;
     let manager: RuntimeProviderManager | undefined;
     let oauth: OAuthManager | undefined;
     await attach(
@@ -309,18 +334,15 @@ describe('preflight acquired lifetime', () => {
     cleanups.push(async () => {
       await activation.dispose();
     });
-    const agent = await fromConfig({
-      config,
-      settingsService: settings,
-      providerManager: manager,
-      oauthManager: oauth,
-      policyOwner: policy,
-      credentialAuthority: credentials().authority,
-      activation: intent,
-      activationPreflight: { operation: activation, token: receipt.token },
-    });
+    const agent = await AgentProfilePreflight.createForegroundAgent(
+      operation,
+      receipt.token,
+      intent,
+      {},
+    );
+    agent.agentClient.assertProviderManager(manager);
     cleanups.push(() => agent.dispose());
-    const before = policy.session.decisions.evaluate('read_file', {
+    const before = policy.evaluate('read_file', {
       path: config.getTargetDir(),
     });
     const bus = activation.messageBus;
@@ -347,7 +369,7 @@ describe('preflight acquired lifetime', () => {
     expect(await pending).toBe(true);
     unsubscribe();
     expect(
-      policy.session.decisions.evaluate('read_file', {
+      policy.evaluate('read_file', {
         path: config.getTargetDir(),
       }),
     ).toBe(before);
@@ -363,9 +385,9 @@ describe('preflight acquired lifetime', () => {
     expect(credentials().snapshot()).toStrictEqual([1]);
     expect(credentials().keySnapshot()).toStrictEqual([1]);
     const configuredPolicy = policy;
-    expect(() =>
-      configuredPolicy.session.decisions.evaluate('read_file', {}),
-    ).toThrow('disposed');
+    expect(() => configuredPolicy.evaluate('read_file', {})).toThrow(
+      'disposed',
+    );
   });
 
   it('closes failed attachment and permits a fresh independent owner', async () => {

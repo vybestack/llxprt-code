@@ -21,7 +21,7 @@ import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 const createFakeAgent = async (config: Config): Promise<Agent> =>
   ({
-    workspace: (await createUiSessionOwner(config)).workspace,
+    ...(await createUiSessionOwner(config)),
     dispose: vi.fn().mockResolvedValue(undefined),
     getConfig: () => config,
   }) as unknown as Agent;
@@ -200,14 +200,11 @@ describe('startInteractiveUI ink render options', () => {
   }, 120_000);
 });
 
-function startupSettings(): {
-  owner: SessionSettingsOwner;
-  store: SettingsService;
-} {
+function startupSettings(): SessionSettingsOwner {
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
   startupOwners.push(owner);
-  return { owner, store };
+  return owner;
 }
 
 function rawPersistence(): CliSessionPersistence {

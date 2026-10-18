@@ -15,10 +15,7 @@ import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.j
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
-import {
-  SessionControl,
-  type SessionControlDeps,
-} from '../control/sessionControl.js';
+import { SessionControl } from '../control/sessionControl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -94,28 +91,24 @@ function textContent(
   };
 }
 
-function makeDeps(client: AgentClientContract): SessionControlDeps {
-  return {
-    readRecordingQueueLimit: () => 1024 * 1024,
-    directories: () => fixturePaths().directories(),
-    config: makeConfig(),
-    mediaStore: new LocalMediaStore({
+function createSessionControl(
+  client: AgentClientContract,
+  id = 'test-session',
+): SessionControl {
+  return new SessionControl(
+    makeConfig(),
+    new LocalMediaStore({
       rootDirectory: '/tmp/test-session-control/media',
       quotaBytes: 1024 * 1024,
     }),
-    persistence: new AgentSessionPersistence(
-      {
-        projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),
-        chatsDir: new Storage('/tmp/test-session-control').getProjectChatsDir(),
-      },
-      {},
-    ),
-    sessionIdentityOwnership: 'config',
-    sessionId: () => 'test-session',
-    resolveClient: () => client,
-    withSessionTransition: (operation) => operation(),
-    closeSessionAdmission: () => {},
-    prepareNewSessionClient: async () => {
+    () => 1024 * 1024,
+    () => fixturePaths().directories(),
+    'config',
+    () => id,
+    () => client,
+    (operation) => operation(),
+    () => {},
+    async () => {
       await client.resetChat();
       return {
         client,
@@ -124,31 +117,30 @@ function makeDeps(client: AgentClientContract): SessionControlDeps {
         discard: async () => {},
       };
     },
-    getProvider: () => 'test-provider',
-    getModel: () => 'test-model',
-  };
+    () => 'test-provider',
+    () => 'test-model',
+    new AgentSessionPersistence(
+      {
+        projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),
+        chatsDir: new Storage('/tmp/test-session-control').getProjectChatsDir(),
+      },
+      {},
+    ),
+  );
 }
 
 describe('SessionControl (characterization)', () => {
   describe('constructor and interface', () => {
     it('creates a SessionControl instance', () => {
       const client = makeMockClient([]);
-      const sc = new SessionControl(makeDeps(client));
+      const sc = createSessionControl(client);
       expect(sc).toBeDefined();
     });
 
     it('creates instances with different session IDs', () => {
       const client = makeMockClient([]);
-      const deps1 = {
-        ...makeDeps(client),
-        sessionId: () => 'session-1',
-      };
-      const deps2 = {
-        ...makeDeps(client),
-        sessionId: () => 'session-2',
-      };
-      const sc1 = new SessionControl(deps1);
-      const sc2 = new SessionControl(deps2);
+      const sc1 = createSessionControl(client, 'session-1');
+      const sc2 = createSessionControl(client, 'session-2');
       expect(sc1).toBeDefined();
       expect(sc2).toBeDefined();
     });
@@ -195,7 +187,7 @@ describe('SessionControl (characterization)', () => {
   describe('dispose', () => {
     it('completes without error on fresh instance', async () => {
       const client = makeMockClient([]);
-      const sc = new SessionControl(makeDeps(client));
+      const sc = createSessionControl(client);
       await expect(sc.dispose()).resolves.toBeUndefined();
     });
   });

@@ -1,3 +1,5 @@
+import * as agents from '@vybestack/llxprt-code-agents';
+import { spyOn } from 'bun:test';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -37,6 +39,15 @@ export async function prepareIntegrationPreflight(
     isTrusted: () => trust.isTrustedFolder(),
   });
   const memory = assembleWorkspaceMemory(config, filesystem, trust);
+  const assemble = agents.assembleAgentActivationBootstrap;
+  const observation = spyOn(
+    agents,
+    'assembleAgentActivationBootstrap',
+  ).mockImplementation(async (...args) => {
+    const activation = await assemble(...args);
+    publishManager(args[2]);
+    return activation;
+  });
   try {
     await preflight.preparePostConfiguration(
       config,
@@ -44,9 +55,6 @@ export async function prepareIntegrationPreflight(
       memory,
       trust,
       () => trust.dispose(),
-      undefined,
-      undefined,
-      publishManager,
     );
     return preflight;
   } catch (error) {
@@ -65,5 +73,7 @@ export async function prepareIntegrationPreflight(
         'Integration preflight cleanup failed',
       );
     throw error;
+  } finally {
+    observation.mockRestore();
   }
 }

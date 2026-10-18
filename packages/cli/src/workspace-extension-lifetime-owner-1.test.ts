@@ -354,14 +354,18 @@ describe('filesystem workspace extension ownership', () => {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
 
-    agent = await fromConfig({
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      agentClient: builtCallerOwner.getAgentClient(),
-      mcpRuntime: builtCallerMcp,
-      mcpOwnership: 'agent',
-    });
+    agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      { mcpOwnership: 'agent' },
+      undefined,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     try {
       for await (const event of agent.stream('hello')) void event;
       await builtCallerMcp.awaitDiscovery();

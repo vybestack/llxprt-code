@@ -10,55 +10,9 @@ import {
   type PropsWithChildren,
   type JSX,
 } from 'react';
-import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { DiscoveredProvider } from '../commands/oauthBucketDiscovery.js';
+import type { AgentSessionAuthentication } from '@vybestack/llxprt-code-agents';
 
-export type OAuthControl = Pick<
-  OAuthManager,
-  | 'attachInteractiveAuthMessages'
-  | 'bindInteractiveAuthHost'
-  | 'unbindInteractiveAuthHost'
-  | 'cancelInteractiveAuth'
-  | 'getInteractiveAuthSessions'
-  | 'getAuthStatus'
-  | 'toggleOAuthEnabled'
-  | 'authenticate'
-  | 'getSupportedProviders'
-  | 'listBuckets'
-  | 'isOAuthEnabled'
-  | 'isAuthenticated'
-  | 'peekStoredToken'
-  | 'getHigherPriorityAuth'
-  | 'activateNamedLoginBucket'
-  | 'logoutAllBuckets'
-  | 'logout'
-  | 'clearSessionBucket'
-  | 'getAuthStatusWithBuckets'
-  | 'setSessionBucket'
-  | 'getSessionBucket'
-  | 'inspectAuthLock'
-  | 'forceRecoverAuthLock'
-  | 'recoverAuthLock'
-  | 'clearBrowserProfileAssociation'
-  | 'setBrowserProfileAssociation'
-  | 'getAllAnthropicUsageInfo'
-  | 'getAllCodexUsageInfo'
-  | 'getAllCodexRateLimitResetCredits'
-> & {
-  hasCodexToken(): Promise<boolean>;
-  clearProviderClientCache(provider: string): void;
-  isAvailable(): boolean;
-  discoverBuckets(logger?: DebugLogger): Promise<DiscoveredProvider[]>;
-  readStoredTokenSummary(
-    provider: string,
-    bucket: string,
-  ): Promise<{ expiry?: number; hasRefreshToken: boolean } | null>;
-  readCodexBucketToken(bucket: string): Promise<unknown>;
-  attachProviderMessages(callback: OAuthUICallback): void;
-  submitCode(provider: string, code: string): boolean;
-};
+export type OAuthControl = AgentSessionAuthentication;
 
 const OAuthControlContext = createContext<OAuthControl | null>(null);
 

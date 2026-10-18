@@ -288,13 +288,16 @@ describe('ACP model selection without provider-manager authority', () => {
   });
   it('retains public Agent model queries and provider responses while usage reads stay live', async () => {
     await openownerCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsService: ownerCallerSettings,
-      config: ownerCallerConfig,
-      providerManager: ownerCallerManager,
-      messageBus: ownerCallerPolicy.session.messageBus,
-      mcpRuntime: ownerCallerMcp,
-    });
+    const agent = await fromConfig(
+      ownerCallerConfig,
+      ownerCallerSettings,
+      {},
+      undefined,
+      ownerCallerManager,
+      undefined,
+      ownerCallerPolicy.session.messageBus,
+      ownerCallerMcp,
+    );
     try {
       const port = projectZedSessionAgent(agent);
       expect(

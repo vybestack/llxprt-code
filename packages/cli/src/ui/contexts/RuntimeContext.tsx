@@ -24,9 +24,8 @@ import type {
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
   SessionProviderReads,
+  createProviderInspection,
 } from '@vybestack/llxprt-code-agents';
-import type { createProviderInspection } from '../../runtime/providerInspection.js';
-import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
@@ -86,7 +85,9 @@ export type RuntimeOwnerFeatures = RuntimeFunctions & {
   ) => Promise<ApiKeyUpdateResult>;
   getWorkspaceDirectories: () => readonly string[];
   getDefaultProfileName: () => string | null;
-  getOpenAIProviderInfo: () => ReturnType<typeof getOpenAIProviderInfo>;
+  getOpenAIProviderInfo: () => ReturnType<
+    SessionProviderReads['readOpenAIInfo']
+  >;
 };
 
 export type RuntimeApi = RuntimeOwnerFeatures &

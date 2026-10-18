@@ -264,36 +264,42 @@ describe('activation bootstrap receipts', () => {
       if (!result.token) throw new Error('Missing receipt');
       const client = built_builtCallerOwner.getAgentClient();
       const contentConfig = built_builtCallerConfig.getContentGeneratorConfig();
-      const agent = await fromConfig({
-        settingsService: built_builtCallerSettings,
-        agentClient: built_builtCallerOwner.getAgentClient(),
-        providerManager: built_builtCallerManager,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation: intent,
-        activationPreflight: {
+      const agent = await fromConfig(
+        built_builtCallerConfig,
+        built_builtCallerSettings,
+        { activation: intent },
+        undefined,
+        built_builtCallerManager,
+        undefined,
+        undefined,
+        built_builtCallerMcp,
+        {
           operation: built_operation,
           token: result.token,
         },
-      });
+        built_builtCallerOwner.getAgentClient(),
+      );
       expect(agent.agentClient).toBe(client);
       expect(built_builtCallerConfig.getContentGeneratorConfig()).toBe(
         contentConfig,
       );
       await agent.dispose();
       await expect(
-        fromConfig({
-          settingsService: built_builtCallerSettings,
-          agentClient: built_builtCallerOwner.getAgentClient(),
-          providerManager: built_builtCallerManager,
-          config: built_builtCallerConfig,
-          mcpRuntime: built_builtCallerMcp,
-          activation: intent,
-          activationPreflight: {
+        fromConfig(
+          built_builtCallerConfig,
+          built_builtCallerSettings,
+          { activation: intent },
+          undefined,
+          built_builtCallerManager,
+          undefined,
+          undefined,
+          built_builtCallerMcp,
+          {
             operation: built_operation,
             token: result.token,
           },
-        }),
+          built_builtCallerOwner.getAgentClient(),
+        ),
       ).rejects.toThrow('Activation preflight');
     } finally {
       await built_operation.dispose();

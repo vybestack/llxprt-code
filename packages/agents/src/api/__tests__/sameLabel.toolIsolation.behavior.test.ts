@@ -470,22 +470,45 @@ describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
         }
       });
       restores.push(() => model.mockRestore());
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-        sessionId,
-        prepareSessionTools: (_config, _bus, tools) =>
-          tools.registerTool(externalTool),
-        onApproval: (confirmation) => {
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { sessionId },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (confirmation) => {
           approvals.push(confirmation.toolCallId);
           return ToolConfirmationOutcome.ProceedOnce;
         },
-      });
+        undefined,
+        undefined,
+        (_config, _bus, tools) => tools.registerTool(externalTool),
+      );
       agents.push(agent);
       return {
         agent,

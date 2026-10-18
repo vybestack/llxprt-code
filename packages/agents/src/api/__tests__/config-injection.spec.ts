@@ -260,15 +260,39 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       const config = callerConfig;
       // onApproval mirrors Path B's ProceedOnce so the tool's confirmation
       // request is answered (the established headless-approval pattern).
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => ToolConfirmationOutcome.ProceedOnce,
+      );
       try {
         // REQ-INT-001: the adopted Config is the SAME instance.
         expect(internalConfig(agent)).toBe(config);
@@ -293,14 +317,18 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     await openCaller('plain-text.jsonl');
     try {
       const config = callerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         // The agent's provider/model reflect the ADOPTED Config's active runtime.
         expect(agent.getProvider()).toBe('fake');
@@ -324,14 +352,18 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     await openCaller('plain-text.jsonl');
     try {
       const config = callerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       await agent.dispose();
 
       // The caller-supplied Config is STILL usable: reading ephemeral settings
@@ -374,15 +406,18 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
       await openCaller('plain-text.jsonl');
       try {
-        const agent: Agent = await fromConfig({
-          settingsOwner: callerSettingsOwner,
-          settingsService: callerSettings,
-          agentClient: callerOwner.getAgentClient(),
-          providerManager: callerManager,
-          config: callerConfig,
-          mcpRuntime: callerMcp,
-          sessionId,
-        });
+        const agent: Agent = await fromConfig(
+          callerConfig,
+          callerSettings,
+          { sessionId },
+          callerSettingsOwner,
+          callerManager,
+          undefined,
+          undefined,
+          callerMcp,
+          undefined,
+          callerOwner.getAgentClient(),
+        );
         try {
           return (
             agent.getProvider() === 'fake' &&
@@ -404,15 +439,18 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
         await openCaller('plain-text.jsonl');
         try {
-          const agent: Agent = await fromConfig({
-            settingsOwner: callerSettingsOwner,
-            settingsService: callerSettings,
-            agentClient: callerOwner.getAgentClient(),
-            providerManager: callerManager,
-            config: callerConfig,
-            mcpRuntime: callerMcp,
-            sessionId,
-          });
+          const agent: Agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            { sessionId },
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            callerOwner.getAgentClient(),
+          );
           try {
             return internalConfig(agent) === callerConfig;
           } finally {

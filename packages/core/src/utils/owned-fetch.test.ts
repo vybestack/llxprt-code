@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
-import { connect } from 'node:net';
+import { connect, createServer as createTcpServer } from 'node:net';
 import { once } from 'node:events';
 import { OwnedFetch } from './fetch.js';
 
@@ -53,6 +53,7 @@ describe('root-owned proxy fetch', () => {
     const held = Promise.withResolvers<void>();
     const admitted = Promise.withResolvers<void>();
     const server = createServer((request, response) => {
+      request.resume();
       if (request.url === '/held') {
         admitted.resolve();
         void held.promise.then(() => response.end(request.url));
@@ -101,4 +102,98 @@ describe('root-owned proxy fetch', () => {
       );
     }
   });
+
+  it.each(['GET', 'POST'])(
+    'cancels its accepted %s response body and rejects new work while an independent owner remains live',
+    async (method) => {
+      const admitted = Promise.withResolvers<void>();
+      const disconnected = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const faults: unknown[] = [];
+      const server = createTcpServer((socket) => {
+        let header = '';
+        let responded = false;
+        socket.on('error', (error) => {
+          if (!('code' in error && error.code === 'ECONNRESET'))
+            faults.push(error);
+        });
+        socket.on('data', (chunk) => {
+          if (responded) return;
+          header += chunk.toString();
+          if (!header.includes('\r\n\r\n')) return;
+          responded = true;
+          socket.write(
+            'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n',
+          );
+          if (header.split('\r\n', 1)[0]?.includes('/held')) {
+            socket.once('close', () => disconnected.resolve());
+            socket.write('accepted');
+            admitted.resolve();
+            void release.promise.then(() => socket.end('released'));
+          } else socket.end('peer response');
+        });
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (address === null || typeof address === 'string')
+        throw new Error('Missing server address');
+      const url = `http://127.0.0.1:${address.port}`;
+      const owner = new OwnedFetch();
+      const peer = new OwnedFetch();
+      let body: Promise<string> | undefined;
+      const failures: unknown[] = [];
+      try {
+        const response = await owner.fetch(`${url}/held`, {
+          method,
+          ...(method === 'POST' ? { body: 'actual request body' } : {}),
+        });
+        const reader = response.body?.getReader();
+        if (reader === undefined)
+          throw new Error('Missing actual response body');
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toBe('accepted');
+        body = reader
+          .read()
+          .then((part) => new TextDecoder().decode(part.value))
+          .finally(() => reader.releaseLock());
+        void body.catch(() => undefined);
+        await admitted.promise;
+        owner.closeAdmissionAndAbort();
+        await expect(owner.fetch(`${url}/late`)).rejects.toThrow(
+          'Root fetch is closed',
+        );
+        await expect(body).rejects.toThrow(/abort/i);
+        await disconnected.promise;
+        await owner.dispose();
+        expect(await (await peer.fetch(`${url}/peer`)).text()).toBe(
+          'peer response',
+        );
+      } catch (error) {
+        failures.push(error);
+      } finally {
+        release.resolve();
+        const retired = await Promise.allSettled([
+          owner.dispose(),
+          peer.dispose(),
+        ]);
+        const stopped = await Promise.allSettled([
+          new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          ),
+        ]);
+        failures.push(
+          ...retired
+            .concat(stopped)
+            .flatMap((result) =>
+              result.status === 'rejected' ? [result.reason] : [],
+            ),
+          ...faults,
+        );
+      }
+      if (failures.length > 0)
+        throw new AggregateError(failures, 'Physical transport release failed');
+    },
+    10000,
+  );
 });

@@ -30,11 +30,11 @@ describe('agent raw credential mutations', () => {
   it('returns Gemini paid-mode transitions from the real credential mutation', async () => {
     const settings = new SettingsService();
     const state = createAgentAuthState();
-    const keys = new AuthKeysControl({
-      authState: state,
-      getKeyName: () => undefined,
-      setKeyName: () => {},
-      updateProviderApiKey: (key) =>
+    const keys = new AuthKeysControl(
+      state,
+      () => undefined,
+      () => {},
+      (key) =>
         updateActiveProviderApiKey(
           key,
           { setEphemeralSetting: (name, value) => settings.set(name, value) },
@@ -46,7 +46,7 @@ describe('agent raw credential mutations', () => {
               'string',
           },
         ),
-    });
+    );
     const updated = await keys.setRaw(' gemini-secret ');
     expect(updated.isPaidMode).toBe(true);
     expect(updated.message).toContain('WARNING: Gemini now runs in paid mode.');
@@ -61,18 +61,18 @@ describe('agent raw credential mutations', () => {
   it('propagates a real mutator failure and retains the previous raw-key state', async () => {
     const settings = new SettingsService();
     const state = createAgentAuthState();
-    const keys = new AuthKeysControl({
-      authState: state,
-      getKeyName: () => undefined,
-      setKeyName: () => {},
-      updateProviderApiKey: (key) =>
+    const keys = new AuthKeysControl(
+      state,
+      () => undefined,
+      () => {},
+      (key) =>
         updateActiveProviderApiKey(
           key,
           { setEphemeralSetting: (name, value) => settings.set(name, value) },
           settings,
           undefined,
         ),
-    });
+    );
     await expect(keys.setRaw('rejected-secret')).rejects.toThrow(
       'No active provider is available.',
     );

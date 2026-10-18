@@ -131,6 +131,7 @@ describe('activation media owner lifetime', () => {
         await released.promise;
         return { authFailed: false, infoMessages: [] };
       },
+      undefined,
       owner,
       await SessionClientOwner.create(
         builtFactorylessConfig,

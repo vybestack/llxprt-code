@@ -5,50 +5,43 @@
  */
 
 import {
-  type WorkspaceTrustControlPort,
-  type WorkspaceMemoryOwner,
-  type WorkspaceFilesystemOwner,
   ApprovalMode,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
+  type SessionSettingsOwner,
+  type ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
 
-import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  type AgentActivationOperation,
+  type AgentPostConfigSettings,
+  type AgentProfileApplication,
+  type AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 import type { EphemeralSettings } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
+import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { CliArgs } from './cliArgParser.js';
+import { type BootstrapProfileArgs } from './profileBootstrap.js';
+import type { ProfileLoadResult } from './profileResolution.js';
+import { applyProfileToRuntime } from './profileRuntimeApplication.js';
+import type { ProviderModelResult } from './providerModelResolver.js';
+import type { Settings } from './settings.js';
 import {
-  type AgentProfileApplication,
-  type AgentActivationOperation,
-  type AgentProfilePreflight,
-  type AgentPostConfigSettings,
-} from '@vybestack/llxprt-code-agents';
-import {
-  READ_ONLY_TOOL_NAMES,
+  buildNormalizedToolSet,
   EDIT_TOOL_NAME,
   normalizeToolNameForPolicy,
-  buildNormalizedToolSet,
+  READ_ONLY_TOOL_NAMES,
 } from './toolGovernance.js';
-import { applyProfileToRuntime } from './profileRuntimeApplication.js';
-import {
-  type BootstrapProfileArgs,
-  type CliRuntimeOverrides,
-} from './profileBootstrap.js';
-import type { CliArgs } from './cliArgParser.js';
-import type { Settings } from './settings.js';
-import type { ProfileLoadResult } from './profileResolution.js';
-import type { ProviderModelResult } from './providerModelResolver.js';
 
 const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
 export interface PostConfigInput {
-  readonly workspaceTrust: WorkspaceTrustControlPort;
-  readonly trustCleanup?: () => Promise<void>;
-  readonly filesystem: WorkspaceFilesystemOwner;
-  readonly memory: WorkspaceMemoryOwner;
+  readonly bindMcpSettings?: () => void;
   readonly config: Config;
   readonly runtimeState: AgentProfilePreflight;
   readonly bootstrapArgs: BootstrapProfileArgs;
@@ -58,7 +51,6 @@ export interface PostConfigInput {
   readonly profileLoadResult: ProfileLoadResult;
   readonly providerModelResult: ProviderModelResult;
   readonly defaultDisabledTools: readonly string[];
-  readonly runtimeOverrides: CliRuntimeOverrides;
   readonly approvalMode: ApprovalMode;
   readonly interactive: boolean;
 }
@@ -68,11 +60,7 @@ export interface PostConfigInput {
 /** Fields consumed by setupRuntimeContext (steps 10-11). */
 type SetupRuntimeContextInput = Pick<
   PostConfigInput,
-  | 'config'
-  | 'runtimeState'
-  | 'profileSettingsWithTools'
-  | 'runtimeOverrides'
-  | 'workspaceTrust'
+  'config' | 'runtimeState' | 'profileSettingsWithTools'
 > & {
   readonly sessionSettings: Pick<
     AgentPostConfigSettings,
@@ -83,7 +71,7 @@ type SetupRuntimeContextInput = Pick<
 /** Fields consumed by reapplyCliOverrides (step 14). */
 type ReapplyCliOverridesInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'bootstrapArgs' | 'argv' | 'runtimeOverrides'
+  'config' | 'runtimeState' | 'bootstrapArgs' | 'argv'
 >;
 
 /** Fields consumed by applyToolPolicies (step 15). */
@@ -428,14 +416,10 @@ function applyEphemeralSettings(
     >;
   },
 ): void {
-  const { config, argv, profileSettingsWithTools, runtimeOverrides } = input;
+  const { config, argv, profileSettingsWithTools } = input;
 
   const preflight = input.runtimeState;
-  if (!runtimeOverrides.settingsService) {
-    logger.warn(
-      '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
-    );
-  }
+
   if (
     profileSettingsWithTools.emojifilter !== undefined &&
     preflight.readSetting('emojifilter') === undefined
@@ -554,6 +538,11 @@ function finalizeMetadata(
  */
 export async function finalizeConfig(
   original: PostConfigInput,
+  settingsOwner?: SessionSettingsOwner,
+  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void,
+  onProfileApplicationReady?: (application: AgentProfileApplication) => void,
+  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void,
+  finishPostConfiguration = true,
 ): Promise<Config> {
   const sessionSettings = original.runtimeState;
   const input = { ...original, sessionSettings };
@@ -565,29 +554,24 @@ export async function finalizeConfig(
   // who sets security.disableOsKeyring still gets a Keychain prompt at startup.
   // The env var LLXPRT_DISABLE_OS_KEYRING=1 is independent and read directly in
   // storage, so it keeps working with zero CLI involvement.
-  setOsKeyringDisabledBySetting(
-    input.profileSettingsWithTools.security?.disableOsKeyring === true,
-  );
-
-  applyDisabledHooks(input);
-  await input.runtimeState.preparePostConfiguration(
+  await input.runtimeState.prepareConfiguredWorkspace(
     input.config,
-    input.filesystem,
-    input.memory,
-    input.workspaceTrust,
-    input.trustCleanup,
-    input.runtimeOverrides.sessionSettingsOwner,
-    input.runtimeOverrides.onPolicyOwnerReady,
-    input.runtimeOverrides.onProviderManagerReady,
-    input.runtimeOverrides.onOAuthManagerReady,
-    input.runtimeOverrides.onProviderFilesReady,
+    () => {
+      setOsKeyringDisabledBySetting(
+        input.profileSettingsWithTools.security?.disableOsKeyring === true,
+      );
+
+      applyDisabledHooks(input);
+    },
+    settingsOwner,
   );
+  input.bindMcpSettings?.();
   const activationOperation = input.runtimeState;
   const switchProvider = activationOperation.captureSwitchOperation();
   const profileApplication = activationOperation.captureProfileOperation();
   try {
-    input.runtimeOverrides.onProviderSwitchReady?.(switchProvider);
-    input.runtimeOverrides.onProfileApplicationReady?.(profileApplication);
+    onProviderSwitchReady?.(switchProvider);
+    onProfileApplicationReady?.(profileApplication);
     const finalProvider = await activateProviderAndProfile(
       input,
       profileApplication,
@@ -606,14 +590,13 @@ export async function finalizeConfig(
     // Step 17: Finalize metadata
     finalizeMetadata(input);
 
-    if (input.runtimeOverrides.onActivationBootstrapReady !== undefined) {
-      activationOperation.transferActivation(
-        input.runtimeOverrides.onActivationBootstrapReady,
-      );
+    if (onActivationBootstrapReady !== undefined) {
+      activationOperation.transferActivation(onActivationBootstrapReady);
     }
     return input.config;
   } finally {
-    await activationOperation.finishPostConfiguration();
+    if (finishPostConfiguration)
+      await activationOperation.finishPostConfiguration();
   }
 }
 

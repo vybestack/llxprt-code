@@ -1,3 +1,8 @@
+import {
+  SessionLifecycle,
+  type SessionCleanupAction,
+} from './sessionLifecycle.js';
+import { AggregateDisposeError } from './disposeErrors.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,8 +19,6 @@
  */
 
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import type { OwnershipRecord } from './agentBootstrap.js';
 
 /**
  * Defensively disposes an OAuthManager if it exposes a dispose method. The
@@ -72,20 +75,6 @@ export function collectSyncDisposalError(
   }
 }
 
-export async function cancelAndJoinMcp(
-  authentication: { cancelAndJoin(): Promise<void> },
-  ownership: Pick<OwnershipRecord, 'disposeMcpRuntime'>,
-  errors: unknown[],
-): Promise<void> {
-  const stopping = collectDisposalError(errors, () =>
-    ownership.disposeMcpRuntime?.(),
-  );
-  const authenticating = collectDisposalError(errors, () =>
-    authentication.cancelAndJoin(),
-  );
-  await Promise.all([stopping, authenticating]);
-}
-
 export async function joinAgentWork(
   cancelAndJoinProfiles: () => Promise<void>,
   cancelAndJoinMcpAuth: () => Promise<void>,
@@ -104,24 +93,18 @@ export async function joinAgentWork(
 }
 
 export async function disposeConfigInfrastructure(
-  ownership: OwnershipRecord,
-  mediaOwner: SessionMediaOwner | undefined,
+  disposeConfig: (() => Promise<void>) | undefined,
+  disposeMedia: (() => Promise<void>) | undefined,
   errors: unknown[],
 ): Promise<void> {
-  if (ownership.configOwnership !== 'caller')
-    await collectDisposalError(errors, () => ownership.config.dispose());
-  await collectDisposalError(errors, () => mediaOwner?.dispose());
-  if (ownership.configOwnership !== 'caller') {
-    await collectDisposalError(errors, async () => {
-      ownership.lspShutDown = true;
-    });
-  }
+  await collectDisposalError(errors, () => disposeConfig?.());
+  await collectDisposalError(errors, () => disposeMedia?.());
 }
 
 export async function disposeAgentObservers(
-  ownership: OwnershipRecord,
-  hooks: { detach(): void },
-  controls: { dispose(): Promise<void> | void },
+  schedulers: ReadonlyArray<{ dispose(): Promise<void> | void }>,
+  detachHooks: () => void,
+  disposeControls: () => Promise<void> | void,
   subscriptions: ReadonlyArray<() => void> | undefined,
   errors: unknown[],
 ): Promise<void> {
@@ -134,7 +117,7 @@ export async function disposeAgentObservers(
   // never disposed. Per-turn loop schedulers stay owned + disposed by
   // AgenticLoop scheduler owner — dispose() does NOT touch them. A
   // failing handle's rejection is collected into errors → AggregateDisposeError.
-  for (const handle of ownership.injectedSchedulerHandles) {
+  for (const handle of schedulers) {
     await collectDisposalError(errors, () => handle.dispose());
   }
 
@@ -142,9 +125,9 @@ export async function disposeAgentObservers(
   // and detach the hooks control's shared-MessageBus subscriptions, driving
   // the bus emitter's listener tally to its post-dispose baseline (zero).
   collectSyncDisposalError(errors, () => {
-    hooks.detach();
+    detachHooks();
   });
-  await collectDisposalError(errors, () => controls.dispose());
+  await collectDisposalError(errors, disposeControls);
   const subs = subscriptions;
   if (subs !== undefined) {
     for (const unsubscribe of subs) {
@@ -153,20 +136,6 @@ export async function disposeAgentObservers(
       });
     }
   }
-}
-
-export async function releaseAgentFinalResources(
-  locks: {
-    readonly sessionLocks: ReadonlyArray<{ release(): Promise<void> | void }>;
-    sessionLocksReleased?: boolean;
-  },
-  oauthManager: OAuthManager,
-  errors: unknown[],
-): Promise<void> {
-  for (const lock of locks.sessionLocks)
-    await collectDisposalError(errors, () => lock.release());
-  locks.sessionLocksReleased = true;
-  await collectDisposalError(errors, () => disposeOAuthManager(oauthManager));
 }
 
 export async function joinCapturedRun(
@@ -185,4 +154,62 @@ export async function finishOwnedHooks(
 ): Promise<void> {
   await collectDisposalError(errors, finishSessionEnd);
   await collectDisposalError(errors, disposeHooks);
+}
+
+export function assembleAgentShutdown(
+  stopAdmissions: readonly SessionCleanupAction[],
+  beginAdmissionJoins: readonly SessionCleanupAction[],
+  abortActiveAndPending: readonly SessionCleanupAction[],
+  beginAbortJoins: readonly SessionCleanupAction[],
+  joinOwnedWork: (errors: unknown[]) => Promise<void>,
+  joinRun: (errors: unknown[]) => Promise<void>,
+  joinProfiles: () => Promise<void>,
+  flushRecording: (errors: unknown[]) => Promise<void>,
+  releaseResources: (errors: unknown[]) => Promise<void>,
+): SessionLifecycle {
+  const errors: unknown[] = [];
+  const pending: Array<Promise<void>> = [];
+  const start = (action: SessionCleanupAction): void => {
+    pending.push(collectDisposalError(errors, action));
+  };
+  return new SessionLifecycle({
+    stopAdmissions: [
+      ...stopAdmissions,
+      ...beginAdmissionJoins.map((action) => () => start(action)),
+    ],
+    abortActiveAndPending: [
+      ...abortActiveAndPending,
+      ...beginAbortJoins.map((action) => () => start(action)),
+    ],
+    cancelAndJoinOwnedWork: [
+      () => joinOwnedWork(errors),
+      () => joinRun(errors),
+      () => collectDisposalError(errors, joinProfiles),
+      async () => {
+        await Promise.all(pending);
+      },
+    ],
+    flushRecording: [() => flushRecording(errors)],
+    releaseResources: [
+      async () => {
+        await releaseResources(errors);
+        if (errors.length > 0) throw new AggregateDisposeError(errors);
+      },
+    ],
+  });
+}
+
+export async function disposeWorkspaceFacades(
+  disposeSkills: () => Promise<void>,
+  disposeWorkspace: () => Promise<void>,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    disposeSkills(),
+    disposeWorkspace(),
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Workspace facade cleanup failed');
 }

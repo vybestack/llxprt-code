@@ -178,7 +178,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(true);
   });
@@ -197,7 +200,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(true);
   });
@@ -216,7 +222,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
   });
@@ -235,7 +244,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
   });
@@ -254,7 +266,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
   });
@@ -280,7 +295,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
   });
@@ -299,7 +317,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello');
@@ -320,7 +341,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
@@ -352,7 +376,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('write a function to sort array');
@@ -373,7 +400,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(true);
     expect(argv.query).toBeUndefined();
@@ -403,7 +433,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(false);
     expect(argv.query).toBe('hello world how are you');
@@ -424,7 +457,10 @@ describe('loadCliConfig interactive', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
     expect(config.isInteractive()).toBe(true);
   });
@@ -511,7 +547,10 @@ describe('loadCliConfig fileFiltering', () => {
         'test-session',
         argv,
         undefined,
-        { credentialAuthority: new CredentialAuthority() },
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
       );
       expect(getter(config)).toBe(value);
     },

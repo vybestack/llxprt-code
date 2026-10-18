@@ -318,22 +318,30 @@ describe('Explicit session client lifetime', () => {
       await cleanupAfterFailure(primary, rightClose);
     }
 
-    const a = await fromConfig({
-      settingsService: leftSettings,
-      config: leftConfig,
-      providerManager: leftManager,
-      messageBus: leftMessageBus,
-      mcpRuntime: leftMcp,
-      agentClient: leftOwner.getAgentClient(),
-    });
-    const b = await fromConfig({
-      settingsService: rightSettings,
-      config: rightConfig,
-      providerManager: rightManager,
-      messageBus: rightMessageBus,
-      mcpRuntime: rightMcp,
-      agentClient: rightOwner.getAgentClient(),
-    });
+    const a = await fromConfig(
+      leftConfig,
+      leftSettings,
+      {},
+      undefined,
+      leftManager,
+      undefined,
+      leftMessageBus,
+      leftMcp,
+      undefined,
+      leftOwner.getAgentClient(),
+    );
+    const b = await fromConfig(
+      rightConfig,
+      rightSettings,
+      {},
+      undefined,
+      rightManager,
+      undefined,
+      rightMessageBus,
+      rightMcp,
+      undefined,
+      rightOwner.getAgentClient(),
+    );
     try {
       await a.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'left only' }] },

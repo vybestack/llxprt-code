@@ -343,16 +343,38 @@ describe('public Agent workspace definition lifetime', () => {
         workingDir: root,
         harness: { includeProcessCwd: false, forceConfirmations: false },
       });
-      const options = {
-        config: callerCallerConfig,
-        settingsService: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        providerManager: callerCallerManager,
-        messageBus: callerCallerPolicy.session.messageBus,
-        mcpRuntime: callerCallerMcp,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const optionsConfig: Parameters<typeof fromConfig>[0] =
+        callerCallerConfig;
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        callerCallerSettings;
+      const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+        callerCallerSettingsOwner;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        callerCallerManager;
+      const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+        callerCallerPolicy.session.messageBus;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        callerCallerMcp;
+      const first = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
+      const second = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
       const closing = closingIndex === 0 ? first : second;
       const peer = closingIndex === 0 ? second : first;
       try {
@@ -409,25 +431,65 @@ describe('public Agent workspace definition lifetime', () => {
       join(root, 'right/profiles'),
       join(root, 'right/subagents'),
     );
-    const options = {
-      config: callerCallerConfig,
-      settingsService: callerCallerSettings,
-      settingsOwner: callerCallerSettingsOwner,
-      providerManager: callerCallerManager,
-      messageBus: callerCallerPolicy.session.messageBus,
-      mcpRuntime: callerCallerMcp,
-      sessionId: 'equal-definition-label',
-    };
-    const left = await fromConfig({
-      ...options,
-      definitionOwner: leftRoot,
-      definitionOwnership: 'caller',
-    });
-    const right = await fromConfig({
-      ...options,
-      definitionOwner: rightRoot,
-      definitionOwnership: 'caller',
-    });
+    const optionsConfig: Parameters<typeof fromConfig>[0] = callerCallerConfig;
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+      callerCallerSettings;
+    const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+      callerCallerSettingsOwner;
+    const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+      callerCallerManager;
+    const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+      callerCallerPolicy.session.messageBus;
+    const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = callerCallerMcp;
+    const optionsSessionId: NonNullable<
+      Parameters<typeof fromConfig>[2]
+    >['sessionId'] = 'equal-definition-label';
+    const left = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      { sessionId: optionsSessionId, definitionOwnership: 'caller' },
+      optionsSettingsOwner,
+      optionsProviderManager,
+      undefined,
+      optionsMessageBus,
+      optionsMcpRuntime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      leftRoot,
+    );
+    const right = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      { sessionId: optionsSessionId, definitionOwnership: 'caller' },
+      optionsSettingsOwner,
+      optionsProviderManager,
+      undefined,
+      optionsMessageBus,
+      optionsMcpRuntime,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      rightRoot,
+    );
     try {
       await left.saveProfileSnapshot('route');
       await right.saveProfileSnapshot('route');

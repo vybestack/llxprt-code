@@ -1,61 +1,30 @@
-import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { vi } from 'bun:test';
+import type { BootstrapProfileArgs } from '../config/profileBootstrap.js';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import type { loadCliConfig } from '../config/config.js';
 
 export function handoffCliConfig(
   config: Config,
-  createOperation: (
-    store: SettingsService,
-    owner: SessionSettingsOwner,
-  ) => AgentActivationOperation | Promise<AgentActivationOperation>,
-  providerManager: RuntimeProviderManager,
+  preflightOperation?: AgentActivationOperation['preflight'],
+  hasActiveProvider?: () => boolean,
 ): typeof loadCliConfig {
   return async (...args) => {
-    const overrides = args[6];
-    if (!overrides?.settingsService)
-      throw new Error('Bootstrap fixture requires supplied settings store');
-    const store = overrides.settingsService;
-    const owner = overrides.sessionSettingsOwner;
-    if (!owner) return config;
-    owner.assertSettingsIdentity(store);
-    providerManager.setRuntimeContext({}, owner, store, config);
-    owner.initializeProviderSelection(config.getProvider(), config.getModel());
-    const operation = await createOperation(store, owner);
-    overrides.onProviderManagerReady?.(providerManager);
-    overrides.onProviderSwitchReady?.(async (name) => ({
-      changed: false,
-      previousProvider: name,
-      nextProvider: name,
-      infoMessages: [],
-    }));
-    const policy = new RuntimePolicyOwner(config, operation.workspaceTrust);
-    overrides.onPolicyOwnerReady?.(policy);
-    if (operation.providerFileLifecycle === undefined)
-      throw new Error('Bootstrap fixture requires its retained provider files');
-    overrides.onProviderFilesReady?.(operation.providerFileLifecycle);
-    overrides.onActivationBootstrapReady?.(operation);
-    overrides.onProfileApplicationReady?.({
-      isApplying: () => false,
-      cancelAndJoin: async () => {},
-      load: async () => {
-        throw new Error('Unexpected profile load in bootstrap fixture');
-      },
-      applySnapshot: async () => {
-        throw new Error('Unexpected profile application in bootstrap fixture');
-      },
-    });
+    const preflight = args[6];
+    if (preflight === undefined)
+      throw new Error('Bootstrap fixture requires its owning preflight');
+    await preflight.prepareConfiguredWorkspace(config, () => {});
+    if (preflightOperation !== undefined)
+      vi.spyOn(preflight, 'preflight').mockImplementation(preflightOperation);
+    if (hasActiveProvider !== undefined)
+      vi.spyOn(preflight, 'hasActiveProvider').mockImplementation(
+        hasActiveProvider,
+      );
     return config;
   };
 }

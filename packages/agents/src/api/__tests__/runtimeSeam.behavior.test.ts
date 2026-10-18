@@ -293,15 +293,18 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
     await openCaller('plain-text.jsonl');
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        sessionId: 'known-runtime-id-T6a',
-      });
+      agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        { sessionId: 'known-runtime-id-T6a' },
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(asWithRuntimeId(agent).getRuntimeId()).toBe(
         'known-runtime-id-T6a',
       );
@@ -315,14 +318,18 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
     await openCaller('plain-text.jsonl');
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
     } finally {
@@ -341,14 +348,18 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
       // one on the supplied Config (no second manager constructed). Mirrors the
       // sibling fromConfig.behavior T6 plain idiom (NOT a mock, NOT an
       // agent-root accessor).
-      agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       expect(captureProviderManager(agent)).toBe(callerManager);
     } finally {
       await agent?.dispose();
@@ -364,15 +375,18 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         await openCaller('plain-text.jsonl');
         let agent: Agent | undefined;
         try {
-          agent = await fromConfig({
-            settingsOwner: callerSettingsOwner,
-            settingsService: callerSettings,
-            agentClient: callerOwner.getAgentClient(),
-            providerManager: callerManager,
-            config: callerConfig,
-            mcpRuntime: callerMcp,
-            sessionId: runtimeId,
-          });
+          agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            { sessionId: runtimeId },
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            callerOwner.getAgentClient(),
+          );
           expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
         } finally {
           await agent?.dispose();
@@ -388,15 +402,18 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         await openCaller('plain-text.jsonl');
         let agent: Agent | undefined;
         try {
-          agent = await fromConfig({
-            settingsOwner: callerSettingsOwner,
-            settingsService: callerSettings,
-            agentClient: callerOwner.getAgentClient(),
-            providerManager: callerManager,
-            config: callerConfig,
-            mcpRuntime: callerMcp,
-            sessionId: runtimeId,
-          });
+          agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            { sessionId: runtimeId },
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            callerOwner.getAgentClient(),
+          );
           expect(captureProviderManager(agent)).toBe(callerManager);
         } finally {
           await agent?.dispose();

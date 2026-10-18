@@ -117,17 +117,25 @@ describe('adoption cleanup with explicit close operations', () => {
       policyOwner,
     );
     const files = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig({
-      config: fixtureFactorylessConfig,
-      settingsService: fixtureFactorylessSettings,
-      settingsOwner: fixtureFactorylessSettingsOwner,
-      policyOwner: fixtureFactorylessPolicy,
-      messageBus: fixtureFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: fixtureFactorylessFactories,
-      mcpRuntime: mcp,
-      providerFileLifecycle: files,
-      credentialAuthority: credentials().authority,
-    });
+    const agent = await fromConfig(
+      fixtureFactorylessConfig,
+      fixtureFactorylessSettings,
+      {},
+      fixtureFactorylessSettingsOwner,
+      undefined,
+      undefined,
+      fixtureFactorylessPolicy.session.messageBus,
+      mcp,
+      undefined,
+      undefined,
+      files,
+      undefined,
+      undefined,
+      fixtureFactorylessFactories,
+      undefined,
+      credentials().authority,
+      fixtureFactorylessPolicy,
+    );
     const tokenizerFactory = configureProviderTokenizer(agent.providerManager);
     const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const media = new SessionMediaOwner(config.projectTempDir, 1024);
@@ -176,6 +184,7 @@ describe('adoption cleanup with explicit close operations', () => {
     });
     const primary = new Error('adoption failed');
     let runtimeFailure: unknown;
+    let joinedRuntimeFailure: AggregateError | undefined;
     let settled = false;
     const result = cleanupFailedAdoption(
       primary,
@@ -186,7 +195,8 @@ describe('adoption cleanup with explicit close operations', () => {
           await agent.dispose();
         } catch (error) {
           runtimeFailure = error;
-          throw new AggregateError([primary, error]);
+          joinedRuntimeFailure = new AggregateError([primary, error]);
+          throw joinedRuntimeFailure;
         }
       },
       undefined,
@@ -204,9 +214,14 @@ describe('adoption cleanup with explicit close operations', () => {
       const error = await result;
       if (!(error instanceof AggregateError))
         throw new Error('Expected joined cleanup failures');
-      expect(error.errors).toStrictEqual([primary, runtimeFailure]);
+      expect(error.errors).toStrictEqual([primary, joinedRuntimeFailure]);
+      expect(joinedRuntimeFailure).toBeInstanceOf(AggregateError);
+      expect(joinedRuntimeFailure?.errors).toStrictEqual([
+        primary,
+        runtimeFailure,
+      ]);
       expect(runtimeFailure).toBeInstanceOf(Error);
-      expect(error.errors[1]).toMatchObject({
+      expect(joinedRuntimeFailure?.errors[1]).toMatchObject({
         message: expect.stringContaining('cleanup-upload'),
       });
       expect(credentials().snapshot()).toStrictEqual([1]);

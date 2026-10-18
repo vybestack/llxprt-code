@@ -69,7 +69,7 @@ describe('interactive CLI owner startup', () => {
     agent: Agent;
     config: Config;
     root: string;
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+    runtimeSettings: SessionSettingsOwner;
   }> {
     const directory =
       root ?? (await mkdtemp(join(tmpdir(), 'interactive-owner-')));
@@ -91,17 +91,17 @@ describe('interactive CLI owner startup', () => {
     });
     const store = new SettingsService();
     const owner = new SessionSettingsOwner(store);
-    const runtimeSettings = { owner, store };
+    const runtimeSettings = owner;
     registerCleanup(async () => {
       await owner.dispose();
       await config.dispose();
     });
-    const agent = await fromConfig({
+    const agent = await fromConfig(
       config,
-      settingsService: store,
-      settingsOwner: owner,
-      activation: { provider: 'fake', model: 'fake-model' },
-    });
+      store,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      owner,
+    );
     agents.push(agent);
     registerCleanup(() => agent.dispose());
     return { agent, config, root: directory, runtimeSettings };
@@ -111,7 +111,7 @@ describe('interactive CLI owner startup', () => {
     config: Config,
     agent: Agent,
     history: Awaited<ReturnType<typeof setupOwnerSessionRecording>>,
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService },
+    runtimeSettings: SessionSettingsOwner,
   ): Promise<React.ReactElement> {
     let tree: React.ReactElement | undefined;
     __setRenderForTesting((node) => {

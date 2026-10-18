@@ -542,22 +542,30 @@ describe('shared production skill resource admission', () => {
         new SimpleExtensionLoader([extension]),
       );
       const facades = [
-        await fromConfig({
-          settingsOwner: firstCallerSettingsOwner,
-          settingsService: firstCallerSettings,
-          config: firstCallerConfig,
-          providerManager: firstCallerManager,
-          agentClient: firstCallerOwner.getAgentClient(),
-          mcpRuntime: firstCallerMcp,
-        }),
-        await fromConfig({
-          settingsOwner: secondCallerSettingsOwner,
-          settingsService: secondCallerSettings,
-          config: secondCallerConfig,
-          providerManager: secondCallerManager,
-          agentClient: secondCallerOwner.getAgentClient(),
-          mcpRuntime: secondCallerMcp,
-        }),
+        await fromConfig(
+          firstCallerConfig,
+          firstCallerSettings,
+          {},
+          firstCallerSettingsOwner,
+          firstCallerManager,
+          undefined,
+          undefined,
+          firstCallerMcp,
+          undefined,
+          firstCallerOwner.getAgentClient(),
+        ),
+        await fromConfig(
+          secondCallerConfig,
+          secondCallerSettings,
+          {},
+          secondCallerSettingsOwner,
+          secondCallerManager,
+          undefined,
+          undefined,
+          secondCallerMcp,
+          undefined,
+          secondCallerOwner.getAgentClient(),
+        ),
       ];
       try {
         for (const facade of facades) {

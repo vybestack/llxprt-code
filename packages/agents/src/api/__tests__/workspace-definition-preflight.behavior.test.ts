@@ -443,16 +443,25 @@ describe('public Agent workspace definition lifetime', () => {
       );
       const result = await operation.preflight(intent);
       if (!result.token) throw new Error('Missing preflight receipt');
-      agent = await fromConfig({
-        config: callerFactorylessConfig,
-        settingsService: callerFactorylessSettings,
-        settingsOwner: callerFactorylessSettingsOwner,
-        providerManager: manager,
-        policyOwner: callerFactorylessPolicy,
-        messageBus: callerFactorylessPolicy.session.messageBus,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
+      agent = await fromConfig(
+        callerFactorylessConfig,
+        callerFactorylessSettings,
+        { activation: intent },
+        callerFactorylessSettingsOwner,
+        manager,
+        undefined,
+        callerFactorylessPolicy.session.messageBus,
+        undefined,
+        { operation, token: result.token },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        callerFactorylessPolicy,
+      );
       await agent.profiles.load('owned-preflight');
       expect(agent.captureProfile().model).toBe('owned-preflight-model');
       await agent.saveProfileSnapshot('owned-adopted');
@@ -528,15 +537,17 @@ describe('public Agent workspace definition lifetime', () => {
       const receipt = await operation.preflight(intent);
       if (!receipt.token)
         throw receipt.authError ?? new Error('Missing preflight receipt');
-      agent = await fromConfig({
-        config: callerCallerConfig,
-        settingsService: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        providerManager: manager,
-        mcpRuntime: callerCallerMcp,
-        activation: intent,
-        activationPreflight: { operation, token: receipt.token },
-      });
+      agent = await fromConfig(
+        callerCallerConfig,
+        callerCallerSettings,
+        { activation: intent },
+        callerCallerSettingsOwner,
+        manager,
+        undefined,
+        undefined,
+        callerCallerMcp,
+        { operation, token: receipt.token },
+      );
       await agent.profiles.load('preflight');
       expect(agent.getModel()).toBe('preflight-model');
       await agent.saveProfileSnapshot('after-adoption');

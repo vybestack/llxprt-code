@@ -123,21 +123,31 @@ describe('foreground explicit provider identity and preflight ownership', () => 
       throw new AggregateError(failures, 'Agent cleanup failed');
   });
   async function adopt(): Promise<Agent> {
-    const agent = await fromConfig({
+    const agent = await fromConfig(
       config,
-      settingsService: settings,
-      settingsOwner: owner,
-      policyOwner: policy,
-      providerManager: manager,
-      oauthManager: oauth,
-      providerFileLifecycle: files,
-      credentialAuthority: credentials().authority,
-      activation: {
-        provider: 'openai',
-        model: config.getModel(),
-        authMode: 'none',
+      settings,
+      {
+        activation: {
+          provider: 'openai',
+          model: config.getModel(),
+          authMode: 'none',
+        },
       },
-    });
+      owner,
+      manager,
+      oauth,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      files,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentials().authority,
+      policy,
+    );
     agents.push(agent);
     return agent;
   }

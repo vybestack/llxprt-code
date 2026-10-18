@@ -182,18 +182,25 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       await callerMcp.initialize();
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtFactorylessSettingsOwner,
-        settingsService: builtFactorylessSettings,
-        agentClient: builtFactorylessNoClient,
-        providerManager: builtFactorylessNoManager,
-        runtimeFactoryBindings: builtFactorylessFactories,
-        config: builtFactorylessConfig,
-        sessionId: runtimeId,
-        messageBus: builtFactorylessPolicy.session.messageBus,
-        policyOwner: builtFactorylessPolicy,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        builtFactorylessConfig,
+        builtFactorylessSettings,
+        { sessionId: runtimeId },
+        builtFactorylessSettingsOwner,
+        builtFactorylessNoManager,
+        undefined,
+        builtFactorylessPolicy.session.messageBus,
+        callerMcp,
+        undefined,
+        builtFactorylessNoClient,
+        undefined,
+        undefined,
+        undefined,
+        builtFactorylessFactories,
+        undefined,
+        undefined,
+        builtFactorylessPolicy,
+      );
       try {
         expect(agentToolNames(agent)).toContain('task');
         expect(
@@ -306,21 +313,28 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       const preAdoptionRegistration = callerRegistration;
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtFactorylessSettingsOwner,
-        settingsService: builtFactorylessSettings,
-        agentClient: builtFactorylessNoClient,
-        providerManager: builtFactorylessNoManager,
-        runtimeFactoryBindings: {
+      const agent: Agent = await fromConfig(
+        builtFactorylessConfig,
+        builtFactorylessSettings,
+        { sessionId: runtimeId },
+        builtFactorylessSettingsOwner,
+        builtFactorylessNoManager,
+        undefined,
+        builtFactorylessPolicy.session.messageBus,
+        callerMcp,
+        undefined,
+        builtFactorylessNoClient,
+        undefined,
+        undefined,
+        undefined,
+        {
           ...builtFactorylessFactories,
           taskToolRegistration: () => preAdoptionRegistration,
         },
-        config: builtFactorylessConfig,
-        sessionId: runtimeId,
-        messageBus: builtFactorylessPolicy.session.messageBus,
-        policyOwner: builtFactorylessPolicy,
-        mcpRuntime: callerMcp,
-      });
+        undefined,
+        undefined,
+        builtFactorylessPolicy,
+      );
       try {
         const task = agent.agentClient.tools.getTool('task');
         expect(task instanceof callerRegistration.toolClass).toBe(true);

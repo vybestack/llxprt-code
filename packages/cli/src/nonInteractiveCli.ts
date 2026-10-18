@@ -1,11 +1,4 @@
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { cliSkillOperations } from './config/configBuilder.js';
-import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOperations } from './runtime/createRuntimeOwnerFeatures.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,10 +7,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createSessionModelCommand } from './runtime/session-model-command.js';
 
 import {
-  type SessionSettingsOwner,
-  type RuntimePolicyOwner,
   type Config,
-  type WorkspaceTrustReadPort,
   parseAndFormatApiError,
   ExitCodes,
   FatalInputError,
@@ -29,22 +19,12 @@ import {
   CoreEvent,
   type UserFeedbackPayload,
   type EmojiFilterMode,
-  type MessageBus,
   type AgentRequestInput,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
 
-import {
-  MCPOAuthTokenStorage,
-  KeychainTokenStorage,
-} from '@vybestack/llxprt-code-mcp';
-import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
-
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
-  fromConfig,
   type Agent,
   type AgentToolHandle,
   type AgentInput,
@@ -79,20 +59,14 @@ import {
 import { runExitCleanup } from './utils/cleanup.js';
 
 interface RunNonInteractiveParams {
-  readonly credentialAuthority?: CredentialAuthority;
-  readonly oauthManager?: OAuthManager;
-  readonly providerFileLifecycle?: ProviderFileLifecycle;
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly acquireAgent?: () => Promise<Agent>;
+  readonly hasActiveProvider?: () => boolean;
+  readonly isTrustedFolder?: () => boolean;
+  runtimeSettings?: SessionSettingsOperations;
   config: Config;
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
-  runtimeMessageBus?: MessageBus;
-  policyOwner?: RuntimePolicyOwner;
-  providerManager?: Agent['providerManager'];
   deferTelemetryShutdown?: boolean;
   /**
    * The single session Agent created at the CLI composition root (#2378). When
@@ -223,7 +197,7 @@ function createEmojiFilter(
 ): EmojiFilter | undefined {
   const configuredEmojiFilterMode =
     params.agent === undefined
-      ? requireRuntimeSettings(params).owner.readNamedParameter('emojifilter')
+      ? requireRuntimeSettings(params).readNamedParameter('emojifilter')
       : params.agent.getEphemeralSetting('emojifilter');
   const emojiFilterMode: EmojiFilterMode =
     configuredEmojiFilterMode === 'allowed' ||
@@ -248,10 +222,8 @@ async function resolveSlashQuery(
   config: Config,
   settings: LoadedSettings,
   agent: Agent | undefined,
-  providerManager: Agent['providerManager'] | undefined,
   runtimeSettings: RunNonInteractiveParams['runtimeSettings'],
-  trust: WorkspaceTrustReadPort | undefined,
-  oauthManager?: OAuthManager,
+  isTrustedFolder: (() => boolean) | undefined,
 ): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
@@ -270,26 +242,24 @@ async function resolveSlashQuery(
       ? createRuntimeApi(
           agent,
           createRuntimeOwnerFeatures(
-            config,
-            agent.providerManager,
+            agent.providerReads.inspection,
             () => agent.workspace.getDirectories(),
             createSessionModelCommand(agent),
-            runtimeSettings.owner,
-            runtimeSettings.store,
+            runtimeSettings,
             agent.workspace,
             agent.modelParameters,
             agent.settings,
             agent.toolFormat,
             agent.providerReads,
             agent.auth.keys,
+            () => agent.providerReads.readOpenAIInfo(),
           ),
           agent.sessionClient.fetch,
         )
       : undefined,
-    providerManager,
-    trust,
-    () => oauthManager,
-    runtimeSettings.owner,
+    agent?.providerManager,
+    isTrustedFolder === undefined ? undefined : { isTrustedFolder },
+    runtimeSettings,
   );
   if (
     slashCommandResult !== undefined &&
@@ -449,21 +419,22 @@ async function processQuery(
   );
 }
 
-function buildNonInteractiveActivationIntent(
-  params: RunNonInteractiveParams,
+export function buildNonInteractiveActivationIntent(
+  config: Config,
+  settings: LoadedSettings,
 ): ProviderActivationIntent {
-  const useExternalAuth = params.settings.merged.useExternalAuth === true;
-  const cliOverrides = buildActivationCliOverrides(params.config);
-  const bootstrapArgs = readBootstrapArgs(params.config);
-  const modelParams = collectActivationModelParams(params.config);
-  const configModel = params.config.getModel();
+  const useExternalAuth = settings.merged.useExternalAuth === true;
+  const cliOverrides = buildActivationCliOverrides(config);
+  const bootstrapArgs = readBootstrapArgs(config);
+  const modelParams = collectActivationModelParams(config);
+  const configModel = config.getModel();
   const resolvedModel =
     bootstrapArgs?.modelOverride ??
     (configModel !== PLACEHOLDER_MODEL ? configModel : undefined);
   const configProvider =
-    params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined;
+    config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined;
   const activeProvider =
-    configProvider === undefined ? params.config.getProvider() : undefined;
+    configProvider === undefined ? config.getProvider() : undefined;
   return {
     ...(configProvider !== undefined ? { provider: configProvider } : {}),
     ...(activeProvider !== undefined
@@ -519,17 +490,20 @@ async function resolveAndStream(
     config,
     settings,
     params.agent,
-    params.providerManager,
     params.runtimeSettings,
-    params.policyOwner?.trust,
-    params.oauthManager,
+    params.isTrustedFolder,
   );
   // #2378: reuse the composition-root Agent when supplied. The composition
   // root owns its lifecycle (registerCleanup disposes it), so a reused Agent
   // must NOT be disposed here. Only an Agent this function built (the direct-
   // caller / test path) is disposed in the finally below.
   const reusedAgent = params.agent;
-  const agent = reusedAgent ?? (await createNonInteractiveAgent(params));
+  const acquire = params.acquireAgent;
+  if (reusedAgent === undefined && acquire === undefined)
+    throw new Error(
+      'Noninteractive execution requires an Agent acquisition operation',
+    );
+  const agent = reusedAgent ?? (await requireAgentAcquisition(acquire));
   const failures: unknown[] = [];
   try {
     const query =
@@ -559,53 +533,14 @@ async function resolveAndStream(
     );
 }
 
-async function createNonInteractiveAgent(
-  params: RunNonInteractiveParams,
+async function requireAgentAcquisition(
+  acquire: (() => Promise<Agent>) | undefined,
 ): Promise<Agent> {
-  const { config } = params;
-  const broker = createGitHubBrokerClient(params.credentialAuthority);
-  return fromConfig({
-    credentialAuthority: params.credentialAuthority,
-    githubBrokerClient: broker,
-    disposeGitHubBroker: async () => broker.dispose(),
-    oauthManager: params.oauthManager,
-    providerFileLifecycle: params.providerFileLifecycle,
-    settingsService: requireRuntimeSettings(params).store,
-    settingsOwner: requireRuntimeSettings(params).owner,
-    providerManager: params.providerManager,
-    config,
-    mcpRuntime: await McpRuntimeOwner.create(
-      {
-        tokenStorage: new MCPOAuthTokenStorage(
-          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-        ),
-        openBrowser: defaultBrowserLauncher,
-      },
-      config,
-      params.runtimeMessageBus,
-      undefined,
-      undefined,
-      undefined,
-      params.policyOwner,
-      'runtime',
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      cliSkillOperations(config),
-    ),
-    mcpOwnership: 'agent',
-    messageBus: params.runtimeMessageBus,
-    sessionId: config.getSessionId(),
-    sessionIdentityOwnership: 'config',
-    activation: buildNonInteractiveActivationIntent(params),
-  });
+  if (acquire === undefined)
+    throw new Error(
+      'Noninteractive execution requires an Agent acquisition operation',
+    );
+  return acquire();
 }
 
 async function releaseNonInteractiveResources(
@@ -628,9 +563,9 @@ export async function runNonInteractive(
   const { config, deferTelemetryShutdown = false } = params;
 
   if (
-    !isProviderConfigured(
-      params.agent?.providerManager ?? params.providerManager,
-    )
+    !(params.agent === undefined
+      ? params.hasActiveProvider?.() === true
+      : isProviderConfigured(params.agent.providerManager))
   ) {
     reportUnconfiguredProviderError(config);
     try {
@@ -694,7 +629,7 @@ export async function runNonInteractive(
       () =>
         deferTelemetryShutdown
           ? undefined
-          : requireRuntimeSettings(params).owner.telemetry.flush(),
+          : requireRuntimeSettings(params).flushTelemetry(),
     ]);
   }
   if (failures.length === 1) throw failures[0];

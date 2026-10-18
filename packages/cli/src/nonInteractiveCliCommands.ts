@@ -1,11 +1,12 @@
+import type { SessionSettingsOperations } from './runtime/createRuntimeOwnerFeatures.js';
+
 import { createSessionMetrics } from '@vybestack/llxprt-code-telemetry';
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { buildSlashCommandRuntime } from './ui/cliUiRuntime.js';
 import {
   type RuntimeProviderManager,
@@ -21,9 +22,7 @@ import { CommandService } from './services/CommandService.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext, SlashCommand } from './ui/commands/types.js';
 import type { RuntimeApi } from './ui/contexts/RuntimeContext.js';
-import { createProviderAliasRefresh } from './runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from './runtime/createOAuthControl.js';
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
@@ -45,9 +44,8 @@ export const handleSlashCommand = async (
   agent: Agent | undefined,
   runtimeApi: RuntimeApi | undefined,
   providerManager: RuntimeProviderManager | undefined,
-  trust: WorkspaceTrustReadPort | undefined,
-  readOAuthManager: () => OAuthManager | undefined = () => undefined,
-  telemetrySettings?: SessionSettingsOwner,
+  trust: Pick<WorkspaceTrustReadPort, 'isTrustedFolder'> | undefined,
+  telemetrySettings?: SessionSettingsOperations,
 ): Promise<AgentRequestInput | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
@@ -87,7 +85,6 @@ export const handleSlashCommand = async (
       trimmed,
       commandToExecute.name,
       args,
-      readOAuthManager,
       telemetrySettings,
     );
 
@@ -135,8 +132,7 @@ function buildHeadlessCommandContext(
   trimmed: string,
   name: string,
   args: string,
-  readOAuthManager: () => OAuthManager | undefined,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): CommandContext {
   const sessionStats: SessionStatsState = {
     sessionId: firstNonEmptyString(config.getSessionId(), 'unknown'),
@@ -159,12 +155,18 @@ function buildHeadlessCommandContext(
       return runtimeApi;
     },
     refreshProviderAliases: () => {
-      const manager = requireHeadlessProviderManager(agent, providerManager);
-      return createProviderAliasRefresh(manager)();
+      if (agent === undefined)
+        throw new Error(
+          'Headless command requires an Agent-owned runtime API.',
+        );
+      return agent.providerReads.refreshAliases();
     },
     get oauthControl() {
-      const manager = requireHeadlessProviderManager(agent, providerManager);
-      return createOAuthControl(readOAuthManager, manager);
+      if (agent === undefined)
+        throw new Error(
+          'Headless command requires an Agent-owned runtime API.',
+        );
+      return agent.authentication;
     },
     signal,
     services: {
@@ -202,14 +204,4 @@ function buildHeadlessCommandContext(
   };
 
   return context;
-}
-
-function requireHeadlessProviderManager(
-  agent: Agent | undefined,
-  supplied: RuntimeProviderManager | undefined,
-): RuntimeProviderManager {
-  const manager = agent?.providerManager ?? supplied;
-  if (manager === undefined)
-    throw new Error('Headless command requires a provider owner.');
-  return manager;
 }

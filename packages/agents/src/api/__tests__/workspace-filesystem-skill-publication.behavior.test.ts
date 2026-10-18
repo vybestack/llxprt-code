@@ -301,14 +301,18 @@ describe('failed production skill publication', () => {
       filesystemOwner: root,
       skillsSupport: true,
     });
-    const facade = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      agentClient: builtCallerOwner.getAgentClient(),
-      mcpRuntime: builtCallerMcp,
-    });
+    const facade = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     const publish = spyOn(builtCallerOwner.getAgentClient(), 'setTools');
     publish.mockRejectedValueOnce(new Error('Model publication rejected'));
     try {

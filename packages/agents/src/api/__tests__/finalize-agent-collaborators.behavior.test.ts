@@ -1,43 +1,72 @@
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { buildOwnedMcpControl } from '../control/mcpControlWiring.js';
+import { createAgentAuthState } from '../control/authState.js';
+import { WorkspaceControl } from '../control/workspaceControl.js';
+import { assembleIdeControl } from '../control/ideControl.js';
+import { LspControl } from '../control/lspControl.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
+import { withChildToolDisplay } from '../../session/childToolAssembly.js';
+import { ChildToolDisplay } from '../../session/childToolDisplay.js';
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import {
+  assembleTaskOwner,
+  cleanupFailedShellBootstrap,
+} from '../agent-shell-assembly.js';
+import {
+  buildFacadeState,
+  createStableDisplayCallbacks,
+  recordOwnership,
+} from '../agentBootstrap.js';
+import type { AgentSchedulerHandle } from '../config-types.js';
+import {
+  assembleSessionAuthentication,
+  clearProviderAuthenticationCache,
+} from '../control/session-authentication.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { setActiveModel } from '../providerMutations.js';
 
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { fileURLToPath } from 'node:url';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { randomUUID } from 'node:crypto';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { randomUUID } from 'node:crypto';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { finalizeAgent } from '../createAgent.js';
+import { AgentImpl } from '../agentImpl.js';
 import { gate } from './helpers/async-child-disposal-join-fixture.js';
 
 describe('Agent finalization collaborators', () => {
@@ -185,36 +214,134 @@ describe('Agent finalization collaborators', () => {
     builtOwner.bindProviderFiles(builtFiles, (provider) =>
       builtOAuth.composeRetryOperations(provider),
     );
-    const agent = await finalizeAgent(
-      { provider: 'fake', model: 'fake-model' },
-      { baseUrl: undefined },
-      builtConfig,
-      builtManager,
-      builtOAuth,
-      builtSettings,
-      builtRuntimeId,
-      builtSettingsOwner,
-      () => 'agent',
-      async () => {
-        releases += 1;
-        closing.release();
-        await release.promise;
-        await builtRelease.close();
-      },
-      undefined,
-      undefined,
-      undefined,
-      [],
-      'caller',
-      undefined,
-      builtMcp,
-      undefined,
-      undefined,
-      'facade',
-      undefined,
-      builtOwner,
-      builtMcp.workspaceSkills.operations,
-    );
+    const agent = await (async () => {
+      const task = assembleTaskOwner(builtSettings);
+      const shell = new ShellJobOwner(() =>
+        resolveShellJobSettings(builtSettings),
+      );
+      const child = new ChildToolDisplay();
+      const editor = { editorCallbacks: {} };
+      const display = {};
+      try {
+        builtOwner.initializeExecution(
+          withChildToolDisplay(
+            (options) => new CoreToolScheduler(options),
+            child,
+            task,
+            shell,
+          ),
+          undefined,
+          createStableDisplayCallbacks(editor, display),
+        );
+        const runtimeState = buildFacadeState(
+          { provider: 'fake', model: 'fake-model' },
+          undefined,
+          builtRuntimeId,
+        );
+        const close = async () => {
+          releases += 1;
+          closing.release();
+          await release.promise;
+          await builtRelease.close();
+        };
+        const handles: AgentSchedulerHandle[] = [];
+        const ownership = recordOwnership({
+          runtimeHandle: { cleanup: close },
+          injectedSchedulerHandles: handles,
+          configOwnership: 'caller',
+        });
+        const history =
+          builtOwner.getAgentClient().getHistoryService() ??
+          new HistoryService();
+        builtOwner.getAgentClient().storeHistoryServiceForReuse(history);
+        const mcpAuth = createAgentAuthState();
+        const facade = new AgentImpl(
+          builtSettingsOwner,
+          builtOwner,
+          builtMcp.workspaceSkills.operations,
+          undefined,
+          undefined,
+          task,
+          shell,
+          new WorkspaceControl(
+            builtMcp.profileDefinitions,
+            builtMcp.profileWrites,
+            builtMcp.subagentDefinitions,
+            builtMcp.subagentWrites,
+            builtMcp.checkpointOperations,
+            builtMcp.workspaceIgnore,
+            builtMcp.workspaceSearch,
+            builtMcp.workspaceFiles,
+            builtMcp.workspacePaths.contains,
+            builtMcp.workspacePaths.directories,
+            builtMcp.addWorkspaceDirectory,
+            builtConfig.getTargetDir(),
+            builtConfig.getProjectRoot(),
+          ),
+          assembleIdeControl(
+            builtMcp.trust,
+            builtMcp.ide,
+            () => editor.editorCallbacks,
+          ),
+          new LspControl(builtMcp.lspInspection),
+          (...args) => builtMcp.awaitDiscovery(...args),
+          (...args) => builtMcp.closeAdmission(...args),
+          buildOwnedMcpControl(
+            (...args) => builtMcp.readServerSettings(...args),
+            builtOwner.toolCatalog.selection,
+            (...args) => builtMcp.listPrompts(...args),
+            (...args) => builtMcp.listResources(...args),
+            (...args) => builtMcp.readOAuthCredentials(...args),
+            (...args) => builtMcp.performOAuth(...args),
+            (...args) => builtMcp.status(...args),
+            (...args) => builtMcp.refresh(...args),
+            (...args) => builtMcp.reload(...args),
+            (server) => mcpAuth.mcpAuth.has(server),
+            (server) => mcpAuth.mcpAuth.add(server),
+            () => builtOwner.getAgentClient().setTools(),
+            (...args) => builtMcp.subscribeStatus(...args),
+            (...args) => builtMcp.findResource(...args),
+            (...args) => builtMcp.readResource(...args),
+          ),
+          mcpAuth,
+          builtConfig,
+          builtManager,
+          builtOAuth,
+          () => 'agent',
+          builtSettings,
+          builtRuntimeId,
+          close,
+          builtOwner.messageBus,
+          runtimeState,
+          ownership,
+          'facade',
+          () => builtOwner.getAgentClient(),
+          history,
+          editor,
+          display,
+          undefined,
+          undefined,
+          child,
+          async (model) => {
+            await setActiveModel(
+              model,
+              assembleModelSelection(builtSettingsOwner),
+              builtSettings,
+              builtManager.getActiveProvider(),
+            );
+          },
+          assembleSessionAuthentication(builtOAuth, (provider) =>
+            clearProviderAuthenticationCache(
+              builtManager.getProviderByName(provider),
+            ),
+          ),
+        );
+        expect(facade.getMessageBus()).toBe(builtOwner.messageBus);
+        return facade;
+      } catch (primary) {
+        return cleanupFailedShellBootstrap(primary, task, shell);
+      }
+    })();
     try {
       await agent.setModel('finalized-model');
       expect(builtSettingsOwner.readSelectedModel()).toBe(agent.getModel());

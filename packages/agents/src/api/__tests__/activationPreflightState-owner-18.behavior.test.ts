@@ -473,6 +473,7 @@ describe('activation public admission lifetime', () => {
       built_builtCallerManager,
       async () => ({ authFailed: false, infoMessages: [] }),
       undefined,
+      undefined,
       handed,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,

@@ -397,19 +397,22 @@ describe('public profile application ownership outside ALS', () => {
       a_builtCallerManager.registerProvider(a_target);
       a_oauthManager = a_oauth;
     }
-    const a_agent = await fromConfig({
-      oauthManager: a_oauthManager,
-      providerFileLifecycle: a_builtCallerFiles,
-      settingsOwner: a_builtCallerSettingsOwner,
-      settingsService: a_builtCallerSettings,
-      agentClient: a_builtCallerOwner.getAgentClient(),
-      providerManager: a_builtCallerManager,
-      runtimeFactoryBindings: a_builtCallerFactories,
-      config: a_builtCallerConfig,
-      mcpRuntime: a_builtCallerMcp,
-      messageBus: a_builtCallerPolicy.session.messageBus,
-      sessionId: 'same-profile-owner-label',
-    });
+    const a_agent = await fromConfig(
+      a_builtCallerConfig,
+      a_builtCallerSettings,
+      { sessionId: 'same-profile-owner-label' },
+      a_builtCallerSettingsOwner,
+      a_builtCallerManager,
+      a_oauthManager,
+      a_builtCallerPolicy.session.messageBus,
+      a_builtCallerMcp,
+      undefined,
+      a_builtCallerOwner.getAgentClient(),
+      a_builtCallerFiles,
+      undefined,
+      undefined,
+      a_builtCallerFactories,
+    );
     ownerCloses.push(() =>
       runCleanupSteps([() => a_agent.dispose(), () => a_builtCallerClose()]),
     );

@@ -6,12 +6,13 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
+import { drain } from '../../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { useOwnedCredentials } from '../../../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
-  buildAgent,
-  drain,
-} from '../../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { TaskLaunchOwner } from '../../../../../../agents/src/session/task-launch-owner.js';
+  buildTaskNotificationAgent,
+  launchHeldNotificationTask,
+} from '../../../../__tests__/task-notification-fixture.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
@@ -100,22 +101,16 @@ function renderNotificationQueue(
 }
 
 describe('background notification queue ownership', () => {
+  const credentials = useOwnedCredentials();
   it('aborts an in-flight completion on unmount and retains ownership until it settles', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    ) {
-      throw new Error('Expected agent dependencies');
-    }
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    ) {
-      throw new Error('Expected task owner');
-    }
-    const owner = agent.deps.taskLaunchOwner;
+    const manager = new AsyncTaskManager();
+    const { agent, cleanup } = await buildTaskNotificationAgent(
+      manager,
+      credentials().authority,
+    );
+    let task:
+      | Awaited<ReturnType<typeof launchHeldNotificationTask>>
+      | undefined;
     const submissions: React.MutableRefObject<QueuedSubmission[]> = {
       current: [],
     };
@@ -147,20 +142,8 @@ describe('background notification queue ownership', () => {
       runStreamRef,
     );
     try {
-      await owner.start(async (launch, publish) => {
-        owner.manager.registerTask({
-          id: 'unmount-old-task',
-          subagentName: 'worker',
-          goalPrompt: 'work',
-          abortController: launch.controller,
-        });
-        launch.register('unmount-old-task');
-        publish({ llmContent: '', returnDisplay: '' });
-      });
-      owner.manager.completeTask('unmount-old-task', {
-        terminate_reason: SubagentTerminateMode.GOAL,
-        emitted_vars: { result: 'OLD_SESSION_OUTPUT' },
-      });
+      task = await launchHeldNotificationTask(agent);
+      task.release();
       await waitFor(() => expect(submissions.current).toHaveLength(1));
       act(() => {
         suppressed.current = false;
@@ -169,7 +152,7 @@ describe('background notification queue ownership', () => {
       const signal = await entered.promise;
       rendered.unmount();
       expect(signal.aborted).toBe(true);
-      expect(owner.getPendingNotifications()).toHaveLength(1);
+      expect(manager.getPendingNotifications()).toHaveLength(1);
       const oldSession = { id: agent.session.getSessionId() };
       await expect(agent.session.startNewSession()).rejects.toThrow(
         'completion notices',
@@ -178,31 +161,27 @@ describe('background notification queue ownership', () => {
       release.resolve();
       await finished.promise;
       await waitFor(() =>
-        expect(owner.getPendingNotifications()).toStrictEqual([]),
+        expect(manager.getPendingNotifications()).toStrictEqual([]),
       );
       await agent.session.startNewSession();
       expect(await agent.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();
+      await task?.close();
       await cleanup();
     }
   });
 
   it('blocks clear while a completion is queued and until its submitted turn finishes', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    )
-      throw new Error('Expected agent dependencies');
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    )
-      throw new Error('Expected task owner');
-    const owner = agent.deps.taskLaunchOwner;
+    const manager = new AsyncTaskManager();
+    const { agent, cleanup } = await buildTaskNotificationAgent(
+      manager,
+      credentials().authority,
+    );
+    let task:
+      | Awaited<ReturnType<typeof launchHeldNotificationTask>>
+      | undefined;
     const submissions: React.MutableRefObject<QueuedSubmission[]> = {
       current: [],
     };
@@ -227,20 +206,8 @@ describe('background notification queue ownership', () => {
       runStreamRef,
     );
     try {
-      await owner.start(async (launch, publish) => {
-        owner.manager.registerTask({
-          id: 'ui-old-task',
-          subagentName: 'worker',
-          goalPrompt: 'work',
-          abortController: launch.controller,
-        });
-        launch.register('ui-old-task');
-        publish({ llmContent: '', returnDisplay: '' });
-      });
-      owner.manager.completeTask('ui-old-task', {
-        terminate_reason: SubagentTerminateMode.GOAL,
-        emitted_vars: { result: 'OLD_SESSION_OUTPUT' },
-      });
+      task = await launchHeldNotificationTask(agent);
+      task.release();
       await waitFor(() => expect(submissions.current).toHaveLength(1));
       const switchWithQueuedCompletion = agent.session.startNewSession();
       await expect(switchWithQueuedCompletion).rejects.toThrow(
@@ -257,13 +224,14 @@ describe('background notification queue ownership', () => {
       );
       release.resolve();
       await waitFor(() =>
-        expect(owner.getPendingNotifications()).toStrictEqual([]),
+        expect(manager.getPendingNotifications()).toStrictEqual([]),
       );
       await agent.session.startNewSession();
       expect(await agent.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();
+      await task?.close();
       await cleanup();
     }
   });

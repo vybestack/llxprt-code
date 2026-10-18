@@ -353,14 +353,18 @@ describe('production filesystem roots', () => {
       const before = await tool
         .build({ absolute_path: file })
         .execute(new AbortController().signal);
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        agentClient: builtCallerOwner.getAgentClient(),
-        mcpRuntime: builtCallerMcp,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         const reader = agent.tools.get('read_file');
         if (!reader) throw new Error('Missing public read_file');

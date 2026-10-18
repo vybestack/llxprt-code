@@ -280,15 +280,18 @@ describe('activation bootstrap ownership and queued work', () => {
         consume: () => result,
       };
       await expect(
-        fromConfig({
-          settingsService: built_builtCallerSettings,
-          agentClient: built_builtCallerOwner.getAgentClient(),
-          providerManager: built_builtCallerManager,
-          config: built_builtCallerConfig,
-          mcpRuntime: built_builtCallerMcp,
-          activation: intent,
-          activationPreflight: { operation: forged, token: result.token },
-        }),
+        fromConfig(
+          built_builtCallerConfig,
+          built_builtCallerSettings,
+          { activation: intent },
+          undefined,
+          built_builtCallerManager,
+          undefined,
+          undefined,
+          built_builtCallerMcp,
+          { operation: forged, token: result.token },
+          built_builtCallerOwner.getAgentClient(),
+        ),
       ).rejects.toThrow('Invalid activation bootstrap');
     } finally {
       await built_operation.dispose();

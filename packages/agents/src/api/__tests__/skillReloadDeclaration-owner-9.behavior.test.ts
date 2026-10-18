@@ -1,3 +1,4 @@
+import { DEFAULT_SKILL_OPERATIONS } from '../workspace-skill-assembly.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -40,7 +41,6 @@ import { AgentConfig } from '../config-types.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
 import {
-  internalWorkspace,
   buildAgent,
   internalConfig,
   type Agent,
@@ -178,6 +178,7 @@ describe('workspace skill required publication ports', () => {
       agent: Agent;
       config: Config;
       workspace: string;
+      policySession?: RuntimePolicyOwner['session'];
     }) => Promise<void>,
     operations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
@@ -188,6 +189,7 @@ describe('workspace skill required publication ports', () => {
     // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
     // so discovery never reads the real ~/.agents/skills here; the strict set
     // assertions only ever see this workspace's skills.
+    let policySession: RuntimePolicyOwner['session'] | undefined;
     let agent: Agent;
     let cleanup: () => Promise<void>;
     if (operations === undefined) {
@@ -369,19 +371,24 @@ describe('workspace skill required publication ports', () => {
         await cleanupAfterFailure(primary, callerCallerClose);
       }
 
-      agent = await fromConfig({
-        config: callerCallerConfig,
-        settingsOwner: callerCallerSettingsOwner,
-        settingsService: callerCallerSettings,
-        providerManager: callerCallerManager,
-        agentClient: callerCallerOwner.getAgentClient(),
-        mcpRuntime: callerCallerMcp,
-      });
+      agent = await fromConfig(
+        callerCallerConfig,
+        callerCallerSettings,
+        {},
+        callerCallerSettingsOwner,
+        callerCallerManager,
+        undefined,
+        undefined,
+        callerCallerMcp,
+        undefined,
+        callerCallerOwner.getAgentClient(),
+      );
       cleanup = callerCallerClose;
+      policySession = callerCallerMcp.policyOwner.session;
     }
     try {
       const config = await settle(agent);
-      await run({ agent, config, workspace });
+      await run({ agent, config, workspace, policySession });
     } finally {
       await agent.dispose();
       await cleanup();
@@ -390,26 +397,37 @@ describe('workspace skill required publication ports', () => {
   }
 
   it('rejects an enabled reload without its MessageBus', async () => {
-    await withWorkspace(['alpha'], async ({ agent, workspace }) => {
-      const runtime = internalWorkspace(agent);
-      const session = runtime.policyOwner.session;
-      const descriptor = Object.getOwnPropertyDescriptor(session, 'messageBus');
-      if (!descriptor)
-        throw new Error('Missing retained session bus descriptor');
-      Object.defineProperty(session, 'messageBus', {
-        configurable: true,
-        get: () => undefined,
-      });
-      writeSkill(workspace, 'beta');
-      try {
-        await expect(agent.skills.reload()).rejects.toThrow(
-          'Missing workspace skill MessageBus',
+    await withWorkspace(
+      ['alpha'],
+      async ({ agent, workspace, policySession }) => {
+        if (policySession === undefined)
+          throw new Error('Missing caller policy owner');
+        const session = policySession;
+        const descriptor = Object.getOwnPropertyDescriptor(
+          session,
+          'messageBus',
         );
-        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
-      } finally {
-        Object.defineProperty(session, 'messageBus', descriptor);
-      }
-    });
+        if (!descriptor)
+          throw new Error('Missing retained session bus descriptor');
+        Object.defineProperty(session, 'messageBus', {
+          configurable: true,
+          get: () => undefined,
+        });
+        writeSkill(workspace, 'beta');
+        try {
+          await expect(agent.skills.reload()).rejects.toThrow(
+            'Missing workspace skill MessageBus',
+          );
+          expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+        } finally {
+          Object.defineProperty(session, 'messageBus', descriptor);
+        }
+      },
+      {
+        reloadPolicy: DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+        registerTools: DEFAULT_SKILL_OPERATIONS.registerTools,
+      },
+    );
   });
 
   it('rejects an enabled reload without its registrar instead of silently publishing stale declarations', async () => {

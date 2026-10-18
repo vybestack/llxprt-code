@@ -2,10 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  WorkspaceControl,
-  type WorkspaceControlDeps,
-} from '../control/workspaceControl.js';
+import { WorkspaceControl } from '../control/workspaceControl.js';
+import type { WorkspaceSearchOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -25,7 +23,6 @@ describe('workspace search facade lifetime', () => {
   let extra: string;
   let config: Config;
   let operations: McpRuntimeOwner;
-  let deps: WorkspaceControlDeps;
   let cleanup: () => Promise<void>;
   async function setup(): Promise<void> {
     directory = await realpath(
@@ -50,21 +47,6 @@ describe('workspace search facade lifetime', () => {
       policy,
     );
     await operations.initialize();
-    deps = {
-      checkpoints: operations.checkpointOperations,
-      profileDefinitions: operations.profileDefinitions,
-      profileWrites: operations.profileWrites,
-      subagentDefinitions: operations.subagentDefinitions,
-      subagentWrites: operations.subagentWrites,
-      directories: operations.workspacePaths.directories,
-      ignore: operations.workspaceIgnore,
-      search: operations.workspaceSearch,
-      files: operations.workspaceFiles,
-      containsPath: operations.workspacePaths.contains,
-      addDirectory: operations.addWorkspaceDirectory,
-      workingDirectory: directory,
-      projectRoot: directory,
-    };
     cleanup = () =>
       runCleanupSteps([
         () => operations.dispose(),
@@ -74,22 +56,39 @@ describe('workspace search facade lifetime', () => {
       ]);
   }
 
+  function createControl(
+    search: WorkspaceSearchOperations = operations.workspaceSearch,
+  ): WorkspaceControl {
+    return new WorkspaceControl(
+      operations.profileDefinitions,
+      operations.profileWrites,
+      operations.subagentDefinitions,
+      operations.subagentWrites,
+      operations.checkpointOperations,
+      operations.workspaceIgnore,
+      search,
+      operations.workspaceFiles,
+      operations.workspacePaths.contains,
+      operations.workspacePaths.directories,
+      operations.addWorkspaceDirectory,
+      directory,
+      directory,
+    );
+  }
+
   it('joins an admitted filesystem search and rejects new search and directory writes', async () => {
     await setup();
     const entered = gate();
     const release = gate();
-    const owner = new WorkspaceControl({
-      ...deps,
-      search: {
-        initializeSearch: deps.search.initializeSearch,
-        search: async (...args) => {
-          entered.release();
-          await release.promise;
-          return deps.search.search(...args);
-        },
+    const owner = createControl({
+      initializeSearch: operations.workspaceSearch.initializeSearch,
+      search: async (...args) => {
+        entered.release();
+        await release.promise;
+        return operations.workspaceSearch.search(...args);
       },
     });
-    const peer = new WorkspaceControl(deps);
+    const peer = createControl();
     const accepted = owner.search(directory, 'owned-search.txt', {
       respectGitIgnore: false,
       respectLlxprtIgnore: false,
@@ -136,17 +135,14 @@ describe('workspace search facade lifetime', () => {
     const release = gate();
     const searchFailure = new Error('Search failed');
     const initFailure = new Error('Search initialization failed');
-    const owner = new WorkspaceControl({
-      ...deps,
-      search: {
-        initializeSearch: async () => {
-          await release.promise;
-          throw initFailure;
-        },
-        search: async () => {
-          await release.promise;
-          throw searchFailure;
-        },
+    const owner = createControl({
+      initializeSearch: async () => {
+        await release.promise;
+        throw initFailure;
+      },
+      search: async () => {
+        await release.promise;
+        throw searchFailure;
       },
     });
     const accepted = [
@@ -171,10 +167,14 @@ describe('workspace search facade lifetime', () => {
       );
       expect(
         (
-          await deps.search.search(directory, 'owned-search.txt', {
-            respectGitIgnore: false,
-            respectLlxprtIgnore: false,
-          })
+          await operations.workspaceSearch.search(
+            directory,
+            'owned-search.txt',
+            {
+              respectGitIgnore: false,
+              respectLlxprtIgnore: false,
+            },
+          )
         ).length,
       ).toBeGreaterThan(0);
     } finally {

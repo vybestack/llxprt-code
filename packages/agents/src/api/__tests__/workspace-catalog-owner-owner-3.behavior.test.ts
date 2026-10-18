@@ -343,14 +343,18 @@ describe('workspace catalog ownership through public Agent operations', () => {
 
   it('projects physical tools, prompts and resources without locating catalogs through Config', async () => {
     await openfixture();
-    const agent = await fromConfig({
-      settingsOwner: fixtureCallerSettingsOwner,
-      settingsService: fixtureCallerSettings,
-      config: fixtureCallerConfig,
-      agentClient: fixtureCallerOwner.getAgentClient(),
-      providerManager: fixtureCallerManager,
-      mcpRuntime: fixtureCallerMcp,
-    });
+    const agent = await fromConfig(
+      fixtureCallerConfig,
+      fixtureCallerSettings,
+      {},
+      fixtureCallerSettingsOwner,
+      fixtureCallerManager,
+      undefined,
+      undefined,
+      fixtureCallerMcp,
+      undefined,
+      fixtureCallerOwner.getAgentClient(),
+    );
     const forbidden = ['getPromptRegistry', 'getResourceRegistry'];
     for (const name of forbidden)
       Object.defineProperty(fixtureCallerConfig, name, {

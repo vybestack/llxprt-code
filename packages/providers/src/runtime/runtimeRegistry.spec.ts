@@ -87,14 +87,24 @@ describe('foreground Agent provider-file ownership', () => {
         maxFiles: 100,
         maxBytes: 512 * 1024 * 1024,
       });
-      const agent = await fromConfig({
+      const agent = await fromConfig(
         config,
-        settingsService: settings,
-        settingsOwner: owner,
-        credentialAuthority: credentials().authority,
-        sessionId: runtimeId,
-        providerFileLifecycle: firstFiles,
-      });
+        settings,
+        { sessionId: runtimeId },
+        owner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        firstFiles,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
+      );
       first = agent;
       retiring.push(() =>
         agent.dispose().catch((error: unknown) => {
@@ -129,17 +139,44 @@ describe('foreground Agent provider-file ownership', () => {
         maxFiles: 100,
         maxBytes: 512 * 1024 * 1024,
       });
-      const agent = await fromConfig({
+      const agent = await fromConfig(
         config,
-        settingsService: settings,
-        settingsOwner: owner,
-        credentialAuthority: credentials().authority,
-        sessionId: runtimeId,
-        providerFileLifecycle: secondFiles,
-        prepareSessionTools: (config) => {
+        settings,
+        { sessionId: runtimeId },
+        owner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        secondFiles,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        (config) => {
           observedSecondConfig = config;
         },
-      });
+      );
       second = agent;
       retiring.push(() => agent.dispose());
     } catch (primary) {

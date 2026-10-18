@@ -451,24 +451,26 @@ describe('interactive runtime owner bridge', () => {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
 
-    const a = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      messageBus: firstCallerPolicy.session.messageBus,
-      mcpRuntime: firstCallerMcp,
-      sessionId: 'shared-bridge-label',
-    });
-    const b = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      messageBus: secondCallerPolicy.session.messageBus,
-      mcpRuntime: secondCallerMcp,
-      sessionId: 'shared-bridge-label',
-    });
+    const a = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'shared-bridge-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
+    const b = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'shared-bridge-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     firstCallerSettingsOwner.writeUserParameter('bridge-owner-key', 'first');
     secondCallerSettingsOwner.writeUserParameter('bridge-owner-key', 'second');
     firstCallerSettingsOwner.chooseModel('first-model');
@@ -479,18 +481,17 @@ describe('interactive runtime owner bridge', () => {
         requestFetch={a.sessionClient.fetch}
         agent={a}
         owner={createRuntimeOwnerFeatures(
-          firstCallerConfig,
-          a.providerManager,
+          a.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(a),
           firstCallerSettingsOwner,
-          firstCallerSettings,
           a.workspace,
           a.modelParameters,
           a.settings,
           a.toolFormat,
           a.providerReads,
           a.auth.keys,
+          () => a.providerReads.readOpenAIInfo(),
         )}
       >
         <SessionController
@@ -515,18 +516,17 @@ describe('interactive runtime owner bridge', () => {
         requestFetch={b.sessionClient.fetch}
         agent={b}
         owner={createRuntimeOwnerFeatures(
-          secondCallerConfig,
-          b.providerManager,
+          b.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(b),
           secondCallerSettingsOwner,
-          secondCallerSettings,
           b.workspace,
           b.modelParameters,
           b.settings,
           b.toolFormat,
           b.providerReads,
           b.auth.keys,
+          () => b.providerReads.readOpenAIInfo(),
         )}
       >
         <SessionController
@@ -591,18 +591,17 @@ describe('interactive runtime owner bridge', () => {
           requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
-            secondCallerConfig,
-            b.providerManager,
+            b.providerReads.inspection,
             fixturePaths().directories,
             createSessionModelCommand(b),
             secondCallerSettingsOwner,
-            secondCallerSettings,
             b.workspace,
             b.modelParameters,
             b.settings,
             b.toolFormat,
             b.providerReads,
             b.auth.keys,
+            () => b.providerReads.readOpenAIInfo(),
           )}
         >
           <SessionController

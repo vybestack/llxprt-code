@@ -257,13 +257,18 @@ describe('production CLI workspace MCP consumers', () => {
     }
 
     await builtCallerMcp.awaitDiscovery();
-    const agent = await fromConfig({
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      undefined,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     workspaceDirectory = directory;
     workspaceAgent = agent;
     workspaceCommands = buildSlashCommandRuntime(builtCallerConfig, agent);

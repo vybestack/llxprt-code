@@ -175,17 +175,25 @@ describe('activation preflight cleanup failure reporting', () => {
 
   it('keeps the original adoption failure when preflight cleanup also fails', async () => {
     await failingCleanupOperation();
-    const outcome = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      settingsOwner: builtFactorylessSettingsOwner,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      providerManager: manager,
-      activation: { provider: 'fake', model: 'a-different-model' },
-      activationPreflight: { operation, token },
-    }).then(
+    const outcome = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      { activation: { provider: 'fake', model: 'a-different-model' } },
+      builtFactorylessSettingsOwner,
+      manager,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      { operation, token },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      undefined,
+      builtFactorylessPolicy,
+    ).then(
       () => undefined,
       (error: unknown) => error,
     );

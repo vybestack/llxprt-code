@@ -6,12 +6,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
-import { buildMcpControlDeps } from '../control/mcpControlWiring.js';
-import type {
-  Config,
-  MCPServerConfig,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { buildOwnedMcpControl } from '../control/mcpControlWiring.js';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   MCPDiscoveryState,
   MCPServerStatus,
@@ -37,9 +33,6 @@ class EmptyTokenStorage {
   async clearAll(): Promise<void> {}
 }
 
-// Minimal fake Config exposing the handful of methods the wiring closures read.
-// The `unknown` cast is the established agents test idiom for a narrow Config
-// seam (cf. fakeToolControlDeps / fakeHookControlDeps).
 interface FakeConfigParts {
   readonly required?: ReadonlyMap<string, boolean>;
   readonly blocked?: ReadonlyArray<{ name: string; extensionName: string }>;
@@ -54,38 +47,27 @@ interface FakeConfigParts {
   }>;
 }
 
-function fakeConfig(
-  servers: Record<string, MCPServerConfig> | undefined,
-  extra: FakeConfigParts = {},
-): Config {
-  return {
-    getMcpServers: () => servers,
-    getBlockedMcpServers: () => extra.blocked,
-  } as unknown as Config;
-}
-
 function serverWithOAuth(enabled: boolean): MCPServerConfig {
-  return { oauth: { enabled } } as unknown as MCPServerConfig;
+  return { oauth: { enabled } };
 }
 
 // A configured server entry that has NO oauth block at all (distinct from
 // oauth:{enabled:false}); exercises the `?.oauth?.enabled` optional chain.
 function serverWithoutOAuth(): MCPServerConfig {
-  return {} as unknown as MCPServerConfig;
+  return {};
 }
 
 function buildDeps(
   servers: Record<string, MCPServerConfig> | undefined,
   extra: FakeConfigParts = {},
 ) {
-  return buildMcpControlDeps({
-    config: fakeConfig(servers, extra),
-    readServerSettings: () => ({
+  return buildOwnedMcpControl(
+    () => ({
       mcpServers: servers ?? {},
       settingsMcpServers: servers ?? {},
       blockedMcpServers: [...(extra.blocked ?? [])],
     }),
-    toolSelection: {
+    {
       getTool: () => undefined,
       getAllTools: () => [],
       getEnabledTools: () => [],
@@ -93,23 +75,23 @@ function buildDeps(
       getFunctionDeclarations: () => [],
       getFunctionDeclarationsFiltered: () => [],
     },
-    listPrompts: (server) =>
+    (server) =>
       (extra.promptsByServer ?? []).map((prompt) => ({
         ...prompt,
         serverName: server,
         invoke: async () => ({ messages: [] }),
       })),
-    listResources: () =>
+    () =>
       (extra.resources ?? []).map((resource) => ({
         ...resource,
         name: resource.name ?? resource.uri,
         discoveredAt: 1,
       })),
-    readOAuthCredentials: () => new EmptyTokenStorage().getCredentials(),
-    performOAuth: async () => {
+    () => new EmptyTokenStorage().getCredentials(),
+    async () => {
       throw new Error('OAuth not configured for status test');
     },
-    getMcpRuntimeStatus: () => ({
+    () => ({
       servers: servers ?? {},
       discoveryFailures: new Map(),
       discoveryState: MCPDiscoveryState.COMPLETED,
@@ -120,12 +102,12 @@ function buildDeps(
         ]),
       ),
     }),
-    refreshMcpServers: async () => {},
-    reloadMcpServers: async () => {},
-    isMcpAuthenticated: () => false,
-    markAuthenticated: () => {},
-    resolveClient: () => ({}) as unknown as AgentClientContract,
-  });
+    async () => {},
+    async () => {},
+    () => false,
+    () => {},
+    async () => {},
+  );
 }
 
 describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004,REQ-INT-002', () => {
@@ -135,10 +117,10 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
     };
     const a = buildDeps(servers, { required: new Map([['same', true]]) });
     const b = buildDeps(servers, { required: new Map([['same', false]]) });
-    expect(await a.getOAuthStatus?.('same')).toBe('none');
-    expect(b.getRequiresAuth?.('same')).toBe(false);
-    expect(await b.getOAuthStatus?.('same')).toBe('not-required');
-    expect(a.getRequiresAuth?.('same')).toBe(true);
+    expect((await a.auth('same')).oauthStatus).toBe('none');
+    expect((await b.auth('same')).requiresAuth).toBe(false);
+    expect((await b.auth('same')).oauthStatus).toBe('not-required');
+    expect((await a.auth('same')).requiresAuth).toBe(true);
   });
 
   // E1: an oauth-enabled config server requires auth and must not report
@@ -146,8 +128,8 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
   it('reports requiresAuth:true and a non-not-required status for an oauth-enabled config server', async () => {
     const deps = buildDeps({ db: serverWithOAuth(true) });
 
-    expect(deps.getRequiresAuth?.('db')).toBe(true);
-    expect(await deps.getOAuthStatus?.('db')).not.toBe('not-required');
+    expect((await deps.auth('db')).requiresAuth).toBe(true);
+    expect((await deps.auth('db')).oauthStatus).not.toBe('not-required');
   });
 
   // E2: a server that neither has oauth.enabled nor is in the owner state does
@@ -155,8 +137,8 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
   it('reports requiresAuth:false and oauthStatus:not-required for an unconfigured server', async () => {
     const deps = buildDeps({ db: serverWithOAuth(false) });
 
-    expect(deps.getRequiresAuth?.('other')).toBe(false);
-    expect(await deps.getOAuthStatus?.('other')).toBe('not-required');
+    expect((await deps.auth('other')).requiresAuth).toBe(false);
+    expect((await deps.auth('other')).oauthStatus).toBe('not-required');
   });
 
   // E3: a configured server that exists but carries NO oauth block at all must
@@ -166,8 +148,8 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
   it('reports requiresAuth:false for a configured server that has no oauth block', async () => {
     const deps = buildDeps({ db: serverWithoutOAuth() });
 
-    expect(deps.getRequiresAuth?.('db')).toBe(false);
-    expect(await deps.getOAuthStatus?.('db')).toBe('not-required');
+    expect((await deps.auth('db')).requiresAuth).toBe(false);
+    expect((await deps.auth('db')).oauthStatus).toBe('not-required');
   });
 
   // PROP-1: the consistency invariant across arbitrary config + owner-state
@@ -213,8 +195,8 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
               ),
             });
 
-            const requires = deps.getRequiresAuth?.(server);
-            const status = await deps.getOAuthStatus?.(server);
+            const requires = (await deps.auth(server)).requiresAuth;
+            const status = (await deps.auth(server)).oauthStatus;
             observations.push({ requires, status });
 
             // Biconditional invariant: auth is required iff the status is not
@@ -235,8 +217,8 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
           required: new Map([[server, false]]),
         });
 
-        expect(deps.getRequiresAuth?.(server)).toBe(false);
-        const status = await deps.getOAuthStatus?.(server);
+        expect((await deps.auth(server)).requiresAuth).toBe(false);
+        const status = (await deps.auth(server)).oauthStatus;
         expect(status).toBe('not-required');
       }),
     );
@@ -254,7 +236,7 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
     const blocked = [{ name: 'srv', extensionName: 'ext' }];
     const deps = buildDeps(undefined, { blocked });
 
-    expect(deps.getBlockedServers?.()).toStrictEqual(blocked);
+    expect(deps.listBlockedServers()).toStrictEqual(blocked);
   });
 
   // getBlockedServers must be undefined-safe: when Config returns undefined the
@@ -263,7 +245,7 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
   it('returns an empty array when Config has no blocked servers', () => {
     const deps = buildDeps(undefined, { blocked: undefined });
 
-    expect(deps.getBlockedServers?.()).toStrictEqual([]);
+    expect(deps.listBlockedServers()).toStrictEqual([]);
   });
 
   // getPromptRegistry forwards the per-server prompt view from Config.
@@ -273,7 +255,7 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
 
     expect(
       deps
-        .listPrompts?.('srv')
+        .listPrompts('srv')
         .map(({ name, description }) => ({ name, description })),
     ).toStrictEqual(prompts);
   });
@@ -285,7 +267,7 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
 
     expect(
       deps
-        .listResources?.()
+        .listResources()
         .map(({ serverName, name, uri }) => ({ serverName, name, uri })),
     ).toStrictEqual(resources);
   });

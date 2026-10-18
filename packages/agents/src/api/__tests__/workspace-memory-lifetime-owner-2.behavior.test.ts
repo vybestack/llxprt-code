@@ -10,7 +10,6 @@ import { toConfigParameters } from '../agentConfig.adapter.js';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import { FromConfigOptions } from '../config-types.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { fromConfig } from '../fromConfig.js';
 
@@ -138,15 +137,65 @@ describe('supplied workspace memory lifetime through public adoption', () => {
       built_builtFactorylessPreviousReplay,
     );
     cleanups.push(built_builtFactorylessClose);
-    const options: FromConfigOptions = {
-      config: built_builtFactorylessConfig,
-      settingsService: built_builtFactorylessSettings,
-      settingsOwner: built_builtFactorylessSettingsOwner,
-      messageBus: built_builtFactorylessPolicy.session.messageBus,
-      policyOwner: built_builtFactorylessPolicy,
-      memoryOwner: { owner: memory, ownership: 'agent' },
+    const optionsConfig: Parameters<typeof fromConfig>[0] =
+      built_builtFactorylessConfig;
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+      built_builtFactorylessSettings;
+    const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+      built_builtFactorylessSettingsOwner;
+    const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+      built_builtFactorylessPolicy.session.messageBus;
+    const optionsPolicyOwner: Parameters<typeof fromConfig>[16] =
+      built_builtFactorylessPolicy;
+    const optionsMemoryOwner: Parameters<typeof fromConfig>[23] = {
+      owner: memory,
+      ownership: 'agent',
     };
-    const facade = await fromConfig(options);
+    const facade = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      {
+        sessionId: undefined,
+        sessionIdentityOwnership: undefined,
+        activation: undefined,
+        definitionOwnership: undefined,
+        filesystemOwnership: undefined,
+        lspOwnership: undefined,
+        mcpOwnership: undefined,
+      },
+      optionsSettingsOwner,
+      undefined,
+      undefined,
+      optionsMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      optionsPolicyOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      optionsMemoryOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     cleanups.push(() => facade.dispose());
     let enter: () => void = () => {
       throw new Error('Missing publication entry');

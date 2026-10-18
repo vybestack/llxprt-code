@@ -128,15 +128,16 @@ export async function initializeTestAgent(
     policyOwner,
     'runtime',
   );
-  const agent = await fromConfig({
-    settingsService,
-    settingsOwner,
+  const agent = await fromConfig(
     config,
+    settingsService,
+    { mcpOwnership: 'caller' },
+    settingsOwner,
     providerManager,
-    messageBus: sessionMessageBus,
-    mcpRuntime: mcpOwner,
-    mcpOwnership: 'caller',
-  });
+    undefined,
+    sessionMessageBus,
+    mcpOwner,
+  );
   roots.add(async () => {
     await agent.dispose();
     await mcpOwner.dispose();

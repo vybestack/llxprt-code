@@ -245,14 +245,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8a numeric normalize: agent.setEphemeralSetting("context-limit","1000") yields the Config-normalized number 1000 and parity with the Config (REQ-INT-003)', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         agent.setEphemeralSetting('context-limit', '1000');
         const viaAgent = agent.getEphemeralSetting('context-limit');
@@ -277,14 +281,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8b streaming enum: agent.setEphemeralSetting("streaming","enabled") yields "enabled" and parity with the Config (REQ-INT-003)', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         agent.setEphemeralSetting('streaming', 'enabled');
         const viaAgent = agent.getEphemeralSetting('streaming');
@@ -306,14 +314,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8c invalid streaming throws with "must resolve" — the Config rule propagates, never swallowed (REQ-INT-003)', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         // The Config rule (configBase.ts:207) throws
         // 'Streaming setting must resolve to "enabled" or "disabled"'; the
@@ -332,14 +344,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8d deep-equal: agent.getEphemeralSettings() deep-equals built.config.getEphemeralSettings() after the same mutations (REQ-INT-003)', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         agent.setEphemeralSetting('context-limit', 50000);
         agent.setEphemeralSetting('streaming', 'disabled');
@@ -370,14 +386,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         async (key, value) => {
           await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              {},
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+            );
             try {
               agent.setEphemeralSetting(key, value);
               callerSettingsOwner.writeUserParameter(key, value);
@@ -401,14 +421,18 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) => {
         await openCaller('plain-text.jsonl');
         try {
-          const agent: Agent = await fromConfig({
-            settingsOwner: callerSettingsOwner,
-            settingsService: callerSettings,
-            agentClient: callerOwner.getAgentClient(),
-            providerManager: callerManager,
-            config: callerConfig,
-            mcpRuntime: callerMcp,
-          });
+          const agent: Agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            {},
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            callerOwner.getAgentClient(),
+          );
           try {
             agent.setEphemeralSetting('streaming', mode);
             callerSettingsOwner.writeUserParameter('streaming', mode);

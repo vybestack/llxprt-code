@@ -12,26 +12,28 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   Config,
+  WorkspaceTrustLifecycle,
+  WorkspaceFilesystemOwner,
+  assembleWorkspaceMemory,
   CoreEvent,
   coreEvents,
   type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
-import {
-  FakeProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
-import {
-  loadRuntimePlugins,
-  configureProviderTokenizer,
-} from '@vybestack/llxprt-code-providers/composition.js';
+import { loadRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import {
+  prepareAgentPreflight,
+  type AgentProfilePreflight,
+  type ActivationPreflightToken,
+} from '@vybestack/llxprt-code-agents';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { waitFor } from './__tests__/async.js';
 import { constructAgentWithSpinner } from './cliTerminalSession.js';
 import {
   __resetCleanupStateForTesting,
   runExitCleanup,
+  registerCleanup,
 } from './utils/cleanup.js';
 
 describe('foreground MCP plugin ownership', () => {
@@ -51,9 +53,9 @@ describe('foreground MCP plugin ownership', () => {
   async function build(owner: string): Promise<{
     credentialAuthority: CredentialAuthority;
     config: Config;
-    providerManager: ProviderManager;
-    settingsService: SettingsService;
-    settingsOwner: SessionSettingsOwner;
+    preflight: AgentProfilePreflight;
+    token: ActivationPreflightToken;
+    activation: import('@vybestack/llxprt-code-agents').AgentActivationOperation;
     getMcpAuthProviderFactory: ReturnType<
       typeof buildMcpAuthFactoryRegistry
     >['getAuthProviderFactory'];
@@ -105,28 +107,49 @@ describe('foreground MCP plugin ownership', () => {
       },
     });
     const credentialAuthority = new CredentialAuthority();
-    const providerManager = new ProviderManager(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      settingsService,
-      config,
-      undefined,
+    const preflight = await prepareAgentPreflight(
+      { runtimeId: 'same-label' },
       credentialAuthority,
+      settingsService,
+      settingsOwner,
+      contributions,
     );
-    providerManager.registerProvider(
-      new FakeProvider(process.env.LLXPRT_FAKE_RESPONSES, directory),
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    await preflight.preparePostConfiguration(
+      config,
+      filesystem,
+      memory,
+      trust,
+      () => trust.dispose(),
+      settingsOwner,
     );
-    providerManager.setActiveProvider('fake');
-    configureProviderTokenizer(providerManager);
+    let activation:
+      | import('@vybestack/llxprt-code-agents').AgentActivationOperation
+      | undefined;
+    preflight.transferActivation((operation) => {
+      activation = operation;
+    });
+    if (activation === undefined) throw new Error('Missing activation');
+    const result = await preflight.preflight({
+      provider: 'fake',
+      model: 'fake-model',
+      authMode: 'auto',
+    });
+    if (result.token === undefined)
+      throw new Error('Missing activation receipt');
+    registerCleanup(() => preflight.dispose());
     configs.push(config);
     return {
       credentialAuthority,
       config,
-      settingsService,
-      settingsOwner,
-      providerManager,
+      preflight,
+      token: result.token,
+      activation,
       getMcpAuthProviderFactory: (type) =>
         registry.getAuthProviderFactory(type),
     };
@@ -140,7 +163,18 @@ describe('foreground MCP plugin ownership', () => {
     coreEvents.on(CoreEvent.UserFeedback, onFeedback);
     try {
       const first = await build('first');
-      const a = await createForegroundAgent(first);
+      const a = await createForegroundAgent(
+        first.preflight,
+        first.token,
+        { provider: 'fake', model: 'fake-model', authMode: 'auto' },
+        first.credentialAuthority,
+        {
+          mcpHost: {
+            getAuthProviderFactory: first.getMcpAuthProviderFactory,
+            emitFeedback: (...args) => coreEvents.emitFeedback(...args),
+          },
+        },
+      );
       await waitFor(() => expect(a.mcp.discoveryState()).toBe('failed'));
       const firstFailures = feedback.join('\n');
       expect(firstFailures).toContain(
@@ -149,7 +183,18 @@ describe('foreground MCP plugin ownership', () => {
       expect(firstFailures).not.toContain('no auth provider is registered');
       feedback.length = 0;
       const second = await build('second');
-      const b = await createForegroundAgent(second);
+      const b = await createForegroundAgent(
+        second.preflight,
+        second.token,
+        { provider: 'fake', model: 'fake-model', authMode: 'auto' },
+        second.credentialAuthority,
+        {
+          mcpHost: {
+            getAuthProviderFactory: second.getMcpAuthProviderFactory,
+            emitFeedback: (...args) => coreEvents.emitFeedback(...args),
+          },
+        },
+      );
       await waitFor(() => expect(b.mcp.discoveryState()).toBe('failed'));
       const secondFailures = feedback.join('\n');
       expect(secondFailures).toContain('second credentials rejected');
@@ -174,19 +219,11 @@ describe('foreground MCP plugin ownership', () => {
       const built = await build('spinner');
       const agent = await constructAgentWithSpinner(
         built.config,
-        built.providerManager,
-        built.settingsService,
-        built.settingsOwner,
-        undefined,
-        undefined,
-        built.getMcpAuthProviderFactory,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+        built.preflight,
+        built.token,
+        { provider: 'fake', model: 'fake-model', authMode: 'auto' },
         built.credentialAuthority,
+        built.getMcpAuthProviderFactory,
       );
       await waitFor(() => expect(agent.mcp.discoveryState()).toBe('failed'));
       expect(feedback.join('\n')).toContain('spinner credentials rejected');

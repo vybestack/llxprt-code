@@ -282,18 +282,21 @@ describe('preflight adoption boundaries', () => {
       const result = await built_operation.preflight(activation);
       if (!result.token) throw new Error('Missing retry receipt');
       const client = built_operation.sessionClient.getAgentClient();
-      const agent = await fromConfig({
-        settingsService: built_builtCallerSettings,
-        agentClient: client,
-        providerManager: built_builtCallerManager,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation,
-        activationPreflight: {
+      const agent = await fromConfig(
+        built_builtCallerConfig,
+        built_builtCallerSettings,
+        { activation },
+        undefined,
+        built_builtCallerManager,
+        undefined,
+        undefined,
+        built_builtCallerMcp,
+        {
           operation: built_operation,
           token: result.token,
         },
-      });
+        client,
+      );
       expect(
         built_builtCallerSettings.getProviderSettings('keyfile-fixture')[
           'auth-key'

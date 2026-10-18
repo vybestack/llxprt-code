@@ -1,4 +1,3 @@
-import { setActiveModel } from './providerMutations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,21 +9,13 @@ import {
   type ModelSelectionOperations,
 } from './model-selection.js';
 
-import {
-  prepareAgentShellOwner,
-  cleanupFailedShellBootstrap,
-} from './agent-shell-assembly.js';
 import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
 import { PreferredAgentAssembly } from './agentRuntimeAssembly.js';
 import type { AgentRetainedProviderFile } from './provider-file-domain.js';
-import type { WorkspaceSkillOperations } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
 
 import type { SessionClientOwner } from '../session/session-client-owner.js';
 
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
-import type { ShellJobOwner } from '../session/shell-job-owner.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P15
@@ -33,15 +24,12 @@ import type { ShellJobOwner } from '../session/shell-job-owner.js';
  * @pseudocode createAgent.md steps 10-176
  */
 
-import { buildFacadeState } from './agentBootstrap.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
+
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   SessionSettingsOwner,
@@ -58,35 +46,21 @@ import type {
   AgentConfig,
   AgentSchedulerFactory,
   AgentSchedulerHandle,
-  EditorCallbacks,
   ProviderActivationIntent,
 } from './config-types.js';
 import type { AgentAuth } from './config-types.js';
 import type { Agent } from './agent.js';
 import type { AgentConfigSchema } from './config-schema.js';
 import { toConfigParameters } from './agentConfig.adapter.js';
-import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
+
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { wrapRegistryWithConfirmation } from './confirmationForcing.js';
-import {
-  rebuildLoop,
-  prepareLoop,
-  type LoopHolder,
-} from './loop/rebuildLoop.js';
-import { AgentImpl } from './agentImpl.js';
+
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { PLACEHOLDER_MODEL } from './constants.js';
-import {
-  wrapSchedulerFactory,
-  wrapApprovalHandler,
-  createStableDisplayCallbacks,
-  type StableDisplayCallbacksHolder,
-  type StableEditorCallbacksHolder,
-  recordOwnership,
-  AgentBootstrapError,
-} from './agentBootstrap.js';
+import { wrapSchedulerFactory, AgentBootstrapError } from './agentBootstrap.js';
 
 /**
  * Builds a ready Agent by composing shipped primitives through a shared runtime
@@ -213,26 +187,6 @@ export async function startAgentSession(agent: Agent): Promise<Agent> {
  * The stable object reads live from the holders so post-construction
  * setDisplayCallbacks/setEditorCallbacks are observable by the CURRENT loop.
  */
-function buildStableDisplayCallbacks(
-  editorCallbacks: EditorCallbacks | undefined,
-): {
-  readonly editorCallbacksHolder: StableEditorCallbacksHolder;
-  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
-  readonly displayCallbacks: DisplayCallbacks;
-} {
-  const editorCallbacksHolder: StableEditorCallbacksHolder = {
-    editorCallbacks: editorCallbacks ?? {},
-  };
-  const displayCallbacksHolder: StableDisplayCallbacksHolder = {};
-  return {
-    editorCallbacksHolder,
-    displayCallbacksHolder,
-    displayCallbacks: createStableDisplayCallbacks(
-      editorCallbacksHolder,
-      displayCallbacksHolder,
-    ),
-  };
-}
 
 /**
  * Finalizes the agent after the runtime context is active and authenticated.
@@ -242,244 +196,6 @@ function buildStableDisplayCallbacks(
  * single source of finalize — no parallel copy).
  * @pseudocode createAgent.md steps 105-166
  */
-export async function finalizeAgent(
-  parsed: {
-    readonly provider: string;
-    readonly model: string;
-    readonly modelParams?: Readonly<Record<string, unknown>>;
-    readonly sessionId?: string;
-    readonly auth?: AgentAuth;
-  },
-  resolvedAuth: {
-    readonly baseUrl: string | undefined;
-  },
-  config: Config,
-  manager: RuntimeProviderManager,
-  oauthManager: OAuthManager,
-  settings: SettingsService,
-  runtimeId: string,
-  settingsOwner: SessionSettingsOwner,
-  readRuntimeKind: () => RuntimeKind,
-  closeRuntime: () => Promise<void> | void,
-  onApproval: Parameters<typeof wrapApprovalHandler>[0] | undefined,
-  onOAuthPrompt: unknown,
-  editorCallbacks: EditorCallbacks | undefined,
-  injectedSchedulerHandles: AgentSchedulerHandle[],
-  // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001,REQ-006 @requirement:REQ-001.3
-  // Threading the config ownership origin so dispose() can skip tearing down a
-  // caller-owned Config (fromConfig) while still tearing down an agent-owned
-  // Config (createAgent).
-  configOwnership: 'agent' | 'caller',
-  disposeMcpRuntime: (() => Promise<void>) | undefined,
-  mcpOperations: AgentMcpOperations,
-  schedulerFactory: SchedulerConstruction = (options) =>
-    new CoreToolScheduler(options),
-  borrowedTasks: AsyncTaskManager | undefined,
-  sessionIdentityOwnership: 'config' | 'facade',
-  mediaOwner: SessionMediaOwner | undefined,
-  sessionClient: SessionClientOwner,
-  workspaceSkills: WorkspaceSkillOperations,
-): Promise<Agent> {
-  // @pseudocode createAgent.md steps 105-113: runtime state (runtimeId REQUIRED)
-
-  // @pseudocode createAgent.md steps 130-148: build the initial loop via rebuildLoop
-  const { taskLaunchOwner, shellOwner, loopHolder } = prepareAgentShellOwner(
-    settings,
-    borrowedTasks,
-    schedulerFactory,
-  );
-  const resolveClient = () => sessionClient.getAgentClient();
-  const approvalHandler = onApproval
-    ? wrapApprovalHandler(onApproval)
-    : undefined;
-  try {
-    return await assembleFacade(settingsOwner, readRuntimeKind, closeRuntime, {
-      taskLaunchOwner,
-      shellOwner,
-      sessionClient,
-      workspaceSkills,
-      config,
-      manager,
-      oauthManager,
-      sharedSettingsService: settings,
-      runtimeId,
-      messageBus: sessionClient.messageBus,
-      loopHolder,
-      runtimeState: buildFacadeState(parsed, resolvedAuth.baseUrl, runtimeId),
-      resolveClient,
-      approvalHandler,
-      ...buildStableDisplayCallbacks(editorCallbacks),
-      onOAuthPrompt,
-      disposeMcpRuntime,
-      mcpOperations,
-      editorCallbacks,
-      initialAuth: parsed.auth,
-      injectedSchedulerHandles,
-      configOwnership,
-      sessionIdentityOwnership,
-      mediaOwner,
-    });
-  } catch (primaryError) {
-    return cleanupFailedShellBootstrap(
-      primaryError,
-      taskLaunchOwner,
-      shellOwner,
-    );
-  }
-}
-
-/**
- * Deps bundle for {@link assembleFacade}: the post-loop facade construction
- * inputs threaded out of finalizeAgent to keep that function within the
- * per-function line budget.
- * @pseudocode createAgent.md steps 150-160
- */
-interface AssembleFacadeDeps {
-  readonly sessionClient: SessionClientOwner;
-  readonly workspaceSkills: WorkspaceSkillOperations;
-  readonly mediaOwner: SessionMediaOwner | undefined;
-  readonly taskLaunchOwner: TaskLaunchOwner;
-  readonly shellOwner: ShellJobOwner;
-  readonly mcpOperations: AgentMcpOperations;
-  readonly disposeMcpRuntime: (() => Promise<void>) | undefined;
-  readonly config: Config;
-  readonly manager: RuntimeProviderManager;
-  readonly oauthManager: OAuthManager;
-  readonly sharedSettingsService: SettingsService;
-  readonly runtimeId: string;
-  readonly messageBus: MessageBus;
-  readonly loopHolder: LoopHolder;
-  readonly runtimeState: ReturnType<typeof createAgentRuntimeState>;
-  readonly resolveClient: () => AgentClientContract;
-  readonly approvalHandler: ReturnType<typeof wrapApprovalHandler> | undefined;
-  readonly displayCallbacks: DisplayCallbacks;
-  readonly editorCallbacksHolder: StableEditorCallbacksHolder;
-  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
-  readonly onOAuthPrompt: unknown;
-  readonly editorCallbacks: EditorCallbacks | undefined;
-  readonly initialAuth: AgentAuth | undefined;
-  readonly injectedSchedulerHandles: AgentSchedulerHandle[];
-  /**
-   * The config ownership origin. 'agent' when createAgent constructed the
-   * Config (dispose() tears it down); 'caller' when fromConfig adopted an
-   * external Config (dispose() skips it).
-   * @plan:PLAN-20260621-COREAPIREMED.P09
-   * @requirement:REQ-001.3
-   */
-  readonly configOwnership: 'agent' | 'caller';
-  readonly sessionIdentityOwnership: 'config' | 'facade';
-}
-
-/**
- * Records ownership, builds the public Agent facade, and fires the SessionStart
- * lifecycle hook. Extracted from finalizeAgent so each function stays within the
- * per-function line budget without changing behavior.
- * @plan:PLAN-20260617-COREAPI.P23
- * @requirement:REQ-015
- * @pseudocode createAgent.md steps 150-166
- */
-async function assembleFacade(
-  settingsOwner: SessionSettingsOwner,
-  readRuntimeKind: () => RuntimeKind,
-  closeRuntime: () => Promise<void> | void,
-  deps: AssembleFacadeDeps,
-): Promise<Agent> {
-  const client = deps.sessionClient;
-  const constructLoop = (current: AgentClientContract) =>
-    client.createLoop(
-      current,
-      deps.loopHolder.schedulerFactory,
-      deps.approvalHandler,
-      deps.displayCallbacks,
-    );
-  const rebuild = (): void => {
-    rebuildLoop(deps.loopHolder, deps.resolveClient, constructLoop);
-  };
-  rebuild();
-  const runtimeHandle = { cleanup: closeRuntime };
-  const ownership = recordOwnership({
-    runtimeHandle,
-    config: deps.config,
-    messageBus: deps.messageBus,
-    loopHolder: deps.loopHolder,
-    runtimeState: deps.runtimeState,
-    injectedSchedulerHandles: deps.injectedSchedulerHandles,
-    configOwnership: deps.configOwnership,
-    disposeMcpRuntime: deps.disposeMcpRuntime,
-  });
-  return new AgentImpl(
-    {
-      sessionClient: client,
-      workspaceSkills: deps.workspaceSkills,
-      mediaOwner: deps.mediaOwner,
-      taskLaunchOwner: deps.taskLaunchOwner,
-      shellOwner: deps.shellOwner,
-      config: deps.config,
-      mcpOperations: deps.mcpOperations,
-      providerManager: deps.manager,
-      oauthManager: deps.oauthManager,
-      switchProvider: assembleProviderSwitch(
-        deps.config,
-        deps.sharedSettingsService,
-        deps.manager,
-        deps.oauthManager,
-        readRuntimeKind,
-        () => client.refreshAuth(),
-        settingsOwner,
-      ),
-      settingsService: deps.sharedSettingsService,
-      settingsOwner,
-      runtimeId: deps.runtimeId,
-      runtimeHandle,
-      messageBus: deps.messageBus,
-      loopHolder: deps.loopHolder,
-      runtimeState: deps.runtimeState,
-      ownership,
-      sessionIdentityOwnership: deps.sessionIdentityOwnership,
-      rebuildLoop: rebuild,
-      prepareLoopForClient: (client) =>
-        prepareLoop(deps.loopHolder, () => client, constructLoop),
-      resolveClient: deps.resolveClient,
-      initialHistoryService: initializeAgentHistory(client.getAgentClient()),
-      approvalHandler: deps.approvalHandler,
-      displayCallbacks: deps.displayCallbacks,
-      editorCallbacksHolder: deps.editorCallbacksHolder,
-      displayCallbacksHolder: deps.displayCallbacksHolder,
-      onOAuthPrompt: deps.onOAuthPrompt,
-      initialAuth: deps.initialAuth,
-    },
-    bindModelSelection(settingsOwner, deps.sharedSettingsService, deps.manager),
-  );
-
-  // SessionStart is driven by the frontend after it has installed observers
-  // and is ready to consume the hook's system message and additional context.
-}
-
-function bindModelSelection(
-  settingsOwner: SessionSettingsOwner,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-): (model: string) => Promise<void> {
-  return async (model) => {
-    await setActiveModel(
-      model,
-      assembleModelSelection(settingsOwner),
-      settings,
-      manager.getActiveProvider(),
-    );
-  };
-}
-
-function initializeAgentHistory(
-  client: AgentClientContract | undefined,
-): HistoryService {
-  if (client === undefined) {
-    throw new AgentBootstrapError('no post-auth agent client');
-  }
-  const history = client.getHistoryService() ?? new HistoryService();
-  client.storeHistoryServiceForReuse(history);
-  return history;
-}
 
 export function prepareAgentConfig(
   parsed: ReturnType<typeof AgentConfigSchema.parse>,

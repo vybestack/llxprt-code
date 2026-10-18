@@ -1,3 +1,9 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
@@ -136,30 +142,53 @@ describe('CLI session client bootstrap ownership', () => {
   async function bootstrap() {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
       settings,
       argv,
       directory,
-      new CredentialAuthority(),
+      credentialAuthority,
+      preflight,
     );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
+    const activationOperation = transferredActivation;
     const activation = await activateConfiguredProvider(
-      boot.config,
-      boot.providerManager,
+      config,
+      preflight,
       argv,
-      boot.activationOperation,
+      activationOperation,
     );
     if (activation.authFailed) throw new Error('Local activation failed');
-    return { boot, activation, argv };
+    return { config, preflight, activationOperation, activation, argv };
   }
 
   it('supplies the pre-Agent owner to raw recording without a Config client lookup', async () => {
-    const { boot, argv } = await bootstrap();
+    const { config, activationOperation, argv } = await bootstrap();
     try {
       const recording = await setupSessionRecording(
-        boot.config,
+        config,
         argv,
         null,
-        boot.activationOperation.sessionClient,
+        activationOperation.sessionClient,
       );
       recording.recordingService.recordContent({
         speaker: 'human',
@@ -173,7 +202,7 @@ describe('CLI session client bootstrap ownership', () => {
       expect(transcript).toContain('pre-agent content');
     } finally {
       await runExitCleanup();
-      await boot.config.dispose();
+      await config.dispose();
     }
   });
 
@@ -348,8 +377,8 @@ describe('CLI session client bootstrap ownership', () => {
 
   for (const failCleanup of [false, true]) {
     it(`joins pre-Agent client cleanup before closing media after ${failCleanup ? 'failed' : 'successful'} client disposal`, async () => {
-      const { boot } = await bootstrap();
-      const client = boot.activationOperation.sessionClient.getAgentClient();
+      const { config, activationOperation } = await bootstrap();
+      const client = activationOperation.sessionClient.getAgentClient();
       const store = client.mediaStore;
       if (!store) throw new Error('Missing owner media');
       let release: () => void = () => {};
@@ -369,7 +398,7 @@ describe('CLI session client bootstrap ownership', () => {
           if (failCleanup) throw new Error('client cleanup control');
         },
       );
-      const closing = Promise.resolve(boot.activationOperation.dispose()).then(
+      const closing = Promise.resolve(activationOperation.dispose()).then(
         () => ({ success: true }),
         (error: unknown) => ({ error }),
       );
@@ -384,7 +413,7 @@ describe('CLI session client bootstrap ownership', () => {
         release();
         await closing;
         interception.mockRestore();
-        await boot.config.dispose();
+        await config.dispose();
         __resetCleanupStateForTesting();
       }
     });

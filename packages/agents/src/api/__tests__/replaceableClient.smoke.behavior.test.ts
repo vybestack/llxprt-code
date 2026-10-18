@@ -428,14 +428,18 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
     expect(config.getProvider()).toBe('fake');
     expect(config.getModel()).toBe('fake-model');
 
-    const agent: Agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
+    const agent: Agent = await fromConfig(
       config,
-      mcpRuntime: builtCallerMcp,
-    });
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
 
     // Adoption (public surface only): the Agent reports the SAME provider/model
     // the caller-owned Config was built with, proving the adopted runtime —

@@ -319,15 +319,18 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
       // signal that fromConfig surfaced an AgentBootstrapError.
       let thrownError: unknown;
       try {
-        await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          activation: intent,
-        });
+        await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { activation: intent },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          undefined,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+        );
       } catch (err) {
         thrownError = err;
       }
@@ -358,15 +361,18 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
         model: 'fake-model',
         authMode: 'auto',
       };
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         expect(
           builtCallerSettingsOwner.readNamedParameter('auth-keyfile'),

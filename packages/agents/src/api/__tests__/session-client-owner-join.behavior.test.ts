@@ -1,3 +1,4 @@
+import { cleanupProviderScope } from '../../session/session-client-cleanup.js';
 import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -424,7 +425,7 @@ describe('Session owner cleanup joining', () => {
     builtOwner.bindProviderFiles(
       lifecycle,
       (provider) => builtOAuth.composeRetryOperations(provider),
-      (id) => SessionClientOwner.cleanupProviderScope(lifecycle, id),
+      (id) => cleanupProviderScope(lifecycle, id),
     );
     const candidate = await builtOwner.prepareProfileClientReplacement();
     candidate.publish();
@@ -435,6 +436,7 @@ describe('Session owner cleanup joining', () => {
       builtConfig,
       builtManager,
       async () => ({ authFailed: false, infoMessages: [] }),
+      lifecycle,
       undefined,
       builtOwner,
       builtMcp.workspaceFilesystem,
@@ -456,7 +458,7 @@ describe('Session owner cleanup joining', () => {
       expect(lifecycle.snapshot().retainedFiles).toBe(0);
       expect(deletions).toBe(1);
     } finally {
-      await SessionClientOwner.cleanupProviderScope(lifecycle, scope);
+      await cleanupProviderScope(lifecycle, scope);
       await closeEngine();
     }
   });

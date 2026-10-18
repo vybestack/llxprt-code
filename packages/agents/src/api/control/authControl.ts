@@ -24,16 +24,9 @@ import type {
 import type { OAuthPromptHandler } from '../config-types.js';
 import type { AgentAuthState } from './authState.js';
 import { AuthKeysControl } from './authKeysControl.js';
-import type { AuthKeysControlDeps } from './authKeysControl.js';
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
-/**
- * Callback bundle injected by AgentImpl so AuthControl can read/mutate the
- * per-agent auth state and the live provider.
- *
- * @plan:PLAN-20260617-COREAPI.P18
- * @requirement:REQ-008
- */
 /**
  * The public auth control. OAuth login flows through the onOAuthPrompt handler
  * (the interactive-OAuth seam that mirrors how the CLI drives OAuth). In
@@ -54,10 +47,27 @@ export class AuthControl implements AgentAuthControl {
     private readonly getStatus: (provider: string) => AuthStatus,
     private readonly onOAuthPrompt: OAuthPromptHandler | undefined,
     private readonly writeBaseUrl: (baseUrl: string | null) => Promise<void>,
-    keys: AuthKeysControlDeps,
-    private readonly getOAuthManager: () => OAuthManager,
+    readKeyName: () => string | undefined,
+    writeKeyName: (name: string | undefined) => void,
+    updateProviderApiKey: (
+      apiKey: string | null,
+    ) => Promise<ApiKeyUpdateResult>,
+    private readonly isOAuthEnabled: (provider: string) => boolean,
+    private readonly isOAuthAuthenticated: (
+      provider: string,
+    ) => Promise<boolean>,
+    private readonly readOAuthExpiry: (
+      provider: string,
+    ) => Promise<number | undefined>,
+    private readonly readHigherPriorityAuth: OAuthManager['getHigherPriorityAuth'],
+    private readonly readBucketStatuses: OAuthManager['getAuthStatusWithBuckets'],
   ) {
-    this.keys = new AuthKeysControl(keys);
+    this.keys = new AuthKeysControl(
+      authState,
+      readKeyName,
+      writeKeyName,
+      updateProviderApiKey,
+    );
   }
 
   /**
@@ -248,16 +258,11 @@ export class AuthControl implements AgentAuthControl {
    * @pseudocode lines 1-17
    */
   async detailedStatus(provider: string): Promise<AuthProviderDetail> {
-    const mgr = this.getOAuthManager();
-    const oauthEnabled = mgr.isOAuthEnabled(provider);
-    const authenticated = await mgr.isAuthenticated(provider);
-    let expiry: number | undefined;
-    if (authenticated) {
-      const token = await mgr.peekStoredToken(provider);
-      if (token !== null) {
-        expiry = token.expiry;
-      }
-    }
+    const oauthEnabled = this.isOAuthEnabled(provider);
+    const authenticated = await this.isOAuthAuthenticated(provider);
+    const expiry = authenticated
+      ? await this.readOAuthExpiry(provider)
+      : undefined;
     return { provider, authenticated, oauthEnabled, expiry };
   }
 
@@ -269,7 +274,7 @@ export class AuthControl implements AgentAuthControl {
    * @pseudocode lines 30-33
    */
   async getHigherPriorityAuth(provider: string): Promise<string | null> {
-    return this.getOAuthManager().getHigherPriorityAuth(provider);
+    return this.readHigherPriorityAuth(provider);
   }
 
   /**
@@ -281,7 +286,7 @@ export class AuthControl implements AgentAuthControl {
   async listBucketStatuses(
     provider: string,
   ): Promise<readonly AuthBucketStatus[]> {
-    const raw = await this.getOAuthManager().getAuthStatusWithBuckets(provider);
+    const raw = await this.readBucketStatuses(provider);
     return raw.map((b) => ({
       bucket: b.bucket,
       authenticated: b.authenticated,

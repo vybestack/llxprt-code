@@ -214,6 +214,7 @@ export class ChildAgentAssembly {
     this.files = new ProviderFileLifecycle({
       maxFiles: 100,
       maxBytes: 512 * 1024 * 1024,
+      proxy: this.config.getProxy(),
     });
     for (const scope of new Set([
       this.data.runtimeId,
@@ -478,4 +479,49 @@ export class ChildAgentAssembly {
     ]);
     return this.closing;
   }
+}
+
+export function assembleChildAgent(
+  data: ChildAgentLaunch,
+  authority: CredentialAuthority,
+  messageBus: MessageBus,
+  requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
+  profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
+  subagentReads: Pick<
+    SubagentDefinitionReads,
+    'loadSubagent' | 'listSubagents'
+  >,
+  telemetry: RootTelemetry | undefined,
+  createChildSettings: () => SettingsService,
+  foregroundConfig: Config,
+  instructions: InstructionReadOperations,
+  workspacePaths: WorkspacePathOperations,
+  readMcpInstructions: () => string | undefined,
+  trust: WorkspaceTrustControlPort | undefined,
+  tools: ToolSelection | undefined,
+  hooks: SessionHookOwner | undefined,
+  clientFactory: AgentClientFactory | undefined,
+  runtimeLoader: typeof loadAgentRuntime,
+  scopeFactory: typeof SubAgentScope.create,
+): Promise<SubagentLaunchResult> {
+  return new ChildAgentAssembly(
+    data,
+    authority,
+    messageBus,
+    requestInteractiveAuth,
+    profileReads,
+    subagentReads,
+    telemetry,
+    createChildSettings,
+    foregroundConfig,
+    instructions,
+    workspacePaths,
+    readMcpInstructions,
+    trust,
+    tools,
+    hooks,
+    clientFactory,
+    runtimeLoader,
+    scopeFactory,
+  ).assemble();
 }

@@ -410,14 +410,18 @@ describe('workspace registrar and skill reload root admission', () => {
   async function adopted(
     turn = true,
   ): Promise<Awaited<ReturnType<typeof fromConfig>>> {
-    const agent = await fromConfig({
-      config: callerConfig,
-      settingsOwner: callerSettingsOwner,
-      settingsService: callerSettings,
-      providerManager: callerManager,
-      agentClient: callerOwner.getAgentClient(),
-      mcpRuntime: callerMcp,
-    });
+    const agent = await fromConfig(
+      callerConfig,
+      callerSettings,
+      {},
+      callerSettingsOwner,
+      callerManager,
+      undefined,
+      undefined,
+      callerMcp,
+      undefined,
+      callerOwner.getAgentClient(),
+    );
     if (turn)
       for await (const event of agent.stream('hello')) {
         if (event.type === 'error') throw new Error('Physical turn failed');

@@ -40,7 +40,7 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, FromConfigOptions } from '../config-types.js';
+import { AgentConfig } from '../config-types.js';
 import { fromConfig } from '../fromConfig.js';
 
 async function settleEngineRelease(
@@ -80,19 +80,17 @@ describe('fromConfig admission before resource effects', () => {
   });
 
   async function rejectWithoutAcquisition(
-    options: FromConfigOptions,
+    workspaceDirectory: string,
+    adopt: () => ReturnType<typeof fromConfig>,
   ): Promise<unknown> {
     const home = process.env.LLXPRT_CONFIG_HOME;
     if (home === undefined) throw new Error('Missing fixture config home');
     const before = (await readdir(home, { recursive: true })).sort();
     const workspaceBefore = (
-      await readdir(options.config.getTargetDir(), { recursive: true })
+      await readdir(workspaceDirectory, { recursive: true })
     ).sort();
     const transports = credentials().snapshot();
-    const outcome = await fromConfig({
-      ...options,
-      credentialAuthority: credentials().authority,
-    }).then(
+    const outcome = await adopt().then(
       async (agent) => {
         await agent.dispose();
         return undefined;
@@ -100,7 +98,7 @@ describe('fromConfig admission before resource effects', () => {
       (error: unknown) => error,
     );
     const after = await readdir(home, { recursive: true });
-    const workspaceAfter = await readdir(options.config.getTargetDir(), {
+    const workspaceAfter = await readdir(workspaceDirectory, {
       recursive: true,
     });
     expect([
@@ -363,16 +361,26 @@ describe('fromConfig admission before resource effects', () => {
     );
     cleanups.push(otherFactorylessClose);
     await expect(
-      rejectWithoutAcquisition({
-        settingsService: builtCallerSettings,
-        settingsOwner: builtCallerSettingsOwner,
-        providerManager: builtCallerManager,
-        agentClient: builtCallerOwner.getAgentClient(),
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-        runtimeFactoryBindings: builtCallerFactories,
-        config: otherFactorylessConfig,
-      }),
+      rejectWithoutAcquisition(otherFactorylessConfig.getTargetDir(), () =>
+        fromConfig(
+          otherFactorylessConfig,
+          builtCallerSettings,
+          {},
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+          undefined,
+          undefined,
+          undefined,
+          builtCallerFactories,
+          undefined,
+          credentials().authority,
+        ),
+      ),
     ).resolves.toMatchObject({ message: expect.stringMatching(/Config/i) });
   });
 });

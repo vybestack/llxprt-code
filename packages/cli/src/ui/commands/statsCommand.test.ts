@@ -1,27 +1,29 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import {
+  detectFromProviderConfig,
+  discoverProviderBuckets,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  setSystemTime,
-  type Mock,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+  vi,
+  type Mock,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
-import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatDuration } from '../utils/formatters.js';
+import { statsCommand } from './statsCommand.js';
+import { type CommandContext } from './types.js';
 
 const oauthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();

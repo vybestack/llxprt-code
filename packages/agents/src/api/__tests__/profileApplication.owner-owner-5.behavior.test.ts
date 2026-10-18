@@ -348,19 +348,22 @@ describe('public profile application ownership outside ALS', () => {
     );
     let a_oauthManager: OAuthManager | undefined;
 
-    const a_agent = await fromConfig({
-      oauthManager: a_oauthManager,
-      providerFileLifecycle: a_builtCallerFiles,
-      settingsOwner: a_builtCallerSettingsOwner,
-      settingsService: a_builtCallerSettings,
-      agentClient: a_builtCallerOwner.getAgentClient(),
-      providerManager: a_builtCallerManager,
-      runtimeFactoryBindings: a_builtCallerFactories,
-      config: a_builtCallerConfig,
-      mcpRuntime: a_builtCallerMcp,
-      messageBus: a_builtCallerPolicy.session.messageBus,
-      sessionId: 'same-profile-owner-label',
-    });
+    const a_agent = await fromConfig(
+      a_builtCallerConfig,
+      a_builtCallerSettings,
+      { sessionId: 'same-profile-owner-label' },
+      a_builtCallerSettingsOwner,
+      a_builtCallerManager,
+      a_oauthManager,
+      a_builtCallerPolicy.session.messageBus,
+      a_builtCallerMcp,
+      undefined,
+      a_builtCallerOwner.getAgentClient(),
+      a_builtCallerFiles,
+      undefined,
+      undefined,
+      a_builtCallerFactories,
+    );
     ownerCloses.push(() =>
       runCleanupSteps([() => a_agent.dispose(), () => a_builtCallerClose()]),
     );
@@ -552,19 +555,22 @@ describe('public profile application ownership outside ALS', () => {
     );
     let b_oauthManager: OAuthManager | undefined;
 
-    const b_agent = await fromConfig({
-      oauthManager: b_oauthManager,
-      providerFileLifecycle: b_builtCallerFiles,
-      settingsOwner: b_builtCallerSettingsOwner,
-      settingsService: b_builtCallerSettings,
-      agentClient: b_builtCallerOwner.getAgentClient(),
-      providerManager: b_builtCallerManager,
-      runtimeFactoryBindings: b_builtCallerFactories,
-      config: b_builtCallerConfig,
-      mcpRuntime: b_builtCallerMcp,
-      messageBus: b_builtCallerPolicy.session.messageBus,
-      sessionId: 'same-profile-owner-label',
-    });
+    const b_agent = await fromConfig(
+      b_builtCallerConfig,
+      b_builtCallerSettings,
+      { sessionId: 'same-profile-owner-label' },
+      b_builtCallerSettingsOwner,
+      b_builtCallerManager,
+      b_oauthManager,
+      b_builtCallerPolicy.session.messageBus,
+      b_builtCallerMcp,
+      undefined,
+      b_builtCallerOwner.getAgentClient(),
+      b_builtCallerFiles,
+      undefined,
+      undefined,
+      b_builtCallerFactories,
+    );
     ownerCloses.push(() =>
       runCleanupSteps([() => b_agent.dispose(), () => b_builtCallerClose()]),
     );

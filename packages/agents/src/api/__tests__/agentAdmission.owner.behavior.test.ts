@@ -548,15 +548,18 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
       await openbuiltCaller('plain-text.jsonl');
       let agent: Agent | undefined;
       try {
-        const adopted = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          messageBus: builtCallerPolicy.session.messageBus,
-        });
+        const adopted = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          {},
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+        );
 
         agent = adopted;
         await withModelBoundary(

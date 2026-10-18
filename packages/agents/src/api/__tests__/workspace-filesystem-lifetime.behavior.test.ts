@@ -309,15 +309,39 @@ describe('public Agent workspace filesystem lifetime', () => {
         workingDir: directory,
         filesystemOwner: root,
       });
-      const options = {
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        agentClient: builtCallerOwner.getAgentClient(),
-        mcpRuntime: builtCallerMcp,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtCallerSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtCallerConfig;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtCallerManager;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
+        builtCallerOwner.getAgentClient();
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        builtCallerMcp;
+      const first = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        undefined,
+        optionsProviderManager,
+        undefined,
+        undefined,
+        optionsMcpRuntime,
+        undefined,
+        optionsAgentClient,
+      );
+      const second = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        undefined,
+        optionsProviderManager,
+        undefined,
+        undefined,
+        optionsMcpRuntime,
+        undefined,
+        optionsAgentClient,
+      );
       try {
         expect(await first.workspace.search(directory, '*.txt')).toStrictEqual(
           [],

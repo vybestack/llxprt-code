@@ -73,11 +73,14 @@ describe('profileBootstrap helpers', () => {
   });
 
   it('prepares runtime before applying profile state', async () => {
-    const parsed = parseBootstrapArgs(profileArgs(), {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: new SettingsService(),
-    });
-    const operation = await prepareRuntimeForProfile(parsed);
+    const parsed = parseBootstrapArgs(profileArgs(), {});
+    const operation = await prepareRuntimeForProfile(
+      parsed,
+      new CredentialAuthority(),
+      new SettingsService(),
+      undefined,
+      undefined,
+    );
     try {
       operation.chooseProviderModel('openai', 'selected-model');
       const result = createBootstrapResult(
@@ -85,7 +88,7 @@ describe('profileBootstrap helpers', () => {
           ...parsed.bootstrapArgs,
           profileJson: '{"provider":"openai","model":"profile-model"}',
         },
-        parsed.runtimeMetadata,
+        undefined,
       );
       expect(result).toMatchObject({
         providerName: 'openai',
@@ -101,10 +104,13 @@ describe('profileBootstrap helpers', () => {
   it('includes runtime metadata in the preflight data', async () => {
     const operation = await prepareRuntimeForProfile(
       parseBootstrapArgs(profileArgs(), {
-        credentialAuthority: new CredentialAuthority(),
         runtimeId: 'cli-runtime',
         metadata: { sessionId: 'bootstrap-session', source: 'test' },
       }),
+      new CredentialAuthority(),
+      undefined,
+      undefined,
+      undefined,
     );
     try {
       expect(operation.captureInput()).toMatchObject({
@@ -125,10 +131,13 @@ describe('prepareRuntimeForProfile agents preflight', () => {
   it('supplies the resolved runtimeId and declarative context without returning services', async () => {
     const operation = await prepareRuntimeForProfile(
       parseBootstrapArgs(profileArgs(), {
-        credentialAuthority: new CredentialAuthority(),
         runtimeId: 'cli.runtime.bootstrap.ordering-test',
         metadata: { source: 'ordering-test' },
       }),
+      new CredentialAuthority(),
+      undefined,
+      undefined,
+      undefined,
     );
     try {
       expect(operation.captureInput()).toMatchObject({
@@ -144,9 +153,11 @@ describe('prepareRuntimeForProfile agents preflight', () => {
 
   it('supplies a deterministic default runtimeId when metadata omits one', async () => {
     const operation = await prepareRuntimeForProfile(
-      parseBootstrapArgs(profileArgs(), {
-        credentialAuthority: new CredentialAuthority(),
-      }),
+      parseBootstrapArgs(profileArgs(), {}),
+      new CredentialAuthority(),
+      undefined,
+      undefined,
+      undefined,
     );
     try {
       expect(operation.captureInput().runtimeId).toBe(DEFAULT_RUNTIME_ID);
@@ -157,7 +168,13 @@ describe('prepareRuntimeForProfile agents preflight', () => {
 
   it('fails before provider construction without a credential authority', async () => {
     await expect(
-      prepareRuntimeForProfile(parseBootstrapArgs(profileArgs(), {})),
+      prepareRuntimeForProfile(
+        parseBootstrapArgs(profileArgs(), {}),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ),
     ).rejects.toThrow('requires a credential authority');
   });
 });

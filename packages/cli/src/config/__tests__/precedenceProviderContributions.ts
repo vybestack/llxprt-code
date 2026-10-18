@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import { loadRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 
@@ -46,19 +45,4 @@ export function loadPrecedenceProviderContributions(): Promise<ProviderContribut
       },
     }),
   });
-}
-
-export function registerPrecedenceProviders(
-  manager: RuntimeProviderManager,
-): void {
-  for (const name of ['openai', 'anthropic']) {
-    manager.registerProvider({
-      name,
-      getDefaultModel: () => 'mock-default-model',
-      getModels: async () => [],
-      async *generateChatCompletion() {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
-      },
-    });
-  }
 }

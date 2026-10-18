@@ -100,9 +100,12 @@ function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
 ): Promise<void> {
   return runHeadlessPolicyFixture(
-    { ...params, credentialAuthority: mockCredentialAuthority },
-    mockRuntimeSettings,
+    params,
+    mockRuntimeSettings.owner,
     mockProviderManager,
+    mockRuntimeSettings.store,
+    mockRuntimeSettings.owner,
+    mockCredentialAuthority,
   );
 }
 
@@ -298,8 +301,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
-      .activation;
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
+      ?.activation;
     expect(activation).toBeDefined();
     expect(activation).toMatchObject({
       provider: 'anthropic',
@@ -327,8 +330,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
-      .activation;
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
+      ?.activation;
     expect(activation).toBeDefined();
     expect(activation?.provider).toBe('openai');
     expect(activation?.model).toBeUndefined();

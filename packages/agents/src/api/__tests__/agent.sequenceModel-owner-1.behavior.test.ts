@@ -310,13 +310,16 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   const observeConsumerFallbacks = async () => {
     await openbuiltCaller('plain-text.jsonl');
     const fallbackModel = builtCallerConfig.getModel();
-    const actualAgent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-    });
+    const actualAgent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+    );
     const observations: Array<{
       reportedModel: string;
       presentResult: string;
@@ -385,13 +388,16 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   it('T9b-real fromConfig-built agent over the fake seam returns null (genuine null contract, real client) @requirement:REQ-003 @scenario:null-contract-real @given:a real agent built via fromConfig over the fake-provider seam @when:agent.getCurrentSequenceModel() @then:returns null (the real fake-provider client reports no sequence model)', async () => {
     await openbuiltCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+      );
       try {
         expect(agent.getCurrentSequenceModel()).toBeNull();
       } finally {

@@ -507,19 +507,45 @@ describe('Mounted CLI child execution ownership', () => {
           },
         }),
     });
-    const agent: Agent = await fromConfig({
-      settingsService: builtCallerSettings,
-      settingsOwner: builtCallerSettingsOwner,
-      prepareSessionTools: (_config, _bus, tools) => {
+    const agent: Agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (_config, _bus, tools) => {
         tools.registerTool(parentRecord);
         tools.registerTool(task);
       },
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-    });
+    );
     cleanupOwners.push(async () => {
       await agent.dispose();
       await builtCallerConfig.dispose();

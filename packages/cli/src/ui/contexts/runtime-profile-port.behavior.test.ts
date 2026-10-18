@@ -262,14 +262,16 @@ describe('CLI profile operation projection', () => {
   });
   it('retains live provider/model settings while excluding root lifecycle and service containers', async () => {
     await openownerCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsService: ownerCallerSettings,
-      settingsOwner: ownerCallerSettingsOwner,
-      config: ownerCallerConfig,
-      providerManager: ownerCallerManager,
-      messageBus: ownerCallerPolicy.session.messageBus,
-      mcpRuntime: ownerCallerMcp,
-    });
+    const agent = await fromConfig(
+      ownerCallerConfig,
+      ownerCallerSettings,
+      {},
+      ownerCallerSettingsOwner,
+      ownerCallerManager,
+      undefined,
+      ownerCallerPolicy.session.messageBus,
+      ownerCallerMcp,
+    );
     try {
       const port = projectRuntimeAgent(agent);
       expect(
@@ -280,18 +282,17 @@ describe('CLI profile operation projection', () => {
       const api = createRuntimeApi(
         port,
         createRuntimeOwnerFeatures(
-          ownerCallerConfig,
-          ownerCallerManager,
+          agent.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(agent),
           ownerCallerSettingsOwner,
-          ownerCallerSettings,
           agent.workspace,
           agent.modelParameters,
           agent.settings,
           agent.toolFormat,
           agent.providerReads,
           agent.auth.keys,
+          () => agent.providerReads.readOpenAIInfo(),
         ),
         agent.sessionClient.fetch,
       );

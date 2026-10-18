@@ -1,8 +1,7 @@
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 import { randomBytes } from 'node:crypto';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import {
-  type SessionSettingsOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
@@ -52,11 +51,7 @@ function writeRecordingStartupWarnings(warnings: readonly string[]): void {
 }
 
 export interface NonInteractiveSessionOptions {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   config: Config;
   agent: Agent;
   settings: LoadedSettings;
@@ -65,11 +60,7 @@ export interface NonInteractiveSessionOptions {
 }
 
 export interface PipedOrPromptSessionOptions {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   config: Config;
   agent: Agent;
   settings: LoadedSettings;
@@ -79,11 +70,7 @@ export interface PipedOrPromptSessionOptions {
 }
 
 export interface SessionDispatchOptions {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -114,7 +101,6 @@ export interface SessionDispatchOptions {
  * piped/prompt non-interactive session depending on the configured mode.
  */
 export async function dispatchInteractiveOrNonInteractive({
-  oauthManager,
   skillOperations,
   restartExtension,
   config,
@@ -170,7 +156,6 @@ export async function dispatchInteractiveOrNonInteractive({
       workspaceRoot,
       {
         recordingOwner,
-        oauthManager,
         runtimeSettings,
         skillOperations,
         restartExtension,
@@ -196,7 +181,6 @@ export async function dispatchInteractiveOrNonInteractive({
   writeRecordingStartupWarnings(recordingStartupWarnings);
 
   await runPipedOrPromptSession({
-    oauthManager,
     runtimeSettings,
     config,
     agent,
@@ -212,7 +196,6 @@ export async function dispatchInteractiveOrNonInteractive({
  * run the non-interactive session, shut down telemetry, and exit the process.
  */
 async function runPipedOrPromptSession({
-  oauthManager,
   config,
   agent,
   settings,
@@ -254,7 +237,6 @@ ${existingInput}`
   try {
     nonInteractiveExitCode = await runNonInteractiveSession({
       runtimeSettings,
-      oauthManager,
       config,
       agent,
       settings,
@@ -271,7 +253,7 @@ ${existingInput}`
     safeReportNonInteractiveError(config, error);
   } finally {
     const exportResult = await Promise.allSettled([
-      Promise.resolve().then(() => runtimeSettings.owner.telemetry.flush()),
+      Promise.resolve().then(() => runtimeSettings.flushTelemetry()),
     ]);
     const cleanupResult = await Promise.allSettled([
       Promise.resolve().then(() => runExitCleanup()),
@@ -297,7 +279,6 @@ ${existingInput}`
  * inject any SessionStart context, run the prompt, and report the exit code.
  */
 async function runNonInteractiveSession({
-  oauthManager,
   config,
   agent,
   settings,
@@ -356,7 +337,6 @@ ${finalInput}`;
     }
 
     await runNonInteractive({
-      oauthManager,
       runtimeSettings,
       config: nonInteractiveConfig,
       // Reuse the composition-root Agent (#2378) instead of building a second
@@ -365,7 +345,6 @@ ${finalInput}`;
       settings,
       input: finalInput,
       prompt_id,
-      runtimeMessageBus: agent.getMessageBus(),
       deferTelemetryShutdown: true,
     });
 

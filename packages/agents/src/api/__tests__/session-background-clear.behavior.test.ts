@@ -18,22 +18,13 @@ function owners(agent: Agent): {
   shell: ShellJobOwner;
 } {
   if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  )
-    throw new Error('Expected agent dependencies');
-  if (
-    !('taskLaunchOwner' in agent.deps) ||
-    !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
+    !('taskLaunchOwner' in agent) ||
+    !(agent.taskLaunchOwner instanceof TaskLaunchOwner)
   )
     throw new Error('Expected task owner');
-  if (
-    !('shellOwner' in agent.deps) ||
-    !(agent.deps.shellOwner instanceof ShellJobOwner)
-  )
+  if (!('shellOwner' in agent) || !(agent.shellOwner instanceof ShellJobOwner))
     throw new Error('Expected shell owner');
-  return { tasks: agent.deps.taskLaunchOwner, shell: agent.deps.shellOwner };
+  return { tasks: agent.taskLaunchOwner, shell: agent.shellOwner };
 }
 
 describe('new sessions exclude background work', () => {

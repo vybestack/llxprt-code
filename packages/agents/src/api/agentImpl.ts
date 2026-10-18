@@ -1,7 +1,28 @@
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { WorkspaceSkillOperations } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { ChildToolDisplay } from '../session/childToolDisplay.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
+import type { ShellJobOwner } from '../session/shell-job-owner.js';
+import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import { AgentProviderFileDomain } from './provider-file-domain.js';
+import { assembleProviderSwitch } from './providerSwitchAssembly.js';
+
+import type { Config, ProviderSwitcher } from '@vybestack/llxprt-code-core';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
+
+import type { StableDisplayCallbacksHolder } from './agentBootstrap.js';
+import type { AgentAuth } from './config-types.js';
+
 import { assembleSettingsControl } from './control/settings-control.js';
 import { assembleToolFormatControl } from './control/tool-format-control.js';
-import { AuxiliaryWork } from '../core/auxiliary-work.js';
+import { generateSessionText } from './detached-generation.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,39 +38,36 @@ import { AuxiliaryWork } from '../core/auxiliary-work.js';
 
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { generateDetachedText } from './detached-generation.js';
-import { executeHookCompression } from './compression-execution.js';
 import {
   ApprovalMode,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { executeHookCompression } from './compression-execution.js';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
-import { assembleAgentTools } from './agent-tool-assembly.js';
+import { assembleToolKeys } from './control/toolKeysControl.js';
 
-import {
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
-} from './providerMutations.js';
 import { assembleModelParameterControl } from './model-parameters.js';
 import {
-  restoreAgentChatVisibility,
   assembleProfilePersistence,
   buildProfileProviderStatus,
+  restoreAgentChatVisibility,
   snapshotModelParams,
 } from './profilePersistenceAssembly.js';
+import {
+  applyFacadeAuthBaseUrl,
+  updateActiveProviderApiKey,
+} from './providerMutations.js';
 
-import type { ActiveRun } from './directProviderAdmission.js';
-import { assembleForegroundRun } from './foreground-run-assembly.js';
-import { streamForegroundRun } from './foregroundRunLifecycle.js';
-import { createNewSessionAdmission } from './new-session-admission.js';
-import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type {
+  Agent,
   AgentHistoryItem,
   AgentInput,
+  AgentMemoryControl,
   AgentMessage,
+  AgentProviderSwitchOptions,
+  AgentProviderSwitchResult,
   AgentResult,
   CompressionResult,
   GenerateOptions,
@@ -59,46 +77,74 @@ import type {
   ToolInfo,
   TurnOptions,
   Unsubscribe,
-  Agent,
-  AgentMemoryControl,
-  AgentSkillsControl,
-  AgentWorkspaceControl,
-  AgentLspControl,
-  AgentProviderSwitchOptions,
-  AgentProviderSwitchResult,
 } from './agent.js';
-import type { AgentEvent } from './event-types.js';
-import type { ToolControl } from './control/toolControl.js';
+import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type { McpControl } from './control/mcpControl.js';
+import { ToolControl } from './control/toolControl.js';
+import type { ActiveRun } from './directProviderAdmission.js';
+import type { AgentEvent } from './event-types.js';
+import { ForegroundRunLifecycle } from './foregroundRunLifecycle.js';
+import { assembleDirectProviderAdmission } from './directProviderAdmission.js';
+import { createNewSessionAdmission } from './new-session-admission.js';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
 
 import { AuthControl, isOAuthPromptHandler } from './control/authControl.js';
-import { IdeControl } from './control/ideControl.js';
-import { type HookControl, createAgentHookControl } from './control/hooks.js';
+import { createAgentHookControl, type HookControl } from './control/hooks.js';
+import type { IdeControl } from './control/ideControl.js';
+import type { LspControl } from './control/lspControl.js';
 import { PolicyControl } from './control/policyControl.js';
-import { createTasksControl } from './control/tasksControl.js';
+import { ProfilesControl } from './control/profilesControl.js';
+import { SessionControl } from './control/sessionControl.js';
+import { SkillsControl } from './control/skillsControl.js';
 import type { TasksControl } from './control/tasksControl.js';
-import type { SessionControl } from './control/sessionControl.js';
-import {
-  assembleSessionControl,
-  idleClient,
-  initializeProviderState,
-  resetIdleChat,
-} from './session-control-assembly.js';
+import { createTasksControl } from './control/tasksControl.js';
+import type { WorkspaceControl } from './control/workspaceControl.js';
+import { assembleProfileApplication } from './profileApplicationAssembly.js';
+import { captureProfileModelParams } from './profileSnapshot.js';
 import {
   createRecordingExecution,
   currentRecordingPath,
 } from './recordingExecution.js';
-import { assembleAgentProfiles } from './profileApplicationAssembly.js';
-import { assembleProviderReads } from './provider-read-assembly.js';
-import { assembleProfileReplacement } from './profileReplacement.js';
-import { buildNewControls, type NewControls } from './control/newControls.js';
+import {
+  idleClient,
+  initializeProviderState,
+  resetIdleChat,
+} from './session-control-assembly.js';
+import { SessionProviderReads } from './session-provider-reads.js';
 
+import {
+  buildAgentResult,
+  buildProviderInfos,
+  drainToResult,
+  type OwnershipRecord,
+} from './agentBootstrap.js';
+import {
+  assembleAgentShutdown,
+  collectDisposalError,
+  disposeAgentObservers,
+  disposeConfigInfrastructure,
+  disposeOAuthManager,
+  disposeWorkspaceFacades,
+  finishOwnedHooks,
+  joinAgentWork,
+  joinCapturedRun,
+} from './agentDisposeHelpers.js';
+import {
+  projectCurrentSequenceModel,
+  projectSessionStats,
+  subscribeSessionStats,
+} from './agentStatsProjector.js';
+import type { AgentSchedulerHandle, EditorCallbacks } from './config-types.js';
+import {
+  authStatusForWinner,
+  computeAuthWinner,
+  type AgentAuthState,
+  type AgentProviderState,
+  type AuthWinner,
+} from './control/authState.js';
 import { AgentBusyError } from './loop/agentBusyError.js';
-
-import { UNCONFIGURED_PROVIDER } from './constants.js';
+import { applyFacadeProviderSwitch } from './providerSwitchOptionsAdapter.js';
 
 /**
  * Actionable error message used when the Agent is unconfigured — no active
@@ -107,46 +153,11 @@ import { UNCONFIGURED_PROVIDER } from './constants.js';
  */
 const UNCONFIGURED_AGENT_MESSAGE =
   'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
-import {
-  drainToResult,
-  buildAgentResult,
-  buildProviderInfos,
-  buildToolInfosFromRegistry,
-  type OwnershipRecord,
-} from './agentBootstrap.js';
-import type { EditorCallbacks } from './config-types.js';
-import {
-  createAgentAuthState,
-  type AgentAuthState,
-  type AuthWinner,
-  computeAuthWinner,
-  authStatusForWinner,
-} from './control/authState.js';
-import type { AgentSchedulerHandle } from './config-types.js';
-import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
-import {
-  projectSessionStats,
-  projectCurrentSequenceModel,
-  subscribeSessionStats,
-} from './agentStatsProjector.js';
-import {
-  releaseAgentFinalResources,
-  disposeAgentObservers,
-  disposeConfigInfrastructure,
-  joinAgentWork,
-  joinCapturedRun,
-  collectDisposalError,
-  finishOwnedHooks,
-} from './agentDisposeHelpers.js';
 
-import { AggregateDisposeError } from './disposeErrors.js';
-import {
+import type {
+  SessionCleanupAction,
   SessionLifecycle,
-  type SessionCleanupAction,
 } from './sessionLifecycle.js';
-
-import type { AgentDeps } from './agent-deps.js';
-export type { AgentDeps } from './agent-deps.js';
 
 /**
  * Mutable per-agent provider/model/param state holder.
@@ -159,14 +170,6 @@ export type { AgentDeps } from './agent-deps.js';
  * @plan:PLAN-20260617-COREAPI.P16
  * @requirement:REQ-004
  */
-export interface AgentProviderState {
-  provider: string;
-  model: string;
-  modelParams: Record<string, unknown>;
-  baseUrl?: string;
-  keyName?: string;
-  isLoadBalancer?: boolean;
-}
 
 /**
  * AgentImpl — the concrete Agent built by createAgent via buildAgent.
@@ -180,24 +183,10 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
   private get activeRun(): ActiveRun | undefined {
     return this.coordinator.current();
   }
-  readonly profiles: ReturnType<typeof assembleAgentProfiles>;
-  readonly tools: ToolControl;
-  readonly mcp: McpControl;
-  readonly auth: AuthControl;
-  readonly ide: IdeControl;
-  readonly session: SessionControl;
-  readonly hooks: HookControl;
-  readonly policy: PolicyControl;
+
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
-  readonly tasks: TasksControl;
-  readonly memory: AgentMemoryControl;
-  readonly skills: AgentSkillsControl;
-  readonly workspace: AgentWorkspaceControl;
-  readonly lsp: AgentLspControl;
-  private readonly newControls: NewControls;
 
   /** @pseudocode createAgent.md steps 150-160 */
-  readonly ownership: OwnershipRecord;
 
   /**
    * The runtime ProviderManager the facade governs. Exposed (mirroring
@@ -206,7 +195,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260621-COREAPIREMED.P09
    * @requirement:REQ-001
    */
-  readonly providerManager: RuntimeProviderManager;
 
   /**
    * The runtimeId the facade was built with. Exposed (mirroring
@@ -215,7 +203,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260621-COREAPIREMED.P09
    * @requirement:REQ-001
    */
-  readonly runtimeId: string;
 
   /**
    * The single shared MessageBus createAgent threaded through every surface.
@@ -226,7 +213,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P24
    * @requirement:REQ-016
    */
-  readonly messageBus: MessageBus;
 
   /**
    * The Config-owned AgentClient (the eager post-auth client refreshAuth
@@ -237,10 +223,9 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P24
    * @requirement:REQ-016
    */
-  readonly sessionClient: Agent['sessionClient'];
 
   get agentClient(): AgentClientContract {
-    return this.deps.sessionClient.getAgentClient();
+    return this.ownerClient.getAgentClient();
   }
 
   /**
@@ -252,7 +237,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-004
    */
-  private readonly providerState: AgentProviderState;
 
   /**
    * Per-agent mutable auth state (parallel to providerState). Carries every
@@ -263,13 +247,49 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-008
    */
-  private readonly authState: AgentAuthState = createAgentAuthState();
 
   /** Mutable editor-callbacks holder shared with ToolControl + forwarding object. */
-  private readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
 
   /** Mutable display-callbacks holder shared with ToolControl + stable forwarding object. */
 
+  readonly modelParameters = assembleModelParameterControl(
+    (provider, key, value) =>
+      this.settingsService.setProviderSetting(provider, key, value),
+    () => this.providerManager.getActiveProviderName(),
+    () => this.providerState.modelParams,
+    () => this.coordinator.assertNoCommit(),
+  );
+  readonly settings: Agent['settings'] = assembleSettingsControl(
+    (key) => this.settingsOwner.readNamedParameter(key),
+    () => this.settingsOwner.captureNamedParameters(),
+    (key, value) => this.settingsOwner.writeUserParameter(key, value),
+    (key) => this.settingsOwner.readSessionOverride(key),
+    (key, value) => this.settingsOwner.writeSessionOverride(key, value),
+    (key) => this.settingsOwner.clearSessionOverride(key),
+    () => this.coordinator.assertSettingsAdmission(),
+    () => this.assertProfileIdle(),
+    (listener) => this.settingsOwner.subscribeModelChanges(listener),
+  );
+  readonly toolFormat: Agent['toolFormat'] = assembleToolFormatControl(
+    () => this.settingsOwner.readToolFormat(),
+    (format) => this.settingsOwner.writeToolFormat(format),
+    () => this.providerManager.getActiveProvider(),
+    () => this.coordinator.assertSettingsAdmission(),
+    () => this.assertProfileIdle(),
+  );
+
+  readonly metrics: Agent['metrics'];
+
+  readonly providerReads: Agent['providerReads'];
+  readonly hasActiveProvider: Agent['hasActiveProvider'] = () =>
+    this.providerManager.hasActiveProvider();
+  readonly getProviderContextLimit: Agent['getProviderContextLimit'] = () =>
+    this.providerManager.getActiveProvider()?.getContextLimit?.();
+  readonly listAvailableModels: Agent['listAvailableModels'] = (provider) =>
+    this.providerManager.getAvailableModels(
+      provider ?? this.getProviderStatus().provider,
+    );
+  readonly sessionClient: Agent['sessionClient'];
   private readonly profilePersistence: ReturnType<
     typeof assembleProfilePersistence
   >;
@@ -279,65 +299,70 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
   readonly getActiveProfileName: Agent['getActiveProfileName'];
   readonly setDefaultProfileName: Agent['setDefaultProfileName'];
   readonly getRuntimeDiagnosticsSnapshot: Agent['getRuntimeDiagnosticsSnapshot'];
-
-  readonly hasActiveProvider: Agent['hasActiveProvider'];
-  readonly getProviderContextLimit: Agent['getProviderContextLimit'];
-  readonly listAvailableModels: Agent['listAvailableModels'];
-  readonly providerReads: Agent['providerReads'];
-
-  protected assertFileAdmission(): void {
-    this.coordinator.assertSettingsAdmission();
-  }
-  readonly modelParameters = assembleModelParameterControl(
-    (provider, key, value) =>
-      this.deps.settingsService.setProviderSetting(provider, key, value),
-    () => this.deps.providerManager.getActiveProviderName(),
-    () => this.providerState.modelParams,
-    () => this.coordinator.assertNoCommit(),
-  );
-  readonly settings: Agent['settings'] = assembleSettingsControl(
-    (key) => this.deps.settingsOwner.readNamedParameter(key),
-    () => this.deps.settingsOwner.captureNamedParameters(),
-    (key, value) => this.deps.settingsOwner.writeUserParameter(key, value),
-    (key) => this.deps.settingsOwner.readSessionOverride(key),
-    (key, value) => this.deps.settingsOwner.writeSessionOverride(key, value),
-    (key) => this.deps.settingsOwner.clearSessionOverride(key),
-    () => this.coordinator.assertSettingsAdmission(),
-    () => this.assertProfileIdle(),
-    (listener) => this.deps.settingsOwner.subscribeModelChanges(listener),
-  );
-  readonly toolFormat: Agent['toolFormat'] = assembleToolFormatControl(
-    () => this.deps.settingsOwner.readToolFormat(),
-    (format) => this.deps.settingsOwner.writeToolFormat(format),
-    () => this.deps.providerManager.getActiveProvider(),
-    () => this.coordinator.assertSettingsAdmission(),
-    () => this.assertProfileIdle(),
-  );
-
+  private readonly providerState: AgentProviderState;
+  readonly tools: ToolControl;
+  readonly profiles: ProfilesControl;
+  readonly auth: AuthControl;
+  readonly session: SessionControl;
+  readonly hooks: HookControl;
+  readonly policy: PolicyControl;
+  readonly tasks: TasksControl;
+  readonly memory: AgentMemoryControl;
+  readonly skills: SkillsControl;
+  private readonly switchProvider: ProviderSwitcher;
   constructor(
-    private readonly deps: AgentDeps,
+    private readonly settingsOwner: SessionSettingsOwner,
+    private readonly ownerClient: SessionClientOwner,
+    workspaceSkills: WorkspaceSkillOperations,
+    private readonly mediaStore: LocalMediaStore | undefined,
+    private readonly mediaOwner: SessionMediaOwner | undefined,
+    private readonly taskLaunchOwner: TaskLaunchOwner,
+    private readonly shellOwner: ShellJobOwner,
+    readonly workspace: WorkspaceControl,
+    readonly ide: IdeControl,
+    readonly lsp: LspControl,
+    private readonly awaitMcpDiscovery: AgentMcpOperations['awaitDiscovery'],
+    private readonly closeMcpAdmission: () => void,
+    readonly mcp: McpControl,
+    private readonly authState: AgentAuthState,
+    private readonly config: Config,
+    readonly providerManager: RuntimeProviderManager,
+    private readonly oauthManager: OAuthManager,
+    readRuntimeKind: () => RuntimeKind,
+    private readonly settingsService: SettingsService,
+    readonly runtimeId: string,
+    private readonly closeRuntime: () => Promise<void> | void,
+    readonly messageBus: MessageBus,
+    private readonly runtimeState: AgentRuntimeState,
+    readonly ownership: OwnershipRecord,
+    private readonly sessionIdentityOwnership: 'config' | 'facade',
+    private readonly resolveClient: () => AgentClientContract,
+    private readonly initialHistoryService: HistoryService | undefined,
+    private readonly editorCallbacksHolder: {
+      editorCallbacks: EditorCallbacks;
+    },
+    private readonly displayCallbacksHolder: StableDisplayCallbacksHolder,
+    private readonly onOAuthPrompt: unknown | undefined,
+    private readonly initialAuth: AgentAuth | undefined,
+    private readonly childDisplay: ChildToolDisplay | undefined,
     private readonly selectOwnerModel: (model: string) => Promise<void>,
+    readonly authentication: Agent['authentication'],
   ) {
-    super(deps.sessionClient.providerFiles, deps.config.getSessionId());
-    this.metrics = deps.settingsOwner.telemetry.localMetrics;
-    const reads = this.buildProviderReads();
-    this.providerReads = reads.providerReads;
-    this.hasActiveProvider = reads.hasActiveProvider;
-    this.getProviderContextLimit = reads.getProviderContextLimit;
-    this.listAvailableModels = reads.listAvailableModels;
-    this.sessionClient = idleClient(
-      deps.sessionClient.operations,
-      this.coordinator,
-      () => this.rebuild(),
+    super(
+      ownerClient.createProviderFileOperations(() =>
+        this.coordinator.assertSettingsAdmission(),
+      ),
     );
-    this.profilePersistence = assembleProfilePersistence(
-      () => deps.config.getModel(),
-      () => deps.config.getProvider(),
-      deps.settingsService,
-      deps.providerManager,
-      () => deps.settingsOwner.captureNamedParameters(),
-      deps.mcpOperations.profileWrites,
+    this.switchProvider = this.constructProviderSwitch(readRuntimeKind);
+    this.metrics = this.settingsOwner.telemetry.localMetrics;
+    this.providerReads = new SessionProviderReads(
+      this.settingsOwner,
+      this.providerManager,
+      () => this.providerState.model,
+      (provider) => this.settingsService.getProviderSettings(provider),
     );
+    this.sessionClient = this.constructSessionClient();
+    this.profilePersistence = this.constructProfilePersistence();
     this.captureProfile = this.profilePersistence.captureProfile;
     this.saveProfileSnapshot = this.profilePersistence.saveProfileSnapshot;
     this.deleteProfileByName = this.profilePersistence.deleteProfileByName;
@@ -345,110 +370,175 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
     this.setDefaultProfileName = this.profilePersistence.setDefaultProfileName;
     this.getRuntimeDiagnosticsSnapshot =
       this.profilePersistence.getRuntimeDiagnosticsSnapshot;
-    this.ownership = deps.ownership;
-    this.providerManager = deps.providerManager;
-    this.runtimeId = deps.runtimeId;
-    // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // Expose the SAME shared MessageBus + Config-owned AgentClient + injected
-    // scheduler/coordinator the facade owns so the T13 disposal probe reads the
-    // genuine live objects dispose() tears down (no second bus, no clones).
-    this.messageBus = deps.messageBus;
-
-    // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
     this.providerState = initializeProviderState(
-      deps.runtimeState,
-      deps.initialAuth,
+      this.runtimeState,
+      this.initialAuth,
       this.authState,
     );
-    // Shared mutable holders threaded from finalizeAgent.
-    this.editorCallbacksHolder = deps.editorCallbacksHolder;
-    this.tools = assembleAgentTools(deps, this.coordinator);
-    this.profiles = assembleAgentProfiles(
-      deps.config,
-      deps.settingsService,
-      deps.providerManager,
-      deps.oauthManager,
-      deps.switchProvider,
-      deps.settingsOwner,
-      this.providerState,
-      this.authState,
-      this.captureProfile,
-      (changed, signal) => this.prepareReplacement(changed, signal),
-      deps.mcpOperations.profileDefinitions,
-      () => this.coordinator.assertIdle(),
-    );
+    this.tools = this.constructTools();
+    this.profiles = this.constructProfiles();
     this.auth = this.buildAuthControl();
-    this.mcp = this.buildMcpControl();
-    this.ide = new IdeControl({
-      trust: deps.mcpOperations.trust,
-      ide: deps.mcpOperations.ide,
-      ideModeEnabled: () => deps.mcpOperations.ide.isEnabled(),
-      getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
-    });
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
-    this.policy = new PolicyControl({
-      inspection: deps.sessionClient.policyInspection,
-    });
-    this.tasks = createTasksControl(deps.taskLaunchOwner, deps.shellOwner);
-    this.newControls = buildNewControls(
-      deps.config,
-      deps.workspaceSkills,
-      deps.mcpOperations,
-    );
-    this.memory = deps.sessionClient.memoryOperations;
-    this.skills = this.newControls.skills;
-    this.workspace = this.newControls.workspace;
-    this.lsp = this.newControls.lsp;
+    this.policy = new PolicyControl(this.ownerClient.policyInspection);
+    this.tasks = createTasksControl(this.taskLaunchOwner, this.shellOwner);
+    this.skills = new SkillsControl(workspaceSkills);
+    this.memory = this.ownerClient.memoryOperations;
+    this.releaseHooks = this.ownerClient.transferHookRelease();
   }
-
-  private buildProviderReads() {
-    return assembleProviderReads(
-      this.deps.providerManager,
-      () => this.getProviderStatus().provider,
-      this.deps.settingsOwner,
-      () => this.providerState.model,
-      (provider) => this.deps.settingsService.getProviderSettings(provider),
+  private constructSessionClient(): Agent['sessionClient'] {
+    return idleClient(this.ownerClient.operations, this.coordinator, () =>
+      this.rebuild(),
     );
   }
+  private constructProfilePersistence(): ReturnType<
+    typeof assembleProfilePersistence
+  > {
+    return assembleProfilePersistence(
+      () => this.config.getModel(),
+      () => this.config.getProvider(),
+      this.settingsService,
+      this.providerManager,
+      () => this.settingsOwner.captureNamedParameters(),
+      this.workspace.profileWrites,
+    );
+  }
+  private constructTools(): ToolControl {
+    const assertSessionAdmission = (): void =>
+      this.coordinator.assertNoCommit();
+    this.taskLaunchOwner.bindSessionAdmission(assertSessionAdmission);
+    this.shellOwner.bindSessionAdmission(assertSessionAdmission);
+    return new ToolControl(
+      (...args) => this.ownerClient.openClientToolChannel(...args),
+      assertSessionAdmission,
+      this.taskLaunchOwner,
+      this.shellOwner,
+      this.childDisplay,
+      this.messageBus,
+      this.ownerClient.toolCatalog.selection,
+      (names) => this.settingsOwner.setAllowedTools(names),
+      () => this.ownerClient.toolCatalog.describeConfiguration(),
+      this.editorCallbacksHolder,
+      this.displayCallbacksHolder,
+      (calls) => this.ownerClient.recordCompletedToolCalls(calls),
+      assembleToolKeys(),
+    );
+  }
 
+  private constructProfiles(): ProfilesControl {
+    const readString = (key: string): string | undefined => {
+      const value = this.settingsOwner.readNamedParameter(key);
+      return typeof value === 'string' && value.length > 0 ? value : undefined;
+    };
+    return new ProfilesControl(
+      () => this.providerState,
+      assembleProfileApplication(
+        this.settingsService,
+        this.providerManager,
+        this.oauthManager,
+        (name, options) =>
+          this.switchProvider(name, {
+            ...options,
+            clientReplacement: 'deferred',
+          }),
+        this.settingsOwner,
+        this.workspace.profileDefinitions,
+        async (result, signal) => {
+          const modelParams = captureProfileModelParams(
+            this.settingsService.getProviderSettings(result.providerName),
+          );
+          const replacement = await this.prepareReplacement(
+            result.providerChanged,
+            signal,
+          );
+          return {
+            publish: () => {
+              replacement.publish();
+              this.providerState.provider = result.providerName;
+              this.providerState.model = result.modelName;
+              this.providerState.modelParams = modelParams;
+              this.providerState.baseUrl = result.baseUrl;
+              this.providerState.keyName = readString('auth-key-name');
+              this.providerState.isLoadBalancer =
+                result.providerName === 'load-balancer';
+              this.authState.keyFile = readString('auth-keyfile');
+              this.authState.rawKeyPresent =
+                readString('auth-key') !== undefined;
+              this.authState.inlineKeyPresent = false;
+              this.authState.baseUrl = result.baseUrl;
+            },
+            retire: () => replacement.retire(),
+            discard: () => replacement.discard(),
+          };
+        },
+        () => this.coordinator.assertIdle(),
+      ),
+      () => ({ ...this.settingsOwner.captureUserParameters() }),
+      this.config.getTargetDir(),
+    );
+  }
+  private constructProviderSwitch(
+    readRuntimeKind: () => RuntimeKind,
+  ): ProviderSwitcher {
+    return assembleProviderSwitch(
+      this.config,
+      this.settingsService,
+      this.providerManager,
+      this.oauthManager,
+      readRuntimeKind,
+      () => this.ownerClient.refreshAuth(),
+      this.settingsOwner,
+    );
+  }
   private readonly prepareReplacement = (
     changed: boolean,
     signal: AbortSignal,
-  ) =>
-    assembleProfileReplacement(
-      this.deps.resolveClient,
-      (run) => run.loop === this.deps.loopHolder.current,
-      this.deps.prepareLoopForClient,
-      () => this.deps.sessionClient.prepareProfileClientReplacement(),
-      () => this.activeRun,
-    )(changed, signal);
+  ) => {
+    const active = this.activeRun;
+    const run =
+      active !== undefined && this.ownerClient.isCurrentExecution(active.loop)
+        ? active
+        : undefined;
+    return this.ownerClient.prepareProfileExecution(
+      changed,
+      signal,
+      (retire) => {
+        if (run !== undefined && this.activeRun === run) {
+          run.retirements = [...run.retirements, retire];
+          return Promise.resolve();
+        }
+        return retire();
+      },
+    );
+  };
 
   private buildSessionControl(): SessionControl {
-    const config = this.deps.config;
-    const settingsOwner = this.deps.settingsOwner;
-    return assembleSessionControl(config, this.deps.mediaStore, {
-      readRecordingQueueLimit: () =>
+    const config = this.config;
+    const settingsOwner = this.settingsOwner;
+    return new SessionControl(
+      config,
+      this.mediaStore,
+      () =>
         settingsOwner.readRecordingQueueLimit(
           config.getSessionRecordingQueueByteLimit(),
         ),
-      directories: () => this.deps.mcpOperations.workspacePaths.directories(),
-      sessionIdentityOwnership: this.deps.sessionIdentityOwnership,
-      sessionId: () => this.deps.runtimeId,
-      resolveClient: () => this.deps.resolveClient(),
-      withSessionTransition: createNewSessionAdmission(
-        this.deps.taskLaunchOwner,
-        this.deps.shellOwner,
+      () => this.workspace.getDirectories(),
+      this.sessionIdentityOwnership,
+      () => this.runtimeId,
+      () => this.resolveClient(),
+      createNewSessionAdmission(
+        this.taskLaunchOwner,
+        this.shellOwner,
         this.coordinator,
         this.tools,
         () => this.assertProfileIdle(),
       ),
-      closeSessionAdmission: () => this.coordinator.closeAdmission(),
-      prepareNewSessionClient: (id) =>
-        this.deps.sessionClient.prepareNewSession(id, () => this.rebuild()),
-      getProvider: () => this.providerState.provider,
-      getModel: () => this.getModel(),
-    });
+      () => this.coordinator.closeAdmission(),
+      (id) => this.ownerClient.prepareNewSession(id, () => this.rebuild()),
+      () => this.providerState.provider,
+      () => this.getModel(),
+      undefined,
+    );
   }
 
   /**
@@ -488,12 +578,14 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
+  private readonly releaseHooks: () => Promise<void>;
+
   private buildHookControl(): HookControl {
     return createAgentHookControl(
-      this.deps.sessionClient.hookOperations,
-      this.deps.messageBus,
+      this.ownerClient.hookOperations,
+      this.messageBus,
       this.readHookSessionId,
-      () => this.deps.config.getTargetDir(),
+      () => this.config.getTargetDir(),
       () => currentRecordingPath(this.session),
     );
   }
@@ -514,52 +606,45 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-008
    */
   private buildAuthControl(): AuthControl {
-    const { settingsService } = this.deps;
-    const onOAuthPromptHandler = isOAuthPromptHandler(this.deps.onOAuthPrompt)
-      ? this.deps.onOAuthPrompt
+    const settingsService = this.settingsService;
+    const onOAuthPromptHandler = isOAuthPromptHandler(this.onOAuthPrompt)
+      ? this.onOAuthPrompt
       : undefined;
-    const keysDeps = {
-      authState: this.authState,
-      getKeyName: () => this.providerState.keyName,
-      setKeyName: (keyName: string | undefined) => {
-        this.providerState.keyName = keyName;
-      },
-      updateProviderApiKey: async (apiKey: string | null) => {
-        this.coordinator.assertSettingsAdmission();
-        return updateActiveProviderApiKey(
-          apiKey,
-          {
-            setEphemeralSetting: (key, value) =>
-              this.deps.settingsOwner.writeUserParameter(key, value),
-          },
-          settingsService,
-          this.deps.providerManager.getActiveProvider(),
-        );
-      },
-    };
     return new AuthControl(
       this.authState,
       () => this.providerState.provider,
       (provider) => authStatusForWinner(this.computeWinner(provider)),
       onOAuthPromptHandler,
-      async (baseUrl) => {
-        this.providerState.baseUrl = baseUrl ?? undefined;
-        try {
-          await updateActiveProviderBaseUrl(
-            baseUrl ?? '',
-            {
-              setEphemeralSetting: (key, value) =>
-                this.deps.settingsOwner.writeUserParameter(key, value),
-            },
-            this.deps.settingsService,
-            this.providerState.provider,
-          );
-        } catch {
-          // No-op under the fake seam.
-        }
+      (baseUrl) =>
+        applyFacadeAuthBaseUrl(
+          baseUrl,
+          this.providerState,
+          (key, value) => this.settingsOwner.writeUserParameter(key, value),
+          this.settingsService,
+          this.providerState.provider,
+        ),
+      () => this.providerState.keyName,
+      (name) => {
+        this.providerState.keyName = name;
       },
-      keysDeps,
-      () => this.deps.oauthManager,
+      async (apiKey) => {
+        this.coordinator.assertSettingsAdmission();
+        return updateActiveProviderApiKey(
+          apiKey,
+          {
+            setEphemeralSetting: (key, value) =>
+              this.settingsOwner.writeUserParameter(key, value),
+          },
+          settingsService,
+          this.providerManager.getActiveProvider(),
+        );
+      },
+      (provider) => this.oauthManager.isOAuthEnabled(provider),
+      (provider) => this.oauthManager.isAuthenticated(provider),
+      async (provider) =>
+        (await this.oauthManager.peekStoredToken(provider))?.expiry,
+      (provider) => this.oauthManager.getHigherPriorityAuth(provider),
+      (provider) => this.oauthManager.getAuthStatusWithBuckets(provider),
     );
   }
 
@@ -573,17 +658,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-013
    * @requirement:REQ-019
    */
-  private buildMcpControl(): McpControl {
-    // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
-    const mcp = this.deps.mcpOperations;
-    return buildOwnedMcpControl(mcp, {
-      toolSelection: this.deps.sessionClient.toolCatalog.selection,
-      config: this.deps.config,
-      isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
-      markAuthenticated: (server) => this.authState.mcpAuth.add(server),
-      resolveClient: () => this.deps.resolveClient(),
-    });
-  }
 
   /**
    * Awaits MCP discovery readiness before a model turn (the discovery gate).
@@ -614,32 +688,27 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @pseudocode createAgent.md steps 130-148 (loop drives the turn)
    */
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent> {
-    return streamForegroundRun(
-      assembleForegroundRun(
-        {
-          recording: createRecordingExecution(
-            this.session,
-            this.readHookSessionId,
-            this.deps.sessionClient.hookOperations,
-          ),
-          isApplying: () => this.profiles.isApplying(),
-          isReady: () => this.isProviderReady(),
-          admitRun: (run) => this.coordinator.admit(run),
-          releaseRun: (run) => this.coordinator.release(run),
-          awaitDiscovery: () => this.deps.mcpOperations.awaitDiscovery(),
-          notifyConfirmation: this.tools.notifyConfirmation.bind(this.tools),
-          notifyToolUpdate: this.tools.notifyToolUpdate.bind(this.tools),
-        },
-        this.deps.settingsService,
-        this.deps.providerManager,
-        this.deps.loopHolder,
-        this.deps.resolveClient,
-        () => this.rebuild(),
-        () => this.getModel(),
-      ),
-      input,
-      opts,
+    const admission = assembleDirectProviderAdmission(
+      this.settingsService,
+      this.providerManager,
+      () => this.getModel(),
     );
+    return new ForegroundRunLifecycle(
+      createRecordingExecution(
+        this.session,
+        this.readHookSessionId,
+        this.ownerClient.hookOperations,
+      ),
+      () => this.profiles.isApplying(),
+      () => this.isProviderReady(),
+      (run) => this.coordinator.admit(run),
+      (run) => this.coordinator.release(run),
+      () => this.ownerClient.resolveExecution(),
+      () => admission.admit(),
+      () => this.awaitMcpDiscovery(),
+      this.tools.notifyConfirmation.bind(this.tools),
+      this.tools.notifyToolUpdate.bind(this.tools),
+    ).stream(input, opts);
   }
 
   /**
@@ -670,9 +739,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-004
    */
-  getProvider(): string {
-    return this.providerState.provider;
-  }
+  readonly getProvider = (): string => this.providerState.provider;
 
   /**
    * Switches the active provider (and optional model) mid-session, preserving
@@ -710,22 +777,19 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-004
    * @requirement:REQ-008
    */
-  getProviderStatus(): ProviderStatus {
-    return buildProfileProviderStatus(
+  readonly getProviderStatus = (): ProviderStatus =>
+    buildProfileProviderStatus(
       this.providerState,
       this.computeWinner(this.providerState.provider),
       this.authState.keyFile,
     );
-  }
 
   /**
    * Returns the configured model per-agent (NOT the global runtime accessor).
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-004
    */
-  getModel(): string {
-    return this.providerReads.getActiveModelName();
-  }
+  readonly getModel = (): string => this.providerReads.getActiveModelName();
 
   /**
    * Changes the active model (provider unchanged), preserving context.
@@ -741,7 +805,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
     await this.selectOwnerModel(model);
-    await this.deps.sessionClient.refreshAuth();
+    await this.ownerClient.refreshAuth();
     await this.restoreChatVisibility();
     this.rebuild();
     this.providerState.model = model;
@@ -756,21 +820,15 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * current sequence model. Returns null when there is no active client or no
    * active load-balancer sequence model.
    */
-  getCurrentSequenceModel(): string | null {
-    // resolveClient mirrors core Config.getAgentClient, whose declared type is
-    // non-nullable only because its backing field uses a definite-assignment
-    // assertion (agentClient!). At runtime no client exists before
-    // initialization, so widen to the truthful runtime type to keep a genuine
-    // null-guard (the T9c contract: a missing client yields null, never throws).
-    return projectCurrentSequenceModel(this.deps.resolveClient());
-  }
+  readonly getCurrentSequenceModel = (): string | null =>
+    projectCurrentSequenceModel(this.resolveClient());
 
   /**
    * @plan:PLAN-20260621-COREAPIREMED.P18
    * @requirement:REQ-005
    * @pseudocode lines 10-12
    */
-  readonly getRuntimeId = (): string => this.deps.runtimeId;
+  readonly getRuntimeId = (): string => this.runtimeId;
 
   /**
    * Returns the single session MessageBus the facade owns — the SAME instance
@@ -781,22 +839,22 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20270110-ISSUE2378.P01
    * @requirement:REQ-2378-001
    */
-  readonly getMessageBus = (): MessageBus => this.deps.messageBus;
+  readonly getMessageBus = (): MessageBus => this.messageBus;
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
-  getEphemeralSetting(key: string): unknown {
-    return this.settings.getEphemeralSetting(key);
-  }
+  readonly getEphemeralSetting = this.settings.getEphemeralSetting.bind(
+    this.settings,
+  );
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 30-33 */
-  setEphemeralSetting(key: string, value: unknown): void {
-    this.settings.setEphemeralSetting(key, value);
-  }
+  readonly setEphemeralSetting = this.settings.setEphemeralSetting.bind(
+    this.settings,
+  );
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
-  getEphemeralSettings(): Readonly<Record<string, unknown>> {
-    return this.settings.getEphemeralSettings();
-  }
+  readonly getEphemeralSettings = this.settings.getEphemeralSettings.bind(
+    this.settings,
+  );
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P04
@@ -805,7 +863,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    */
   getApprovalMode(): ApprovalMode {
     return this.ide.isTrustedFolder()
-      ? this.deps.config.getApprovalMode()
+      ? this.config.getApprovalMode()
       : ApprovalMode.DEFAULT;
   }
 
@@ -819,7 +877,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
       throw new Error(
         'Cannot enable privileged approval modes in an untrusted folder.',
       );
-    this.deps.config.setApprovalMode(mode);
+    this.config.setApprovalMode(mode);
   }
 
   /**
@@ -828,9 +886,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-004
    * @pseudocode switch-rebind.md steps 110-112
    */
-  getModelParams(): Readonly<Record<string, unknown>> {
-    return snapshotModelParams(this.providerState.modelParams);
-  }
+  readonly getModelParams = (): Readonly<Record<string, unknown>> =>
+    snapshotModelParams(this.providerState.modelParams);
 
   /**
    * Lazily sets a model param (no content-generator rebuild); the next provider
@@ -839,9 +896,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-004
    * @pseudocode switch-rebind.md steps 90-94
    */
-  setModelParam(key: string, value: unknown): void {
-    this.modelParameters.set(key, value);
-  }
+  readonly setModelParam = this.modelParameters.set.bind(this.modelParameters);
 
   /**
    * Lazily clears a model param (no rebuild).
@@ -849,19 +904,18 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-004
    * @pseudocode switch-rebind.md steps 100-103
    */
-  clearModelParam(key: string): void {
-    this.modelParameters.clear(key);
-  }
+  readonly clearModelParam = this.modelParameters.clear.bind(
+    this.modelParameters,
+  );
 
-  async getHistory(): Promise<readonly AgentMessage[]> {
-    return this.deps.resolveClient().getHistory();
-  }
+  readonly getHistory = async (): Promise<readonly AgentMessage[]> =>
+    this.resolveClient().getHistory();
 
   async setHistory(
     history: readonly AgentMessage[],
     opts?: { readonly stripThoughts?: boolean },
   ): Promise<void> {
-    const client = this.deps.resolveClient();
+    const client = this.resolveClient();
     await client.setHistory(
       [...history] as Parameters<typeof client.setHistory>[0],
       opts,
@@ -875,10 +929,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async addHistory(message: AgentMessage): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.addHistory(message);
-  }
+  readonly addHistory = async (message: AgentMessage): Promise<void> =>
+    this.resolveClient().addHistory(message);
 
   /**
    * Restores a curated history (IContent[] items) by delegating to the client's
@@ -888,10 +940,9 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async restoreHistory(items: readonly AgentHistoryItem[]): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.restoreHistory([...items]);
-  }
+  readonly restoreHistory = async (
+    items: readonly AgentHistoryItem[],
+  ): Promise<void> => this.resolveClient().restoreHistory([...items]);
 
   /**
    * Resets the chat through the durable history-clear path while recording is
@@ -903,7 +954,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
   async resetChat(): Promise<void> {
     this.assertProfileIdle();
     await resetIdleChat(this.coordinator, this.session, () =>
-      this.deps.resolveClient().resetChat(),
+      this.resolveClient().resetChat(),
     );
   }
 
@@ -913,9 +964,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async updateSystemInstruction(): Promise<void> {
-    await this.deps.resolveClient().updateSystemInstruction();
-  }
+  readonly updateSystemInstruction = async (): Promise<void> =>
+    this.resolveClient().updateSystemInstruction();
 
   /**
    * Adds directory context to the system prompt for the next turn by delegating
@@ -923,9 +973,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async addDirectoryContext(): Promise<void> {
-    await this.deps.resolveClient().addDirectoryContext();
-  }
+  readonly addDirectoryContext = async (): Promise<void> =>
+    this.resolveClient().addDirectoryContext();
 
   /**
    * Explicitly triggers history compression via the chat contract's
@@ -946,10 +995,10 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
     return executeHookCompression(
       opts?.promptId ?? `compress-${Date.now()}`,
       () => this.restoreChatVisibility(),
-      () => this.deps.resolveClient().getChat(),
+      () => this.resolveClient().getChat(),
       this.session,
       this.readHookSessionId,
-      this.deps.sessionClient.hookOperations,
+      this.ownerClient.hookOperations,
       () => this.historyService,
     );
   }
@@ -961,7 +1010,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  readonly metrics: Agent['metrics'];
 
   readonly getStats = (): SessionStats =>
     projectSessionStats(this.historyService, this.metrics);
@@ -987,19 +1035,14 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-012
    */
   async generate(input: AgentInput, opts?: GenerateOptions): Promise<string> {
-    if (!this.isProviderReady()) {
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    }
-    const client = this.deps.resolveClient();
-    return generateDetachedText(
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    const client = this.ownerClient.getAgentClient();
+    return generateSessionText(
       input,
-      opts?.promptId ?? `generate-${Date.now()}`,
+      opts,
       client.generateDirectMessage.bind(client),
-      createRecordingExecution(
-        this.session,
-        this.readHookSessionId,
-        this.deps.sessionClient.hookOperations,
-      ),
+      this.session,
+      this.ownerClient.hookOperations,
     );
   }
 
@@ -1016,11 +1059,10 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
     opts?: GenerateOptions,
   ): Promise<Record<string, unknown>> {
     if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    const client = this.deps.resolveClient();
-    const input = [...contents];
-    const model = opts?.model ?? this.getModel();
-    return this.auxiliary.run(
-      (signal) => client.generateJson(input, { ...schema }, signal, model),
+    return this.ownerClient.generateJson(
+      contents,
+      schema,
+      opts?.model ?? this.getModel(),
       opts?.signal,
     );
   }
@@ -1034,10 +1076,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    */
   async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
     if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    const client = this.deps.resolveClient();
-    return this.auxiliary.run((signal) =>
-      client.generateEmbedding([...texts], signal),
-    );
+    return this.ownerClient.generateEmbedding(texts);
   }
 
   /**
@@ -1046,18 +1085,12 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-017
    */
   listProviders(): readonly ProviderInfo[] {
-    const names = this.deps.providerManager.listProviders();
+    const names = this.providerManager.listProviders();
     return buildProviderInfos(names, new Set(names));
   }
 
   /** Projects the enriched ToolInfo[] from the registry (added by #2376). */
-  listTools(): readonly ToolInfo[] {
-    const registry = this.deps.sessionClient.toolCatalog.selection;
-    return buildToolInfosFromRegistry(
-      registry.getAllTools(),
-      new Set(registry.getEnabledTools().map((t) => t.name)),
-    );
-  }
+  readonly listTools = (): readonly ToolInfo[] => [...this.tools.list()];
 
   /**
    * Per-agent HistoryService accessor (per-access; never cached). Falls back to
@@ -1071,8 +1104,8 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    */
   get historyService(): HistoryService | null {
     return (
-      this.deps.resolveClient().getHistoryService() ??
-      this.deps.initialHistoryService ??
+      this.resolveClient().getHistoryService() ??
+      this.initialHistoryService ??
       null
     );
   }
@@ -1096,70 +1129,22 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-005
    * @pseudocode switch-rebind.md steps 30-42
    */
-  private async applyProviderSwitch(
+  private applyProviderSwitch(
     provider: string,
     model?: string,
     options?: AgentProviderSwitchOptions,
   ): Promise<AgentProviderSwitchResult> {
-    const previousProvider = this.providerState.provider;
-    // switchActiveProvider rebuilds the content generator internally; under the
-    // fake seam the named provider is not registered and this throws (no-op).
-    let providerChanged = false;
-    let infoMessages: readonly string[] = [];
-    let defaultModel: string | undefined;
-    try {
-      const switchResult = await this.deps.switchProvider(
-        provider,
-        toRuntimeSwitchOptions(options),
-      );
-      providerChanged = switchResult.changed;
-      infoMessages = switchResult.infoMessages;
-      defaultModel = switchResult.defaultModel;
-    } catch (error) {
-      // Only the EXPECTED fake-seam case is suppressed: the fake seam sets
-      // LLXPRT_FAKE_RESPONSES to a fixture-file path (never the string '1'), so
-      // the seam predicate is simply "the env var is set at all". A REAL
-      // provider-switch failure (env var not set) must propagate so a genuine
-      // failure is never reported as success — facade state below is then left
-      // untouched.
-      const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
-      if (!isFakeSeam) {
-        throw error;
-      }
-      // Provider not registered (fake seam) — the active provider handles all
-      // requests. Per-agent state still reflects the switch (getProvider etc.).
-    }
-    if (providerChanged) {
-      // Real provider switch succeeded; apply the requested model (if any) via
-      // setActiveModel + the explicit model-only rebuild.
-      if (model !== undefined && model !== this.providerState.model) {
-        await this.selectOwnerModel(model);
-        await this.deps.sessionClient.refreshAuth();
-      }
-      await this.restoreChatVisibility();
-    } else if (model !== undefined && model !== this.providerState.model) {
-      // Same provider, different model — apply the model to the runtime
-      // without reinitializing the content generator (the provider did not
-      // change, so the client/HistoryService identity is preserved).
-      // setActiveModel updates the model on the existing provider; the
-      // rebuild() below propagates it to the loop (#2374 deepthinker finding).
-      await this.selectOwnerModel(model);
-    }
-    // Under the fake seam (providerChanged === false), the client is unchanged;
-    // history/HistoryService identity is trivially preserved (same client).
-    this.providerState.provider = provider;
-    if (model !== undefined) {
-      this.providerState.model = model;
-    }
-    this.rebuild();
-    return {
-      changed: providerChanged,
-      previousProvider:
-        previousProvider === UNCONFIGURED_PROVIDER ? null : previousProvider,
-      nextProvider: provider,
-      ...(defaultModel !== undefined ? { defaultModel } : {}),
-      infoMessages,
-    };
+    return applyFacadeProviderSwitch(
+      provider,
+      model,
+      options,
+      this.providerState,
+      this.switchProvider,
+      this.selectOwnerModel,
+      () => this.ownerClient.refreshAuth(),
+      this.restoreChatVisibility,
+      () => this.rebuild(),
+    );
   }
 
   /**
@@ -1173,7 +1158,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-005
    */
   private readonly restoreChatVisibility = (): Promise<void> =>
-    restoreAgentChatVisibility(this.deps.resolveClient());
+    restoreAgentChatVisibility(this.resolveClient());
 
   /**
    * Applies a profile's modelParams onto the live agent via the lazy runtime
@@ -1194,9 +1179,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-004
    * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
    */
-  private rebuild(): void {
-    this.deps.rebuildLoop();
-  }
+  private readonly rebuild = (): void => this.ownerClient.rebuildExecution();
 
   /**
    * Provider readiness: true when the manager reports an active provider.
@@ -1209,7 +1192,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
     this.session.getSessionId();
   private isProviderReady(): boolean {
     if (this.ownership.disposed) throw new Error('Agent is closed');
-    return this.deps.providerManager.hasActiveProvider();
+    return this.providerManager.hasActiveProvider();
   }
 
   /** Computes the auth status for an explicit provider. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */
@@ -1247,7 +1230,6 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
    * @requirement:REQ-015
    * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
    */
-  private readonly auxiliary = new AuxiliaryWork();
   private lifecycle?: SessionLifecycle;
 
   dispose(): Promise<void> {
@@ -1260,96 +1242,83 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
       () => {
         this.ownership.disposed = true;
       },
-      () => this.deps.sessionClient.closeAdmission(),
-      () => this.deps.taskLaunchOwner.closeAdmissionAndAbort(),
-      () => this.deps.sessionClient.closeHookAdmission(),
+      () => this.ownerClient.closeAdmission(),
+      () => this.taskLaunchOwner.closeAdmissionAndAbort(),
+      () => this.ownerClient.closeHookAdmission(),
       () => this.hooks.closeAdmission(),
       () => this.profilePersistence.closeAdmission(),
-      () => this.deps.mcpOperations.closeAdmission(),
-      () => this.deps.shellOwner.closeAdmission(),
-      () => this.newControls.closeAdmission(),
+      () => this.closeMcpAdmission(),
+      () => this.shellOwner.closeAdmission(),
+      () => this.skills.closeAdmission(),
+      () => this.workspace.closeAdmission(),
       () => this.session.closeAdmission(),
     ];
   }
 
   private createShutdownLifecycle(): SessionLifecycle {
-    const errors: unknown[] = [];
-    const pending: Array<Promise<void>> = [];
     const run = this.activeRun;
-    const holder = this.deps.loopHolder;
-    const start = (action: SessionCleanupAction): void => {
-      pending.push(collectDisposalError(errors, action));
-    };
-    return new SessionLifecycle({
-      stopAdmissions: [
-        ...this.stopShutdownAdmissions(),
-        () => start(() => this.auxiliary.close()),
-        () => start(() => this.deps.sessionClient.closeImageAdmission()),
-        () => start(() => this.deps.sessionClient.toolCatalog.closeAdmission()),
-        () => start(() => this.tools.dispose()),
+    return assembleAgentShutdown(
+      this.stopShutdownAdmissions(),
+      [
+        () => this.ownerClient.closeAuxiliaryAdmission(),
+        () => this.ownerClient.closeImageAdmission(),
+        () => this.ownerClient.toolCatalog.closeAdmission(),
+        () => this.tools.dispose(),
       ],
-      abortActiveAndPending: [
-        () => run?.controller.abort(),
-        () => holder.activeRunController?.abort(),
-        () => start(() => this.coordinator.dispose()),
-        () => start(() => this.deps.shellOwner.dispose()),
-      ],
-      cancelAndJoinOwnedWork: [
-        () =>
-          joinAgentWork(
-            () => this.profiles.cancelAndJoin(),
-            () => this.mcp.cancelAndJoin(),
-            () => this.deps.taskLaunchOwner.hasPendingWork(),
-            () => this.deps.taskLaunchOwner.join(),
-            () => this.ownership.disposeMcpRuntime?.(),
-            errors,
-          ),
-        () => joinCapturedRun(run, errors),
-        () =>
-          collectDisposalError(errors, () => this.profilePersistence.join()),
-        async () => {
-          await Promise.all(pending);
-        },
-      ],
-      flushRecording: [
-        async () => {
-          await finishOwnedHooks(
-            () => this.hooks.finishSessionEnd(),
-            () => this.deps.sessionClient.disposeHooks(),
-            errors,
-          );
-          await disposeAgentObservers(
-            this.ownership,
-            this.hooks,
-            this.newControls,
-            holder.subscriptions,
-            errors,
-          );
-          await collectDisposalError(errors, () => this.session.dispose());
-        },
-      ],
-      releaseResources: [
-        async () => {
-          await this.releaseShutdownResources(errors);
-          if (errors.length > 0) throw new AggregateDisposeError(errors);
-        },
-      ],
-    });
+      [() => run?.controller.abort(), () => this.ownerClient.abortExecution()],
+      [() => this.coordinator.dispose(), () => this.shellOwner.dispose()],
+      (errors) =>
+        joinAgentWork(
+          () => this.profiles.cancelAndJoin(),
+          () => this.mcp.cancelAndJoin(),
+          () => this.taskLaunchOwner.hasPendingWork(),
+          () => this.taskLaunchOwner.join(),
+          () => this.ownership.disposeMcpRuntime?.(),
+          errors,
+        ),
+      (errors) => joinCapturedRun(run, errors),
+      () => this.profilePersistence.join(),
+      async (errors) => {
+        await finishOwnedHooks(
+          () => this.hooks.finishSessionEnd(),
+          this.releaseHooks,
+          errors,
+        );
+        await disposeAgentObservers(
+          this.ownership.injectedSchedulerHandles,
+          () => this.hooks.detach(),
+          () =>
+            disposeWorkspaceFacades(
+              () => this.skills.dispose(),
+              () => this.workspace.dispose(),
+            ),
+          undefined,
+          errors,
+        );
+        await collectDisposalError(errors, () => this.session.dispose());
+      },
+      (errors) => this.releaseShutdownResources(errors),
+    );
   }
 
   private async releaseShutdownResources(errors: unknown[]): Promise<void> {
-    await collectDisposalError(errors, () => this.deps.sessionClient.dispose());
-    await collectDisposalError(errors, () => this.deps.runtimeHandle.cleanup());
+    await collectDisposalError(errors, () => this.ownerClient.dispose());
+    await collectDisposalError(errors, this.closeRuntime);
     await disposeConfigInfrastructure(
-      this.ownership,
-      this.deps.mediaOwner,
+      this.ownership.configOwnership === 'caller'
+        ? undefined
+        : () => this.config.dispose(),
+      this.mediaOwner?.dispose.bind(this.mediaOwner),
       errors,
     );
+    if (this.ownership.configOwnership !== 'caller')
+      this.ownership.lspShutDown = true;
     this.ownership.extensionsDisposed = true;
-    await releaseAgentFinalResources(
-      this.ownership,
-      this.deps.oauthManager,
-      errors,
+    for (const lock of this.ownership.sessionLocks)
+      await collectDisposalError(errors, () => lock.release());
+    this.ownership.sessionLocksReleased = true;
+    await collectDisposalError(errors, () =>
+      disposeOAuthManager(this.oauthManager),
     );
   }
 }

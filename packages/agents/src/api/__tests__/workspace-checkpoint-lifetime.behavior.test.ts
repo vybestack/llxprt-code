@@ -416,16 +416,38 @@ describe('public Agent workspace checkpoint lifetime', () => {
         checkpointing: true,
         harness: { includeProcessCwd: false, forceConfirmations: false },
       });
-      const options = {
-        config: callerCallerConfig,
-        settingsService: callerCallerSettings,
-        settingsOwner: callerCallerSettingsOwner,
-        providerManager: callerCallerManager,
-        messageBus: callerCallerPolicy.session.messageBus,
-        mcpRuntime: callerCallerMcp,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const optionsConfig: Parameters<typeof fromConfig>[0] =
+        callerCallerConfig;
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        callerCallerSettings;
+      const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+        callerCallerSettingsOwner;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        callerCallerManager;
+      const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+        callerCallerPolicy.session.messageBus;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        callerCallerMcp;
+      const first = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
+      const second = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
       const closing = closingIndex === 0 ? first : second;
       const peer = closingIndex === 0 ? second : first;
       try {

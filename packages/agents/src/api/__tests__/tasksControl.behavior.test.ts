@@ -13,18 +13,12 @@ import { buildAgent } from './helpers/agentHarness.js';
 
 function taskOwner(agent: Agent): TaskLaunchOwner {
   if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  )
-    throw new Error('Expected Agent dependencies');
-  if (
-    !('taskLaunchOwner' in agent.deps) ||
-    !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
+    !('taskLaunchOwner' in agent) ||
+    !(agent.taskLaunchOwner instanceof TaskLaunchOwner)
   ) {
     throw new Error('Expected Agent task owner');
   }
-  return agent.deps.taskLaunchOwner;
+  return agent.taskLaunchOwner;
 }
 
 async function seedTask(

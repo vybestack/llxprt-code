@@ -459,15 +459,18 @@ describe('preflight adoption boundaries', () => {
           built_builtCallerSettings,
         ),
       ).toThrow('different ProviderManager');
-      const agent = await fromConfig({
-        settingsService: built_builtCallerSettings,
-        agentClient: built_builtCallerOwner.getAgentClient(),
-        providerManager: built_builtCallerManager,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation: intent,
-        activationPreflight: preflight,
-      });
+      const agent = await fromConfig(
+        built_builtCallerConfig,
+        built_builtCallerSettings,
+        { activation: intent },
+        undefined,
+        built_builtCallerManager,
+        undefined,
+        undefined,
+        built_builtCallerMcp,
+        preflight,
+        built_builtCallerOwner.getAgentClient(),
+      );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();
     } finally {

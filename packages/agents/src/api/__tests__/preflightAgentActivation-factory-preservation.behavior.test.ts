@@ -315,17 +315,18 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('fake');
       if (!result.token) throw new Error('Missing preflight token');
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        messageBus: builtCallerPolicy.session.messageBus,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        { operation, token: result.token },
+        builtCallerOwner.getAgentClient(),
+      );
       const events = await drain(agent.stream('read package metadata'));
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);
       expect(countType(events, 'done')).toBe(1);
@@ -377,17 +378,42 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       const result = await operation.preflight(intent);
       expect(result.authFailed).toBe(false);
       if (!result.token) throw new Error('Missing preflight token');
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        messageBus: builtCallerPolicy.session.messageBus,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-        toolSchedulerFactory: () => {
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        { operation, token: result.token },
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => {
           created += 1;
           active += 1;
           return {
@@ -396,7 +422,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
             },
           };
         },
-      });
+      );
       const events = await drain(agent.stream('read package metadata'));
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);
       expect(created).toBeGreaterThan(0);

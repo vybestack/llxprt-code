@@ -1,3 +1,4 @@
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -40,6 +41,7 @@ const dataRecordSchema = z
 const hostInputSchema = z
   .object({
     runtimeId: z.string().refine((value) => value.trim().length > 0),
+    proxy: z.string().optional(),
     initialSettings: dataRecordSchema.optional(),
     metadata: dataRecordSchema.optional(),
     activation: ProviderActivationIntentSchema.extend({
@@ -99,4 +101,19 @@ export async function openAgentPreflightBrowser(
     throw new Error('Preflight requires a browser request capability');
   await host.open(url, signal);
   signal.throwIfAborted();
+}
+
+export function capturePreflightRuntimeContext(
+  host: AgentPreflightHostInput,
+  stage: 'pre-config' | 'post-config',
+) {
+  return createProviderRuntimeContext({
+    runtimeId: host.runtimeId,
+    runtimeKind:
+      host.metadata?.source === 'cli-bootstrap'
+        ? 'cli-bootstrap'
+        : 'cli-interactive',
+    metadata:
+      stage === 'post-config' ? { ...host.metadata, stage } : host.metadata,
+  });
 }

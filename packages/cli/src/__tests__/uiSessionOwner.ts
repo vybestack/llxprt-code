@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+import { assembleSessionAuthentication } from '../../../agents/src/api/control/session-authentication.js';
 import { IdeControl } from '../../../agents/src/api/control/ideControl.js';
 import { wrapToolHandle } from '../../../agents/src/api/control/toolControl.js';
 import { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
@@ -62,6 +64,8 @@ function createUiMedia(): LocalMediaStore {
 
 type UiSessionOwner = Pick<
   Agent,
+  | 'providerReads'
+  | 'authentication'
   | 'agentClient'
   | 'sessionClient'
   | 'providerManager'
@@ -286,12 +290,19 @@ function projectUiSessionOwner(
   const { sessionClient, catalogs, filesystem, manager } = runtime;
   return {
     settingsOwner: settings,
-    ide: new IdeControl({
-      trust: runtime.trust,
-      ide: runtime.ide,
-      ideModeEnabled: () => runtime.ide.isEnabled(),
-      getEditorCallbacks: () => ({}),
-    }),
+    providerReads: new SessionProviderReads(
+      settings,
+      manager,
+      () => settings.readSelectedModel() ?? config.getModel(),
+      (provider) => settingsService.getProviderSettings(provider),
+    ),
+    authentication: assembleSessionAuthentication(undefined, () => {}),
+    ide: new IdeControl(
+      runtime.trust,
+      runtime.ide,
+      () => runtime.ide.isEnabled(),
+      () => ({}),
+    ),
     getApprovalMode: () =>
       runtime.trust.isTrustedFolder()
         ? config.getApprovalMode()

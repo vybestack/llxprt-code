@@ -216,7 +216,7 @@ function createMinimalSettings(options?: {
 // dispatch-branch traces would never record the runner.
 async function createFakeAgent(): Promise<unknown> {
   return {
-    workspace: (await createUiSessionOwner()).workspace,
+    ...(await createUiSessionOwner()),
     getMessageBus: () => ({}) as never,
     hooks: {
       triggerSessionStart: vi.fn(async () => ({})),

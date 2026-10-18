@@ -320,14 +320,18 @@ describe('provider owner generation boundary', () => {
     await openbuiltCaller('multi-turn-text.jsonl');
     const client = builtCallerOwner.getAgentClient();
     await client.startChat();
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     try {
       const blocked = denyManagerDiscovery(builtCallerConfig);
       try {

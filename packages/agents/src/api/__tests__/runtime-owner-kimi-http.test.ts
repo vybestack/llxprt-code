@@ -16,6 +16,7 @@ import { createAgent, fromConfig, type Agent } from '../index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { startLocalConnectProxy } from './helpers/local-connect-proxy.js';
 
 class MemoryStore implements TokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
@@ -47,6 +48,17 @@ class MemoryStore implements TokenStore {
   async releaseRefreshLock(): Promise<void> {}
 }
 
+function proxyConnections(
+  proxy: Awaited<ReturnType<typeof startLocalConnectProxy>> | undefined,
+): number {
+  return proxy?.readConnections() ?? 0;
+}
+
+function maintenanceConnections(proxied: boolean, failed: boolean): number {
+  if (!proxied) return 0;
+  return failed ? 2 : 1;
+}
+
 describe('public Agent same-label Kimi files', () => {
   const credentials = useOwnedCredentials();
   const oldHome = process.env.LLXPRT_CONFIG_HOME;
@@ -66,13 +78,19 @@ describe('public Agent same-label Kimi files', () => {
     await rm(home, { recursive: true, force: true });
   });
   it.each([
-    { failDeletion: false, adoptConfig: false },
-    { failDeletion: true, adoptConfig: false },
-    { failDeletion: false, adoptConfig: true },
-    { failDeletion: true, adoptConfig: true },
+    ...[false, true].flatMap((adoptConfig) =>
+      [false, true].flatMap((failDeletion) =>
+        [false, true].map((proxied) => ({
+          adoptConfig,
+          failDeletion,
+          proxied,
+        })),
+      ),
+    ),
   ])(
     'keeps same-label Kimi uploads alive across caller scope and cleanup policy %j',
-    async ({ failDeletion, adoptConfig }) => {
+    async ({ failDeletion, adoptConfig, proxied }) => {
+      const proxy = proxied ? await startLocalConnectProxy() : undefined;
       const agents: Agent[] = [];
       const configs: Config[] = [];
       const deleted: string[] = [];
@@ -197,35 +215,53 @@ describe('public Agent same-label Kimi files', () => {
                   debugMode: false,
                   provider: 'kimi',
                   model: 'kimi-k3',
+                  proxy: proxy?.url,
                 });
                 configs.push(config);
                 const settings = new SettingsService();
                 settings.set('provider-files', 'session');
                 settings.set('kimi.experimental-video', true);
-                const lifecycle = new ProviderFileLifecycle({
+                const fileOptions = {
                   maxFiles: 10,
                   maxBytes: 1024 * 1024,
-                });
-                return fromConfig({
-                  credentialAuthority: credentials().authority,
+                  proxy: proxy?.url,
+                };
+                const lifecycle = new ProviderFileLifecycle(fileOptions);
+                fileOptions.proxy = 'http://127.0.0.1:1';
+                return fromConfig(
                   config,
-                  settingsService: settings,
-                  sessionId: 'same-kimi-label',
-                  providerFileLifecycle: lifecycle,
-                  activation: {
-                    provider: 'kimi',
-                    model: 'kimi-k3',
-                    cliOverrides: {
-                      key: `test-key-${index}`,
-                      baseUrl: endpoint,
+                  settings,
+                  {
+                    sessionId: 'same-kimi-label',
+                    activation: {
+                      provider: 'kimi',
+                      model: 'kimi-k3',
+                      cliOverrides: {
+                        key: `test-key-${index}`,
+                        baseUrl: endpoint,
+                      },
                     },
                   },
-                });
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  lifecycle,
+                  undefined,
+                  undefined,
+                  undefined,
+                  undefined,
+                  credentials().authority,
+                );
               }
               const options = {
                 credentialAuthority: credentials().authority,
                 provider: 'kimi',
                 model: 'kimi-k3',
+                proxy: proxy?.url,
                 workingDir: process.cwd(),
                 sessionId: 'same-kimi-label',
                 tokenStore: new MemoryStore(),
@@ -255,6 +291,7 @@ describe('public Agent same-label Kimi files', () => {
         await first;
         expect(firstAttempts).toBeGreaterThan(1);
         expect(uploaded).toBe(2);
+        const connectionsBeforeRelease = proxyConnections(proxy);
         const disposal = await agents[0].dispose().then(
           () => null,
           (error: unknown) => error,
@@ -280,6 +317,9 @@ describe('public Agent same-label Kimi files', () => {
         );
         expect(stateBeforeRetry).toStrictEqual(failDeletion ? [1, 1] : [0, 1]);
         expect(retried.failed).toBe(0);
+        expect(proxyConnections(proxy) - connectionsBeforeRelease).toBe(
+          maintenanceConnections(proxied, failDeletion),
+        );
         expect(deleted).toStrictEqual(['public-file-0']);
         expect(
           agents.map((owner) => owner.captureProviderFiles().retainedFiles),
@@ -290,7 +330,11 @@ describe('public Agent same-label Kimi files', () => {
         await expect(agents[0].generate(media)).rejects.toThrow(
           'Agent is closed',
         );
+        const connectionsBeforePeerRelease = proxyConnections(proxy);
         await agents[1].dispose();
+        expect(proxyConnections(proxy) - connectionsBeforePeerRelease).toBe(
+          proxied ? 1 : 0,
+        );
         expect(deleted).toStrictEqual(['public-file-0', 'public-file-1']);
         expect(credentials().snapshot()).toStrictEqual(
           adoptConfig ? [1, 1] : [],
@@ -306,6 +350,7 @@ describe('public Agent same-label Kimi files', () => {
           'POST /v1/chat/completions owner=1',
         ]);
         expect(requests).toContain('response 503 owner=0');
+        expect(proxyConnections(proxy)).toBeGreaterThanOrEqual(proxied ? 4 : 0);
         expect(requests.some((entry) => entry.startsWith('clientError'))).toBe(
           false,
         );
@@ -321,6 +366,7 @@ describe('public Agent same-label Kimi files', () => {
           server.close((error) => (error ? reject(error) : resolve()));
           server.closeAllConnections();
         });
+        await proxy?.close();
       }
     },
   );

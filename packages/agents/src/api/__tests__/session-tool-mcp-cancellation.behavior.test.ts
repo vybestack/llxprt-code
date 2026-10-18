@@ -281,13 +281,16 @@ describe('physical MCP tool cancellation', () => {
       recording: { enabled: false },
       mcpServers: { physical: { httpUrl: server.url, trust: true } },
     });
-    const agent = await fromConfig({
-      settingsOwner: callerSettingsOwner,
-      settingsService: callerSettings,
-      config: callerConfig,
-      providerManager: callerManager,
-      mcpRuntime: callerMcp,
-    });
+    const agent = await fromConfig(
+      callerConfig,
+      callerSettings,
+      {},
+      callerSettingsOwner,
+      callerManager,
+      undefined,
+      undefined,
+      callerMcp,
+    );
     const controller = new AbortController();
     try {
       await callerMcp.awaitDiscovery();

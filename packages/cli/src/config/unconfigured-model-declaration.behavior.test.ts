@@ -38,14 +38,14 @@ describe('unconfigured CLI model declaration', () => {
         'unconfigured-model',
         argv,
         directory,
-        {
-          credentialAuthority: new CredentialAuthority(),
-          settingsService: store,
-          sessionSettingsOwner: owner,
-          onActivationBootstrapReady: (value) => {
-            operation = value;
-            value.takeSettingsOwner(store);
-          },
+        undefined,
+        store,
+        owner,
+        new CredentialAuthority(),
+        undefined,
+        (value) => {
+          operation = value;
+          value.takeSettingsOwner(store);
         },
       );
       expect(config.getModel()).toBe('declared-only-model');

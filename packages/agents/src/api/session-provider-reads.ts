@@ -1,3 +1,20 @@
+import { createProviderInspection } from './control/provider-inspection.js';
+import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
+import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
+import type { ProviderMessage } from '@vybestack/llxprt-code-providers';
+type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
+
+export interface AgentOpenAIProviderInfo {
+  readonly providerIdentity: object | null;
+  readonly currentModel: string | null;
+  readonly isResponsesAPI: boolean;
+  readonly remoteTokenInfo: OpenAIProviderInfo['remoteTokenInfo'];
+  getCachedConversation(
+    conversationId: string,
+    parentId: string,
+  ): ProviderMessage[] | null;
+}
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,10 +47,14 @@ function requireOwner<T>(owner: T | undefined): T {
 
 type SelectionReads = Pick<
   SessionSettingsOwner,
-  'readSelectedProvider' | 'readSelectedModel'
+  | 'readSelectedProvider'
+  | 'readSelectedModel'
+  | 'readNamedParameter'
+  | 'readSelectedEndpoint'
 >;
 type ProviderInspection = Pick<
   RuntimeProviderManager,
+  | 'hasActiveProvider'
   | 'getActiveProviderName'
   | 'getActiveProvider'
   | 'getProviderByName'
@@ -46,7 +67,7 @@ type ProviderInspection = Pick<
 export class SessionProviderReads {
   constructor(
     private readonly selection: SelectionReads,
-    private readonly manager: ProviderInspection,
+    private readonly manager: RuntimeProviderManager,
     private readonly readConfiguredModel: () => string,
     private readonly readProviderSettings: (
       provider: string,
@@ -58,6 +79,52 @@ export class SessionProviderReads {
     requireOwner<(provider: string) => Record<string, unknown>>(
       readProviderSettings,
     );
+  }
+
+  get inspection(): ReturnType<typeof createProviderInspection> {
+    return createProviderInspection(
+      () => this.selection.readSelectedEndpoint(),
+      this.manager,
+    );
+  }
+  readonly refreshAliases = async (): Promise<void> => {
+    refreshAliasProviders(this.manager);
+  };
+
+  private previousOpenAIProvider: OpenAIProviderInfo['provider'] = null;
+  private openAIIdentity: object | null = null;
+
+  readOpenAIInfo(): AgentOpenAIProviderInfo {
+    const info = getOpenAIProviderInfo(
+      {
+        settingsService: {
+          get: (key: string) => this.selection.readNamedParameter(key),
+          getProviderSettings: this.readProviderSettings,
+        },
+        config: {
+          getProvider: () => this.selection.readSelectedProvider(),
+          getModel: this.readConfiguredModel,
+        },
+      },
+      {
+        hasActiveProvider: () => this.manager.hasActiveProvider(),
+        getActiveProviderName: () => this.manager.getActiveProviderName(),
+        getActiveProvider: () => this.manager.getActiveProvider(),
+      },
+    );
+    if (info.provider !== this.previousOpenAIProvider) {
+      this.previousOpenAIProvider = info.provider;
+      this.openAIIdentity = info.provider === null ? null : Object.freeze({});
+    }
+    const cache = info.conversationCache;
+    return {
+      providerIdentity: this.openAIIdentity,
+      currentModel: info.currentModel,
+      isResponsesAPI: info.isResponsesAPI,
+      remoteTokenInfo: info.remoteTokenInfo,
+      getCachedConversation: (conversationId, parentId) =>
+        cache?.get(conversationId, parentId) ?? null,
+    };
   }
 
   readActiveProviderName(): string | null {

@@ -1,44 +1,47 @@
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService, Profile } from '@vybestack/llxprt-code-settings';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  runCleanupSteps,
   cleanupAfterFailure,
+  runCleanupSteps,
 } from '../../core/subagent-cleanup.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildRuntimeProfileSnapshot } from '../profileSnapshot.js';
-import { assembleAgentProfiles } from '../profileApplicationAssembly.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
 import { AgentExecutionCoordinator } from '../agentExecutionCoordinator.js';
+import {
+  AgentProviderState,
+  createAgentAuthState,
+} from '../control/authState.js';
+import { ProfilesControl } from '../control/profilesControl.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { assembleProfileApplication } from '../profileApplicationAssembly.js';
+import { captureProfileModelParams } from '../profileSnapshot.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { createAgentAuthState } from '../control/authState.js';
-import { AgentProviderState } from '../agentImpl.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -211,41 +214,69 @@ describe('Profile finalization', () => {
       const failure = new Error('loop rebuild failed');
       let failRebuild = true;
       const coordinator = new AgentExecutionCoordinator();
-      const profiles = assembleAgentProfiles(
-        config,
-        settings,
-        manager,
-        null,
-        assembleProviderSwitch(
-          config,
-          settings,
-          manager,
-          null,
-          () => undefined,
-          () => builtOwner.refreshAuth(),
-          builtSettingsOwner,
-        ),
-        builtSettingsOwner,
-        providerState,
-        authState,
-        () =>
-          buildRuntimeProfileSnapshot({
-            providerName: manager.getActiveProviderName() ?? '',
-            modelName: config.getModel(),
-            providerSettings: settings.getProviderSettings('fake'),
-            ephemeralSettings: builtSettingsOwner.captureNamedParameters(),
-          }),
-        async () => {
-          if (failRebuild) throw failure;
-          return {
-            publish: () => {},
-            retire: async () => {},
-            discard: async () => {},
-          };
-        },
-        builtMcp.profileDefinitions,
-        () => coordinator.assertNoCommit(),
-      );
+      const profiles = (() => {
+        const readString = (key: string): string | undefined => {
+          const value = builtSettingsOwner.readNamedParameter(key);
+          return typeof value === 'string' && value.length > 0
+            ? value
+            : undefined;
+        };
+        return new ProfilesControl(
+          () => providerState,
+          assembleProfileApplication(
+            settings,
+            manager,
+            null,
+            (name, options) =>
+              assembleProviderSwitch(
+                config,
+                settings,
+                manager,
+                null,
+                () => undefined,
+                () => builtOwner.refreshAuth(),
+                builtSettingsOwner,
+              )(name, { ...options, clientReplacement: 'deferred' }),
+            builtSettingsOwner,
+            builtMcp.profileDefinitions,
+            async (result) => {
+              const modelParams = captureProfileModelParams(
+                settings.getProviderSettings(result.providerName),
+              );
+              const replacement = await (async () => {
+                if (failRebuild) throw failure;
+                return {
+                  publish: () => {},
+                  retire: async () => {},
+                  discard: async () => {},
+                };
+              })();
+              return {
+                publish: () => {
+                  replacement.publish();
+                  providerState.provider = result.providerName;
+                  providerState.model = result.modelName;
+                  providerState.modelParams = modelParams;
+                  providerState.baseUrl = result.baseUrl;
+                  providerState.keyName = readString('auth-key-name');
+                  providerState.isLoadBalancer =
+                    result.providerName === 'load-balancer';
+                  authState.keyFile = readString('auth-keyfile');
+                  authState.rawKeyPresent =
+                    readString('auth-key') !== undefined;
+                  authState.inlineKeyPresent = false;
+                  authState.baseUrl = result.baseUrl;
+                },
+                retire: () => replacement.retire(),
+                discard: () => replacement.discard(),
+              };
+            },
+            () => coordinator.assertNoCommit(),
+          ),
+          () => ({ ...builtSettingsOwner.captureUserParameters() }),
+          config.getTargetDir(),
+        );
+      })();
       const profile: Profile = {
         version: 1,
         provider: 'fake',

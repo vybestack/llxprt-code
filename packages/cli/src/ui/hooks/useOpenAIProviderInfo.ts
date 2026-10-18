@@ -1,3 +1,4 @@
+import type { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,14 +12,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  type getOpenAIProviderInfo,
-  type ProviderMessage as Message,
-} from '@vybestack/llxprt-code-providers';
+import { type ProviderMessage as Message } from '@vybestack/llxprt-code-providers';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 // Import OpenAIProviderInfo type from the function return type
-type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
+type OpenAIProviderInfo = ReturnType<SessionProviderReads['readOpenAIInfo']>;
 
 export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
   refresh: () => void;
@@ -53,7 +51,7 @@ export function useOpenAIProviderInfo(): UseOpenAIProviderInfoReturn {
 
       // Only update if something changed
       if (
-        newInfo.provider !== providerInfo.provider ||
+        newInfo.providerIdentity !== providerInfo.providerIdentity ||
         newInfo.currentModel !== providerInfo.currentModel ||
         newInfo.isResponsesAPI !== providerInfo.isResponsesAPI
       ) {
@@ -64,19 +62,9 @@ export function useOpenAIProviderInfo(): UseOpenAIProviderInfoReturn {
     return () => clearInterval(checkInterval);
   }, [providerInfo, getProviderInfo]);
 
-  const getCachedConversation = useCallback(
-    (conversationId: string, parentId: string) => {
-      if (!providerInfo.conversationCache) {
-        return null;
-      }
-      return providerInfo.conversationCache.get(conversationId, parentId);
-    },
-    [providerInfo.conversationCache],
-  );
-
   return {
     ...providerInfo,
     refresh,
-    getCachedConversation,
+    getCachedConversation: providerInfo.getCachedConversation,
   };
 }

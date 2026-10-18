@@ -46,10 +46,7 @@ import {
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  loadPrecedenceProviderContributions,
-  registerPrecedenceProviders,
-} from './precedenceProviderContributions.js';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
@@ -170,16 +167,14 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     'test-session',
     parsedArgv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner: settingsOwner,
-      providerContributions: await loadPrecedenceProviderContributions(),
-      onProviderManagerReady: registerPrecedenceProviders,
-      onActivationBootstrapReady: (operation) => {
-        operation.takeSettingsOwner(runtimeSettingsService);
-        retainedActivationOperations.push(operation);
-      },
+    undefined,
+    runtimeSettingsService,
+    settingsOwner,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
+    (operation) => {
+      operation.takeSettingsOwner(runtimeSettingsService);
+      retainedActivationOperations.push(operation);
     },
   );
   return { config, settingsOwner };

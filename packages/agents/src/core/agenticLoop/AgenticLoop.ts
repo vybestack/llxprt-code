@@ -164,6 +164,14 @@ export class AgenticLoop {
   private readonly createSchedulerOwner: AgenticLoopOptions['createSchedulerOwner'];
   private readonly displayCallbacks: AgenticLoopOptions['displayCallbacks'];
   private readonly ownedToolCallIds = new Set<string>();
+  private retired = false;
+  private releaseApproval: () => void = () => {};
+
+  retire(): void {
+    this.retired = true;
+    this.releaseApproval();
+  }
+
   private promptCount = 0;
   private isRunning = false;
   /**
@@ -202,6 +210,7 @@ export class AgenticLoop {
    * should queue it for the next turn instead.
    */
   injectSteer(text: string): void {
+    if (this.retired) throw new Error('Agent loop is retired');
     if (!this.isRunning) {
       return;
     }
@@ -295,6 +304,7 @@ export class AgenticLoop {
       },
     );
     return () => {
+      if (!active) return;
       active = false;
       unsubscribe();
     };
@@ -319,12 +329,17 @@ export class AgenticLoop {
     recordingExecution?: AgentChatRecordingExecution,
     modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<AgenticLoopEvent> {
+    if (this.retired) throw new Error('Agent loop is retired');
     if (this.isRunning) {
       throw new Error('AgenticLoop.run does not support concurrent executions');
     }
     this.isRunning = true;
-    const unsubscribe = this.wireApprovalHandler();
+    let unsubscribe = (): void => {};
+    let failed = false;
+    let primary: unknown;
     try {
+      unsubscribe = this.wireApprovalHandler();
+      this.releaseApproval = unsubscribe;
       let currentMessage = message;
       const initialPromptId = promptId ?? this.generateInitialPromptId();
       let currentPromptId = initialPromptId;
@@ -361,13 +376,33 @@ export class AgenticLoop {
         currentPromptId = this.generateContinuationPromptId(initialPromptId);
       }
     } catch (error) {
+      failed = true;
+      primary = error;
       logger.debug(
         () =>
           `AgenticLoop.run error: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
     } finally {
+      this.finishRun(unsubscribe, failed, primary);
+    }
+  }
+
+  private finishRun(
+    unsubscribe: () => void,
+    failed: boolean,
+    primary: unknown,
+  ): void {
+    try {
       unsubscribe();
+    } catch (error) {
+      if (failed)
+        throw new AggregateError(
+          [primary, error],
+          'Agent loop and approval cleanup failed',
+        );
+      throw error;
+    } finally {
       this.isRunning = false;
       this.pendingSteer = [];
     }

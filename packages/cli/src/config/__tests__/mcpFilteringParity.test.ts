@@ -174,11 +174,10 @@ async function loadMcpConfig(
     'test-session',
     argv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner,
-    },
+    undefined,
+    runtimeSettingsService,
+    sessionSettingsOwner,
+    new CredentialAuthority(),
   );
 }
 
@@ -204,10 +203,10 @@ async function getBlockedMcpServers(
     'test-session',
     argv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-    },
+    undefined,
+    runtimeSettingsService,
+    undefined,
+    new CredentialAuthority(),
   );
   return config.getBlockedMcpServers() ?? [];
 }
