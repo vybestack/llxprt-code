@@ -28,6 +28,10 @@
  */
 
 import * as fs from 'node:fs/promises';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
+import type { SessionRecordingPort } from './recordingPort.js';
+import { createJournalChildSession } from './journalChildSession.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { allocateChildSessionId } from './childSessionIds.js';
 import type { RecordingWriterIo } from './types.js';
@@ -49,6 +53,7 @@ export interface ChildSessionJournalOptions {
   model: string;
   /** Write seam for failure injection (mirrors RecordingWriterIo). */
   readonly io?: RecordingWriterIo;
+  readonly journal?: JournalSessionOptions;
 }
 
 /** An ephemeral child journal whose dispose() removes every artifact. */
@@ -56,7 +61,7 @@ export interface ChildSessionJournal {
   /** The fs-safe id allocated for this child (== recording.getSessionId()). */
   readonly sessionId: string;
   /** Same recorder class main sessions use; safe for HistoryService attach. */
-  readonly recording: SessionRecordingService;
+  readonly recording: SessionRecordingPort;
   /**
    * Flush best effort, dispose the recorder, release the lock, and REMOVE
    * the journal file. Idempotent; never leaves a `.lock` or a
@@ -90,6 +95,13 @@ async function cleanupRecording(
  * flush removes the lock and partial file before rethrowing.
  */
 export async function createChildSessionJournal(
+  options: ChildSessionJournalOptions,
+): Promise<ChildSessionJournal> {
+  if (selectBackend() === 'journal') return createJournalChildSession(options);
+  return createJsonlChildSessionJournal(options);
+}
+
+async function createJsonlChildSessionJournal(
   options: ChildSessionJournalOptions,
 ): Promise<ChildSessionJournal> {
   // The id is minted BEFORE any runtime construction so launch failures can

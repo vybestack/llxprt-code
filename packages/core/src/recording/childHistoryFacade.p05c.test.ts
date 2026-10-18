@@ -27,6 +27,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+pinHistoryBackend('old');
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { HistoryService } from '../services/history/HistoryService.js';

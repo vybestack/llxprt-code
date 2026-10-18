@@ -692,20 +692,26 @@ export class SubagentOrchestrator {
       childJournal: params.childJournal,
       signal: params.signal,
     });
-    await params.isolatedHandle.tokenizerFactory.prepareTokenizer?.(
-      params.runtimeState.provider,
-      params.runtimeState.model,
-    );
-    const loaded = await this.runtimeLoader(loaderOptions);
-    loaded.history.setTokenizerFactory({
-      getTokenizer: (provider, model) =>
-        params.isolatedHandle.tokenizerFactory.getTokenizer(provider, model),
-    });
-    loaded.history.setActiveTokenizationTarget(
-      params.runtimeState.model,
-      params.runtimeState.provider,
-    );
-    return loaded;
+    try {
+      await params.isolatedHandle.tokenizerFactory.prepareTokenizer?.(
+        params.runtimeState.provider,
+        params.runtimeState.model,
+      );
+      const loaded = await this.runtimeLoader(loaderOptions);
+      loaded.history.setTokenizerFactory({
+        getTokenizer: (provider, model) =>
+          params.isolatedHandle.tokenizerFactory.getTokenizer(provider, model),
+      });
+      loaded.history.setActiveTokenizationTarget(
+        params.runtimeState.model,
+        params.runtimeState.provider,
+      );
+      return loaded;
+    } catch (error) {
+      return cleanupAfterFailure(error, () =>
+        disposeHistoryLike(loaderOptions.overrides?.historyService),
+      );
+    }
   }
 
   private buildRuntimeLoaderOptions(params: {

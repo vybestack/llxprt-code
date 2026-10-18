@@ -159,8 +159,10 @@ export function extractRunConfig(
   return factoryCall[4];
 }
 
-export function createRuntimeBundle(label = 'bundle') {
-  const ownedHistory = new HistoryService();
+export function createRuntimeBundle(
+  label = 'bundle',
+  ownedHistory = new HistoryService(),
+) {
   const history = {
     clear: vi.fn(() => ownedHistory.clear()),
     setTokenizerFactory: ownedHistory.setTokenizerFactory.bind(ownedHistory),

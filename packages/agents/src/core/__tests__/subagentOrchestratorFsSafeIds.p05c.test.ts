@@ -20,7 +20,15 @@
  * @requirement:G7
  */
 
-import { afterEach, describe, expect, it, vi, setSystemTime } from 'bun:test';
+import {
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  setSystemTime,
+} from 'bun:test';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
@@ -47,6 +55,16 @@ import { readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
+const initialBackend = process.env.LLXPRT_HISTORY_BACKEND;
+function restoreBackend(): void {
+  if (initialBackend === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
+  else process.env.LLXPRT_HISTORY_BACKEND = initialBackend;
+}
 
 const PARENT_SESSION_ID = 'primary-session';
 
@@ -122,6 +140,7 @@ function buildOrchestrator(
   const loadProfile = vi
     .fn()
     .mockImplementation(async (name: string) => profiles[name]);
+  let childContext: SubAgentScope['runtimeContext'] | undefined;
   const runtimeLoader = vi
     .fn()
     .mockImplementation(async (options: AgentRuntimeLoaderOptions) => {
@@ -133,7 +152,8 @@ function buildOrchestrator(
         blocks: [{ type: 'text', text: 'child' }],
       });
       await history.waitForCommit();
-      const bundle = createRuntimeBundle('sess');
+      const bundle = createRuntimeBundle('sess', history);
+      childContext = bundle.runtimeContext;
       return {
         ...bundle,
         history,
@@ -141,7 +161,10 @@ function buildOrchestrator(
       };
     });
   const scope = {
-    runtimeContext: createRuntimeBundle('sess').runtimeContext,
+    get runtimeContext(): SubAgentScope['runtimeContext'] {
+      if (childContext === undefined) throw new Error('Child runtime missing');
+      return childContext;
+    },
     getAgentId: () => 'child-agent-1',
   } as unknown as SubAgentScope;
   const scopeFactory = vi.fn<typeof SubAgentScope.create>(async () => {
@@ -193,6 +216,10 @@ async function resetRuntimeAfterTest(): Promise<void> {
 }
 
 describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(restoreBackend);
+  beforeEach(() => {
+    process.env.LLXPRT_HISTORY_BACKEND = 'old';
+  });
   afterEach(resetRuntimeAfterTest);
 
   it('allocates a child sessionId that passes the safe-session lock grammar', async () => {
@@ -251,6 +278,10 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
 });
 
 describe('mandatory launch journal lifecycle', () => {
+  afterEach(restoreBackend);
+  beforeEach(() => {
+    process.env.LLXPRT_HISTORY_BACKEND = 'old';
+  });
   afterEach(resetRuntimeAfterTest);
 
   it('keeps parallel and nested journals separate and preserves the parent', async () => {
@@ -329,6 +360,10 @@ describe('mandatory launch journal lifecycle', () => {
 });
 
 describe('mandatory launch journal failure cleanup', () => {
+  afterEach(restoreBackend);
+  beforeEach(() => {
+    process.env.LLXPRT_HISTORY_BACKEND = 'old';
+  });
   afterEach(resetRuntimeAfterTest);
 
   it('removes the child journal when scope startup fails after runtime creation', async () => {
@@ -378,3 +413,180 @@ describe('mandatory launch journal failure cleanup', () => {
     },
   );
 });
+
+describe.each(['old', 'journal'] as const)(
+  'production child history on %s',
+  (backend) => {
+    afterEach(restoreBackend);
+    beforeEach(() => {
+      process.env.LLXPRT_HISTORY_BACKEND = backend;
+    });
+    afterEach(resetRuntimeAfterTest);
+
+    it.each(['normal', 'execution-failure', 'execution-cancel'] as const)(
+      'persists isolated child history and releases it after %s',
+      async (mode) => {
+        const config = makeForegroundConfig();
+        const parent = await createLockedSessionRecorder({
+          sessionId: PARENT_SESSION_ID,
+          projectHash: 'parent',
+          chatsDir: config.projectChatsDir,
+          workspaceDirs: [],
+          provider: 'gemini',
+          model: 'gemini-1.5-flash',
+        });
+        const parentHistory = new HistoryService({ recording: parent });
+        parentHistory.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'parent' }],
+        });
+        await parentHistory.waitForCommit();
+        const parentFile = parent.getFilePath();
+        if (parentFile === null) throw new Error('Missing parent file');
+        const before = await readFile(parentFile);
+        const baseline = (await readdir(config.projectChatsDir)).sort();
+        const { orchestrator } = buildOrchestrator(config);
+        try {
+          const result = await orchestrator.launch({ name: 'helper' });
+          try {
+            const history = result.runtime.history;
+            expect(
+              history
+                .journalPath()
+                ?.endsWith(backend === 'journal' ? '.llxj' : '.jsonl'),
+            ).toBe(true);
+            await collectJournalRowsForAssertions(history, (rows) => {
+              expect(rows.map((row) => row.blocks)).toStrictEqual([
+                [{ type: 'text', text: 'child' }],
+              ]);
+            });
+            const dump = await history.openDumpSnapshot();
+            const outcome = await executeChild(history, mode).then(
+              () => 'completed',
+              (error: unknown) =>
+                error instanceof Error ? error.message : String(error),
+            );
+            const expectedOutcomes = {
+              normal: 'completed',
+              'execution-failure': 'child execution failed',
+              'execution-cancel': 'The operation was aborted.',
+            };
+            expect(outcome).toBe(expectedOutcomes[mode]);
+            await collectJournalRowsForAssertions(history, (rows) => {
+              expect(rows.map((row) => row.speaker)).toStrictEqual([
+                'human',
+                'ai',
+              ]);
+            });
+            if (backend === 'old') await dump.close();
+            await result.dispose();
+            await expect(
+              Promise.resolve().then(() => history.openDumpSnapshot()),
+            ).rejects.toThrow(/disposed/);
+            await expect(
+              Promise.resolve().then(() =>
+                dump.rows()[Symbol.asyncIterator]().next(),
+              ),
+            ).rejects.toThrow(/closed/);
+            expect(
+              (await readdir(config.projectChatsDir)).sort(),
+            ).toStrictEqual(baseline);
+            expect(await readFile(parentFile)).toStrictEqual(before);
+          } finally {
+            await result.dispose();
+          }
+        } finally {
+          await parentHistory.dispose();
+          await parent.dispose();
+        }
+      },
+    );
+
+    it.each(['runtime-failure', 'scope-failure', 'cancel', 'timeout'] as const)(
+      'releases history reads and removes file and lock after %s',
+      async (mode) => {
+        const config = makeForegroundConfig();
+        const controller = new AbortController();
+        let dump:
+          | Awaited<ReturnType<HistoryService['openDumpSnapshot']>>
+          | undefined;
+        let history: HistoryService | undefined;
+        const { orchestrator } = buildOrchestrator(
+          config,
+          async (options) => {
+            history = options.overrides?.historyService;
+            if (history === undefined) throw new Error('Missing child history');
+            history.add({
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'in-flight child' }],
+            });
+            await history.waitForCommit();
+            dump = await history.openDumpSnapshot();
+            if (mode === 'runtime-failure') throw new Error('runtime failed');
+            if (mode === 'cancel') controller.abort();
+            if (mode === 'timeout') {
+              await new Promise<void>((resolve) => {
+                const deadline = AbortSignal.timeout(1);
+                deadline.addEventListener(
+                  'abort',
+                  () => {
+                    controller.abort(deadline.reason);
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+            }
+          },
+          () => {
+            if (mode === 'scope-failure') throw new Error('scope failed');
+          },
+        );
+        try {
+          await expect(
+            orchestrator.launch({ name: 'helper' }, controller.signal),
+          ).rejects.toThrow(
+            {
+              'runtime-failure': /runtime failed/,
+              'scope-failure': /scope failed/,
+              cancel: /aborted/,
+              timeout: /aborted/,
+            }[mode],
+          );
+          if (dump === undefined) throw new Error('Missing child read');
+          if (history === undefined) throw new Error('Missing child history');
+          const childHistory = history;
+          await expect(
+            Promise.resolve().then(() => childHistory.openDumpSnapshot()),
+          ).rejects.toThrow(/disposed/);
+          const heldDump = dump;
+          if (backend === 'old') await heldDump.close();
+          await expect(
+            Promise.resolve().then(() =>
+              heldDump.rows()[Symbol.asyncIterator]().next(),
+            ),
+          ).rejects.toThrow(/closed/);
+          expect(await readdir(config.projectChatsDir)).toStrictEqual([]);
+        } finally {
+          await dump?.close();
+          await history?.dispose();
+        }
+      },
+    );
+  },
+);
+
+async function executeChild(
+  history: HistoryService,
+  mode: 'normal' | 'execution-failure' | 'execution-cancel',
+): Promise<void> {
+  history.add({
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'child execution' }],
+  });
+  await history.waitForCommit();
+  const controller = new AbortController();
+  if (mode === 'execution-cancel') controller.abort();
+  controller.signal.throwIfAborted();
+  if (mode === 'execution-failure') throw new Error('child execution failed');
+}

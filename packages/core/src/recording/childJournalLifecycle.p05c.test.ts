@@ -32,6 +32,9 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { requireJsonlRecorder } from '../services/history/recorderBackend.js';
+pinHistoryBackend('old');
 import { createChildSessionJournal } from './childJournal.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
@@ -115,7 +118,7 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
   it('materializes a locked child journal under its own file', async () => {
     const chatsDir = await makeChatsDir();
     const journal = await createChildSessionJournal(journalOptions(chatsDir));
-    journal.recording.recordContent({
+    requireJsonlRecorder(journal.recording).recordContent({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'child work' }],
     });
@@ -194,7 +197,7 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
     });
     await parent.flush();
     const journal = await createChildSessionJournal(journalOptions(chatsDir));
-    journal.recording.recordContent({
+    requireJsonlRecorder(journal.recording).recordContent({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'child work' }],
     });
