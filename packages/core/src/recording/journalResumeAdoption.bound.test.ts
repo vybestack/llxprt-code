@@ -132,6 +132,36 @@ describe('adopting a resumed journal while recorders are bound', () => {
     return fsp.readFile(file);
   }
 
+  it('does not retire a subscription installed on the newly adopted primary', async () => {
+    const live = recorder('previous-listener-session');
+    const store = await liveStore();
+    store.apply({ kind: 'content', content: userRow('previous') });
+    await store.attachJournal(live, true);
+    await settle(store);
+    const resumed = await resumeRecorded([userRow('resumed')]);
+    let priorRetirements = 0;
+    let nextRetirements = 0;
+    store.onRetired(() => {
+      priorRetirements += 1;
+    });
+    const adoption = await store.adoptJournal(
+      resumed.recording,
+      resumed.resumePoint,
+    );
+    store.onRetired(() => {
+      nextRetirements += 1;
+    });
+    await adoption.commit();
+    expect(priorRetirements).toBe(1);
+    expect(nextRetirements).toBe(0);
+    store.apply({ kind: 'content', content: userRow('after adoption') });
+    await settle(store);
+    expect(await fileTexts(resumed.recording)).toStrictEqual([
+      'resumed',
+      'after adoption',
+    ]);
+  });
+
   it('retires the live recorder, writes to the resumed file only and leaves the live file as it was', async () => {
     const live = recorder('session-live');
     const store = await liveStore();

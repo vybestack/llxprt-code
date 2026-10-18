@@ -212,10 +212,10 @@ export class JournalMirrors {
   }
 
   /** Tells the retirement listeners that the session of this primary is replaced, once. */
-  fireRetired(): void {
-    const listeners = [...this.retired];
-    this.retired.clear();
-    for (const listener of listeners) listener();
+  fireRetired(listeners: ReadonlyArray<() => void>): void {
+    for (const listener of listeners) {
+      if (this.retired.delete(listener)) listener();
+    }
   }
 
   /** The listeners of this primary; a successor primary shares them. */

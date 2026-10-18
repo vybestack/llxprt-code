@@ -81,6 +81,7 @@ export async function adoptOnto(
   }
   const next = await recorder.session();
   assertAtPoint(next, point);
+  const retired = [...previous.mirrors.retirementListeners];
   const moved = await previous.mirrors.unbindRecorders();
   const primaryOrigin = previous.mirrors.primaryOriginId();
   const replaced = moved.filter(({ origin }) => origin === primaryOrigin);
@@ -113,7 +114,7 @@ export async function adoptOnto(
     await restore();
     throw error;
   }
-  return settledOnce(previous, replaced, host, restore);
+  return settledOnce(previous, replaced, host, restore, retired);
 }
 
 /**
@@ -166,6 +167,7 @@ function settledOnce(
   replaced: readonly BoundRecorder[],
   host: AdoptionHost,
   restore: () => Promise<void>,
+  retired: ReadonlyArray<() => void>,
 ): JournalAdoption {
   let settled = false;
   const settle = (): void => {
@@ -183,7 +185,7 @@ function settledOnce(
       // An adopted file is its recorder's; the recorder closes it.
       if (previous.adopted === undefined) await previous.session.close();
       if (replaced.length > 0 || previous.adopted !== undefined) {
-        previous.mirrors.fireRetired();
+        previous.mirrors.fireRetired(retired);
       }
     },
   };
