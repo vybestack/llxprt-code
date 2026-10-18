@@ -30,6 +30,10 @@
 
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, spyOn } from 'bun:test';
 import {
@@ -42,11 +46,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import {
-  LocalMediaStore,
-  replaySession,
-  SessionRecordingService,
-} from '@vybestack/llxprt-code-core';
+import { LocalMediaStore, replaySession } from '@vybestack/llxprt-code-core';
 import { SessionControl } from '../control/sessionControl.js';
 import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -224,7 +224,7 @@ function chatsDirOf(projectRoot: string): string {
 
 /**
  * Records a REAL resumable session to disk for `sessionId`: materializes a JSONL
- * file via the real SessionRecordingService (seeded with one content event),
+ * file via the recorder of the selected backend (seeded with one content event),
  * flushes, and disposes so the file is complete and unlocked (resumable).
  */
 async function recordResumableSession(
@@ -233,7 +233,7 @@ async function recordResumableSession(
   seed: IContent,
   mediaStore?: LocalMediaStore,
 ): Promise<void> {
-  const service = new SessionRecordingService({
+  const service = createRecorderForTest({
     sessionId,
     projectHash: basename(projectRoot),
     chatsDir: chatsDirOf(projectRoot),
@@ -242,7 +242,7 @@ async function recordResumableSession(
     model: 'fake-model',
     ...(mediaStore === undefined ? {} : { mediaStore }),
   });
-  service.recordContent(seed);
+  await recordRowsForTest(service, [seed]);
   await service.flush();
   await service.dispose();
 }

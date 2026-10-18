@@ -10,11 +10,15 @@ import {
   type HistoryBackend,
 } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
 import { collectRawHistory } from './collect-raw-history.js';
 import { collectJournalRowsForAssertions } from './collect-rows-for-assertions.js';
 import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
 import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
-import { createRecorderForTest } from './recorder-for-test.js';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from './recorder-for-test.js';
 import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
 
 const BACKENDS: readonly HistoryBackend[] = ['old', 'journal'];
@@ -63,6 +67,33 @@ describe('test infrastructure on both history backends', () => {
           expect(recorder.getSessionId()).toBe('chosen');
         } finally {
           await recorder.dispose();
+          rmSync(chatsDir, { recursive: true, force: true });
+        }
+      });
+
+      it('records seed rows that a resume of the same session reads back', async () => {
+        const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
+        const recorder = createRecorderForTest({ chatsDir });
+        const seed = suffixRow(0);
+        await recordRowsForTest(recorder, [seed]);
+        await recorder.flush();
+        await recorder.dispose();
+        const resumed = await resumeSession({
+          continueRef: CONTINUE_LATEST,
+          projectHash: 'test-project',
+          chatsDir,
+          currentProvider: 'test',
+          currentModel: 'test',
+          workspaceDirs: [chatsDir],
+        });
+        try {
+          if (!resumed.ok) throw new Error(resumed.error);
+          const rows = [];
+          for await (const row of resumed.boot.streamRows()) rows.push(row);
+          expect(rows).toHaveLength(1);
+          expect(rows[0]?.blocks).toStrictEqual(seed.blocks);
+        } finally {
+          if (resumed.ok) await resumed.recording.dispose();
           rmSync(chatsDir, { recursive: true, force: true });
         }
       });
