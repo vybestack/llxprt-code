@@ -105,6 +105,36 @@ describe('journal history store over a journal recorder', () => {
   }
 
   describe('attachJournal, detachJournal and isRecorder', () => {
+    it('keeps an empty attachment unmaterialized until its first content group', async () => {
+      const store = await newStore();
+      const rec = recorder();
+      await store.attachJournal(rec, true, undefined, 'agent-a');
+      await boundary(store);
+      expect(store.isRecorder(rec)).toBe(true);
+      expect(rec.getFilePath()).toBeNull();
+      store.apply({
+        kind: 'content',
+        content: row('first recorded turn'),
+        origin: 'agent-a',
+      });
+      await boundary(store);
+      expect(await texts(rec)).toStrictEqual(['first recorded turn']);
+      expect((await readJournalFileFacts(rec.getFilePath() ?? ''))?.rows).toBe(
+        1,
+      );
+    });
+
+    it('detaches an empty recorder without creating a session file', async () => {
+      const store = await newStore();
+      const rec = recorder();
+      await store.attachJournal(rec, true);
+      await store.detachJournal(rec);
+      store.apply({ kind: 'content', content: row('after stop') });
+      await boundary(store);
+      expect(store.isRecorder(rec)).toBe(false);
+      expect(rec.getFilePath()).toBeNull();
+    });
+
     it('binds the recorder as the mirror of its origin and keeps its session facts', async () => {
       const store = await newStore();
       const rec = recorder();

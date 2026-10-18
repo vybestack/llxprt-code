@@ -22,7 +22,7 @@ export interface MirrorQueue {
 /** A recorder bound as a mirror, with the origin whose rows it holds. */
 export interface BoundRecorder {
   readonly recorder: JournalRecordingService;
-  readonly session: JournalSession;
+  readonly session: JournalSession | undefined;
   readonly origin: string | undefined;
 }
 
@@ -38,12 +38,15 @@ export class JournalMirrors {
   private primaryOrigin: string | undefined;
   private readonly recorders = new Map<
     JournalRecordingService,
-    { readonly session: JournalSession; readonly origin: string | undefined }
+    {
+      readonly session: JournalSession | undefined;
+      readonly origin: string | undefined;
+    }
   >();
   private readonly previewWrites = new PendingRecorderWrites();
 
   constructor(
-    primary: JournalStore,
+    private readonly primary: JournalStore,
     private readonly owners: JournalOwners,
     private readonly queue: MirrorQueue,
     /** Shared by the mirrors of successive primaries, so a swap keeps the listeners. */
@@ -56,7 +59,13 @@ export class JournalMirrors {
     return this.fanout.mirrors;
   }
 
-  commit(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+  async commit(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+    for (const [recorder, held] of this.recorders) {
+      if (held.session !== undefined) continue;
+      const session = await recorder.session();
+      await this.seedAndBind(session, held.origin);
+      this.recorders.set(recorder, { session, origin: held.origin });
+    }
     return this.fanout.commitDetailed(edits);
   }
 
@@ -78,6 +87,10 @@ export class JournalMirrors {
     mirror: JournalSession,
     origin: string | undefined,
   ): Promise<void> {
+    await this.fanout.attach(mirror.store, await this.ownerId(origin));
+  }
+
+  private async ownerId(origin: string | undefined): Promise<number> {
     const owner = await this.owners.resolve(origin);
     try {
       if (owner.edits.length > 0) await this.fanout.commit(owner.edits);
@@ -85,7 +98,7 @@ export class JournalMirrors {
       this.owners.invalidate();
       throw error;
     }
-    await this.fanout.attach(mirror.store, owner.id);
+    return owner.id;
   }
 
   /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
@@ -111,15 +124,11 @@ export class JournalMirrors {
       onAttached?.();
       return;
     }
-    const session = await recorder.session();
-    if (!replace && (session.store.published?.rows ?? 0) > 0) {
-      throw new Error(
-        `The recorder already holds rows (${session.path}); attaching it must replace them`,
-      );
-    }
-    const first = this.size === 0;
-    await this.attach(session, origin);
-    this.recorders.set(recorder, { session, origin });
+    const first = this.recorders.size === 0;
+    await this.queue.exclusive(async () => {
+      const session = await this.bindRecorder(recorder, origin, replace);
+      this.recorders.set(recorder, { session, origin });
+    });
     if (first && origin !== undefined) this.primaryOrigin ??= origin;
     try {
       onAttached?.();
@@ -133,13 +142,17 @@ export class JournalMirrors {
   async detachRecorder(recorder: JournalRecordingService): Promise<void> {
     const bound = this.recorders.get(recorder);
     if (bound === undefined) return;
-    await this.detach(bound.session);
+    if (bound.session !== undefined) await this.detach(bound.session);
     this.recorders.delete(recorder);
   }
 
   /** Whether every bound mirror is a recorder, which is what a swap of the primary can move. */
   get onlyRecorders(): boolean {
-    return this.fanout.mirrors === this.recorders.size;
+    let bound = 0;
+    for (const held of this.recorders.values()) {
+      if (held.session !== undefined) bound += 1;
+    }
+    return this.fanout.mirrors === bound;
   }
 
   /**
@@ -152,7 +165,7 @@ export class JournalMirrors {
       ...held,
     }));
     for (const { recorder, session } of bound) {
-      await this.fanout.detach(session.store);
+      if (session !== undefined) await this.fanout.detach(session.store);
       this.recorders.delete(recorder);
     }
     return bound;
@@ -164,15 +177,39 @@ export class JournalMirrors {
    * file that held other rows is replaced.
    */
   async bindRecorders(bound: readonly BoundRecorder[]): Promise<void> {
-    for (const { recorder, session, origin } of bound) {
-      await this.seedAndBind(session, origin);
+    for (const { recorder, origin } of bound) {
+      const session = await this.bindRecorder(recorder, origin, true);
       this.recorders.set(recorder, { session, origin });
     }
   }
 
+  private async bindRecorder(
+    recorder: JournalRecordingService,
+    origin: string | undefined,
+    replace: boolean,
+  ): Promise<JournalSession | undefined> {
+    if (
+      recorder.getFilePath() === null &&
+      (this.primary.published?.rows ?? 0) === 0
+    ) {
+      await this.ownerId(origin);
+      return undefined;
+    }
+    const session = await recorder.session();
+    if (!replace && (session.store.published?.rows ?? 0) > 0) {
+      throw new Error(
+        `The recorder already holds rows (${session.path}); attaching it must replace them`,
+      );
+    }
+    await this.seedAndBind(session, origin);
+    return session;
+  }
+
   /** The file of the recorder bound first, which holds the rows of the primary origin; null when none is bound. */
   firstRecorderPath(): string | null {
-    for (const { session } of this.recorders.values()) return session.path;
+    for (const { session } of this.recorders.values()) {
+      if (session !== undefined) return session.path;
+    }
     return null;
   }
 
