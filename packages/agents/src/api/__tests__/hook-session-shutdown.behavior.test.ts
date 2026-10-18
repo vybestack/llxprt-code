@@ -78,8 +78,9 @@ async function withUnrelatedProcess(
     process.execPath,
     [
       '-e',
-      `import { writeFileSync } from 'node:fs';
-writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+      `import { renameSync, writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker + '.tmp')}, String(process.pid));
+renameSync(${JSON.stringify(marker + '.tmp')}, ${JSON.stringify(marker)});
 setInterval(() => {}, 1000);`,
     ],
     { detached: true, stdio: 'ignore' },
@@ -111,9 +112,10 @@ async function createPhysicalHooks(directory: string): Promise<string> {
   const child = join(directory, 'descendant.ts');
   await writeFile(
     child,
-    `import { writeFileSync } from 'node:fs';
+    `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync(${JSON.stringify(join(directory, 'child.pid'))}, String(process.pid));
+writeFileSync(${JSON.stringify(join(directory, 'child.pid.tmp'))}, String(process.pid));
+renameSync(${JSON.stringify(join(directory, 'child.pid.tmp'))}, ${JSON.stringify(join(directory, 'child.pid'))});
 await Bun.sleep(1500);
 writeFileSync(${JSON.stringify(join(directory, 'late'))}, 'privileged');
 `,
