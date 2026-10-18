@@ -140,9 +140,10 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
     if (retirement !== undefined)
       await writeFile(
         join(directory, 'hook-descendant.ts'),
-        `import { writeFileSync } from 'node:fs';
+        `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync('task-hook-child.pid', String(process.pid));
+writeFileSync('task-hook-child.pid.tmp', String(process.pid));
+renameSync('task-hook-child.pid.tmp', 'task-hook-child.pid');
 await Bun.sleep(1500);
 writeFileSync('task-hook-late', 'privileged');
 `,

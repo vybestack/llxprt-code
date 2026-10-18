@@ -183,10 +183,11 @@ describe('public Agent hook shutdown', () => {
       try {
         await writeFile(
           script,
-          `import { appendFileSync, writeFileSync, existsSync } from 'node:fs';
+          `import { appendFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
 appendFileSync(${JSON.stringify(join(evidence, 'events'))}, input.session_id + '\\n');
-writeFileSync(${JSON.stringify(join(evidence, 'entered'))}, input.session_id);
+writeFileSync(${JSON.stringify(join(evidence, 'entered.tmp'))}, input.session_id);
+renameSync(${JSON.stringify(join(evidence, 'entered.tmp'))}, ${JSON.stringify(join(evidence, 'entered'))});
 while (!existsSync(${JSON.stringify(released)})) await Bun.sleep(10);
 console.log(JSON.stringify({systemMessage: 'final process joined'}));
 `,

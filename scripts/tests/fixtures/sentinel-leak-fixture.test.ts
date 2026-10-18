@@ -14,7 +14,12 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -31,14 +36,17 @@ describe('sentinel leak fixture (issue #3622)', () => {
         'setInterval(() => {}, 1000)',
       ]);
       descendant.once('error', (error) => {
-        writeFileSync(ready, `ERROR: ${error.message}`);
+        writeFileSync(`${ready}.tmp`, `ERROR: ${error.message}`);
+        renameSync(`${ready}.tmp`, ready);
       });
       try {
         if (!descendant.pid) {
-          writeFileSync(ready, 'ERROR: descendant did not start');
+          writeFileSync(`${ready}.tmp`, 'ERROR: descendant did not start');
+          renameSync(`${ready}.tmp`, ready);
           throw new Error('Descendant did not start');
         }
-        writeFileSync(ready, String(descendant.pid));
+        writeFileSync(`${ready}.tmp`, String(descendant.pid));
+        renameSync(`${ready}.tmp`, ready);
         await new Promise<void>(() => {});
       } finally {
         descendant.kill('SIGKILL');

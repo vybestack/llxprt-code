@@ -525,7 +525,7 @@ describe('installed memprofile launcher runtime', () => {
       writeFileSync(
         join(bundleDir, 'llxprt.js'),
         [
-          `import { appendFileSync, closeSync, constants, fstatSync, openSync, writeFileSync } from 'node:fs';`,
+          `import { appendFileSync, closeSync, constants, fstatSync, openSync, renameSync, writeFileSync } from 'node:fs';`,
           `const jobControlFile = process.env.LLXPRT_TEST_JOB_CONTROL_FILE;`,
           `const signalFile = process.env.LLXPRT_TEST_SIGNAL_FILE;`,
           `if (jobControlFile !== undefined) {`,
@@ -541,7 +541,8 @@ describe('installed memprofile launcher runtime', () => {
           `      process.exit(77);`,
           `    });`,
           `  }`,
-          `  writeFileSync(signalFile + '.ready', String(process.pid));`,
+          `  writeFileSync(signalFile + '.ready.tmp', String(process.pid));`,
+          `  renameSync(signalFile + '.ready.tmp', signalFile + '.ready');`,
           `  setTimeout(() => process.exit(124), 12000).unref();`,
           `  setInterval(() => {}, 1000);`,
           `} else {`,

@@ -104,7 +104,8 @@ describe.skipIf(process.platform === 'win32')(
       const { pkgRoot, launcherTarget } = makeLayout(dir, {
         entryCode: [
           'const fs = require("fs");',
-          `fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+          `fs.writeFileSync(${JSON.stringify(pidFile + '.tmp')}, String(process.pid));`,
+          `fs.renameSync(${JSON.stringify(pidFile + '.tmp')}, ${JSON.stringify(pidFile)});`,
           'process.stdin.resume();',
           // Pause stdin on exit so a clean shutdown does not leave it flowing.
           'process.on("exit", () => { try { process.stdin.pause(); } catch {} });',

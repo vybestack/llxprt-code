@@ -172,9 +172,10 @@ describe('physical hook ownership', () => {
         const descendant = join(directory, 'descendant.ts');
         await writeFile(
           descendant,
-          `import { writeFileSync } from 'node:fs';
+          `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync('descendant.admitted', String(process.pid));
+writeFileSync('descendant.admitted.tmp', String(process.pid));
+renameSync('descendant.admitted.tmp', 'descendant.admitted');
 await Bun.sleep(1600);
 writeFileSync('descendant.finished', 'privileged');
 `,
