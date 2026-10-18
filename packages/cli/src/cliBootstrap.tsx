@@ -138,7 +138,9 @@ export async function maybeRelaunchForMemory(
 }
 
 /** Register per-tool dynamic settings once Config is fully initialized. */
-export function registerDynamicToolSettings(tools: Agent['tools']): void {
+export function registerDynamicToolSettings(
+  tools: Pick<Agent['tools'], 'describeConfiguration'>,
+): void {
   try {
     const dynamicToolSettings = generateDynamicToolSettings({
       describeToolConfiguration: () => tools.describeConfiguration(),
