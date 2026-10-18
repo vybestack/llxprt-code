@@ -25,7 +25,7 @@ import {
   internalConfig,
   internalSettingsOwner,
 } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { dispatchInteractiveOrNonInteractive } from './nonInteractiveSession.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import { LoadedSettings } from '../config/settings.js';
 import {
   registerCleanup,

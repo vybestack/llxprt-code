@@ -6,10 +6,10 @@
 import type React from 'react';
 import { useEffect } from 'react';
 import { Text } from 'ink';
-import { Colors } from '../colors.js';
-import { useSessionState } from './SessionStateContext.js';
-import { useProviderAliasRefresh } from './ProviderAliasRefreshContext.js';
-import { useRuntimeApi, type RuntimeApi } from './RuntimeContext.js';
+import { Colors } from '../ui/colors.js';
+import { useSessionState } from '../ui/contexts/SessionStateContext.js';
+import { useProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
+import { useRuntimeApi, type RuntimeApi } from './runtime-context-fixture.js';
 
 export function OwnerView({
   label,

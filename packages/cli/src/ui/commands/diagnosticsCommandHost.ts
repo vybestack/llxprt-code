@@ -3,10 +3,18 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetLoadBalancerStatsOperation,
+  type GetLoadBalancerTokenAccountingOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type GetSessionTokenUsageOperation,
+  type ProviderStatusOperation,
+} from '../contexts/RuntimeContext.js';
+
 import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import type { DiagnosticsCommandReads } from './diagnosticsCommand.js';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
@@ -15,21 +23,25 @@ export function bindDiagnosticsReads(
   config: CliUiRuntime | null,
   settings: LoadedSettings,
   listTools: DiagnosticsCommandReads['listTools'],
-  runtimeApi: RuntimeApi,
+  runtimeApiGetLoadBalancerStats: GetLoadBalancerStatsOperation,
+  runtimeApiGetLoadBalancerTokenAccounting: GetLoadBalancerTokenAccountingOperation,
+  runtimeApiGetRuntimeDiagnosticsSnapshot: GetRuntimeDiagnosticsSnapshotOperation,
+  runtimeApiGetSessionTokenUsage: GetSessionTokenUsageOperation,
+  runtimeApiProviderStatus: ProviderStatusOperation,
   oauth: OAuthControl,
 ): DiagnosticsCommandReads {
   return {
     isConfigured: config !== null,
-    readSnapshot: () => runtimeApi.getRuntimeDiagnosticsSnapshot(),
+    readSnapshot: () => runtimeApiGetRuntimeDiagnosticsSnapshot(),
     isOAuthAvailable: () => oauth.isAvailable(),
     readSessionBucket: (provider) => oauth.getSessionBucket(provider),
     readFailoverBuckets: () => config?.readFailoverBuckets?.() ?? [],
     readCurrentBucket: () => config?.readCurrentBucket?.(),
     readProviderName: () =>
-      runtimeApi.providerStatus().providerName ?? undefined,
-    readLoadBalancerStats: () => runtimeApi.getLoadBalancerStats(),
-    readTokenAccounting: () => runtimeApi.getLoadBalancerTokenAccounting(),
-    readSessionTokens: () => runtimeApi.getSessionTokenUsage(),
+      runtimeApiProviderStatus().providerName ?? undefined,
+    readLoadBalancerStats: () => runtimeApiGetLoadBalancerStats(),
+    readTokenAccounting: () => runtimeApiGetLoadBalancerTokenAccounting(),
+    readSessionTokens: () => runtimeApiGetSessionTokenUsage(),
     readStaticInfo: () => {
       if (!config) throw new Error('Configuration not available');
       const { merged } = settings;

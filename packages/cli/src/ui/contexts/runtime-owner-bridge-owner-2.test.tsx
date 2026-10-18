@@ -54,7 +54,7 @@ import { AgentConfig } from '../../../../agents/src/api/config-types.js';
 import {
   OwnerView,
   AliasRefreshView,
-} from './runtime-owner-bridge-views.fixture.js';
+} from '../../__tests__/runtime-owner-bridge-views.fixture.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
@@ -62,14 +62,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { createProviderAliasRefresh } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
-import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
+import {
+  RuntimeContextProvider,
+  type RuntimeApi,
+} from '../../__tests__/runtime-context-fixture.js';
 
 /**
  * @license

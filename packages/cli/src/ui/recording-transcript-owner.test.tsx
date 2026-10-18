@@ -9,7 +9,7 @@ import { Text } from 'ink';
 import { render } from '../__tests__/render.js';
 import { Colors } from './colors.js';
 import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
-import { getInteractiveTranscriptPath } from './AppContainerRuntime.js';
+import { getInteractiveTranscriptPath } from './transcriptPath.js';
 import { Agent } from '@vybestack/llxprt-code-agents';
 
 /**

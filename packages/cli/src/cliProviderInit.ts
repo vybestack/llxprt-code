@@ -14,7 +14,6 @@ import dns from 'node:dns';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  type Agent,
   type AgentProfileApplication,
   type AgentActivationOperation,
   type ProviderActivationIntent,
@@ -250,15 +249,13 @@ export async function configureProvidersAndServices(
 
 /** Connect the IDE companion client when IDE mode is enabled. */
 export async function connectIdeClientIfEnabled(
-  config: Pick<Agent['ide'], 'getIdeMode' | 'getIdeClient'>,
+  readIdeMode: () => boolean,
+  connectIdeClient: () => Promise<void>,
 ): Promise<void> {
-  if (!config.getIdeMode()) {
+  if (!readIdeMode()) {
     return;
   }
-  const ideClient = config.getIdeClient();
-  if (ideClient) {
-    await ideClient.connect();
-  }
+  await connectIdeClient();
 }
 
 /**

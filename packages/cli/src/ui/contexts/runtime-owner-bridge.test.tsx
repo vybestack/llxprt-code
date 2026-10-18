@@ -47,7 +47,7 @@ import { AgentConfig } from '../../../../agents/src/api/config-types.js';
 import {
   OwnerView,
   ModelEventView,
-} from './runtime-owner-bridge-views.fixture.js';
+} from '../../__tests__/runtime-owner-bridge-views.fixture.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
@@ -55,8 +55,11 @@ import { act } from 'react';
 import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { SessionController } from '../containers/SessionController.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
-import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import {
+  RuntimeContextProvider,
+  type RuntimeApi,
+} from '../../__tests__/runtime-context-fixture.js';
 
 /**
  * @license

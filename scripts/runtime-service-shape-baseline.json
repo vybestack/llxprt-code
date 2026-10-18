@@ -1,7 +1,7 @@
 {
   "counts": {
     "a2a-server": {
-      "runtime-service-bundle": 5,
+      "runtime-service-bundle": 4,
       "runtime-service-bag-parameter": 0
     },
     "agents": {
@@ -9,8 +9,8 @@
       "runtime-service-bag-parameter": 46
     },
     "cli": {
-      "runtime-service-bag-parameter": 68,
-      "runtime-service-bundle": 152
+      "runtime-service-bag-parameter": 30,
+      "runtime-service-bundle": 106
     },
     "core": {
       "runtime-service-bag-parameter": 0,
@@ -21,7 +21,7 @@
       "runtime-service-bag-parameter": 1
     },
     "zed-acp": {
-      "runtime-service-bundle": 7,
+      "runtime-service-bundle": 4,
       "runtime-service-bag-parameter": 0
     }
   }

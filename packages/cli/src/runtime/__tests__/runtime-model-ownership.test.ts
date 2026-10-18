@@ -42,8 +42,8 @@ import {
   fromConfig,
   SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
-import { createRuntimeApi } from '../../ui/contexts/RuntimeContext.js';
-import { createRuntimeOwnerFeatures } from '../createRuntimeOwnerFeatures.js';
+import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 import { createSessionModelCommand } from '../session-model-command.js';
 
 /**

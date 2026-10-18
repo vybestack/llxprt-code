@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
 
 import express from 'express';
 
@@ -32,7 +33,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import {
-  createTaskAgent,
+  createTaskAgentConfig,
   loadEnvironment,
   setTargetDir,
 } from '../config/config.js';
@@ -197,7 +198,9 @@ async function createStartupContext(): Promise<AppContext & TaskStores> {
   // model) has been read (#3221). Disposal must run even if the read fails:
   // dispose() tears down MCP connections and bus listeners the host would
   // otherwise leak for its lifetime.
-  const agent = await createTaskAgent(settings, extensions, 'a2a-server');
+  const agent = await createAgent(
+    createTaskAgentConfig(settings, extensions, 'a2a-server'),
+  );
   let model: string;
   try {
     model = agent.getModel();

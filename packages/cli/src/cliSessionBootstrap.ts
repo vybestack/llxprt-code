@@ -2,6 +2,7 @@ import type {
   CredentialAuthority,
   OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
@@ -82,7 +83,7 @@ export async function handleSessionListAndDelete(
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   chatsDir: string,
   projectHash: string,
-  config: Config,
+  config: Pick<Config, 'dispose'>,
 ): Promise<void> {
   const deleteRef = argv.deleteSession;
   const shouldDelete = typeof deleteRef === 'string' && deleteRef.length > 0;
@@ -342,7 +343,7 @@ async function releaseResumedResources(
  * recording-suite weight.
  */
 export function setupObservation(
-  config: Config,
+  config: Pick<Config, 'getProjectRoot'>,
   selection: BootstrapSelection | null,
 ): void {
   const projectRoot = config.getProjectRoot();
@@ -544,7 +545,7 @@ export async function setupSessionRecording(
 }
 
 async function resumeOwnerRecording(
-  session: Agent['session'],
+  session: Pick<Agent['session'], 'resume' | 'setRecording'>,
   mediaStore: ReturnType<typeof clientMediaStore>,
   continueRef: string,
   location: { chatsDir: string; projectHash: string },
@@ -604,8 +605,12 @@ async function resumeOwnerRecording(
 }
 
 export async function setupOwnerSessionRecording(
-  config: Config,
-  agent: Agent,
+  config: Pick<
+    Config,
+    'getProjectRoot' | 'projectChatsDir' | 'getContinueSessionRef' | 'dispose'
+  >,
+  session: Pick<Agent['session'], 'getRecording' | 'setRecording' | 'resume'>,
+  readMediaStore: () => ReturnType<typeof clientMediaStore>,
   argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   bootstrapSelection: BootstrapSelection | null,
   startupWarnings: string[] = [],
@@ -620,14 +625,14 @@ export async function setupOwnerSessionRecording(
     let history: IContent[] | null;
     if (continueRef) {
       history = await resumeOwnerRecording(
-        agent.session,
-        clientMediaStore(agent.agentClient),
+        session,
+        readMediaStore(),
         continueRef,
         { chatsDir, projectHash },
         startupWarnings,
       );
     } else {
-      await agent.session.setRecording({ enabled: true });
+      await session.setRecording({ enabled: true });
       history = null;
     }
 
@@ -635,9 +640,9 @@ export async function setupOwnerSessionRecording(
     setupObservation(config, bootstrapSelection);
     return history;
   } catch (error: unknown) {
-    if (agent.session.getRecording().enabled) {
+    if (session.getRecording().enabled) {
       try {
-        await agent.session.setRecording({ enabled: false });
+        await session.setRecording({ enabled: false });
       } catch (cleanupError: unknown) {
         throw new AggregateError(
           [error, cleanupError],
@@ -816,9 +821,6 @@ function ownCliPolicy(owner: RuntimePolicyOwner): RuntimePolicyOwner {
 }
 
 async function discoverCliProviderContributions() {
-  const { loadInstalledRuntimePlugins } = await import(
-    '@vybestack/llxprt-code-providers/composition.js'
-  );
   const providerContributions = await loadInstalledRuntimePlugins();
   const authFactories = buildMcpAuthFactoryRegistry(
     providerContributions

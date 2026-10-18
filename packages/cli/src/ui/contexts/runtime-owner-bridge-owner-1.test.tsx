@@ -44,20 +44,23 @@ import { executeProviderActivation } from '../../../../agents/src/api/providerAc
 import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitchAssembly.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import { AgentConfig } from '../../../../agents/src/api/config-types.js';
-import { OwnerView } from './runtime-owner-bridge-views.fixture.js';
+import { OwnerView } from '../../__tests__/runtime-owner-bridge-views.fixture.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
-import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
+import {
+  RuntimeContextProvider,
+  type RuntimeApi,
+} from '../../__tests__/runtime-context-fixture.js';
 
 /**
  * @license

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { useCommandOwners } from '../__tests__/command-owner-fixture.js';
-import { getInteractiveTranscriptPath } from './AppContainerRuntime.js';
+import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
 describe('transcript path owner reads', () => {
   const makeOwner = useCommandOwners();

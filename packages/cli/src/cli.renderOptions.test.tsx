@@ -1,11 +1,13 @@
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeRenderAgent = installCommandOwners();
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
@@ -19,12 +21,8 @@ import { __setRenderForTesting } from './session/interactiveUI.js';
 import { LoadedSettings } from './config/settings.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
-const createFakeAgent = async (config: Config): Promise<Agent> =>
-  ({
-    workspace: (await createUiSessionOwner(config)).workspace,
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => config,
-  }) as unknown as Agent;
+const createFakeAgent = async (_config: Config): Promise<Agent> =>
+  makeRenderAgent(crypto.randomUUID());
 
 void vi.mock('./utils/version.js', () => ({
   getCliVersion: vi.fn(() => Promise.resolve('1.0.0')),
@@ -115,7 +113,9 @@ describe('startInteractiveUI ink render options', () => {
   });
 
   it('passes computed Ink render options to ink.render()', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,
@@ -159,7 +159,9 @@ describe('startInteractiveUI ink render options', () => {
   }, 120_000);
 
   it('forces alternate buffer off when screen reader mode is enabled', async () => {
-    const { startInteractiveUI } = await import('./cli.js');
+    const { startInteractiveUI } = await import(
+      './__tests__/raw-interactive-startup-fixture.js'
+    );
     const config = new Config({
       sessionId: 'test-session',
       targetDir: tempDir,

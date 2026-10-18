@@ -9,7 +9,7 @@ import { TasksControl } from '../../../../agents/src/api/control/tasksControl.js
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createTaskCommand } from './tasksCommand.js';
 

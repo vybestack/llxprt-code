@@ -3,10 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
+
 import type { ExecutionEventBus } from '@a2a-js/sdk/server';
 import type { AgentSettings } from '../types.js';
 import {
-  createTaskAgent,
+  createTaskAgentConfig,
   loadEnvironment,
   setTargetDir,
 } from '../config/config.js';
@@ -26,7 +28,9 @@ export async function acquireTaskSession(
   const extensions = loadExtensions(workspaceRoot, {
     folderTrust: settings.folderTrust,
   });
-  const agent = await createTaskAgent(settings, extensions, taskId);
+  const agent = await createAgent(
+    createTaskAgentConfig(settings, extensions, taskId),
+  );
   return new Task(
     taskId,
     contextId,

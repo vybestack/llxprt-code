@@ -3,12 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createAgent } from '@vybestack/llxprt-code-agents';
 
 import { describe, expect, it } from 'bun:test';
 import { Task } from './task.js';
 import { RequestContext } from '@a2a-js/sdk/server';
 import { fileURLToPath } from 'node:url';
-import { createTaskAgent } from '../config/config.js';
+import { createTaskAgentConfig } from '../config/config.js';
 import { createOwnedTask } from './__tests__/owned-task.js';
 
 describe('A2A worker data and turn ports', () => {
@@ -60,7 +61,9 @@ describe('A2A worker data and turn ports', () => {
         import.meta.url,
       ),
     );
-    const agent = await createTaskAgent({}, [], 'port-proof');
+    const agent = await createAgent(
+      createTaskAgentConfig({}, [], 'port-proof'),
+    );
     try {
       const task = createOwnedTask('port-proof', 'context', agent);
       const acceptUserMessage = task.acceptUserMessage.bind(task);
@@ -104,7 +107,9 @@ describe('A2A worker data and turn ports', () => {
         import.meta.url,
       ),
     );
-    const agent = await createTaskAgent({}, [], 'port-proof');
+    const agent = await createAgent(
+      createTaskAgentConfig({}, [], 'port-proof'),
+    );
     try {
       const task = createOwnedTask('port-proof', 'context', agent);
       const acceptUserMessage = task.acceptUserMessage.bind(task);

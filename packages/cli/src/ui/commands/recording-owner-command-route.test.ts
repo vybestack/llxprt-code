@@ -13,7 +13,7 @@ import {
   replaySession,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import {
   useRecordingPrompts,

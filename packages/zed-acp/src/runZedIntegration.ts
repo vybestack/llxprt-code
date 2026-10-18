@@ -1,4 +1,8 @@
-import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  HostCredentialOwner,
+  createFileOAuthSettingsProvider,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -148,11 +152,6 @@ export async function serveZedConnection(
 }
 
 async function discoverZedSessionProviderInputs(): Promise<ZedSessionProviderInputs> {
-  const [{ loadInstalledRuntimePlugins }, { createFileOAuthSettingsProvider }] =
-    await Promise.all([
-      import('@vybestack/llxprt-code-providers/composition.js'),
-      import('@vybestack/llxprt-code-providers/auth.js'),
-    ]);
   return {
     credentialAuthority: new HostCredentialOwner(process.env).authority,
     providerContributions: await loadInstalledRuntimePlugins(),

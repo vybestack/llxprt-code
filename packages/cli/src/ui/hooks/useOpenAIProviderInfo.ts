@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useGetOpenAIProviderInfo } from '../contexts/RuntimeContext.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -15,7 +16,6 @@ import {
   type getOpenAIProviderInfo,
   type ProviderMessage as Message,
 } from '@vybestack/llxprt-code-providers';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 // Import OpenAIProviderInfo type from the function return type
 type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
@@ -33,10 +33,10 @@ export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
  * @returns OpenAI provider information and helper methods
  */
 export function useOpenAIProviderInfo(): UseOpenAIProviderInfoReturn {
-  const runtime = useRuntimeApi();
+  const runtimeGetOpenAIProviderInfo = useGetOpenAIProviderInfo();
   const getProviderInfo = useCallback(
-    () => runtime.getOpenAIProviderInfo(),
-    [runtime],
+    () => runtimeGetOpenAIProviderInfo(),
+    [runtimeGetOpenAIProviderInfo],
   );
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
     getProviderInfo(),

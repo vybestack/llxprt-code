@@ -61,11 +61,22 @@ void vi.mock('node:v8', () => ({
   },
 }));
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'gemini' }),
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'gemini' }),
+    });
+    return {
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 import { useResponsive } from '../hooks/useResponsive.js';
 import { testRegex } from '../../__tests__/regex.js';

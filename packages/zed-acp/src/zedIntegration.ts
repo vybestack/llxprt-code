@@ -1,4 +1,4 @@
-import { Session } from './zed-session.js';
+import type { Session } from './zed-session.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,36 +15,27 @@ import {
   type ProfileDefinitionListing,
 } from '@vybestack/llxprt-code-core';
 
-import type {
-  Agent,
-  AgentProfileApplication,
-} from '@vybestack/llxprt-code-agents';
+import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
 
 import type * as acp from '@agentclientprotocol/sdk';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
-import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
 import { randomUUID } from 'crypto';
 import { buildSessionModes } from './zed-helpers.js';
 import {
-  buildZedSessionAgent,
+  acquireZedSession,
   captureZedHostInputs,
   resolveZedHostTrust,
   type ZedHostInputs,
   type ZedSessionProviderInputs,
 } from './zed-session-agent.js';
-import { resolveSessionTargetDir } from './zed-session-config.js';
 import { SessionLifecycle } from './zed-session-lifecycle.js';
 import { rethrowZedSessionFailure } from './zed-session-errors.js';
 import {
   hasRecordedSessionFile,
   nodeChatSessionFileLister,
-  resumeAgentHistory,
-  toLoadRequestError,
   type ChatSessionFileLister,
 } from './zed-session-loader.js';
-import type { TerminalManager } from './zed-terminal-manager.js';
-import { createZedTerminalTransport } from './zed-terminal-setup.js';
 
 import type {
   ClientCapabilitiesWithSession,
@@ -53,10 +44,8 @@ import type {
   DeleteSessionRequest,
   DeleteSessionResponse,
 } from './acp-types.js';
-import { enableZedSessionRecording } from './zed-agent-setup.js';
 import {
   dispatchZedConfigOption,
-  zedConfigOptionsForClient,
   zedSessionConfigOptions,
 } from './zed-config-options.js';
 export { parseZedAuthMethodId } from './zed-helpers.js';
@@ -112,9 +101,6 @@ export class ZedAgent {
       authenticateZedAgent(this.definitions, methodId, this.application),
     );
   }
-  private reportRecordingFailure(sessionId: string, error: unknown): void {
-    this.logger.debug(() => `Recording failed for ${sessionId}: ${error}`);
-  }
   newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     return this.admitWork(() => this.openSession(params));
   }
@@ -123,74 +109,8 @@ export class ZedAgent {
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     try {
       const sessionId = randomUUID();
-      const settingsSource = this.createSessionSettings();
-      const terminals = this.createTerminals(sessionId, cwd, settingsSource);
-      const agent = await this.buildSessionAgent(
-        sessionId,
-        cwd,
-        settingsSource,
-        terminals,
-      );
-      let session: Session;
-      try {
-        await enableZedSessionRecording(
-          () => agent.session.setRecording({ enabled: true }),
-          this.reportRecordingFailure.bind(this, sessionId),
-        );
-        session = new Session(
-          sessionId,
-          (input, options) => agent.stream(input, options),
-          () => agent.getModel(),
-          (model) => agent.setModel(model),
-          () => agent.listAvailableModels(),
-          () => agent.getProviderContextLimit(),
-          () => agent.getApprovalMode(),
-          (mode) => agent.setApprovalMode(mode),
-          () => agent.getHistory(),
-          (options) => agent.compress(options),
-          () => agent.dispose(),
-          (name) => agent.tools.get(name),
-          () => agent.tools.list(),
-          agent.tools.respondToConfirmation.bind(agent.tools),
-          () => agent.session.getRecordingTitle(),
-          (title) => agent.session.recordRecordingTitle(title),
-          () => agent.memory.getFilePaths(),
-          () => agent.profiles.list(),
-          () => agent.tasks.list(),
-          () => agent.workspace.getProjectRoot(),
-          () => this.hostInputs.maxSessionTurns ?? -1,
-          () => this.hostInputs.debugMode,
-          () => ({
-            respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
-            respectLlxprtIgnore:
-              this.hostInputs.fileFiltering.respectLlxprtIgnore,
-          }),
-          () => agent.workspace.getWorkingDirectory(),
-          () => this.hostInputs.fileFiltering.enableRecursiveFileSearch,
-          (path) => agent.workspace.readTextFile(path),
-          (path, options) => agent.workspace.shouldIgnoreFile(path, options),
-          () => agent.workspace.getCoreIgnorePatterns(),
-          (key) => agent.getEphemeralSetting(key),
-          (key, value) => agent.setEphemeralSetting(key, value),
-          (listener) => agent.settings.subscribeModelChanges(listener),
-          this.connection,
-          this.supportsConfigOptions(),
-          terminals,
-        );
-      } catch (primary) {
-        return await this.releaseFailedConstruction(
-          primary,
-          () => agent.dispose(),
-          () => terminals?.dispose(),
-        );
-      }
-      return await this.publishNewSession(
-        session,
-        sessionId,
-        () => agent.getModel(),
-        () => agent.listAvailableModels(),
-        (key) => agent.getEphemeralSetting(key),
-      );
+      const { session } = await this.buildSession(sessionId, cwd, false);
+      return await this.publishNewSession(session, sessionId);
     } catch (error) {
       this.logger.debug(() => `ERROR in newSession: ${error}`);
       throw error;
@@ -199,9 +119,6 @@ export class ZedAgent {
   private async publishNewSession(
     session: Session,
     sessionId: string,
-    readModel: Agent['getModel'],
-    listModels: Agent['listAvailableModels'],
-    readSetting: Agent['getEphemeralSetting'],
   ): Promise<acp.NewSessionResponse> {
     this.unpublishedSessions.add(session);
     if (this.closing !== undefined) {
@@ -215,11 +132,9 @@ export class ZedAgent {
     }
     let configOptions: acp.NewSessionResponse['configOptions'];
     try {
-      ({ configOptions } = await zedConfigOptionsForClient(
+      ({ configOptions } = await zedSessionConfigOptions(
         this.clientCapabilities,
-        readModel,
-        listModels,
-        readSetting,
+        session,
       ));
     } catch (primary) {
       return this.rejectSession(sessionId, session, primary);
@@ -240,9 +155,6 @@ export class ZedAgent {
     params: acp.ResumeSessionRequest,
   ): Promise<acp.ResumeSessionResponse> {
     return this.admitWork(() => this.lifecycle.resume(params));
-  }
-  private supportsConfigOptions(): boolean {
-    return this.clientCapabilities?.session?.configOptions === true;
   }
   async loadSession(
     params: acp.LoadSessionRequest,
@@ -371,71 +283,7 @@ export class ZedAgent {
     sessionId: string,
     cwd: string | undefined,
   ): Promise<{ session: Session; history: readonly IContent[] }> {
-    const settingsSource = this.createSessionSettings();
-    const terminals = this.createTerminals(sessionId, cwd, settingsSource);
-    const agent = await this.buildSessionAgent(
-      sessionId,
-      cwd,
-      settingsSource,
-      terminals,
-    );
-    let history: readonly IContent[];
-    let session: Session;
-    try {
-      history = await resumeAgentHistory(
-        (id) => agent.session.resume(id),
-        sessionId,
-        this.config.projectChatsDir,
-        this.sessionFileLister,
-      );
-      session = new Session(
-        sessionId,
-        (input, options) => agent.stream(input, options),
-        () => agent.getModel(),
-        (model) => agent.setModel(model),
-        () => agent.listAvailableModels(),
-        () => agent.getProviderContextLimit(),
-        () => agent.getApprovalMode(),
-        (mode) => agent.setApprovalMode(mode),
-        () => agent.getHistory(),
-        (options) => agent.compress(options),
-        () => agent.dispose(),
-        (name) => agent.tools.get(name),
-        () => agent.tools.list(),
-        agent.tools.respondToConfirmation.bind(agent.tools),
-        () => agent.session.getRecordingTitle(),
-        (title) => agent.session.recordRecordingTitle(title),
-        () => agent.memory.getFilePaths(),
-        () => agent.profiles.list(),
-        () => agent.tasks.list(),
-        () => agent.workspace.getProjectRoot(),
-        () => this.hostInputs.maxSessionTurns ?? -1,
-        () => this.hostInputs.debugMode,
-        () => ({
-          respectGitIgnore: this.hostInputs.fileFiltering.respectGitIgnore,
-          respectLlxprtIgnore:
-            this.hostInputs.fileFiltering.respectLlxprtIgnore,
-        }),
-        () => agent.workspace.getWorkingDirectory(),
-        () => this.hostInputs.fileFiltering.enableRecursiveFileSearch,
-        (path) => agent.workspace.readTextFile(path),
-        (path, options) => agent.workspace.shouldIgnoreFile(path, options),
-        () => agent.workspace.getCoreIgnorePatterns(),
-        (key) => agent.getEphemeralSetting(key),
-        (key, value) => agent.setEphemeralSetting(key, value),
-        (listener) => agent.settings.subscribeModelChanges(listener),
-        this.connection,
-        this.supportsConfigOptions(),
-        terminals,
-      );
-    } catch (primary) {
-      this.logger.debug(() => `loadSession - build/resume failed: ${primary}`);
-      return this.releaseFailedConstruction(
-        toLoadRequestError(sessionId, primary),
-        () => agent.dispose(),
-        () => terminals?.dispose(),
-      );
-    }
+    const { session, history } = await this.buildSession(sessionId, cwd, true);
     this.unpublishedSessions.add(session);
     if (this.closing !== undefined) {
       await this.releaseSession(session);
@@ -443,72 +291,25 @@ export class ZedAgent {
     }
     return { session, history };
   }
-  private async releaseFailedConstruction(
-    primary: unknown,
-    retireAgent: Agent['dispose'],
-    releaseTerminals: () => Promise<void> | undefined,
-  ): Promise<never> {
-    const results = await Promise.allSettled([
-      Promise.resolve().then(retireAgent),
-      Promise.resolve().then(releaseTerminals),
-    ]);
-    rethrowZedSessionFailure(
-      primary,
-      results.flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      ),
-    );
-  }
-  private createTerminals(
+  private buildSession(
     sessionId: string,
     cwd: string | undefined,
-    source: SettingsService,
-  ): TerminalManager | null {
-    if (this.clientCapabilities?.terminal !== true) return null;
-    return createZedTerminalTransport(
-      sessionId,
+    resume: boolean,
+  ): Promise<{ session: Session; history: readonly IContent[] }> {
+    return acquireZedSession(
+      this.config,
+      this.hostInputs,
       this.connection,
-      resolveSessionTargetDir(this.config, cwd),
+      this.clientCapabilities,
+      sessionId,
+      cwd,
       this.logger,
-      this.config.getInitialSettings()['shell-output-retention-max-bytes'] ??
-        source.get('shell-output-retention-max-bytes'),
+      this.createSessionSettings(),
+      this.hostTrust,
+      this.providerInputs,
+      resume,
+      this.sessionFileLister,
     );
-  }
-  private async buildSessionAgent(
-    sessionId: string,
-    cwd: string | undefined,
-    source: SettingsService,
-    terminals: TerminalManager | null,
-  ): Promise<Agent> {
-    const execute: IShellToolHost['executeShellCommand'] | undefined =
-      terminals === null
-        ? undefined
-        : (command, directory, output, signal) =>
-            terminals.executeShellCommand(command, directory, output, signal);
-    try {
-      return await buildZedSessionAgent(
-        this.config,
-        this.hostInputs,
-        this.connection,
-        this.clientCapabilities,
-        sessionId,
-        cwd,
-        source,
-        this.hostTrust,
-        this.providerInputs,
-        execute,
-      );
-    } catch (primary) {
-      try {
-        await terminals?.dispose();
-      } catch (cleanup) {
-        throw new AggregateError(
-          [primary, cleanup],
-          'ACP session startup and terminal cleanup failed',
-        );
-      }
-      throw primary;
-    }
   }
   deleteSession(params: DeleteSessionRequest): Promise<DeleteSessionResponse> {
     return this.admitWork(() => this.lifecycle.delete(params));

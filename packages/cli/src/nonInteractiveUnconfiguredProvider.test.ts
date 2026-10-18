@@ -45,7 +45,7 @@ import {
   ProviderManager,
   type IProvider,
 } from '@vybestack/llxprt-code-providers';
-import { runNonInteractive } from './nonInteractiveCli.js';
+import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
 

@@ -108,10 +108,29 @@ function requireRuntime(): ConfigBackedRuntime {
   return runtimeHolder.current;
 }
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtimeHolder.current,
-  getRuntimeApi: () => runtimeHolder.current,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtimeHolder.current;
+    return {
+      useListSavedProfiles: () => requireRuntime().listSavedProfiles,
+      useLoadProfileByName: () => requireRuntime().loadProfileByName,
+      useProviderStatus: () => requireRuntime().providerStatus,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        requireRuntime().getRuntimeDiagnosticsSnapshot,
+      useDeleteProfileByName: () => undefined,
+      useGetDefaultProfileName: () => undefined,
+      useGetProfileByName: () => undefined,
+      useSaveProfileDefinition: () => undefined,
+      useSetDefaultProfileName: () => undefined,
+      useRuntimeApi: useSelectedTestRuntime,
+      getRuntimeApi: () => runtimeHolder.current,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 // Import after mocks are set up
 import { useModelDialogHandler } from '../components/modelDialogHandler.js';

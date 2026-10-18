@@ -294,7 +294,16 @@ describe('isolated ACP session fixtures', () => {
       ).rejects.toThrow(/Session not found/);
     });
 
-    it('closeSession reports mandatory disposal failure and still removes the session', async () => {
+    it(
+      'closeSession reports mandatory disposal failure and still removes the session',
+      verifyMandatoryCloseFailure,
+    );
+    it(
+      'closeSession succeeds and removes the session even when agent disposal fails',
+      verifyMandatoryCloseFailure,
+    );
+
+    async function verifyMandatoryCloseFailure(): Promise<void> {
       const stub = buildStubAgent({});
       const failure = new Error('dispose failed');
       stub.dispose.mockRejectedValueOnce(failure);
@@ -314,7 +323,7 @@ describe('isolated ACP session fixtures', () => {
       await expect(
         zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
       ).rejects.toThrow(/Session not found/);
-    });
+    }
 
     it('initialize() advertises loadSession: true', async () => {
       const connection = new RecordingConnection();

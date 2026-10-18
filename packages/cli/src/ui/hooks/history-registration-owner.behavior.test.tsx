@@ -8,7 +8,7 @@ import { renderHook } from '../../__tests__/render.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
 import { bindCopyCommandHistoryRead } from '../commands/copyCommandHost.js';
@@ -29,7 +29,11 @@ describe('history registration ownership', () => {
       null,
       context.services.settings,
       () => [],
-      context.runtimeApi,
+      context.runtimeApi.getLoadBalancerStats,
+      context.runtimeApi.getLoadBalancerTokenAccounting,
+      context.runtimeApi.getRuntimeDiagnosticsSnapshot,
+      context.runtimeApi.getSessionTokenUsage,
+      context.runtimeApi.providerStatus,
       context.oauthControl,
     );
     const hook = renderHook(

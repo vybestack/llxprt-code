@@ -71,7 +71,7 @@ import {
   type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import { runNonInteractive } from './nonInteractiveCli.js';
+import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from './config/settings.js';
 import { CommandContext } from './ui/commands/types.js';
 import { bindAutoPromptOperation } from './ui/commands/subagentCommandHost.js';

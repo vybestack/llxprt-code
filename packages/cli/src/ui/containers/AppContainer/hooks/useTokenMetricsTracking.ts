@@ -4,6 +4,10 @@ import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveProviderMetricsOperation,
+  type GetSessionTokenUsageOperation,
+} from '../../../contexts/RuntimeContext.js';
 
 /**
  * @hook useTokenMetricsTracking
@@ -18,7 +22,7 @@ import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
 
 import { useEffect, useRef, useState } from 'react';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import type { RuntimeApi } from '../../../contexts/RuntimeContext.js';
+
 import type {
   HistoryTokenSubscription,
   RecordingHistorySubscription,
@@ -40,8 +44,8 @@ export interface TokenMetrics {
 interface UseTokenMetricsTrackingOptions {
   subscribeHistoryTokens: HistoryTokenSubscription;
   subscribeRecordingHistory: RecordingHistorySubscription;
-  readProviderMetrics: RuntimeApi['getActiveProviderMetrics'];
-  readSessionTokenUsage: RuntimeApi['getSessionTokenUsage'];
+  readProviderMetrics: GetActiveProviderMetricsOperation;
+  readSessionTokenUsage: GetSessionTokenUsageOperation;
   metrics: SessionMetricUpdates;
   updateHistoryTokenCount: (count: number) => void;
   recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;

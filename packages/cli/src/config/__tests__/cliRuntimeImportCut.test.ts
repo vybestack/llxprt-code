@@ -50,7 +50,7 @@ import {
   prepareRuntimeForProfile,
 } from '../profileBootstrap.js';
 import { finalizeConfig } from '../postConfigRuntime.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 
 const originalArgv = process.argv;
 const roots: string[] = [];

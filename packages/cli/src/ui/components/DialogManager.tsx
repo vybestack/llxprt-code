@@ -3,11 +3,18 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveProviderNameOperation,
+  useGetActiveProviderName,
+  useSetProvider,
+  useSetActiveModel,
+  useProviderStatus,
+} from '../contexts/RuntimeContext.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box } from 'ink';
 import { useCallback, useMemo } from 'react';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { SettingsDialog } from './SettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
@@ -145,7 +152,7 @@ function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
   config: CliUiRuntime,
   uiActions: AppCommands,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetActiveProviderName: GetActiveProviderNameOperation,
 ) {
   const { commandContext } = useAppCommandData();
   const staticExtraHeight = 0;
@@ -162,11 +169,11 @@ function useDialogManagerState(
 
   const currentProvider = useMemo(() => {
     try {
-      return runtime.getActiveProviderName() || null;
+      return runtimeGetActiveProviderName() || null;
     } catch {
       return null;
     }
-  }, [runtime]);
+  }, [runtimeGetActiveProviderName]);
 
   const handleAuthSelect = useCallback(
     (method: string | undefined, scope: SettingScope) => {
@@ -190,7 +197,11 @@ function useDialogManagerState(
   );
 
   const handleModelsDialogSelect = useModelDialogHandler(
-    runtime,
+    {
+      setProvider: useSetProvider(),
+      setActiveModel: useSetActiveModel(),
+      providerStatus: useProviderStatus(),
+    },
     addItem,
     dialogStore,
     currentProvider,
@@ -468,10 +479,15 @@ function renderDialogBody(
 export const DialogManager = ({ config, settings }: DialogManagerProps) => {
   const uiState = useDialogData();
   const uiActions = useAppCommands();
-  const runtime = useRuntimeApi();
+  const runtimeGetActiveProviderName = useGetActiveProviderName();
   const { addItem } = useTurnStore().commands;
 
-  const state = useDialogManagerState(addItem, config, uiActions, runtime);
+  const state = useDialogManagerState(
+    addItem,
+    config,
+    uiActions,
+    runtimeGetActiveProviderName,
+  );
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
   return renderDialogBody(uiState, uiActions, settings, config, addItem, state);

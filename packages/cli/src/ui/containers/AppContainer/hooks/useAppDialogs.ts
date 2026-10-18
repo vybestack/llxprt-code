@@ -3,6 +3,22 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveModelNameOperation,
+  type GetActiveProfileNameOperation,
+  type GetActiveProviderNameOperation,
+  type GetLoadBalancerStatsOperation,
+  type ListAvailableModelsOperation,
+  type ListProvidersOperation,
+  type ListSavedProfilesOperation,
+  type LoadProfileByNameOperation,
+  type ProviderStatusOperation,
+  type SaveProfileSnapshotOperation,
+  type SetActiveModelOperation,
+  type SetDefaultProfileNameOperation,
+  type SetProviderOperation,
+  type UpdateActiveProviderApiKeyOperation,
+} from '../../../contexts/RuntimeContext.js';
 
 import { selectDialogOpen } from '../../../stores/dialog/dialogStore.js';
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
@@ -39,7 +55,6 @@ import { useQueueErrorTimeout } from './useQueueErrorTimeout.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
 import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
-import type { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type {
   IdeInfo,
   RecordingIntegration,
@@ -93,7 +108,20 @@ export interface AppDialogsParams {
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  runtime: ReturnType<typeof useRuntimeApi>;
+  getActiveModelName: GetActiveModelNameOperation;
+  getActiveProfileName: GetActiveProfileNameOperation;
+  getActiveProviderName: GetActiveProviderNameOperation;
+  getLoadBalancerStats: GetLoadBalancerStatsOperation;
+  listAvailableModels: ListAvailableModelsOperation;
+  listProviders: ListProvidersOperation;
+  listSavedProfiles: ListSavedProfilesOperation;
+  loadProfileByName: LoadProfileByNameOperation;
+  providerStatus: ProviderStatusOperation;
+  saveProfileSnapshot: SaveProfileSnapshotOperation;
+  setActiveModel: SetActiveModelOperation;
+  setDefaultProfileName: SetDefaultProfileNameOperation;
+  setProvider: SetProviderOperation;
+  updateActiveProviderApiKey: UpdateActiveProviderApiKeyOperation;
   suppressStartupWelcome?: boolean;
   /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
   shouldShowIdePrompt: boolean | null | undefined;
@@ -201,15 +229,8 @@ function useDialogsAuthProviders(
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
 ) {
-  const {
-    config,
-    settings,
-    handleNewMessage,
-    recordingIntegration,
-    runtime,
-    store,
-    dialogs,
-  } = p;
+  const { getActiveProviderName, listProviders, setProvider, store, dialogs } =
+    p;
   const { addItem } = p.turnStore.commands;
   const auth = useAuthCommand(dialogs, st.setAuthError);
   const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
@@ -219,43 +240,45 @@ function useDialogsAuthProviders(
     appDispatch: p.appDispatch,
     dialogs,
     isOAuthCodeDialogOpen,
-    getActiveProviderName: runtime.getActiveProviderName,
+    getActiveProviderName,
     setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(
-    settings,
+    p.settings,
     dialogs,
     addItem,
     p.settingsStore.commands.setEditorError,
   );
   const provider = useProviderDialog({
     addMessage: useDialogHistoryMessage(p.turnStore),
-    listProviders: runtime.listProviders,
-    getActiveProviderName: runtime.getActiveProviderName,
-    setProvider: runtime.setProvider,
-    getActiveModelName: runtime.getActiveModelName,
+    listProviders,
+    getActiveProviderName,
+    setProvider,
+    getActiveModelName: p.getActiveModelName,
     recordProviderSwitch: useProviderDialogRecording(
       p.recordRecordingEvent,
       p.recordingOwner,
-      recordingIntegration,
+      p.recordingIntegration,
     ),
     openProviderDialog: useCallback(() => dialogs.provider.open({}), [dialogs]),
     closeProviderDialog: dialogs.provider.close,
   });
-  useModelRuntimeSync({
-    config,
+  useDialogModelSync(
+    p.config,
     currentModel,
     setCurrentModel,
     currentModelLabel,
     setCurrentModelLabel,
-    getActiveModelName: runtime.getActiveModelName,
-    getActiveProviderName: runtime.getActiveProviderName,
-    resolveModelDisplayLabel: () => resolveModelIdentity(runtime),
+    p.getActiveModelName,
+    getActiveProviderName,
+    p.providerStatus,
+    p.getActiveProfileName,
+    p.getLoadBalancerStats,
     contextLimit,
     setContextLimit,
-  });
+  );
   useAppEventHandlers({
-    handleNewMessage,
+    handleNewMessage: p.handleNewMessage,
     setShowErrorDetails: p.terminalStore.commands.setShowErrorDetails,
     setConstrainHeight: p.terminalStore.commands.setConstrainHeight,
   });
@@ -281,16 +304,16 @@ function useDialogsWelcome(
   return useWelcomeOnboarding({
     settings,
     isFolderTrustComplete,
-    listProviders: p.runtime.listProviders,
-    listAvailableModels: p.runtime.listAvailableModels,
-    setActiveModel: p.runtime.setActiveModel,
-    readProviderStatus: p.runtime.providerStatus,
-    listSavedProfiles: p.runtime.listSavedProfiles,
-    saveProfileSnapshot: p.runtime.saveProfileSnapshot,
-    setDefaultProfileName: p.runtime.setDefaultProfileName,
-    loadProfileByName: p.runtime.loadProfileByName,
+    listProviders: p.listProviders,
+    listAvailableModels: p.listAvailableModels,
+    setActiveModel: p.setActiveModel,
+    readProviderStatus: p.providerStatus,
+    listSavedProfiles: p.listSavedProfiles,
+    saveProfileSnapshot: p.saveProfileSnapshot,
+    setDefaultProfileName: p.setDefaultProfileName,
+    loadProfileByName: p.loadProfileByName,
     switchProviderAfterAuth: p.switchProviderAfterAuth,
-    updateActiveProviderApiKey: p.runtime.updateActiveProviderApiKey,
+    updateActiveProviderApiKey: p.updateActiveProviderApiKey,
     authenticate: oauthControl.authenticate,
     suppressStartup: p.suppressStartupWelcome === true,
   });
@@ -306,19 +329,19 @@ function useDialogsAuth(
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
 ) {
-  const { config, settings, store, dialogs } = p;
+  const { store, dialogs } = p;
   const { addItem } = p.turnStore.commands;
   const theme = useThemeCommand(
-    settings,
+    p.settings,
     dialogs,
     addItem,
     p.settingsStore.commands.setThemeError,
   );
   const folderTrust = useFolderTrust({
     settingsStore: p.settingsStore,
-    settings,
+    settings: p.settings,
     addItem,
-    config,
+    config: p.config,
     store,
     dialogs,
   });
@@ -670,3 +693,36 @@ export function useAppDialogs(params: AppDialogsParams) {
 }
 
 export type AppDialogsResult = ReturnType<typeof useAppDialogs>;
+
+function useDialogModelSync(
+  config: AppDialogsParams['config'],
+  currentModel: string,
+  setCurrentModel: (model: string) => void,
+  currentModelLabel: string | undefined,
+  setCurrentModelLabel: (label: string | undefined) => void,
+  getActiveModelName: GetActiveModelNameOperation,
+  getActiveProviderName: GetActiveProviderNameOperation,
+  providerStatus: ProviderStatusOperation,
+  getActiveProfileName: GetActiveProfileNameOperation,
+  getLoadBalancerStats: GetLoadBalancerStatsOperation,
+  contextLimit: number | undefined,
+  setContextLimit: (limit: number | undefined) => void,
+) {
+  useModelRuntimeSync({
+    config,
+    currentModel,
+    setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
+    getActiveModelName,
+    getActiveProviderName,
+    resolveModelDisplayLabel: () =>
+      resolveModelIdentity({
+        providerStatus,
+        getActiveProfileName,
+        getLoadBalancerStats,
+      }),
+    contextLimit,
+    setContextLimit,
+  });
+}

@@ -34,9 +34,26 @@ const runtime = {
     ],
   }),
 };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtime;
+    return {
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { useProviderDialog } = await import('./useProviderDialog.js');
 
 describe('provider switch notices', () => {

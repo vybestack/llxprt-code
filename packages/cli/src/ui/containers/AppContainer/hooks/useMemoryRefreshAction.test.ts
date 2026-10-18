@@ -74,7 +74,8 @@ describe('useMemoryRefreshAction', () => {
       const counts: number[] = [];
       const { result, unmount } = renderHook(() =>
         useMemoryRefreshAction({
-          config: runtime,
+          refreshMemory: runtime.refreshMemory.bind(runtime),
+          readDebugMode: runtime.getDebugMode.bind(runtime),
           settings: createMockSettings({}),
           addItem: (item) => {
             items.push(item);

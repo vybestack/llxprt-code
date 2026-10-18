@@ -528,7 +528,13 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         return Reflect.get(target, property, receiver);
       },
     });
-    const resumed = await setupOwnerSessionRecording(request, agent, {}, null);
+    const resumed = await setupOwnerSessionRecording(
+      request,
+      agent.session,
+      () => agent.agentClient.mediaStore,
+      {},
+      null,
+    );
     expect(resumed?.flatMap((item) => item.blocks)).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },

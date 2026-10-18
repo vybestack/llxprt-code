@@ -8,9 +8,9 @@ import { renderHook } from '../../__tests__/render.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
-import { RuntimeContextProvider } from '../contexts/RuntimeContext.js';
+import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import type { SlashCommand } from '../commands/types.js';
 import { useProviderCommand } from './useProviderCommand.js';
 

@@ -16,17 +16,34 @@ import { z } from 'zod';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   bootstrapRuntimeAndConfig,
-  setupOwnerSessionRecording,
+  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
 } from '../cliSessionBootstrap.js';
 import { activateConfiguredProvider } from '../cliProviderInit.js';
 import { createForegroundAgent } from '../cliAgentBootstrap.js';
-import { createRuntimeOwnerFeatures } from '../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from './runtime-owner-features-fixture.js';
 import { loadSettings } from '../config/settings.js';
 import { parseArguments } from '../config/cliArgParser.js';
 import {
   runExitCleanup,
   __resetCleanupStateForTesting,
 } from '../utils/cleanup.js';
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    () => agent.agentClient.mediaStore,
+    argv,
+    selection,
+    warnings,
+  );
+}
 
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);
 const directory = z.string().parse(process.argv[3]);

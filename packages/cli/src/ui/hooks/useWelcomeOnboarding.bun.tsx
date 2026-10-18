@@ -39,9 +39,16 @@ const defaultRuntime: RuntimeStub = {
 // not capture the value at registration time — it reads through the `let` binding),
 // letting each test plug in a different fake runtime API.
 let currentRuntime: RuntimeStub = defaultRuntime;
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => currentRuntime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => currentRuntime;
+    return { useRuntimeApi: useSelectedTestRuntime };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 void vi.mock('../contexts/OAuthControlContext.js', () => ({
   useOAuthControl: () => ({ authenticate: async () => {} }),
 }));

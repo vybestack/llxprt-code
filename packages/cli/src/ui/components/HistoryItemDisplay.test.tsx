@@ -24,13 +24,29 @@ import { renderWithProviders } from '../../__tests__/render.js';
 // component test does not establish. Preserve the complete module shape and
 // replace only the hook so unrelated exports keep their production contract.
 const actual = { ...(await import('../contexts/RuntimeContext.js')) };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...actual,
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'gemini' }),
-    getEphemeralSetting: () => undefined,
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'gemini' }),
+      getEphemeralSetting: () => undefined,
+    });
+    return {
+      ...actual,
+      useGetWorkspaceDirectories: () => () => [],
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 // Mock child components
 void vi.mock('./messages/ToolGroupMessage.js', () => ({

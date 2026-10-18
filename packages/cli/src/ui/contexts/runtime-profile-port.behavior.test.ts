@@ -47,9 +47,9 @@ import { assembleModelSelection } from '../../../../agents/src/api/model-selecti
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
-import { createRuntimeApi } from './RuntimeContext.js';
-import { projectRuntimeAgent } from './runtimeProfileAgent.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
+import { projectRuntimeAgent } from '../../__tests__/runtime-profile-agent-fixture.js';
 
 /**
  * @license

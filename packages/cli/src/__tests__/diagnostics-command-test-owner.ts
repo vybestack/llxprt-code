@@ -17,7 +17,11 @@ export function registerDiagnosticsCommand(owner: CommandOwnerFixture) {
         if (agent === null) throw new Error('agent not available');
         return agent.tools.list();
       },
-      owner.runtimeApi,
+      owner.runtimeApi.getLoadBalancerStats,
+      owner.runtimeApi.getLoadBalancerTokenAccounting,
+      owner.runtimeApi.getRuntimeDiagnosticsSnapshot,
+      owner.runtimeApi.getSessionTokenUsage,
+      owner.runtimeApi.providerStatus,
       owner.oauthControl,
     ),
   );

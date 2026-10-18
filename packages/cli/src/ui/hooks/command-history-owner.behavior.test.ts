@@ -1,9 +1,10 @@
-import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { bindCommandHistoryLoader } from './commandHistoryLoaderHost.js';
+
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import {
@@ -15,7 +16,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createChatCommand } from '../commands/chatCommand.js';
 import { bindChatRecordingOperations } from '../commands/chatCommandHost.js';

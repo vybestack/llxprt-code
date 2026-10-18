@@ -17,13 +17,19 @@
  */
 
 import { describe, it, expect, afterEach, afterAll } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+  mkdirSync,
+  realpathSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ApprovalMode } from '@vybestack/llxprt-code-agents';
+import { ApprovalMode, createAgent } from '@vybestack/llxprt-code-agents';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
-import { createTaskAgent } from './config.js';
+import { createTaskAgentConfig } from './config.js';
 
 const AUTH_ENV_KEYS = [
   'USE_CCPA',
@@ -107,14 +113,16 @@ function activateFakeProvider(): void {
 }
 
 async function buildAgent(
-  settings: Parameters<typeof createTaskAgent>[0] = {},
+  settings: Parameters<typeof createTaskAgentConfig>[0] = {},
   extensions: LlxprtExtension[] = [],
   taskId = 'task-agent-test',
 ): Promise<Agent> {
   const previousCwd = process.cwd();
   process.chdir(WORKSPACE);
   try {
-    return await createTaskAgent(settings, extensions, taskId);
+    return await createAgent(
+      createTaskAgentConfig(settings, extensions, taskId),
+    );
   } finally {
     process.chdir(previousCwd);
   }
@@ -298,6 +306,35 @@ describe('config', () => {
           expect(names).toContain('ext-server');
         } finally {
           await disposeAgent(agent);
+        }
+      });
+    }, 30_000);
+
+    it('captures declarative task input before the host acquires its session', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        const previousCwd = process.cwd();
+        process.chdir(WORKSPACE);
+        try {
+          process.env.LLXPRT_DEFAULT_PROVIDER = '  captured-provider  ';
+          const input = createTaskAgentConfig({}, [], 'deferred-task');
+          delete process.env.LLXPRT_DEFAULT_PROVIDER;
+          const unconfigured = createTaskAgentConfig(
+            {},
+            [],
+            'unconfigured-task',
+          );
+          expect(input.provider).toBe('captured-provider');
+          expect(input.provider).not.toBe(unconfigured.provider);
+          expect(input.workingDir).toBe(realpathSync(WORKSPACE));
+          expect(input.sessionId).not.toBe(unconfigured.sessionId);
+          const agent = await createAgent(input);
+          try {
+            expect(await drainTypes(agent)).toContain('done');
+          } finally {
+            await disposeAgent(agent);
+          }
+        } finally {
+          process.chdir(previousCwd);
         }
       });
     }, 30_000);

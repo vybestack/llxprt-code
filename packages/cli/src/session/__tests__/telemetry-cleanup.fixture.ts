@@ -1,4 +1,3 @@
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -57,7 +56,8 @@ import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MemoryTokenStore } from '../../../../agents/src/api/__tests__/helpers/provider-auth-fixtures.js';
 import { fixturesDir } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { runNonInteractive } from '../../nonInteractiveCli.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { runNonInteractive } from '../../__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from '../../config/settings.js';
 
 /**

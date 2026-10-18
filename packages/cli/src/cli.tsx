@@ -24,10 +24,15 @@ import {
   type WorkspaceSkillOperations,
   type RuntimeProviderManager,
   type Config,
+  type IContent,
+  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 
-import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProfileApplication,
+} from '@vybestack/llxprt-code-agents';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -110,7 +115,11 @@ import {
   ensureAcpProviderActivated,
   type ConfiguredProviderActivationResult,
 } from './cliProviderInit.js';
-import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
+import {
+  guardUnconfiguredProvider,
+  isProviderConfigured,
+  reportUnconfiguredProviderError,
+} from './unconfiguredProviderGuard.js';
 import {
   constructAgentWithSpinner,
   prepareTerminalSession,
@@ -130,8 +139,35 @@ import {
   resolveBootstrapSelection,
   type BootstrapSelection,
 } from './observation/jspWiring.js';
-import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
-import { formatNonInteractiveError } from './session/errorReporting.js';
+import {
+  dispatchInteractiveOrNonInteractive,
+  runPipedOrPromptSession,
+  type ValidatedNonInteractiveRun,
+} from './session/nonInteractiveSession.js';
+import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
+import {
+  createNonInteractiveRun,
+  createHeadlessTurn,
+  createHeadlessInput,
+  createHeadlessCommandRun,
+  createHeadlessCommandLoader,
+  resolveHeadlessSlash,
+  createHeadlessFeedback,
+  createHeadlessErrorReporter,
+} from './nonInteractiveBindings.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from './utils/apiErrorFormatting.js';
+import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from './ui/utils/modelIdentity.js';
+import {
+  reportNonInteractiveError,
+  formatNonInteractiveError,
+} from './session/errorReporting.js';
 import {
   runDirectImageModeAndExit,
   buildImageModeFlags,
@@ -263,84 +299,233 @@ function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
  * connection and session recording run AFTER because they depend on the
  * initialize() the Agent performs.
  */
-async function constructForegroundAgentAndDispatch(
-  config: Config,
-  settings: LoadedSettings,
-  argv: ParsedCliArgs,
-  workspaceRoot: string,
-  providerActivation: ConfiguredProviderActivationResult,
-  hasPipedInput: boolean,
-  readStdinData: () => Promise<string>,
-  bootstrapSelection: BootstrapSelection | null,
-  getMcpAuthProviderFactory: RuntimeConfigBootstrap['getMcpAuthProviderFactory'],
-  providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  policyOwner?: RuntimePolicyOwner,
-  oauthManager?: OAuthManager,
-  providerFileLifecycle?: ProviderFileLifecycle,
-  credentialAuthority?: CredentialAuthority,
-): Promise<void> {
-  // Configure Unicode rendering before any Ink render (including the MCP
-  // initialization spinner inside constructAgentWithSpinner) so that Windows
-  // consoles with non-UTF-8 codepages fall back to ASCII borders/spinners.
-  configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
-  let restartExtension:
+class ForegroundSessionHost {
+  readonly #foreground: Promise<Agent>;
+  #restartExtension:
     | ((extension: LlxprtExtension) => Promise<void>)
     | undefined;
-  let skillOperations:
+  #skillOperations:
     | Pick<
         WorkspaceSkillOperations,
         'list' | 'find' | 'reload' | 'isAdminEnabled'
       >
     | undefined;
-  const agent = await constructAgentWithSpinner(
-    config,
-    providerManager,
-    settingsService,
-    settingsOwner,
-    providerActivation.activationPreflight,
-    providerActivation.intent,
-    getMcpAuthProviderFactory,
-    (skills) => {
-      skillOperations = skills;
-    },
-    (restart) => {
-      restartExtension = restart;
-    },
-    policyOwner,
-    oauthManager,
-    providerFileLifecycle,
-    argv,
-    credentialAuthority,
-  );
-  await connectIdeClientIfEnabled(agent.ide);
-
-  const recordingStartupWarnings: string[] = [];
-  const resumedHistory = await setupOwnerSessionRecording(
-    config,
-    agent,
-    argv,
-    bootstrapSelection,
-    recordingStartupWarnings,
-  );
-
-  await dispatchInteractiveOrNonInteractive({
-    oauthManager,
-    skillOperations,
-    restartExtension,
-    config,
-    agent,
-    settings,
-    workspaceRoot,
-    recordingOwner: 'agent',
-    runtimeSettings: { owner: settingsOwner, store: settingsService },
-    resumedHistory,
-    recordingStartupWarnings,
-    hasPipedInput,
-    readStdinData,
-    suppressStartupWelcome: hasExplicitProviderProfileSelector(argv),
-  });
+  constructor(
+    private readonly config: Config,
+    private readonly settings: LoadedSettings,
+    private readonly argv: ParsedCliArgs,
+    private readonly workspaceRoot: string,
+    providerActivation: ConfiguredProviderActivationResult,
+    private readonly hasPipedInput: boolean,
+    private readonly readStdinData: () => Promise<string>,
+    private readonly bootstrapSelection: BootstrapSelection | null,
+    getMcpAuthProviderFactory: RuntimeConfigBootstrap['getMcpAuthProviderFactory'],
+    providerManager: RuntimeProviderManager,
+    settingsService: SettingsService,
+    private readonly settingsOwner: SessionSettingsOwner,
+    policyOwner?: RuntimePolicyOwner,
+    private readonly oauthManager?: OAuthManager,
+    providerFileLifecycle?: ProviderFileLifecycle,
+    credentialAuthority?: CredentialAuthority,
+  ) {
+    configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
+    this.#foreground = constructAgentWithSpinner(
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+      providerActivation.activationPreflight,
+      providerActivation.intent,
+      getMcpAuthProviderFactory,
+      (skills) => {
+        this.#skillOperations = skills;
+      },
+      (restart) => {
+        this.#restartExtension = restart;
+      },
+      policyOwner,
+      oauthManager,
+      providerFileLifecycle,
+      argv,
+      credentialAuthority,
+    );
+    this.settingsService = settingsService;
+  }
+  private readonly settingsService: SettingsService;
+  async run(): Promise<void> {
+    const agent = await this.#foreground;
+    await connectIdeClientIfEnabled(
+      () => agent.ide.getIdeMode(),
+      async () => {
+        const ideClient = agent.ide.getIdeClient();
+        if (ideClient) await ideClient.connect();
+      },
+    );
+    const warnings: string[] = [];
+    const history = await setupOwnerSessionRecording(
+      this.config,
+      agent.session,
+      () => agent.agentClient.mediaStore,
+      this.argv,
+      this.bootstrapSelection,
+      warnings,
+    );
+    const input = this.config.getQuestion();
+    const bus = agent.getMessageBus();
+    await dispatchInteractiveOrNonInteractive(
+      input,
+      () =>
+        typeof this.config.isInteractive === 'function' &&
+        this.config.isInteractive(),
+      'agent',
+      warnings,
+      () => getUserStartupWarnings(this.settings.merged),
+      async (startupWarnings) => {
+        await this.launchInteractive(startupWarnings, history, bus);
+      },
+      () => this.config.getOutputFormat(),
+      (initialInput) =>
+        runPipedOrPromptSession(
+          initialInput,
+          this.hasPipedInput,
+          this.readStdinData,
+          () => this.validateRun(),
+          () => agent.hooks.triggerSessionStart(),
+          (reason) => agent.hooks.triggerSessionEnd(reason),
+          (error) => reportNonInteractiveError(this.config, error),
+          () => this.settingsOwner.telemetry.flush(),
+        ),
+    );
+  }
+  private async validateRun(): Promise<ValidatedNonInteractiveRun> {
+    const agent = await this.#foreground;
+    const validated = await validateNonInteractiveAuth(
+      this.settings.merged.useExternalAuth,
+      this.config,
+      this.settings,
+      runExitCleanup,
+      agent.providerManager,
+      (key, value) => agent.setEphemeralSetting(key, value),
+    );
+    return {
+      run: createNonInteractiveRun(
+        () => isProviderConfigured(agent.providerManager),
+        () => reportUnconfiguredProviderError(validated),
+        () => validated.getOutputFormat(),
+        () => validated.getDebugMode(),
+        () => validated.getSessionId(),
+        () => validated.getModel(),
+        createHeadlessFeedback(() => validated.getDebugMode()),
+        () => agent.getEphemeralSetting('emojifilter'),
+        resolveHeadlessSlash(
+          true,
+          createHeadlessCommandRun(
+            createHeadlessCommandLoader(
+              () => validated.userCommandsDir,
+              () => validated.projectCommandsDir,
+              () => validated.getProjectRoot(),
+              () => validated.getExtensions(),
+              () => validated.getFolderTrust(),
+              () => agent.ide.isTrustedFolder.bind(agent.ide),
+              () => validated.getShellReplacement(),
+              () => validated.getExcludeTools(),
+              () => validated.getCoreTools(),
+              () => validated.getApprovalMode(),
+              () => validated.getShellExecutionConfig(),
+              () => validated.getTargetDir(),
+              () => validated.getShouldUseNodePtyShell(),
+            ),
+            () => validated.getSessionId(),
+            () => agent.metrics.getMetrics(),
+          ),
+        ),
+        () =>
+          this.headlessTurn(
+            () => validated.getFileFilteringOptions(),
+            () => validated.getEnableRecursiveFileSearch(),
+            () => validated.getMaxSessionTurns(),
+            () => validated.getQuiet(),
+            () => validated.getSessionId(),
+          ),
+        createHeadlessErrorReporter(
+          () => getActiveProviderNameForApiError(validated),
+          (provider) => getErrorFallbackModel(validated, provider),
+        ),
+        () => this.settingsOwner.telemetry.flush(),
+      ),
+      report: (error) => reportNonInteractiveError(validated, error),
+    };
+  }
+  private async headlessTurn(
+    readFiltering: Parameters<typeof createHeadlessInput>[0],
+    readRecursive: Parameters<typeof createHeadlessInput>[1],
+    readMaxTurns: Parameters<typeof createHeadlessTurn>[2],
+    readQuiet: Parameters<typeof createHeadlessTurn>[3],
+    readSessionId: Parameters<typeof createHeadlessTurn>[4],
+  ) {
+    const agent = await this.#foreground;
+    return createHeadlessTurn(
+      createHeadlessInput(
+        readFiltering,
+        readRecursive,
+        (...args) => agent.workspace.shouldIgnoreFile(...args),
+        (...args) => agent.workspace.shouldGitIgnoreFile(...args),
+        (...args) => agent.workspace.shouldLlxprtIgnoreFile(...args),
+        (...args) => agent.workspace.filterFiles(...args),
+        (...args) => agent.workspace.filterFilesWithReport(...args),
+        (...args) => agent.workspace.getGlobExcludes(...args),
+        (...args) => agent.workspace.getReadManyFilesExcludes(...args),
+        () => agent.workspace.getDirectories(),
+        (path) => agent.workspace.containsPath(path),
+        (name) => agent.tools.get(name),
+        (server, uri) => agent.mcp.readResource(server, uri),
+        (identifier) => agent.mcp.findResource(identifier),
+      ),
+      (query, options) => agent.stream(query, options),
+      readMaxTurns,
+      readQuiet,
+      readSessionId,
+      () => agent.getEphemeralSetting('reasoning.includeInResponse') !== false,
+      () =>
+        resolveContentPrefixIdentity(
+          createCliModelIdentityRuntime({
+            getProvider: () => agent.getProvider(),
+            getModel: () => agent.getModel(),
+            getCurrentSequenceModel: () => agent.getCurrentSequenceModel(),
+            getActiveProfileName: () => agent.getActiveProfileName(),
+          }),
+        ),
+      () => agent.metrics.getMetrics(),
+      async () => {},
+    );
+  }
+  private async launchInteractive(
+    warnings: string[],
+    history: IContent[] | null,
+    bus: MessageBus,
+  ): Promise<void> {
+    const agent = await this.#foreground;
+    await startInteractiveUI(
+      this.config,
+      agent,
+      this.settings,
+      warnings,
+      this.workspaceRoot,
+      {
+        recordingOwner: 'agent',
+        oauthManager: this.oauthManager,
+        runtimeSettings: {
+          owner: this.settingsOwner,
+          store: this.settingsService,
+        },
+        skillOperations: this.#skillOperations,
+        restartExtension: this.#restartExtension,
+        runtimeMessageBus: bus,
+        resumedHistory: history ?? undefined,
+        suppressStartupWelcome: hasExplicitProviderProfileSelector(this.argv),
+      },
+    );
+  }
 }
 
 /**
@@ -353,7 +538,7 @@ async function constructForegroundAgentAndDispatch(
  *    data (`bootstrapRuntimeAndConfig`). No MessageBus and no Config.initialize
  *    happen here — both are owned by agent construction. The pre-Config
  *    provider-runtime assembly (identity, session bus, provider/OAuth managers)
- *    is owned by agents (`prepareAgentPreflight`).
+ *    is owned by the providers package (`assembleCliProviderRuntime`).
  * 2. Declarative preflight (pre-agent): the CLI assembles a declarative
  *    activation intent and calls the operation’s `preflight`
  *    agent-bootstrap entrypoint (via `activateConfiguredProvider`), which OWNS
@@ -572,7 +757,7 @@ export async function main() {
       activationOperation.sessionClient.getAgentClient().getHistory(),
     );
 
-    await constructForegroundAgentAndDispatch(
+    await new ForegroundSessionHost(
       config,
       settings,
       argv,
@@ -589,7 +774,7 @@ export async function main() {
       boot.oauthManager,
       boot.providerFileLifecycle,
       boot.credentialAuthority,
-    );
+    ).run();
   } finally {
     await activationOperation.dispose();
   }

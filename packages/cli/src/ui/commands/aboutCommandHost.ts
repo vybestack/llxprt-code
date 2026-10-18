@@ -3,7 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import {
+  type GetActiveProviderDetailsOperation,
+  type GetActiveProviderNameOperation,
+  type GetEphemeralSettingOperation,
+  type GetRuntimeDiagnosticsSnapshotOperation,
+  type ProviderStatusOperation,
+} from '../contexts/RuntimeContext.js';
+
 import type { AboutDetails } from './aboutCommand.js';
 
 function shouldRenderRuntimeModelLabel(
@@ -17,10 +24,10 @@ function shouldRenderRuntimeModelLabel(
 }
 
 function readProviderDetails(
-  readSnapshot: RuntimeApi['getRuntimeDiagnosticsSnapshot'],
-  readActiveProvider: RuntimeApi['getActiveProviderName'],
-  readActiveDetails: RuntimeApi['getActiveProviderDetails'],
-  readSetting: RuntimeApi['getEphemeralSetting'],
+  readSnapshot: GetRuntimeDiagnosticsSnapshotOperation,
+  readActiveProvider: GetActiveProviderNameOperation,
+  readActiveDetails: GetActiveProviderDetailsOperation,
+  readSetting: GetEphemeralSettingOperation,
 ): { modelVersion: string; provider: string; baseURL: string } {
   const snapshot = readSnapshot();
   const modelVersion = snapshot.modelName ?? 'Unknown';
@@ -47,15 +54,15 @@ function readProviderDetails(
 }
 
 export function bindAboutDetails(
-  readSnapshot: RuntimeApi['getRuntimeDiagnosticsSnapshot'],
-  readActiveProvider: RuntimeApi['getActiveProviderName'],
-  readActiveDetails: RuntimeApi['getActiveProviderDetails'],
-  readRuntimeSetting: RuntimeApi['getEphemeralSetting'],
+  readSnapshot: GetRuntimeDiagnosticsSnapshotOperation,
+  readActiveProvider: GetActiveProviderNameOperation,
+  readActiveDetails: GetActiveProviderDetailsOperation,
+  readRuntimeSetting: GetEphemeralSettingOperation,
   readConfiguredModel: () => string | undefined,
-  readConfiguredSetting: RuntimeApi['getEphemeralSetting'],
+  readConfiguredSetting: GetEphemeralSettingOperation,
   readConfiguredProvider: () => string | undefined,
   readIdeClient: () => string,
-  readProviderStatus: RuntimeApi['providerStatus'],
+  readProviderStatus: ProviderStatusOperation,
   readKeyfile: (provider: string) => string | undefined,
 ): () => Promise<AboutDetails> {
   return async () => {

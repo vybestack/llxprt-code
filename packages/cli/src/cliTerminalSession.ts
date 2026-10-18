@@ -174,7 +174,7 @@ export async function constructAgentWithSpinner(
       providerFileLifecycle,
     });
     if (argv) registerSessionSummaryWriter(argv, agent.metrics);
-    registerDynamicToolSettings(agent.tools);
+    registerDynamicToolSettings(() => agent.tools.describeConfiguration());
     registerShellJobShutdownNotice(() =>
       agent.tasks
         .listRunning()

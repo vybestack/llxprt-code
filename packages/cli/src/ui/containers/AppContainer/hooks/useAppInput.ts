@@ -3,7 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentStreamInputs,
+  StreamInteractionInputs,
+} from '../../../hooks/agentStream/useAgentStream.js';
+import type { SlashCommandProcessorCoreResult } from '../../../hooks/useSlashCommandProcessorCore.js';
+import type { LoadedSettings } from '../../../../config/settings.js';
+import type { BrowserTargetDeleter } from '../../../hooks/browserCatalogHost.js';
+import type { AppCommands } from '../../../contexts/AppCommandsContext.js';
 
 import { useIdePromptComplete } from './useIdePromptComplete.js';
 import {
@@ -11,16 +18,7 @@ import {
   computeIsAwaitingSlashCommandConfirmation,
 } from './inputActivity.js';
 
-import { useBrowserCatalogCommands } from '../../../hooks/useBrowserCatalogCommands.js';
 import { isEditorAvailable } from '@vybestack/llxprt-code-core';
-import {
-  bindOwnerBrowserResume,
-  bindRawBrowserResume,
-  bindRawBrowserSession,
-} from '../../../components/browserResumeHost.js';
-import { resumeOwnerSession } from '../../../utils/resumeOwnerSession.js';
-import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 
 import {
@@ -32,18 +30,10 @@ import { useStdin, useStdout } from 'ink';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/useAgentStream.js';
-import {
-  useBound,
-  useContentIdentityReader,
-  useTurnFlush,
-  useCancelRunningSubagents,
-} from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
 import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
-import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
-import { useVimMode } from '../../../contexts/VimModeContext.js';
 import { useVim } from '../../../hooks/vim.js';
 import { useTextBuffer } from '../../../components/shared/text-buffer.js';
 import { useInputHistoryStore } from '../../../hooks/useInputHistoryStore.js';
@@ -54,7 +44,6 @@ import { getPendingOAuthProvider } from '../../../oauthGlobalState.js';
 import type { PromptContentGenerator } from '../../../hooks/usePromptCompletion.js';
 import type { EditorType } from '@vybestack/llxprt-code-core';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
-import { useSlashCommandActions } from './useSlashCommandActions.js';
 import { useExitHandling } from './useExitHandling.js';
 import { useInputHandling } from './useInputHandling.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
@@ -68,23 +57,39 @@ import type {
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
-import type { SlashCommandProcessorActions } from '../../../hooks/slashCommandProcessor.js';
 
 import * as fs from 'fs';
 import type { AppBootstrapResult } from './useAppBootstrap.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
-import { useExtensionUpdates } from '../../../hooks/useExtensionUpdates.js';
 import { useLogger } from '../../../hooks/useLogger.js';
 import { useInputHistoryBootstrap } from './useInputHistoryBootstrap.js';
 import { useInitialPromptSubmit } from './useInitialPromptSubmit.js';
 import { useInputKeybindings } from './useInputKeybindings.js';
-import type {
-  SlashCommandRuntime,
-  StreamRuntime,
-  UiSubagentManager,
-} from '../../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../../cliUiRuntime.js';
 
-export interface AppInputParams {
+type InputStreamOperations = Omit<
+  AgentStreamInputs,
+  keyof StreamInteractionInputs | 'history'
+>;
+
+export interface AppInputParams extends InputStreamOperations {
+  commands: SlashCommandProcessorCoreResult;
+  setQuittingMessagesRef: React.MutableRefObject<
+    ((messages: HistoryItem[]) => void) | null
+  >;
+  disposeInput: () => Promise<void>;
+  readApprovalMode: Parameters<
+    typeof useAutoAcceptIndicator
+  >[0]['readApprovalMode'];
+  setApprovalMode: Parameters<
+    typeof useAutoAcceptIndicator
+  >[0]['setApprovalMode'];
+  generatePromptContent: PromptContentGenerator;
+  resumeBrowserTarget: AppCommands['resumeBrowserTarget'];
+  readBrowserCatalog: AppCommands['readBrowserCatalog'];
+  deleteBrowserTarget: BrowserTargetDeleter;
+  refreshMemory: Parameters<typeof useMemoryRefreshAction>[0]['refreshMemory'];
+  readDebugMode: () => boolean;
   projectTempDir: string;
   readInitialPrompt: () => string | undefined;
   isAgentClientPresent: () => boolean;
@@ -95,10 +100,7 @@ export interface AppInputParams {
     typeof useInputKeybindings
   >[0]['readInteractiveShellEnabled'];
   readMcpServers: Parameters<typeof useInputKeybindings>[0]['readMcpServers'];
-  streamRuntime: StreamRuntime;
-  slashCommandRuntime: SlashCommandRuntime;
-  agent: Agent;
-  settings: AppBootstrapResult['settings'];
+  settings: LoadedSettings;
   subagentManager?: UiSubagentManager;
   /**
    * Turn store; owns the committed history and the addItem/removeItems/
@@ -106,11 +108,6 @@ export interface AppInputParams {
    * selector where the stream needs it; commands are stable references.
    */
   turnStore: TurnStore;
-  recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
-  recordingOwner?: 'agent' | 'raw';
-  recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'];
-  recordingIntegration: AppBootstrapResult['recordingIntegration'];
-  runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
   setIdePromptAnswered: AppBootstrapResult['setIdePromptAnswered'];
   setLlxprtMdFileCount: AppBootstrapResult['setLlxprtMdFileCount'];
 
@@ -192,105 +189,17 @@ function useInputCoreCallbacks(p: AppInputParams) {
   };
 }
 
-function useSlashActions(
-  p: AppInputParams,
-  quitHandler: (messages: HistoryItem[]) => void,
-  extensions: ReturnType<typeof useExtensionUpdates>,
-): SlashCommandProcessorActions {
-  const actions = useStoreSelector(
-    p.settingsStore.store,
-    (s) => s.dialogActions,
-  );
-  return useSlashCommandActions({
-    ...actions,
-    dialogs: p.dialogs,
-    quitHandler,
-    setDebugMessage: p.settingsStore.commands.setDebugMessage,
-    toggleCorgiMode: noop,
-    toggleDebugProfiler: p.terminalStore.commands.toggleDebugProfiler,
-    dispatchExtensionStateUpdate: extensions.dispatchExtensionStateUpdate,
-    addConfirmUpdateExtensionRequest:
-      extensions.addConfirmUpdateExtensionRequest,
-  });
-}
-
 function noop(): void {}
 
-function useSlashCommandSetup(
-  p: AppInputParams,
-  quitHandler: (messages: HistoryItem[]) => void,
-  toggleVimEnabled: () => Promise<boolean>,
-) {
-  const {
-    agent,
-    settings,
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
-    setLlxprtMdFileCount,
-  } = p;
-  const { addItem, clearItems, loadHistory, refreshStatic, setIsProcessing } =
-    p.turnStore.commands;
-  const extensions = useExtensionUpdates(
-    p.slashCommandRuntime.getExtensions(),
-    addItem,
-    p.slashCommandRuntime.getWorkingDir(),
-    p.store,
-  );
-  const slashCommandProcessorActions = useSlashActions(
-    p,
-    quitHandler,
-    extensions,
-  );
-  const { todos, updateTodos } = useTodoContext();
-  const todoContextForCommands = useMemo(
-    () => ({ todos, updateTodos, refreshTodos: () => {} }),
-    [todos, updateTodos],
-  );
-  return useSlashCommandProcessor(
-    p.slashCommandRuntime,
-    agent,
-    settings,
-    addItem,
-    clearItems,
-    loadHistory,
-    refreshStatic,
-    toggleVimEnabled,
-    setIsProcessing,
-    setLlxprtMdFileCount,
-    slashCommandProcessorActions,
-    p.store,
-    extensions.extensionsUpdateState,
-    true,
-    todoContextForCommands,
-    recordingIntegrationRef?.current ?? undefined,
-    recordingSwapCallbacks,
-    p.recordingOwner,
-  );
-}
-
 function useInputCoreProcessors(p: AppInputParams) {
-  const { toggleVimEnabled } = useVimMode();
-  const setQuittingMessagesRef = useRef<
-    ((messages: HistoryItem[]) => void) | null
-  >(null);
-  const quitHandler = useCallback((messages: HistoryItem[]) => {
-    if (setQuittingMessagesRef.current)
-      setQuittingMessagesRef.current(messages);
-  }, []);
-  const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);
-  const disposeAgentBeforeExit = useCallback(
-    () => p.agent.dispose(),
-    [p.agent],
-  );
   const exitResult = useExitHandling({
-    handleSlashCommand: slashResult.handleSlashCommand,
+    handleSlashCommand: p.commands.handleSlashCommand,
     endHookSession: p.endInputHookSession,
-    onBeforeExit: disposeAgentBeforeExit,
+    onBeforeExit: p.disposeInput,
   });
-  setQuittingMessagesRef.current = exitResult.setQuittingMessages;
+  p.setQuittingMessagesRef.current = exitResult.setQuittingMessages;
   return {
-    setQuittingMessagesRef,
-    ...slashResult,
+    ...p.commands,
     ...exitResult,
   };
 }
@@ -378,7 +287,8 @@ function useStreamInteraction(
   const handleSlashCommand = core.handleSlashCommand;
   const setDebugMessage = p.settingsStore.commands.setDebugMessage;
   const performMemoryRefresh = useMemoryRefreshAction({
-    config: p.slashCommandRuntime,
+    refreshMemory: p.refreshMemory,
+    readDebugMode: p.readDebugMode,
     settings,
     addItem,
     setLlxprtMdFileCount: p.setLlxprtMdFileCount,
@@ -418,79 +328,51 @@ function useInputStreamSetup(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const {
-    agent,
-    streamRuntime: runtime,
-    recordingIntegration: recorder,
-    subagentManager,
-    recordingOwner,
-  } = p;
   const { bufferSetup, input } = useStreamInteraction(p, core);
-  const { tools, mcp, metrics, tasks } = agent;
-  const { session, events, model } = runtime;
-  const { ephemeral, shell, checkpoint, files, projectTempDir } = runtime;
-  const { settings: prefs } = runtime;
-  const { bucketFailover: buckets, sessionLimits: limits } = runtime;
   const agentStreamResult = useAgentStream({
     ...input,
-    readHistory: useBound(agent, agent.getHistory),
-    isCheckpointingEnabled: useBound(
-      checkpoint,
-      checkpoint.getCheckpointingEnabled,
-    ),
-    projectCheckpointsDir: runtime.projectCheckpointsDir,
-    stream: useBound(agent, agent.stream),
-    setDisplayCallbacks: useBound(tools, tools.setDisplayCallbacks),
-    setEditorCallbacks: useBound(tools, tools.setEditorCallbacks),
-    openClientChannel: useBound(tools, tools.openClientChannel),
-    subscribeChildTools: useBound(tools, tools.subscribeChildTools),
-    appendShellHistory: useBound(agent, agent.addHistory),
-    injectSteer: useBound(agent, agent.injectSteer),
-    cancelRunningAsyncTasks: useCancelRunningSubagents(tasks),
-    getProviderContextLimit: useBound(agent, agent.getProviderContextLimit),
-    getContentPrefixIdentity: useContentIdentityReader(agent),
-    getToolHandle: useBound(tools, tools.get),
-    findResource: useBound(mcp, mcp.findResource),
-    readResource: useBound(mcp, mcp.readResource),
-    setLastPromptTokenCount: useBound(metrics, metrics.setLastPromptTokenCount),
-    subscribeTaskNotifications: useBound(tasks, tasks.subscribeNotifications),
-    flushRecording: useTurnFlush(agent.session, recordingOwner, recorder),
-    readSessionId: useBound(session, session.getSessionId),
-    subscribeMcpUpdates: useBound(events, events.onMcpClientUpdate),
-    resetBuckets: useCallback(() => buckets.resetBuckets?.(), [buckets]),
-    resetBucketSession: useCallback(
-      () => buckets.resetBucketSession?.(),
-      [buckets],
-    ),
-    ensureBucketsAuthenticated: useCallback(async () => {
-      await buckets.ensureBucketsAuthenticated?.();
-    }, [buckets]),
-    atCommandConfig: files,
-    logUserPrompt: useBound(prefs, prefs.logUserPrompt),
-    getModel: useBound(model, model.getModel),
-    getProvider: useBound(model, model.getProvider),
-    readSelectedProvider: useBound(prefs, prefs.readSelectedProvider),
-    readCitations: useBound(prefs, prefs.readCitations),
-    readProfileName: useBound(prefs, prefs.readProfileName),
-    readContextLimit: useCallback(
-      () => ephemeral.getEphemeralSetting('context-limit'),
-      [ephemeral],
-    ),
-    getMaxSessionTurns: useBound(limits, limits.getMaxSessionTurns),
-    readEmojiFilterMode: useCallback(
-      () => resolveEmojiFilterMode(ephemeral),
-      [ephemeral],
-    ),
-    projectTempDir,
-    checkpointOperations: checkpoint.getCheckpointingEnabled()
-      ? checkpoint.checkpoints
-      : undefined,
-    readTargetDir: useBound(session, session.getTargetDir),
-    readUsePty: useBound(shell, shell.getShouldUseNodePtyShell),
-    readShellExecutionConfig: useBound(shell, shell.getShellExecutionConfig),
-    readPtyWidth: useBound(shell, shell.getPtyTerminalWidth),
-    readPtyHeight: useBound(shell, shell.getPtyTerminalHeight),
-    subagentManager,
+    readHistory: p.readHistory,
+    isCheckpointingEnabled: p.isCheckpointingEnabled,
+    projectCheckpointsDir: p.projectCheckpointsDir,
+    stream: p.stream,
+    setDisplayCallbacks: p.setDisplayCallbacks,
+    setEditorCallbacks: p.setEditorCallbacks,
+    openClientChannel: p.openClientChannel,
+    subscribeChildTools: p.subscribeChildTools,
+    appendShellHistory: p.appendShellHistory,
+    injectSteer: p.injectSteer,
+    cancelRunningAsyncTasks: p.cancelRunningAsyncTasks,
+    getProviderContextLimit: p.getProviderContextLimit,
+    getContentPrefixIdentity: p.getContentPrefixIdentity,
+    getToolHandle: p.getToolHandle,
+    findResource: p.findResource,
+    readResource: p.readResource,
+    setLastPromptTokenCount: p.setLastPromptTokenCount,
+    subscribeTaskNotifications: p.subscribeTaskNotifications,
+    flushRecording: p.flushRecording,
+    readSessionId: p.readSessionId,
+    subscribeMcpUpdates: p.subscribeMcpUpdates,
+    resetBuckets: p.resetBuckets,
+    resetBucketSession: p.resetBucketSession,
+    ensureBucketsAuthenticated: p.ensureBucketsAuthenticated,
+    atCommandConfig: p.atCommandConfig,
+    logUserPrompt: p.logUserPrompt,
+    getModel: p.getModel,
+    getProvider: p.getProvider,
+    readSelectedProvider: p.readSelectedProvider,
+    readCitations: p.readCitations,
+    readProfileName: p.readProfileName,
+    readContextLimit: p.readContextLimit,
+    getMaxSessionTurns: p.getMaxSessionTurns,
+    readEmojiFilterMode: p.readEmojiFilterMode,
+    projectTempDir: p.projectTempDir,
+    checkpointOperations: p.checkpointOperations,
+    readTargetDir: p.readTargetDir,
+    readUsePty: p.readUsePty,
+    readShellExecutionConfig: p.readShellExecutionConfig,
+    readPtyWidth: p.readPtyWidth,
+    readPtyHeight: p.readPtyHeight,
+    subagentManager: p.subagentManager,
   });
   return { ...bufferSetup, agentStreamResult };
 }
@@ -663,7 +545,7 @@ function useInputFinish(
   core: ReturnType<typeof useInputCore>,
   stream: ReturnType<typeof useInputStream>,
 ) {
-  const { settings, setIdePromptAnswered, agent } = p;
+  const { settings, setIdePromptAnswered } = p;
   const { handleSlashCommand } = core;
   const {
     buffer,
@@ -691,15 +573,9 @@ function useInputFinish(
     stream.activeShellPtyId != null && !embeddedShellFocused,
     stream.lastOutputTime,
   );
-  const readApprovalMode = useCallback(() => agent.getApprovalMode(), [agent]);
-  const setApprovalMode = useCallback(
-    (mode: Parameters<typeof agent.setApprovalMode>[0]) =>
-      agent.setApprovalMode(mode),
-    [agent],
-  );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({
-    readApprovalMode,
-    setApprovalMode,
+    readApprovalMode: p.readApprovalMode,
+    setApprovalMode: p.setApprovalMode,
     addItem: p.turnStore.commands.addItem,
   });
   // Store mirrors: the stream/command projections the layout tree reads live
@@ -756,6 +632,7 @@ function useInputStartup(
   const initialPrompt = useMemo(() => readInitialPrompt(), [readInitialPrompt]);
   useInitialPromptSubmit({
     initialPrompt,
+    commandsReady: core.slashCommands !== undefined,
     submitPrompt: stream.handleUserInputSubmit,
     agentClientPresent: p.isAgentClientPresent(),
     interactiveRuntimeReady: stream.interactiveRuntimeReady,
@@ -764,84 +641,18 @@ function useInputStartup(
   });
 }
 
-function usePromptContentGenerator(client: {
-  generateContent: PromptContentGenerator;
-}): PromptContentGenerator {
-  return useMemo(
-    () =>
-      (...input: Parameters<PromptContentGenerator>) =>
-        client.generateContent(...input),
-    [client],
-  );
-}
-
 export function useAppInput(params: AppInputParams) {
   const core = useInputCore(params);
   const stream = useInputStream(params, core);
   const finish = useInputFinish(params, core, stream);
-  const {
-    agent,
-    slashCommandRuntime: config,
-    turnStore,
-    store,
-    recordingOwner,
-    recordingSwapCallbacks,
-  } = params;
-  const { readBrowserCatalog, deleteBrowserTarget } = useBrowserCatalogCommands(
-    agent.session,
-    recordingOwner,
-    config,
-    recordingSwapCallbacks,
-    agent.agentClient.mediaStore,
-  );
-  const resumeBrowserTarget = useMemo(() => {
-    const close = () => store.commands.closeDialog('sessionBrowser');
-    if (recordingOwner === 'agent')
-      return bindOwnerBrowserResume(
-        (target) =>
-          resumeOwnerSession(
-            agent.session.resume.bind(agent.session),
-            target.kind === 'session'
-              ? target.session.sessionId
-              : target.checkpointId,
-            resolveEmojiFilterMode(config),
-            agent.session.listBrowserTargetsDetailed.bind(agent.session),
-          ),
-        turnStore.commands.loadHistory,
-        turnStore.commands.addItem,
-        close,
-      );
-    const logger = new DebugLogger('llxprt:ui:dialogmanager');
-    return bindRawBrowserResume(
-      bindRawBrowserSession(
-        config,
-        () => agent.agentClient.getHistoryService(),
-        recordingSwapCallbacks,
-        logger,
-      ),
-      () => resolveEmojiFilterMode(config),
-      core.commandContext.ui.clear,
-      turnStore.commands.addItem,
-      close,
-      logger,
-    );
-  }, [
-    agent,
-    config,
-    turnStore,
-    store,
-    recordingOwner,
-    recordingSwapCallbacks,
-    core.commandContext.ui.clear,
-  ]);
   useInputStartup(params, core, stream);
   return {
     buffer: stream.buffer,
     commandContext: core.commandContext,
-    generatePromptContent: usePromptContentGenerator(params.agent.agentClient),
-    resumeBrowserTarget,
-    readBrowserCatalog,
-    deleteBrowserTarget,
+    generatePromptContent: params.generatePromptContent,
+    resumeBrowserTarget: params.resumeBrowserTarget,
+    readBrowserCatalog: params.readBrowserCatalog,
+    deleteBrowserTarget: params.deleteBrowserTarget,
     inputHistoryStore: stream.inputHistoryStore,
     handleUserInputSubmit: stream.handleUserInputSubmit,
     handleSteer: stream.handleSteer,

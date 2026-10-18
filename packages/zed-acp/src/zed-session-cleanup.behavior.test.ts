@@ -9,23 +9,29 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { Config } from '@vybestack/llxprt-code-core';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config, DebugLogger, ApprovalMode } from '@vybestack/llxprt-code-core';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   buildZedSessionAgent,
+  acquireZedSession,
   captureZedHostInputs,
 } from './zed-session-agent.js';
 import * as acp from '@agentclientprotocol/sdk';
+import { nodeChatSessionFileLister } from './zed-session-loader.js';
 import { ZedAgent } from './zedIntegration.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 let managers: ProviderManager[] = [];
 
 let host: Config | undefined;
+let rootDir: string;
 function buildHost(): Config {
   host = new Config({
     sessionId: crypto.randomUUID(),
-    cwd: process.cwd(),
-    targetDir: process.cwd(),
+    cwd: rootDir,
+    targetDir: rootDir,
     debugMode: false,
     model: 'cleanup-test-model',
     provider: 'openai',
@@ -34,7 +40,22 @@ function buildHost(): Config {
 }
 function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
   const settingsService = new SettingsService();
-  const connection = new acp.AgentSideConnection(
+  const connection = createConnection(config, settingsService);
+  return buildZedSessionAgent(
+    config,
+    captureZedHostInputs(config),
+    connection,
+    undefined,
+    crypto.randomUUID(),
+    rootDir,
+    settingsService,
+    trust,
+    { credentialAuthority: new CredentialAuthority() },
+  );
+}
+
+function createConnection(config: Config, settingsService: SettingsService) {
+  return new acp.AgentSideConnection(
     (connection) =>
       new ZedAgent(
         config,
@@ -51,22 +72,32 @@ function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
       }),
     ),
   );
-  return buildZedSessionAgent(
+}
+async function buildAcquiredSession(
+  config: Config,
+  trust: WorkspaceTrustLifecycle,
+) {
+  const settings = new SettingsService();
+  return acquireZedSession(
     config,
     captureZedHostInputs(config),
-    connection,
+    createConnection(config, settings),
     undefined,
     crypto.randomUUID(),
-    process.cwd(),
-    settingsService,
+    rootDir,
+    new DebugLogger('acp-cleanup-test'),
+    settings,
     trust,
     { credentialAuthority: new CredentialAuthority() },
+    false,
+    nodeChatSessionFileLister,
   );
 }
 
 describe('ACP session infrastructure cleanup', () => {
   let trust: WorkspaceTrustLifecycle;
-  beforeEach(() => {
+  beforeEach(async () => {
+    rootDir = await mkdtemp(join(tmpdir(), 'acp-session-owner-'));
     trust = new WorkspaceTrustLifecycle();
   });
   afterEach(async () => {
@@ -76,6 +107,26 @@ describe('ACP session infrastructure cleanup', () => {
     await trust.dispose();
     await host?.dispose();
     host = undefined;
+    await rm(rootDir, { recursive: true, force: true });
+  });
+
+  it('keeps acquired session policy isolated when a sibling is retired', async () => {
+    const config = buildHost();
+    const first = await buildAcquiredSession(config, trust);
+    const second = await buildAcquiredSession(config, trust);
+    try {
+      first.session.setMode(ApprovalMode.YOLO);
+      expect(first.session.getApprovalMode()).toBe(ApprovalMode.YOLO);
+      expect(second.session.getApprovalMode()).not.toBe(
+        first.session.getApprovalMode(),
+      );
+      await first.session.dispose();
+      second.session.setMode(ApprovalMode.AUTO_EDIT);
+      expect(second.session.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);
+    } finally {
+      await first.session.dispose();
+      await second.session.dispose();
+    }
   });
 
   it('releases Config subscriptions when the owned manager throws synchronously during disposal', async () => {

@@ -11,7 +11,7 @@ import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createMockSettings, renderHook } from '../../__tests__/render.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
-import { RuntimeContextProvider } from '../contexts/RuntimeContext.js';
+import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { useAppStores } from '../AppContainerRuntime.js';
@@ -65,7 +65,7 @@ describe('application dialog operation ownership', () => {
               turnStore: stores.turnStore,
               appDispatch: () => {},
               handleNewMessage: () => {},
-              runtime: context.runtimeApi,
+              ...context.runtimeApi,
               suppressStartupWelcome: true,
               shouldShowIdePrompt: false,
               currentIDE: undefined,

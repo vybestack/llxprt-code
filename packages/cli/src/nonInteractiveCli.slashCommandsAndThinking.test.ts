@@ -1,3 +1,4 @@
+import { LoadedSettings } from './config/settings.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -37,8 +38,7 @@ import {
   type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import { runNonInteractive } from './nonInteractiveCli.js';
-import { LoadedSettings } from './config/settings.js';
+import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
 
 /**
  * @license

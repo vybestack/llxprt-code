@@ -26,7 +26,6 @@ import { render as inkRender } from 'ink';
  * which is unsupported under Bun's native test runner) can replace this
  * via the exported __setRenderForTesting seam.
  */
-import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
 let render: typeof inkRender = inkRender;
 
@@ -70,10 +69,8 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  createRuntimeOwnerFeatures,
-  createProviderAliasRefresh,
-} from '../runtime/createRuntimeOwnerFeatures.js';
+import { createProviderAliasRefresh } from '../runtime/createRuntimeOwnerFeatures.js';
+import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
 import { createOAuthControl } from '../runtime/createOAuthControl.js';
 import {
   buildUiRuntimeFromSource,
@@ -319,58 +316,57 @@ function buildRenderElement(
   recordingOwner?: 'agent' | 'raw',
   oauthManager?: OAuthManager,
 ): React.ReactElement {
-  const runtimeOwnerFeatures = () =>
-    createRuntimeOwnerFeatures(
-      runtimeOwner,
-      agent.providerManager,
-      () => agent.workspace.getDirectories(),
-      createSessionModelCommand(agent),
-      runtimeSettings.owner,
-      runtimeSettings.store,
-      agent.workspace,
-      agent.modelParameters,
-      agent.settings,
-      agent.toolFormat,
-      agent.providerReads,
-      agent.auth.keys,
-    );
-  return (
-    <React.StrictMode>
-      <ErrorBoundary onError={handleError}>
-        <SettingsContext.Provider value={settings}>
-          <AppWrapper
-            uiRuntime={uiRuntime}
-            slashCommandRuntime={slashCommandRuntime}
-            agent={agent}
-            runtimeOwner={{ create: runtimeOwnerFeatures }}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
-            settings={settings}
-            runtimeMessageBus={runtimeMessageBus}
-            startupWarnings={startupWarnings}
-            version={version}
-            terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
-            {...(recordingOwner === 'agent'
-              ? { recordingOwner, resumedHistory, suppressStartupWelcome }
-              : {
-                  recordingIntegration,
-                  recordingOwner,
-                  resumedHistory,
-                  initialRecordingService,
-                  initialLockHandle,
-                  suppressStartupWelcome,
-                })}
-            operationLifecycle={perfOwner?.registry}
-            memoryController={perfOwner?.memoryController ?? undefined}
-          />
-        </SettingsContext.Provider>
-      </ErrorBoundary>
-    </React.StrictMode>
+  const contextHost = new InteractiveContextHost(
+    runtimeOwner,
+    agent,
+    runtimeSettings.owner,
+    runtimeSettings.store,
+  );
+  return renderInteractiveShell(
+    <AppWrapper
+      uiRuntime={uiRuntime}
+      slashCommandRuntime={slashCommandRuntime}
+      agent={agent}
+      renderRuntime={contextHost.renderRuntime}
+      detectProviderQuota={contextHost.detectProviderQuota}
+      fetch={contextHost.fetch}
+      getActiveModelName={contextHost.getActiveModelName}
+      getActiveProviderAliasConfig={contextHost.getActiveProviderAliasConfig}
+      getActiveProviderName={contextHost.getActiveProviderName}
+      getActiveToolFormatState={contextHost.getActiveToolFormatState}
+      getEphemeralSetting={contextHost.getEphemeralSetting}
+      getEphemeralSettings={contextHost.getEphemeralSettings}
+      listSavedProfiles={contextHost.listSavedProfiles}
+      providerStatus={contextHost.providerStatus}
+      saveLoadBalancerProfile={contextHost.saveLoadBalancerProfile}
+      setActiveModel={contextHost.setActiveModel}
+      setActiveToolFormatOverride={contextHost.setActiveToolFormatOverride}
+      setEphemeralSetting={contextHost.setEphemeralSetting}
+      updateActiveProviderApiKey={contextHost.updateActiveProviderApiKey}
+      providerAliasRefresh={createProviderAliasRefresh(agent.providerManager)}
+      oauthControl={createOAuthControl(
+        () => oauthManager,
+        agent.providerManager,
+      )}
+      settings={settings}
+      runtimeMessageBus={runtimeMessageBus}
+      startupWarnings={startupWarnings}
+      version={version}
+      terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
+      {...(recordingOwner === 'agent'
+        ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+        : {
+            recordingIntegration,
+            recordingOwner,
+            resumedHistory,
+            initialRecordingService,
+            initialLockHandle,
+            suppressStartupWelcome,
+          })}
+      operationLifecycle={perfOwner?.registry}
+      memoryController={perfOwner?.memoryController ?? undefined}
+    />,
+    settings,
   );
 }
 
@@ -413,74 +409,40 @@ export interface OwnerInteractiveStartup {
   readonly suppressStartupWelcome?: boolean;
 }
 
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  startup: OwnerInteractiveStartup,
-): Promise<InteractiveInstanceCapability>;
-export function startInteractiveUI(
-  config: Config,
-  agent: Agent,
-  settings: LoadedSettings,
-  startupWarnings: string[],
-  workspaceRoot: string,
-  runtimeMessageBus?: MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
+export interface RawInteractiveStartup {
+  readonly recordingOwner: 'raw';
+  readonly oauthManager: OAuthManager;
+  readonly runtimeSettings: {
     readonly owner: SessionSettingsOwner;
     readonly store: SettingsService;
-  },
-): Promise<InteractiveInstanceCapability>;
+  };
+  readonly sessionPersistence: CliSessionPersistencePort | undefined;
+  readonly runtimeMessageBus?: MessageBus;
+  readonly recordingIntegration?: RecordingIntegration;
+  readonly resumedHistory?: IContent[];
+  readonly initialRecordingService?: SessionRecordingService;
+  readonly initialLockHandle?: LockHandle | null;
+  readonly suppressStartupWelcome?: boolean;
+}
 export async function startInteractiveUI(
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
-  startup?: OwnerInteractiveStartup | MessageBus,
-  recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
-  initialRecordingService?: SessionRecordingService,
-  initialLockHandle?: LockHandle | null,
-  suppressStartupWelcome?: boolean,
-  recordingOwner?: 'raw',
-  sessionPersistence?: CliSessionPersistencePort,
-  runtimeSettings?: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
-) {
-  const ownerStartup =
-    startup && 'recordingOwner' in startup ? startup : undefined;
-  const runtimeMessageBus =
-    startup && 'recordingOwner' in startup
-      ? startup.runtimeMessageBus
-      : startup;
-
-  if (!ownerStartup && !sessionPersistence) {
+  startup: OwnerInteractiveStartup | RawInteractiveStartup,
+): Promise<InteractiveInstanceCapability> {
+  if (
+    startup.recordingOwner === 'raw' &&
+    startup.sessionPersistence === undefined
+  )
     throw new Error(
       'Raw interactive startup requires its own CLI session persistence',
     );
-  }
-
   const version = await initializeInteractivePresentation(
     workspaceRoot,
     settings,
   );
-
-  // Deterministic pre-start replacement: tear down any previous instance and
-  // perf owner BEFORE constructing/starting a new owner. This prevents
-  // observer-conflict: a new owner's installObservers() must not collide with
-  // a previous owner's still-installed observers.
   await replacePreviousInstanceAndOwner();
   const perfOwner = await buildAndStartPerfOwner(
     config,
@@ -488,30 +450,14 @@ export async function startInteractiveUI(
     settings,
     version,
   );
-  const selectedSettings = ownerStartup?.runtimeSettings ?? runtimeSettings;
-  if (selectedSettings === undefined)
-    throw new Error(
-      'Interactive startup requires explicit session settings ownership',
-    );
   return commitInteractiveStartup({
-    oauthManager: ownerStartup?.oauthManager,
     config,
     agent,
     settings,
     perfOwner,
     version,
     startupWarnings,
-    runtimeMessageBus,
-    ...(ownerStartup ?? {
-      runtimeSettings: selectedSettings,
-      recordingOwner,
-      recordingIntegration,
-      resumedHistory,
-      initialRecordingService,
-      initialLockHandle,
-      suppressStartupWelcome,
-      sessionPersistence,
-    }),
+    ...startup,
   });
 }
 
@@ -868,4 +814,19 @@ async function initializeInteractivePresentation(
   setWindowTitle(basename(workspaceRoot), settings);
 
   return version;
+}
+
+function renderInteractiveShell(
+  element: React.ReactElement,
+  settings: LoadedSettings,
+): React.ReactElement {
+  return (
+    <React.StrictMode>
+      <ErrorBoundary onError={handleError}>
+        <SettingsContext.Provider value={settings}>
+          {element}
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>
+  );
 }

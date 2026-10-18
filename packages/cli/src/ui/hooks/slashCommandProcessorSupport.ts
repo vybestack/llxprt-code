@@ -3,26 +3,19 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  LoadRegisteredCommands,
+  SubscribeCommandChanges,
+} from '../../services/commandRegistryOperations.js';
 
 import { useShallowMemo } from './useShallowMemo.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import process from 'node:process';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { type Todo, CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
+import { type Todo } from '@vybestack/llxprt-code-core';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { Message, HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
-import { CommandService } from '../../services/CommandService.js';
-import {
-  BuiltinCommandLoader,
-  type BuiltinCommandOwners,
-} from '../../services/BuiltinCommandLoader.js';
-import { bindShellPromptOperations } from '../../services/prompt-processors/shellPromptHost.js';
-import { FileCommandLoader } from '../../services/FileCommandLoader.js';
-import { McpPromptLoader } from '../../services/McpPromptLoader.js';
-import type { ICommandLoader } from '../../services/types.js';
+import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
 import {
   slashCommandLogger,
@@ -187,98 +180,35 @@ function buildCommandContextUi(
 
 export function useCommandReload(
   owners: BuiltinCommandOwners,
-  config: CliUiRuntime | null,
+  load: LoadRegisteredCommands,
+  subscribe: SubscribeCommandChanges,
   reloadTrigger: number,
   isConfigInitialized: boolean,
   reloadCommands: () => void,
   setCommands: (commands: readonly SlashCommand[]) => void,
-  agent: Agent | null,
 ): void {
-  useEffect(
-    () => subscribeToExternalCommandChanges(config, reloadCommands, agent),
-    [config, reloadCommands, agent],
-  );
+  useEffect(() => subscribe(reloadCommands), [subscribe, reloadCommands]);
   useEffect(() => {
     const controller = new AbortController();
-    void loadSlashCommands(owners, config, controller.signal, setCommands);
-    return () => {
-      controller.abort();
-    };
-  }, [owners, config, reloadTrigger, isConfigInitialized, setCommands]);
+    void publishRegisteredCommands(
+      load,
+      owners,
+      controller.signal,
+      setCommands,
+    );
+    return () => controller.abort();
+  }, [owners, load, reloadTrigger, isConfigInitialized, setCommands]);
 }
 
-function subscribeToExternalCommandChanges(
-  config: CliUiRuntime | null,
-  reloadCommands: () => void,
-  agent: Agent | null,
-): (() => void) | undefined {
-  if (!config) return undefined;
-  const listener = () => {
-    reloadCommands();
-  };
-  const ideClient = config.getIdeClient();
-  ideClient?.addStatusChangeListener(listener);
-  const unsubscribeMcp = agent?.mcp.subscribeStatus(listener);
-  coreEvents.on(CoreEvent.FolderTrustChanged, listener);
-  return () => {
-    ideClient?.removeStatusChangeListener(listener);
-    unsubscribeMcp?.();
-    coreEvents.off(CoreEvent.FolderTrustChanged, listener);
-  };
-}
-
-function shouldUseBuiltinCommandsOnly(): boolean {
-  return process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true';
-}
-
-export function loadBuiltinSlashCommands(
+async function publishRegisteredCommands(
+  load: LoadRegisteredCommands,
   owners: BuiltinCommandOwners,
-  config: CliUiRuntime | null,
-): readonly SlashCommand[] {
-  return new BuiltinCommandLoader(owners, config).loadCommandsSync();
-}
-
-async function loadSlashCommands(
-  owners: BuiltinCommandOwners,
-  config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
 ): Promise<void> {
   try {
-    const loaders: ICommandLoader[] = [
-      new BuiltinCommandLoader(owners, config),
-    ];
-    if (!shouldUseBuiltinCommandsOnly()) {
-      loaders.unshift(
-        new McpPromptLoader(
-          config
-            ? {
-                getMcpServers: () => config.getMcpServers(),
-                listPrompts: (server) => config.listPrompts(server),
-              }
-            : null,
-        ),
-      );
-      loaders.push(
-        new FileCommandLoader(
-          config
-            ? {
-                userCommandsDir: config.userCommandsDir,
-                projectCommandsDir: config.projectCommandsDir,
-                getProjectRoot: () => config.getProjectRoot(),
-                getExtensions: () => config.getExtensions(),
-                getFolderTrust: () => config.getFolderTrust(),
-                isTrustedFolder: () => config.isTrustedFolder(),
-              }
-            : null,
-          bindShellPromptOperations(config),
-        ),
-      );
-    }
-    const commandService = await CommandService.create(loaders, signal);
-    if (!signal.aborted) {
-      setCommands(commandService.getCommands());
-    }
+    const commands = await load(owners, signal);
+    if (!signal.aborted) setCommands(commands);
   } catch (error) {
     if (!signal.aborted) {
       slashCommandLogger.error(

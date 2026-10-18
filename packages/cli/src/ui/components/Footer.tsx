@@ -6,6 +6,10 @@
  * @plan PLAN-20250909-TOKTRACK.P16
  * @requirement REQ-INT-001.1
  */
+import {
+  useProviderStatus,
+  type ProviderStatusOperation,
+} from '../contexts/RuntimeContext.js';
 
 import React, { useEffect, useState, useRef } from 'react';
 import { Box, Text } from 'ink';
@@ -18,7 +22,6 @@ import {
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import v8 from 'node:v8';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
@@ -356,13 +359,13 @@ ModelNameDisplay.displayName = 'ModelNameDisplay';
 interface PaidModeDisplayProps {
   isPaidMode: boolean | undefined;
   showModelName: boolean;
-  runtime: ReturnType<typeof useRuntimeApi>;
+  readProviderStatus: ProviderStatusOperation;
 }
 
 const PaidModeDisplay = React.memo(
-  ({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
+  ({ isPaidMode, showModelName, readProviderStatus }: PaidModeDisplayProps) => {
     if (isPaidMode === undefined) return null;
-    const status = runtime.providerStatus();
+    const status = readProviderStatus();
     if (status.providerName !== 'gemini') return null;
     return (
       <>
@@ -602,7 +605,7 @@ interface FooterSecondLineProps {
   hideModelInfo: boolean;
   showModelName: boolean;
   model: string;
-  runtime: ReturnType<typeof useRuntimeApi>;
+  readProviderStatus: ProviderStatusOperation;
   isPaidMode: boolean | undefined;
   sessionTokenTotal: number | undefined;
   showErrorDetails: boolean;
@@ -619,7 +622,7 @@ const FooterSecondLine = React.memo((props: FooterSecondLineProps) => {
     hideModelInfo,
     showModelName,
     model,
-    runtime,
+    readProviderStatus,
     isPaidMode,
     sessionTokenTotal,
     showErrorDetails,
@@ -652,7 +655,7 @@ const FooterSecondLine = React.memo((props: FooterSecondLineProps) => {
           <PaidModeDisplay
             isPaidMode={isPaidMode}
             showModelName={showModelName}
-            runtime={runtime}
+            readProviderStatus={readProviderStatus}
           />
           {sessionTokenTotal !== undefined && (
             <>
@@ -707,7 +710,7 @@ export const Footer = React.memo(
     hideModelInfo = false,
   }: FooterProps) => {
     const { breakpoint } = useResponsive();
-    const runtime = useRuntimeApi();
+    const readProviderStatus = useProviderStatus();
     const showTimestamp = breakpoint === 'WIDE';
     const showModelName = breakpoint !== 'NARROW';
     const isCompact = breakpoint === 'NARROW';
@@ -746,7 +749,7 @@ export const Footer = React.memo(
           hideModelInfo={hideModelInfo}
           showModelName={showModelName}
           model={model}
-          runtime={runtime}
+          readProviderStatus={readProviderStatus}
           isPaidMode={isPaidMode}
           sessionTokenTotal={sessionTokenTotal}
           showErrorDetails={showErrorDetails}
