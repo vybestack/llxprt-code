@@ -3,6 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  exportJournalSessionMediaPackage,
+  type JournalPackageExportOptions,
+} from './session-media-package-export-journal.js';
 
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
@@ -181,7 +185,18 @@ export async function exportSessionMediaPackage(
   projectHash: string,
   mediaStore: LocalMediaStore,
   packageDirectory: string,
+  options: JournalPackageExportOptions = {},
 ): Promise<void> {
+  if (selectBackend() === 'journal') {
+    await exportJournalSessionMediaPackage(
+      recordingPath,
+      projectHash,
+      mediaStore,
+      packageDirectory,
+      options,
+    );
+    return;
+  }
   const admission = new MediaAdmissionService(mediaStore);
   const temporaryDirectory = `${packageDirectory}.${randomUUID()}.tmp`;
   const ledger = new ReservationLedger(

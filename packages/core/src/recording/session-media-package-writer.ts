@@ -23,6 +23,7 @@ import {
 
 export interface SessionMediaPackageManifestInput {
   readonly temporaryDirectory: string;
+  readonly recordingFile?: MediaPackageManifest['recording'];
   readonly persistedStateFiles: readonly string[];
   readonly references: readonly MediaReferenceBlock[];
   readonly objects: readonly MediaStoredObject[];
@@ -60,7 +61,7 @@ export async function writeSessionMediaPackageManifest(
 ): Promise<void> {
   const manifest: MediaPackageManifest = {
     version: PACKAGE_VERSION,
-    recording: RECORDING_FILE,
+    recording: input.recordingFile ?? RECORDING_FILE,
     persistedStates: input.persistedStateFiles.map((file) => ({
       file,
       version: SUPPORTED_PERSISTED_SESSION_VERSION,

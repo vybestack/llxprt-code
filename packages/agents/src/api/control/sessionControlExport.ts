@@ -54,5 +54,6 @@ export async function exportRecordedSession(
     projectHash,
     mediaStore,
     destination,
+    recording?.getSessionId() === source.sessionId ? { recording } : {},
   );
 }
