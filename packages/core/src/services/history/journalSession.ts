@@ -115,6 +115,23 @@ export class JournalSession {
     return new JournalSession(await JournalStore.createUnlinked(deps), false);
   }
 
+  /**
+   * A bare store holding the published version of this journal, in a file of
+   * its own (design 4.8); this journal is left as it is.
+   */
+  async cloneUnlinked(
+    options: Pick<JournalSessionOptions, 'unlinkedDirectory'> = {},
+  ): Promise<JournalSession> {
+    const store = await this.store.cloneUnlinked(() =>
+      openUnlinkedFile(
+        options.unlinkedDirectory === undefined
+          ? {}
+          : { directory: options.unlinkedDirectory },
+      ),
+    );
+    return new JournalSession(store, false);
+  }
+
   get path(): string {
     return this.store.path;
   }

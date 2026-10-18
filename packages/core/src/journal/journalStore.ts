@@ -186,6 +186,42 @@ export class JournalStore {
   }
 
   /**
+   * A new store in a file with no name that holds the published version of
+   * this one (design 4.8): the streaming copy of compaction, so the copy keeps
+   * the commit sequence, the labels and the checkpoints. The source is pinned
+   * for the copy, so no compaction moves it, and stays as it was. `open` makes
+   * the nameless file.
+   */
+  async cloneUnlinked(
+    open: JournalOpenDependencies['open'],
+  ): Promise<JournalStore> {
+    const deps = { ...this.deps, journal: { ...this.deps.journal, open } };
+    const candidate = await this.whilePinned(() =>
+      writeUnlinkedCompactionCandidate(
+        UNLINKED_JOURNAL_LABEL,
+        this.requireAccess(),
+        this.requireVersion(),
+        deps.journal,
+        deps.idDeps.hasher,
+      ),
+    );
+    let clone: JournalStore;
+    try {
+      clone = await JournalStore.createUnlinked(deps);
+    } catch (error) {
+      await candidate.handle.close();
+      throw error;
+    }
+    await swapInUnlinkedCandidate(
+      clone.writer,
+      clone.fileOperations,
+      candidate,
+    );
+    clone.restartOnNewFile();
+    return clone;
+  }
+
+  /**
    * Opens an existing journal for its owner; the last committed version is the
    * published one. A candidate a crashed compaction left is removed first, and
    * the trigger is evaluated once (design 4.11).

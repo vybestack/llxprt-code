@@ -116,6 +116,51 @@ export async function adoptOnto(
   return settledOnce(previous, replaced, host, restore);
 }
 
+/**
+ * Stops the adopted recorder from being the primary (D-ORCH-11), inside one
+ * turn of the queue. The published version is cloned into a file with no name
+ * (design 4.8), which becomes the primary; the recorder's file is left as it
+ * is, and nothing is written to it again, so the recorder can close it. The
+ * recorders bound to the history move with the primary and stay bound. A
+ * failure puts the adopted file back as the primary and closes the clone.
+ */
+export async function releaseAdoptedPrimary(host: AdoptionHost): Promise<void> {
+  const previous = host.state();
+  if (previous.adopted === undefined) {
+    throw new Error('The primary journal is not an adopted recorder file');
+  }
+  if (!previous.mirrors.onlyRecorders) {
+    throw new Error(
+      'A history with mirrors that are not recorders cannot leave an adopted journal',
+    );
+  }
+  const next = await previous.session.cloneUnlinked();
+  const moved = await previous.mirrors.unbindRecorders();
+  const owners = new JournalOwners(next.store);
+  const mirrors = host.mirrorsOf(
+    next,
+    owners,
+    previous.mirrors.retirementListeners,
+  );
+  mirrors.inheritPrimaryOrigin(previous.mirrors.primaryOriginId());
+  host.install({
+    ...previous,
+    session: next,
+    owners,
+    mirrors,
+    adopted: undefined,
+  });
+  try {
+    await mirrors.bindRecorders(moved);
+  } catch (error) {
+    await mirrors.unbindRecorders();
+    host.install(previous);
+    await previous.mirrors.bindRecorders(moved);
+    await next.close();
+    throw error;
+  }
+}
+
 function settledOnce(
   previous: PrimaryState,
   replaced: readonly BoundRecorder[],

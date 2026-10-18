@@ -48,6 +48,7 @@ import {
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import {
   adoptOnto,
+  releaseAdoptedPrimary,
   type AdoptionHost,
   type JournalAdoption,
 } from './journalAdoption.js';
@@ -539,9 +540,20 @@ export class JournalHistoryStore implements HistoryStorePort {
       .then(() => this.previews.recordFirstFor(recorder, origin));
   }
 
+  /**
+   * Unbinds a recorder. The adopted recorder's file is the primary, so the
+   * history leaves it first and the recorder may then close it (D-ORCH-11).
+   */
   detachJournal(recorder: SessionRecordingPort): Promise<void> {
     const journalRecorder = requireJournalRecorder(recorder);
-    return this.opened.then(() => this.mirrors.detachRecorder(journalRecorder));
+    return this.opened.then(() =>
+      this.adopted === journalRecorder
+        ? this.exclusive(async () => {
+            await this.adoptedWrites.settle();
+            await releaseAdoptedPrimary(this.adoptionHost());
+          })
+        : this.mirrors.detachRecorder(journalRecorder),
+    );
   }
 
   /** Whether the recorder is bound now; a recorder given at construction is bound once the journal is open. */
