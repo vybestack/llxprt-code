@@ -701,6 +701,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     return new JournalDumpSnapshot(
       await this.session.store.snapshot(),
       this.boundary,
+      this.options.counters,
     );
   }
 
