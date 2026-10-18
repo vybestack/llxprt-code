@@ -27,6 +27,7 @@
  */
 
 import * as fs from 'node:fs/promises';
+import { ownedString } from '../utils/ownedString.js';
 import { MAX_RECORD_BYTES } from './journalCursor.js';
 
 const NEWLINE_BYTE = 0x0a;
@@ -116,7 +117,9 @@ export async function scanFirstUserMessage(
   try {
     const text = await findFirstUserText(handle, chunkBytes, options);
     if (text === null) return null;
-    return text.length > maxLength ? text.slice(0, maxLength) : text;
+    return text.length > maxLength
+      ? ownedString(text.slice(0, maxLength))
+      : text;
   } catch {
     return null;
   } finally {

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { StateReader } from '../journal/journalReaderState.js';
+import { ownedString } from '../utils/ownedString.js';
 import type { SessionStartKind } from './types.js';
 
 /**
@@ -31,7 +32,7 @@ export const SESSION_PREVIEW_LENGTH = 200;
 /**
  * The text a content row offers as the session preview: its text blocks, cut to the preview length. Undefined for a row that is not from the user or has no text.
  *
- * Only the leading preview-length characters of a block are read. A `slice` of a long string shares the parent's characters, so the cut is copied through UTF-8 and the preview owns its own characters; otherwise it would keep the whole row alive for as long as the store holds the preview.
+ * Only the leading preview-length characters of a block are read. A `slice` of a long string shares the parent's characters, so the cut goes through `ownedString`; otherwise the preview would keep the whole row alive for as long as the store holds it.
  */
 export function previewOfContent(content: {
   readonly speaker: string;
@@ -48,7 +49,7 @@ export function previewOfContent(content: {
       cut += block.text.slice(0, SESSION_PREVIEW_LENGTH - cut.length);
     }
   }
-  return cut.length === 0 ? undefined : UTF8_DECODER.decode(UTF8.encode(cut));
+  return cut.length === 0 ? undefined : ownedString(cut);
 }
 
 /** The text a `session:preview` entry holds. */

@@ -11,6 +11,7 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createStreamInterruptionError } from '@vybestack/llxprt-code-core/utils/retry.js';
+import { ownedString } from '@vybestack/llxprt-code-core/utils/ownedString.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { StreamLivenessListener } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { randomUUID } from 'node:crypto';
@@ -316,7 +317,7 @@ function* handleFunctionCallDone(
         'Streaming tool call arguments were malformed JSON.',
         {
           itemId,
-          snippet: finalArguments.slice(0, 200),
+          snippet: ownedString(finalArguments.slice(0, 200)),
         },
         parseError,
       );

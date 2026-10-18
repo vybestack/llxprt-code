@@ -399,6 +399,10 @@
       "bun": "./src/utils/fetch.ts",
       "import": "./dist/src/utils/fetch.js"
     },
+    "./utils/ownedString.js": {
+      "bun": "./src/utils/ownedString.ts",
+      "import": "./dist/src/utils/ownedString.js"
+    },
     "./utils/parameterCoercion.js": {
       "bun": "./src/utils/parameterCoercion.ts",
       "import": "./dist/src/utils/parameterCoercion.js"
