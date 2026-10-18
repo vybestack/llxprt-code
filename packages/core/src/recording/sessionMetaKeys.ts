@@ -28,7 +28,11 @@ export const SESSION_KEYS = {
 /** Characters of the first user message that discovery shows (decision G7). */
 export const SESSION_PREVIEW_LENGTH = 200;
 
-/** The text a content row offers as the session preview: its text blocks, cut to the preview length. Undefined for a row that is not from the user or has no text. */
+/**
+ * The text a content row offers as the session preview: its text blocks, cut to the preview length. Undefined for a row that is not from the user or has no text.
+ *
+ * Only the leading preview-length characters of a block are read. A `slice` of a long string shares the parent's characters, so the cut is copied through UTF-8 and the preview owns its own characters; otherwise it would keep the whole row alive for as long as the store holds the preview.
+ */
 export function previewOfContent(content: {
   readonly speaker: string;
   readonly blocks: ReadonlyArray<{
@@ -37,10 +41,14 @@ export function previewOfContent(content: {
   }>;
 }): string | undefined {
   if (content.speaker !== 'human') return undefined;
-  const text = content.blocks
-    .map((block) => (block.type === 'text' ? (block.text ?? '') : ''))
-    .join('');
-  return text.length === 0 ? undefined : text.slice(0, SESSION_PREVIEW_LENGTH);
+  let cut = '';
+  for (const block of content.blocks) {
+    if (cut.length >= SESSION_PREVIEW_LENGTH) break;
+    if (block.type === 'text' && block.text !== undefined) {
+      cut += block.text.slice(0, SESSION_PREVIEW_LENGTH - cut.length);
+    }
+  }
+  return cut.length === 0 ? undefined : UTF8_DECODER.decode(UTF8.encode(cut));
 }
 
 /** The text a `session:preview` entry holds. */
