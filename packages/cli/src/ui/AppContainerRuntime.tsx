@@ -18,6 +18,7 @@ import {
   useGetActiveProfileName,
   useGetActiveProviderName,
   useGetLoadBalancerStats,
+  useHasActiveProvider,
   useListAvailableModels,
   useListProviders,
   useListSavedProfiles,
@@ -205,12 +206,12 @@ export function useAppStores(runtime: Pick<SlashCommandRuntime, 'getModel'>): {
 
 /** Guidance nudge for sessions without an active provider configured. */
 function useUnconfiguredGuidance(
-  props: AppContainerRuntimeProps,
   turnStore: TurnStore,
   dialogStore: DialogStore,
 ): void {
+  const hasActiveProvider = useHasActiveProvider();
   useUnconfiguredProviderGuidance({
-    hasActiveProvider: props.agent.hasActiveProvider(),
+    hasActiveProvider: hasActiveProvider(),
     addItem: turnStore.commands.addItem,
     store: dialogStore,
   });
@@ -240,7 +241,7 @@ function useAppDialogsRuntime(
         props.agent.setProvider(provider, undefined, { autoOAuth: false }),
       [props.agent],
     ),
-    listTools: useBound(props.agent.tools, props.agent.tools.list),
+    listTools: props.listCommandTools,
     generatePrompt: useAutoPromptOperation(
       useBound(props.agent, props.agent.getProvider),
       useCallback(() => props.agent.agentClient, [props.agent]),
@@ -531,7 +532,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     terminalStore,
     settingsStore,
   });
-  useUnconfiguredGuidance(props, turnStore, dialogStore);
+  useUnconfiguredGuidance(turnStore, dialogStore);
   const readTranscript = useCallback(
     () =>
       getInteractiveTranscriptPath(

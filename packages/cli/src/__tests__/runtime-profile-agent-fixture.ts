@@ -9,6 +9,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 export type RuntimeProfileAgent = Pick<
   Agent,
   | 'getRuntimeId'
+  | 'hasActiveProvider'
   | 'getProvider'
   | 'setProvider'
   | 'getActiveProfileName'
@@ -26,6 +27,7 @@ export function projectRuntimeAgent(
 ): RuntimeProfileAgent {
   return {
     getRuntimeId: () => agent.getRuntimeId(),
+    hasActiveProvider: () => agent.hasActiveProvider(),
     getProvider: () => agent.getProvider(),
     setProvider: (provider, model, options) =>
       agent.setProvider(provider, model, options),

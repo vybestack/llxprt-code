@@ -171,11 +171,15 @@ export const RuntimeContextProvider: React.FC<
     () => createBridge(agent, owner, requestFetch),
     [agent, owner, requestFetch],
   );
-  return provideRuntimeFixture(
-    bridge.api,
-    <RuntimeContext.Provider value={bridge}>
-      {children}
-    </RuntimeContext.Provider>,
+  return (
+    <Operations.HasActiveProviderProvider value={agent.hasActiveProvider}>
+      {provideRuntimeFixture(
+        bridge.api,
+        <RuntimeContext.Provider value={bridge}>
+          {children}
+        </RuntimeContext.Provider>,
+      )}
+    </Operations.HasActiveProviderProvider>
   );
 };
 

@@ -13,6 +13,18 @@ import * as Operations from '../ui/contexts/RuntimeContext.js';
 import { createProviderInspection } from './providerInspection.js';
 import { createSessionModelCommand } from './session-model-command.js';
 
+function getLoadBalancerOperations(
+  inspection: ReturnType<typeof createProviderInspection>,
+): [
+  Operations.GetLoadBalancerStatsOperation,
+  Operations.GetLoadBalancerTokenAccountingOperation,
+] {
+  return [
+    inspection.getLoadBalancerStats,
+    inspection.getLoadBalancerTokenAccounting,
+  ];
+}
+
 export class InteractiveContextHost {
   readonly #getActiveProviderDetails: Operations.GetActiveProviderDetailsOperation;
   readonly #getProviderDumpMetadata: Operations.GetProviderDumpMetadataOperation;
@@ -26,6 +38,7 @@ export class InteractiveContextHost {
   readonly saveLoadBalancerProfile: Operations.SaveLoadBalancerProfileOperation;
   readonly #listProviders: Operations.ListProvidersOperation;
   readonly getActiveProviderName: Operations.GetActiveProviderNameOperation;
+  readonly hasActiveProvider: Operations.HasActiveProviderOperation;
   readonly #listAvailableModels: Operations.ListAvailableModelsOperation;
   readonly getActiveModelName: Operations.GetActiveModelNameOperation;
   readonly providerStatus: Operations.ProviderStatusOperation;
@@ -71,7 +84,6 @@ export class InteractiveContextHost {
     const format = agent.toolFormat;
     const params = agent.modelParameters;
     const keys = agent.auth.keys;
-
     const inspection = createProviderInspection(
       () => selected.readSelectedEndpoint(),
       agent.providerManager,
@@ -84,15 +96,15 @@ export class InteractiveContextHost {
     this.#getProviderDumpMetadata = inspection.getProviderDumpMetadata;
     this.getActiveProviderAliasConfig = inspection.getActiveProviderAliasConfig;
     this.detectProviderQuota = inspection.detectProviderQuota;
-    this.#getLoadBalancerStats = inspection.getLoadBalancerStats;
-    this.#getLoadBalancerTokenAccounting =
-      inspection.getLoadBalancerTokenAccounting;
+    [this.#getLoadBalancerStats, this.#getLoadBalancerTokenAccounting] =
+      getLoadBalancerOperations(inspection);
     this.listSavedProfiles = definitions.listSavedProfiles;
     this.#getProfileByName = definitions.getProfileByName;
     this.#saveProfileDefinition = definitions.saveProfileDefinition;
     this.saveLoadBalancerProfile = definitions.saveLoadBalancerProfile;
     this.#listProviders = reads.listProviders.bind(reads);
     this.getActiveProviderName = reads.getActiveProviderName.bind(reads);
+    this.hasActiveProvider = agent.hasActiveProvider;
     this.#listAvailableModels = reads.listAvailableModels.bind(reads);
     this.getActiveModelName = reads.getActiveModelName.bind(reads);
     this.providerStatus = reads.providerStatus.bind(reads);
@@ -166,7 +178,11 @@ export class InteractiveContextHost {
                   <Operations.GetActiveProviderAliasConfigProvider
                     value={this.getActiveProviderAliasConfig}
                   >
-                    {children}
+                    <Operations.HasActiveProviderProvider
+                      value={this.hasActiveProvider}
+                    >
+                      {children}
+                    </Operations.HasActiveProviderProvider>
                   </Operations.GetActiveProviderAliasConfigProvider>
                 </Operations.GetActiveProviderDetailsProvider>
               </Operations.ProviderStatusProvider>

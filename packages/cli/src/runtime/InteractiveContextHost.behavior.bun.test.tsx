@@ -15,6 +15,7 @@ import { InteractiveContextHost } from './InteractiveContextHost.js';
 import {
   useGetActiveModelName,
   useGetEphemeralSetting,
+  useHasActiveProvider,
   useSetEphemeralSetting,
   useSaveProfileSnapshot,
 } from '../ui/contexts/RuntimeContext.js';
@@ -83,6 +84,8 @@ describe('interactive context acquisition host', () => {
         throw new Error('Selected operations unavailable');
       const first = capture.primary;
       const second = capture.peer;
+      expect(first.hasActiveProvider()).toBe(true);
+      expect(second.hasActiveProvider()).toBe(true);
       first.write('context-owner-setting', 'owner');
       second.write('context-owner-setting', 'peer');
       expect(first.read('context-owner-setting')).toBe('owner');
@@ -118,6 +121,7 @@ function useSelected() {
     read: useGetEphemeralSetting(),
     write: useSetEphemeralSetting(),
     save: useSaveProfileSnapshot(),
+    hasActiveProvider: useHasActiveProvider(),
     model: useGetActiveModelName(),
   };
 }

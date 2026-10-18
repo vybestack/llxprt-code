@@ -188,6 +188,9 @@ export type GetActiveProviderNameOperation =
   SessionProviderReads['getActiveProviderName'];
 const GetActiveProviderNameContext =
   createContext<GetActiveProviderNameOperation | null>(null);
+export type HasActiveProviderOperation = Agent['hasActiveProvider'];
+const HasActiveProviderContext =
+  createContext<HasActiveProviderOperation | null>(null);
 export const GetActiveProviderNameProvider =
   GetActiveProviderNameContext.Provider;
 export function useGetActiveProviderName(): GetActiveProviderNameOperation {
@@ -195,6 +198,15 @@ export function useGetActiveProviderName(): GetActiveProviderNameOperation {
   if (operation === null)
     throw new Error(
       'GetActiveProviderNameProvider is missing from the component tree.',
+    );
+  return operation;
+}
+export const HasActiveProviderProvider = HasActiveProviderContext.Provider;
+export function useHasActiveProvider(): HasActiveProviderOperation {
+  const operation = useContext(HasActiveProviderContext);
+  if (operation === null)
+    throw new Error(
+      'HasActiveProviderProvider is missing from the component tree.',
     );
   return operation;
 }
