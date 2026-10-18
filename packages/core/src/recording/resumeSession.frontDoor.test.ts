@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createResumableSession } from './__tests__/support/resumableSession.js';
 import { PROJECT_HASH } from './__tests__/support/p05dTestKit.js';
+import { useBackendEnv } from './__tests__/support/backendEnv.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot } from './journalResume.js';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
@@ -19,7 +20,10 @@ let resumed: ResumeResult | undefined;
 async function open(
   backend: 'old' | 'journal',
   sessionId: string,
+  setBackend: (backend: 'old' | 'journal') => void,
 ): Promise<ResumeResult> {
+  // Session discovery inside the resume follows the process environment.
+  setBackend(backend);
   const result = await resumeSession(
     {
       continueRef: sessionId,
@@ -46,6 +50,7 @@ async function texts(rows: AsyncIterable<IContent>): Promise<string[]> {
 }
 
 describe('the resume front door', () => {
+  const setBackend = useBackendEnv();
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'resume-front-door-'));
     resumed = undefined;
@@ -58,7 +63,7 @@ describe('the resume front door', () => {
   it('resumes a JSONL session with the JSONL recorder and a cursor boot on the old backend', async () => {
     const env = { LLXPRT_HISTORY_BACKEND: 'old' };
     const fixture = await createResumableSession(root, { rows: 3 }, env);
-    const result = await open('old', fixture.sessionId);
+    const result = await open('old', fixture.sessionId, setBackend);
     expect(result.recording).toBeInstanceOf(SessionRecordingService);
     expect(result.boot).toBeInstanceOf(ResumeCursorBoot);
     expect(await texts(result.boot.streamRows())).toStrictEqual([
@@ -71,7 +76,7 @@ describe('the resume front door', () => {
   it('resumes a journal session with the journal recorder and a point boot on the journal backend', async () => {
     const env = { LLXPRT_HISTORY_BACKEND: 'journal' };
     const fixture = await createResumableSession(root, { rows: 3 }, env);
-    const result = await open('journal', fixture.sessionId);
+    const result = await open('journal', fixture.sessionId, setBackend);
     expect(result.recording).toBeInstanceOf(JournalRecordingService);
     expect(result.boot).toBeInstanceOf(JournalResumeBoot);
     expect(result.boot).toMatchObject({ rows: 3 });
@@ -92,6 +97,7 @@ describe('the resume front door', () => {
       { rows: 1 },
       { LLXPRT_HISTORY_BACKEND: 'old' },
     );
+    setBackend('journal');
     const result = await resumeSession(
       {
         continueRef: fixture.sessionId,

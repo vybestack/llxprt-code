@@ -24,6 +24,10 @@ import {
   writeUnsupportedVersionSession,
 } from './__tests__/recording-file-fixtures.js';
 import { collectBootRows } from './resumeSession.test.helpers.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+// The fixtures are JSONL recordings; session discovery follows the environment.
+pinHistoryBackend('old');
 
 const PROJECT_HASH = 'resume-unreadable-project';
 

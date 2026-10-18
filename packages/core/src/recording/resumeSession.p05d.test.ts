@@ -63,7 +63,11 @@ import {
   type ResumeRequest,
 } from './__tests__/support/p05dTestKit.js';
 import { CONTINUE_LATEST, resumeJsonlSession } from './resumeSession.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 import type { IContent } from '../services/history/IContent.js';
+
+// The cursor boot reads JSONL; session discovery follows the environment.
+pinHistoryBackend('old');
 
 let chatsDir: string;
 let tempRoot: string;

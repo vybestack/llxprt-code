@@ -6,7 +6,7 @@
 
 import { useMemo, useReducer } from 'react';
 import type {
-  ResumeCursorBoot,
+  ResumeBootHandle,
   RecordingIntegration,
   SessionRecordingPort,
   LockHandle,
@@ -56,7 +56,7 @@ interface AppProps {
   oauthControl: OAuthControl;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   version: string;
   terminalBackgroundColor?: string;
   runtimeMessageBus?: MessageBus;

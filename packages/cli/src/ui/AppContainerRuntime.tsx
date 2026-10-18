@@ -10,7 +10,7 @@ import type {
   RecordingIntegration,
   SessionRecordingPort,
   LockHandle,
-  ResumeCursorBoot,
+  ResumeBootHandle,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
@@ -72,7 +72,7 @@ export interface AppContainerRuntimeProps {
   agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   version: string;
   terminalBackgroundColor?: string;
   runtimeMessageBus?: MessageBus;

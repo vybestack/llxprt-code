@@ -31,6 +31,10 @@ import {
   setupSessionRecording,
   type ResolvedRecording,
 } from './cliSessionBootstrap.js';
+import { pinHistoryBackend } from './services/__tests__/support/pinHistoryBackend.js';
+
+// The fixtures read and write JSONL headers; a journal twin belongs to the discovery/recording suites (W21).
+pinHistoryBackend('old');
 
 let projectHash = '';
 const CORRUPT_REASON =

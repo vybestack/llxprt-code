@@ -6,7 +6,7 @@
 import { resumeHistoryWindow } from '../../../utils/streamHistoryItems.js';
 
 import { useEffect, useRef, useState } from 'react';
-import type { ResumeCursorBoot } from '@vybestack/llxprt-code-core';
+import type { ResumeBootHandle } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { HistoryItem } from '../../../types.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
@@ -40,7 +40,7 @@ export interface UseSessionInitializationParams {
   agent: Agent;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
   prependHistory: (leading: HistoryItem[]) => void;
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
 }
 
 export interface UseSessionInitializationResult {

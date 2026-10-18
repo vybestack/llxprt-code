@@ -25,7 +25,7 @@ import {
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type IdeInfo,
   type MessageBus,
   type RecordingIntegration,
@@ -65,7 +65,7 @@ export interface AppBootstrapProps {
   agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   version: string;
   runtimeMessageBus?: MessageBus;
   appState: AppState;
@@ -132,7 +132,7 @@ export interface AppBootstrapResult {
   nightly: boolean;
   runtimeMessageBus?: MessageBus;
   startupWarnings: string[];
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
 }

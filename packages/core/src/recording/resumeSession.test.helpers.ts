@@ -15,6 +15,7 @@ import {
   type SessionRecordLine,
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,6 +166,8 @@ export function useResumeFixture(): {
 } {
   let tempDir = '';
   const lockHandles: LockHandle[] = [];
+  // The fixtures are JSONL recordings; session discovery follows the environment.
+  pinHistoryBackend('old');
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resume-session-test-'));
     await fs.mkdir(path.join(tempDir, 'chats'), { recursive: true });

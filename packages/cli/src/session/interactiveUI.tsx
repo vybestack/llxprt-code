@@ -6,7 +6,7 @@ import {
   type Config,
   type SessionRecordingPort,
   type RecordingIntegration,
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type LockHandle,
   type MessageBus,
   type TelemetrySettings,
@@ -311,7 +311,7 @@ function buildRenderElement(
   version: string,
   runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
-  resumedBoot: Pick<ResumeCursorBoot, 'streamRows'> | undefined,
+  resumedBoot: Pick<ResumeBootHandle, 'streamRows'> | undefined,
   initialRecordingService: SessionRecordingPort | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
@@ -404,7 +404,7 @@ export interface OwnerInteractiveStartup {
   >;
   readonly recordingOwner: 'agent';
   readonly runtimeMessageBus?: MessageBus;
-  readonly resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  readonly resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 }
 
@@ -424,7 +424,7 @@ export function startInteractiveUI(
   workspaceRoot: string,
   runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>,
   initialRecordingService?: SessionRecordingPort,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
@@ -443,7 +443,7 @@ export async function startInteractiveUI(
   workspaceRoot: string,
   startup?: OwnerInteractiveStartup | MessageBus,
   recordingIntegration?: RecordingIntegration,
-  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
+  resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>,
   initialRecordingService?: SessionRecordingPort,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
@@ -606,7 +606,7 @@ export type CommitInteractiveStartupArgs = {
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
   readonly runtimeMessageBus?: MessageBus;
-  readonly resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
+  readonly resumedBoot?: Pick<ResumeBootHandle, 'streamRows'>;
   readonly suppressStartupWelcome?: boolean;
 } & (
   | {
