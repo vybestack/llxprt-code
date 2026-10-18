@@ -40,17 +40,31 @@ export function recordPublicationOwners(
   };
 }
 
+/**
+ * The replacement rows of a density op. A class method reads `this`, so the
+ * iterable keeps nothing but the replacements; a generator literal closing
+ * over the op would leave the op's scope (and with it the last row admitted)
+ * reachable from the engine for many collections after the admission.
+ */
+class DensityReplacementRows implements Iterable<IContent> {
+  constructor(
+    private readonly replacements: ReadonlyArray<{
+      readonly replacement: IContent;
+    }>,
+  ) {}
+
+  *[Symbol.iterator](): Generator<IContent, void, unknown> {
+    for (const item of this.replacements) yield item.replacement;
+  }
+}
+
 export function journalPublicationOwners(
   op: HistoryJournalOp,
 ): Iterable<IContent> {
-  return {
-    *[Symbol.iterator](): Generator<IContent, void, unknown> {
-      if (op.kind === 'content') yield op.content;
-      else if (op.kind === 'compressed') yield op.summary;
-      else if (op.kind === 'syntheticInsert') yield op.payload.content;
-      else if (op.kind === 'density') {
-        for (const item of op.payload.replacements) yield item.replacement;
-      }
-    },
-  };
+  if (op.kind === 'content') return [op.content];
+  if (op.kind === 'compressed') return [op.summary];
+  if (op.kind === 'syntheticInsert') return [op.payload.content];
+  if (op.kind === 'density')
+    return new DensityReplacementRows(op.payload.replacements);
+  return [];
 }
