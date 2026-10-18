@@ -30,7 +30,10 @@ interface FixtureRow {
   readonly planned: PlannedRow;
 }
 
-function fixtureRows(rows: readonly MistralRow[]): {
+function fixtureRows(
+  rows: readonly MistralRow[],
+  drafts?: readonly RowDraft[],
+): {
   readonly rows: FixtureRow[];
   readonly nextLabel: bigint;
 } {
@@ -42,12 +45,14 @@ function fixtureRows(rows: readonly MistralRow[]): {
     nextLabel,
     rows: rows.map((row, at) => {
       const speaker = row.speaker === 'ai' ? ROW_SPEAKER.ai : ROW_SPEAKER.tool;
-      const draft = draftRow({
-        speaker,
-        owner: 1 + (at % 2),
-        calls: row.speaker === 'ai' ? [row.id] : [],
-        responses: row.speaker === 'tool' ? [row.id] : [],
-      });
+      const draft =
+        drafts?.[at] ??
+        draftRow({
+          speaker,
+          owner: 1 + (at % 2),
+          calls: row.speaker === 'ai' ? [row.id] : [],
+          responses: row.speaker === 'tool' ? [row.id] : [],
+        });
       return {
         label: labels[at],
         draft,
@@ -70,10 +75,11 @@ export async function writeMistralSource(
   file: string,
   rows: readonly MistralRow[],
   mapping: ReadonlyMap<string, string>,
+  drafts?: readonly RowDraft[],
 ): Promise<void> {
   const deps = realDeps();
   const writer = await createJournal(file, testJournalSeams().dependencies);
-  const planned = fixtureRows(rows);
+  const planned = fixtureRows(rows, drafts);
   await writer.commitStreamedGroup(async (appender) => {
     const entries: RowEntry[] = [];
     const lens = await appender.append(plainRecord(RECORD_KIND.LENS, 5, 48));

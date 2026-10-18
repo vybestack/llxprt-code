@@ -16,7 +16,6 @@ import {
   storeDeps,
 } from './storeFixtures.js';
 import type { StoreSnapshot } from './storeSnapshot.js';
-import { accessOf } from './pinnedAccess.js';
 
 const UTF8 = new TextEncoder();
 const UTF8_DECODER = new TextDecoder();
@@ -79,11 +78,16 @@ export async function mapContents(
   store: JournalStore,
   which: 'state' | 'meta',
 ): Promise<Map<string, string>> {
-  const version = store.published;
-  if (version === undefined) throw new Error('nothing is published');
-  const root =
-    which === 'state' ? version.roots.stateRoot : version.roots.metaRoot;
-  return mapContentsAt(await accessOf(store), root);
+  const read = await store.openRead();
+  try {
+    const { version } = read;
+    if (version === undefined) throw new Error('nothing is published');
+    const root =
+      which === 'state' ? version.roots.stateRoot : version.roots.metaRoot;
+    return await mapContentsAt(read.access, root);
+  } finally {
+    read.close();
+  }
 }
 
 /** The owner dictionary, start metadata and title a session carries (design 3.5). */

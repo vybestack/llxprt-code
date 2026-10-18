@@ -64,16 +64,20 @@ export class OffsetAudit {
     expect(target).toBeLessThan(referrer);
   }
 
-  async walkVersion(version: Version): Promise<void> {
+  async walkVersion(version: Version, copied = true): Promise<void> {
     const { roots } = version;
     await this.check(
       OFFSET.trailerSelf,
       version.selfOffset,
       version.durableEnd,
     );
-    expect(version.parent).toBe(0);
-    expect(version.skip).toStrictEqual([0, 0, 0]);
-    expect(version.lineageDepth).toBe(0);
+    if (copied) {
+      expect(version.parent).toBe(0);
+      expect(version.skip).toStrictEqual([0, 0, 0]);
+      expect(version.lineageDepth).toBe(0);
+    } else {
+      await this.walkAncestors(version);
+    }
     if (roots.rowRoot !== 0) {
       await this.check(
         OFFSET.trailerRowRoot,
@@ -109,6 +113,27 @@ export class OffsetAudit {
         version.lastRowOffset,
         version.selfOffset,
       );
+    }
+  }
+
+  private async walkAncestors(version: Version): Promise<void> {
+    for (const offset of version.skip) {
+      if (offset !== 0)
+        await this.check(OFFSET.trailerSkip, offset, version.selfOffset);
+    }
+    if (version.parent !== 0) {
+      await this.check(
+        OFFSET.trailerParent,
+        version.parent,
+        version.selfOffset,
+      );
+      if (!this.visited.has(version.parent)) {
+        this.visited.add(version.parent);
+        await this.walkVersion(
+          await readVersionAt(this.access, version.parent),
+          false,
+        );
+      }
     }
   }
 
@@ -182,6 +207,10 @@ export class OffsetAudit {
       );
       const saved = await readVersionAt(this.access, descriptor.trailerOffset);
       expect(saved.commitSeq).toBe(descriptor.commitSeq);
+      if (!this.visited.has(saved.selfOffset)) {
+        this.visited.add(saved.selfOffset);
+        await this.walkVersion(saved, false);
+      }
     }
   }
 }
