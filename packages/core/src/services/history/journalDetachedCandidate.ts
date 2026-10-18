@@ -161,9 +161,14 @@ export class JournalCandidate {
     return { start: newLastSeq + 1, end: previousLastSeq, reason: 'rewound' };
   }
 
-  private async accept(row: IContent, owner: number): Promise<void> {
+  private async accept(source: IContent, owner: number): Promise<void> {
     const { host, modelName, signal, appendOnly } = this.ctx;
-    validateHistoryEntry(row, this.count);
+    validateHistoryEntry(source, this.count);
+    // The stamper writes the marker in place; the caller's row stays as it was handed in.
+    const row =
+      source.metadata?.chronology === undefined
+        ? { ...source, metadata: { ...source.metadata } }
+        : source;
     host.chronology.stamp(row);
     this.tokens += await host.estimate([row], modelName, signal);
     this.range.add(row);
