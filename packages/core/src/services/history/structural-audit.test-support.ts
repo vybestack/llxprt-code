@@ -479,7 +479,7 @@ function resumeFacadeBound(
     internalReturns.length !== 1 ||
     internalResult === undefined ||
     !ts.isCallExpression(internalResult) ||
-    internalResult.expression.getText(source) !== 'adoptResumeJournal'
+    internalResult.expression.getText(source) !== 'this.journal.adoptResume'
   )
     return false;
   return deferredResumeBound(source, wrapper);
