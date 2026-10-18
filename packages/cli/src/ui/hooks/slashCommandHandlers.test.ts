@@ -36,9 +36,18 @@ import { createSlashCommandCancellation } from './useSlashCommandCancellation.js
 import { computeIsAwaitingSlashCommandConfirmation } from '../containers/AppContainer/hooks/useAppInput.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
+import {
+  assertNativeSlashEvent,
+  assertJsonlSlashEvent,
+  assertNativeDirectories,
+  assertJsonlDirectories,
+  useRecordingLogCapture,
+} from './__tests__/support/slashRecordingAssertions.js';
+
 const performResumeMock = vi.fn();
 
 describe('slashCommandHandlers', () => {
+  const captureRecordingLog = useRecordingLogCapture();
   beforeEach(() => {
     performResumeMock.mockReset();
   });
@@ -153,7 +162,7 @@ describe('slashCommandHandlers', () => {
     ]);
   });
 
-  it('persists a slash error only through the selected owner recorder', async () => {
+  it('reports a slash error only through the selected owner recorder', async () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
@@ -163,6 +172,8 @@ describe('slashCommandHandlers', () => {
       if (!path) throw new Error('No recording path');
       const deps = createDeps(vi.fn());
       const rawWrite = vi.fn();
+      const before = new Uint8Array(await readFile(path));
+      const logs = captureRecordingLog();
       await processSlashCommand(
         {
           ...deps,
@@ -180,9 +191,10 @@ describe('slashCommandHandlers', () => {
         },
         '/help',
       );
-      expect(
-        (await readFile(path, 'utf8')).match(/owner slash failure/g),
-      ).toHaveLength(1);
+      const assertEvent = path.endsWith('.llxj')
+        ? assertNativeSlashEvent
+        : assertJsonlSlashEvent;
+      await assertEvent(path, before, 'owner slash failure', logs);
       expect(rawWrite).not.toHaveBeenCalled();
     });
   }, 30000);
@@ -202,6 +214,8 @@ describe('slashCommandHandlers', () => {
       await next.session.setRecording({ enabled: true });
       const secondPath = next.session.getRecording().path;
       if (!secondPath) throw new Error('No second recording path');
+      const before = new Uint8Array(await readFile(secondPath));
+      const logs = captureRecordingLog();
       const deps = createDeps(vi.fn());
       await processSlashCommand(
         {
@@ -220,13 +234,14 @@ describe('slashCommandHandlers', () => {
       expect(await readFile(firstPath, 'utf8')).not.toContain(
         'resumed owner failure',
       );
-      expect(await readFile(secondPath, 'utf8')).toContain(
-        'resumed owner failure',
-      );
+      const assertEvent = secondPath.endsWith('.llxj')
+        ? assertNativeSlashEvent
+        : assertJsonlSlashEvent;
+      await assertEvent(secondPath, before, 'resumed owner failure', logs);
     });
   }, 30000);
 
-  it('records /directory add once in the owner session JSONL', async () => {
+  it('records /directory add once in the owner session', async () => {
     await withRecordingLifetimeFixture(
       async ({ agent, config, settingsOwner }) => {
         await agent.setHistory([
@@ -270,11 +285,10 @@ describe('slashCommandHandlers', () => {
             },
             `/directory add ${addedDirectory}`,
           );
-          const lines = (await readFile(path, 'utf8')).split('\n');
-          expect(
-            lines.filter((line) => line.includes('directories_changed')),
-          ).toHaveLength(1);
-          expect(lines.join('\n')).toContain(addedDirectory);
+          const assertDirectories = path.endsWith('.llxj')
+            ? assertNativeDirectories
+            : assertJsonlDirectories;
+          await assertDirectories(path, addedDirectory);
           expect(agent.workspace.containsPath(addedDirectory)).toBe(true);
         } finally {
           await rm(addedDirectory, { recursive: true, force: true });

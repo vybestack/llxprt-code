@@ -8,17 +8,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   LocalMediaStore,
   DebugLogger,
-  SessionRecordingService,
   type SessionRecordingPort,
   getProjectHash,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { continueCommand } from '../commands/continueCommand.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
@@ -36,7 +40,7 @@ async function writeHealthySession(
   chatsDir: string,
   projectHash: string,
 ): Promise<void> {
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     chatsDir,
     sessionId: SESSION_ID,
     projectHash,
@@ -45,10 +49,12 @@ async function writeHealthySession(
     model: 'test-model',
   });
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'restored conversation' }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'restored conversation' }],
+      },
+    ]);
     await recording.flush();
   } finally {
     await recording.dispose();
@@ -59,6 +65,31 @@ async function writeCorruptSession(
   chatsDir: string,
   projectHash: string,
 ): Promise<string> {
+  if (selectBackend() === 'journal') {
+    const recorder = createRecorderForTest({
+      chatsDir,
+      projectHash,
+      sessionId: 'corrupt-resume-session',
+    });
+    let path: string;
+    try {
+      await recordRowsForTest(recorder, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'corrupt fixture' }],
+        },
+      ]);
+      const recorded = recorder.getFilePath();
+      if (recorded === null) throw new Error('Expected corrupt fixture path');
+      path = recorded;
+    } finally {
+      await recorder.dispose();
+    }
+    const bytes = await readFile(path);
+    bytes[60] ^= 1;
+    await writeFile(path, bytes);
+    return path;
+  }
   const filePath = join(chatsDir, 'session-2026-10-08T21-18-08-corrupt.jsonl');
   const header = {
     v: 1,
@@ -172,6 +203,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
     await writeHealthySession(chatsDir, projectHash);
     const corruptPath = await writeCorruptSession(chatsDir, projectHash);
     const turnStore = createTurnStore();
+    const reason =
+      selectBackend() === 'journal'
+        ? 'Journal header CRC mismatch'
+        : CORRUPT_REASON;
 
     await processSlashCommand(createDeps(turnStore), `/continue ${SESSION_ID}`);
 
@@ -180,7 +215,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       .history.map((item) => ('text' in item ? item.text : item.type));
     expect(visible).toStrictEqual([
       'restored conversation',
-      `Warning: Skipped unreadable session recording ${corruptPath}: ${CORRUPT_REASON}`,
+      `Warning: Skipped unreadable session recording ${corruptPath}: ${reason}`,
     ]);
   });
 });
