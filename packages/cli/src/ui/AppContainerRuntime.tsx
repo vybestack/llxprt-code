@@ -233,10 +233,7 @@ function useAppDialogsRuntime(
   const setProvider = useSetProvider();
   return useAppDialogs({
     config: props.slashCommandRuntime,
-    recordRecordingEvent: useBound(
-      props.agent.session,
-      props.agent.session.recordRecordingEvent,
-    ),
+    recordRecordingEvent: bootstrap.recordRecordingEvent,
     switchProviderAfterAuth: useCallback(
       (provider: string) =>
         setProvider(provider, undefined, { autoOAuth: false }),

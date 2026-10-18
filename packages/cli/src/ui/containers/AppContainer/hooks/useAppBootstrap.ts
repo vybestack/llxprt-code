@@ -124,6 +124,7 @@ export interface AppBootstrapResult {
   resumedHistory?: IContent[];
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
+  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
 }
 
 function useInitializationBindings(
@@ -370,6 +371,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     resumedHistory: props.resumedHistory,
     recordingIntegration: props.recordingIntegration,
     recordingOwner: props.recordingOwner,
+    recordRecordingEvent: props.recordRecordingEvent,
     nightly: h.nightly,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
     updateInfo: h.updateInfo,

@@ -181,6 +181,19 @@ describe('bootstrap captured operation ownership', () => {
       expect(await readFile(peerPath, 'utf8')).not.toContain(
         'captured bootstrap feedback',
       );
+      await hook.result.current.bootstrap.recordRecordingEvent({
+        type: 'session_event',
+        severity: 'warning',
+        message: 'dialog recording operation',
+      });
+      await waitFor(async () =>
+        expect(await readFile(ownerPath, 'utf8')).toContain(
+          'dialog recording operation',
+        ),
+      );
+      expect(await readFile(peerPath, 'utf8')).not.toContain(
+        'dialog recording operation',
+      );
     } finally {
       hook.unmount();
       await config.dispose();
