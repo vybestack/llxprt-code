@@ -4,11 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
@@ -27,8 +22,7 @@ import {
 import { RuntimeContextProvider } from '../../__tests__/runtime-context-fixture.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
-import { initialAppState } from '../reducers/appReducer.js';
-import { useAppBootstrap } from '../containers/AppContainer/hooks/useAppBootstrap.js';
+import { useBootstrapRuntime } from '../containers/AppContainer/hooks/useBootstrapRuntime.js';
 
 describe('bootstrap captured operation ownership', () => {
   const makeOwner = useCommandOwners();
@@ -82,66 +76,60 @@ describe('bootstrap captured operation ownership', () => {
       cancelInteractiveAuth: () => 0,
     };
     const settings = createMockSettings({});
+    for (const current of [owner, peer]) {
+      current.metrics.setTokenTrackingMetrics({
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 91,
+        timeToFirstToken: 23,
+        tokensPerSecond: 7,
+        sessionTokenUsage: {
+          input: 12,
+          output: 9,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 21,
+        },
+      });
+    }
     const hook = renderHook(
       () => {
         const stores = useAppStores(runtime);
-        const bootstrap = useAppBootstrap(
-          Object.assign(
-            {
-              uiRuntime,
-              agent: peer,
-              settings,
-              version: 'test',
-              appState: initialAppState,
-              appDispatch: () => {},
-              terminalStore: stores.terminalStore,
-              settingsStore: stores.settingsStore,
-              turnStore: stores.turnStore,
-              recordingOwner: 'agent' as const,
-            },
-            {
-              triggerSessionStart: owner.hooks.triggerSessionStart.bind(
-                owner.hooks,
+        const bootstrap = useBootstrapRuntime(
+          {
+            version: 'test',
+            readLlxprtMdFileCount: owner.memory.getFileCount.bind(owner.memory),
+            readCoreMemoryFileCount: owner.memory.getCoreFileCount.bind(
+              owner.memory,
+            ),
+            triggerSessionStart: owner.hooks.triggerSessionStart.bind(
+              owner.hooks,
+            ),
+            appendHistory: owner.addHistory.bind(owner),
+            recordRecordingEvent: owner.session.recordRecordingEvent.bind(
+              owner.session,
+            ),
+            setTokenTrackingMetrics: owner.metrics.setTokenTrackingMetrics.bind(
+              owner.metrics,
+            ),
+            readProviderMetrics:
+              owner.providerReads.getActiveProviderMetrics.bind(
+                owner.providerReads,
               ),
-              appendHistory: owner.addHistory.bind(owner),
-              recordRecordingEvent: owner.session.recordRecordingEvent.bind(
-                owner.session,
+            readSessionTokenUsage:
+              owner.providerReads.getSessionTokenUsage.bind(
+                owner.providerReads,
               ),
-              metrics: owner.metrics,
-              readLlxprtMdFileCount: owner.memory.getFileCount.bind(
-                owner.memory,
-              ),
-              readCoreMemoryFileCount: owner.memory.getCoreFileCount.bind(
-                owner.memory,
-              ),
-              readEmojiFilterMode: () => 'auto' as const,
-              readTerminalBackground:
-                uiRuntime.shell.getTerminalBackground.bind(uiRuntime.shell),
-              readCurrentIde: () =>
-                uiRuntime.ide.getIdeClient()?.getCurrentIde(),
-              readIdeMode: uiRuntime.ide.getIdeMode.bind(uiRuntime.ide),
-              registerIdeCleanup: () => {},
-              readDebugMode: uiRuntime.app.getDebugMode.bind(uiRuntime.app),
-              readTokenHistory: () =>
-                peer.agentClient.getHistoryService() ?? null,
-              subscribeHistoryTokens: bindHistoryTokenSubscription(
-                () => owner.agentClient.getHistoryService() ?? null,
-                new DebugLogger('bootstrap-owner-tokens'),
-              ),
-              subscribeRecordingHistory: bindRecordingHistorySubscription(
-                () => owner.agentClient.getHistoryService() ?? null,
-                new DebugLogger('bootstrap-owner-recording'),
-              ),
-              readProviderMetrics:
-                owner.providerReads.getActiveProviderMetrics.bind(
-                  owner.providerReads,
-                ),
-              readSessionTokenUsage:
-                owner.providerReads.getSessionTokenUsage.bind(
-                  owner.providerReads,
-                ),
-            },
-          ),
+          },
+          settings.merged,
+          stores,
+          uiRuntime.ephemeral,
+          uiRuntime.shell,
+          uiRuntime.ide,
+          uiRuntime.app,
+          () => owner.agentClient.getHistoryService() ?? null,
+          'agent',
+          undefined,
         );
         return { bootstrap, settingsStore: stores.settingsStore };
       },
@@ -162,6 +150,14 @@ describe('bootstrap captured operation ownership', () => {
       },
     );
     try {
+      await waitFor(() =>
+        expect(
+          owner.metrics.getMetrics().tokenTracking.sessionTokenUsage,
+        ).toStrictEqual(owner.providerReads.getSessionTokenUsage()),
+      );
+      expect(
+        peer.metrics.getMetrics().tokenTracking.sessionTokenUsage.total,
+      ).not.toBe(owner.providerReads.getSessionTokenUsage().total);
       await waitFor(() =>
         expect(
           hook.result.current.settingsStore.store.getState().historyTokenCount,

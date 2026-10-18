@@ -31,11 +31,12 @@ import {
   useUpdateActiveProviderApiKey,
 } from './contexts/RuntimeContext.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
-import { registerCleanup } from '../utils/cleanup.js';
+import { useBootstrapRuntime } from './containers/AppContainer/hooks/useBootstrapRuntime.js';
 import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './containers/AppContainer/hooks/historyTokenSubscriptions.js';
+  useRecordingInfrastructure,
+  type UseRecordingInfrastructureResult,
+} from './containers/AppContainer/hooks/useRecordingInfrastructure.js';
+import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 
 import type React from 'react';
 import type {
@@ -46,6 +47,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
@@ -56,10 +58,9 @@ import {
   DefaultAppLayout,
   type DefaultAppLayoutProps,
 } from './layouts/DefaultAppLayout.js';
-import {
-  useAppBootstrap,
-  type AppBootstrapProps,
-  type AppBootstrapResult,
+import type {
+  AppBootstrapProps,
+  AppBootstrapResult,
 } from './containers/AppContainer/hooks/useAppBootstrap.js';
 import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js';
 import type {
@@ -147,7 +148,7 @@ export interface AppContainerRuntimeProps
   triggerSessionStart: AppBootstrapProps['triggerSessionStart'];
   appendHistory: AppBootstrapProps['appendHistory'];
   recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
-  metrics: AppBootstrapProps['metrics'];
+  metrics: SessionMetricUpdates;
   readTokenHistory: () => ReturnType<
     Agent['agentClient']['getHistoryService']
   > | null;
@@ -252,6 +253,7 @@ function useAppDialogsRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
   stores: ReturnType<typeof useAppStores>,
+  recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
 ): AppDialogsResult {
   const {
     dialogStore,
@@ -260,6 +262,11 @@ function useAppDialogsRuntime(
     settingsStore,
     turnStore,
   } = stores;
+  useExtensionAutoUpdate({
+    settings: props.settings,
+    onConsoleMessage: bootstrap.handleNewMessage,
+  });
+  useUnconfiguredGuidance(turnStore, dialogStore);
   const setProvider = useSetProvider();
   return useAppDialogs({
     config: props.slashCommandRuntime,
@@ -275,7 +282,7 @@ function useAppDialogsRuntime(
     subagentDefinitions: props.subagentDefinitions,
     subagentWrites: props.subagentWrites,
     profileDefinitions: props.profileDefinitions,
-    settings: bootstrap.settings,
+    settings: props.settings,
     store: dialogStore,
     dialogs: dialogOpeners,
     terminalStore,
@@ -283,9 +290,9 @@ function useAppDialogsRuntime(
     turnStore,
     appDispatch: props.appDispatch,
     handleNewMessage: bootstrap.handleNewMessage,
-    recordingIntegration: bootstrap.recordingIntegration,
-    recordingOwner: bootstrap.recordingOwner,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    recordingIntegration: props.recordingIntegration,
+    recordingOwner: props.recordingOwner,
+    recordingIntegrationRef,
     getActiveModelName: useGetActiveModelName(),
     getActiveProfileName: useGetActiveProfileName(),
     getActiveProviderName: useGetActiveProviderName(),
@@ -307,22 +314,22 @@ function useAppDialogsRuntime(
 }
 
 /** Input runtime: wiring only; every param is bootstrap/store-owned. */
-function useAppInputRuntime(
+function useInputBindings(
   commands: SlashCommandProcessorCoreResult,
   setQuittingMessagesRef: React.MutableRefObject<
     ((messages: HistoryItem[]) => void) | null
   >,
   props: AppContainerRuntimeProps,
-  bootstrap: AppBootstrapResult,
   inputView: ReturnType<typeof buildInputView>,
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ): AppInputResult {
   const { dialogStore, turnStore } = inputView;
   const { uiRuntime: runtime, slashCommandRuntime: config } = props;
   const browser = useInputBrowserCommands(
     props.session,
     config,
-    bootstrap.recordingOwner,
-    bootstrap.recordingSwapCallbacks,
+    props.recordingOwner,
+    recordingSwapCallbacks,
     props.mediaStore,
     props.readClientHistory,
     turnStore,
@@ -341,7 +348,7 @@ function useAppInputRuntime(
     props.metrics,
     props.tasks,
     props.session,
-    bootstrap.recordingOwner,
+    props.recordingOwner,
     props.recordingIntegration,
   );
   const policy = useInputStreamPolicy(
@@ -383,74 +390,24 @@ function useAppInputRuntime(
   });
 }
 
-function useBootstrapRuntime(
-  props: AppContainerRuntimeProps,
-  stores: ReturnType<typeof useAppStores>,
-): AppBootstrapResult {
-  const { terminalStore, turnStore, settingsStore } = stores;
-  const { uiRuntime, ...bootstrapProps } = props;
-  const tokenLogger = useMemo(
-    () => new DebugLogger('llxprt:ui:tokentracking'),
-    [],
-  );
-  return useAppBootstrap({
-    ...bootstrapProps,
-    readEmojiFilterMode: useCallback(
-      () => resolveEmojiFilterMode(uiRuntime.ephemeral),
-      [uiRuntime],
-    ),
-    readLlxprtMdFileCount: useBound(
-      uiRuntime.memory,
-      uiRuntime.memory.getLlxprtMdFileCount,
-    ),
-    readCoreMemoryFileCount: useBound(
-      uiRuntime.memory,
-      uiRuntime.memory.getCoreMemoryFileCount,
-    ),
-    readTerminalBackground: useBound(
-      uiRuntime.shell,
-      uiRuntime.shell.getTerminalBackground,
-    ),
-    readCurrentIde: useCallback(
-      () => uiRuntime.ide.getIdeClient()?.getCurrentIde(),
-      [uiRuntime],
-    ),
-    readIdeMode: useBound(uiRuntime.ide, uiRuntime.ide.getIdeMode),
-    registerIdeCleanup: useCallback(() => {
-      const ideClient = uiRuntime.ide.getIdeClient();
-      if (ideClient !== undefined)
-        registerCleanup(() => {
-          void ideClient.disconnect();
-        });
-    }, [uiRuntime]),
-    readDebugMode: useBound(uiRuntime.app, uiRuntime.app.getDebugMode),
-    triggerSessionStart: props.triggerSessionStart,
-    appendHistory: props.appendHistory,
-    recordRecordingEvent: props.recordRecordingEvent,
-    metrics: props.metrics,
-    subscribeHistoryTokens: useMemo(
-      () => bindHistoryTokenSubscription(props.readTokenHistory, tokenLogger),
-      [props.readTokenHistory, tokenLogger],
-    ),
-    subscribeRecordingHistory: useMemo(
-      () =>
-        bindRecordingHistorySubscription(props.readTokenHistory, tokenLogger),
-      [props.readTokenHistory, tokenLogger],
-    ),
-    readProviderMetrics: props.readProviderMetrics,
-    readSessionTokenUsage: props.readSessionTokenUsage,
-    terminalStore,
-    turnStore,
-    settingsStore,
-  });
-}
-
-function useRuntimeCommandProcessor(
+function useAppInputRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  view: ReturnType<typeof useInputCommandView>,
+  stores: ReturnType<typeof useAppStores>,
+  recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ) {
-  return useSlashCommandProcessorCore({
+  const view = useInputCommandView(
+    useBound(
+      props.slashCommandRuntime,
+      props.slashCommandRuntime.getExtensions,
+    ),
+    props.slashCommandRuntime.getWorkingDir(),
+    stores,
+    props.settings,
+    bootstrap.setLlxprtMdFileCount,
+  );
+  const commands = useSlashCommandProcessorCore({
     registerCredentials: props.registerCredentials,
     readBuiltinCommands: props.readBuiltinCommands,
     loadRegisteredCommands: props.loadRegisteredCommands,
@@ -470,35 +427,10 @@ function useRuntimeCommandProcessor(
     startCommandSession: props.startCommandSession,
     listCommandTools: props.listCommandTools,
     ...view,
-    recordingIntegration:
-      bootstrap.recordingIntegrationRef?.current ?? undefined,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingOwner: bootstrap.recordingOwner,
+    recordingIntegration: recordingIntegrationRef?.current ?? undefined,
+    recordingSwapCallbacks,
+    recordingOwner: props.recordingOwner,
   });
-}
-
-export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
-  debug.debug('AppContainer architecture active (v2)');
-  const stores = useAppStores(props.slashCommandRuntime);
-  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
-  const bootstrap = useBootstrapRuntime(props, stores);
-  const dialogs = useAppDialogsRuntime(props, bootstrap, stores);
-  const inputCommandView = useInputCommandView(
-    useBound(
-      props.slashCommandRuntime,
-      props.slashCommandRuntime.getExtensions,
-    ),
-    props.slashCommandRuntime.getWorkingDir(),
-    stores,
-    props.settings,
-    bootstrap.setLlxprtMdFileCount,
-  );
-  const setQuittingMessagesRef = inputCommandView.setQuittingMessagesRef;
-  const commands = useRuntimeCommandProcessor(
-    props,
-    bootstrap,
-    inputCommandView,
-  );
   const inputView = buildInputView(
     stores,
     props.settings,
@@ -509,53 +441,120 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     bootstrap.setIdePromptAnswered,
     bootstrap.setLlxprtMdFileCount,
   );
-  const input = useAppInputRuntime(
+  return useInputBindings(
     commands,
-    setQuittingMessagesRef,
+    view.setQuittingMessagesRef,
+    props,
+    inputView,
+    recordingSwapCallbacks,
+  );
+}
+
+function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
+  return {
+    readLlxprtMdFileCount: useBound(memory, memory.getLlxprtMdFileCount),
+    readCoreMemoryFileCount: useBound(memory, memory.getCoreMemoryFileCount),
+  };
+}
+
+export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
+  debug.debug('AppContainer architecture active (v2)');
+  const { uiRuntime, slashCommandRuntime: config, settings, metrics } = props;
+  const stores = useAppStores(config);
+  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
+  const { recordingIntegrationRef, recordingSwapCallbacks } =
+    useRecordingInfrastructure(
+      props.initialRecordingService,
+      props.recordingIntegration,
+      props.initialLockHandle,
+      props.recordingOwner,
+    );
+  const bootstrap = useBootstrapRuntime(
+    {
+      ...useBootstrapMemoryReads(uiRuntime.memory),
+      triggerSessionStart: props.triggerSessionStart,
+      appendHistory: props.appendHistory,
+      recordRecordingEvent: props.recordRecordingEvent,
+      setTokenTrackingMetrics: useBound(
+        metrics,
+        metrics.setTokenTrackingMetrics,
+      ),
+      readProviderMetrics: props.readProviderMetrics,
+      readSessionTokenUsage: props.readSessionTokenUsage,
+      resumedHistory: props.resumedHistory,
+      version: props.version,
+      memoryController: props.memoryController,
+    },
+    settings.merged,
+    stores,
+    uiRuntime.ephemeral,
+    uiRuntime.shell,
+    uiRuntime.ide,
+    uiRuntime.app,
+    props.readTokenHistory,
+    props.recordingOwner,
+    recordingIntegrationRef,
+  );
+  const dialogs = useAppDialogsRuntime(
     props,
     bootstrap,
-    inputView,
+    stores,
+    recordingIntegrationRef,
+  );
+  const input = useAppInputRuntime(
+    props,
+    bootstrap,
+    stores,
+    recordingIntegrationRef,
+    recordingSwapCallbacks,
   );
   const layout = useAppLayout({
-    uiRuntime: props.uiRuntime,
-    settings: props.settings,
+    uiRuntime,
+    settings,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
     turnStore,
     store: dialogStore,
     terminalStore,
     settingsStore,
   });
-  useUnconfiguredGuidance(turnStore, dialogStore);
-  const readTranscript = useCallback(
-    () =>
-      getInteractiveTranscriptPath(
-        bootstrap.recordingOwner,
-        props.readAgentRecordingPath,
-        () =>
-          bootstrap.recordingSwapCallbacks
-            ?.getCurrentRecording()
-            ?.getFilePath() ?? undefined,
-      ),
-    [
-      bootstrap.recordingOwner,
-      bootstrap.recordingSwapCallbacks,
-      props.readAgentRecordingPath,
-    ],
-  );
   return renderAppRuntimeView(
     props.runtimeMessageBus,
-    props.slashCommandRuntime,
+    config,
     props.version,
-    props.uiRuntime.app.getScreenReader(),
-    props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
-    props.uiRuntime.app.getDebugMode(),
+    uiRuntime.app.getScreenReader(),
+    uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
+    uiRuntime.app.getDebugMode(),
     bootstrap,
+    settings,
+    props.startupWarnings,
     layout,
     useAppCommands(dialogs, input, layout, terminalStore),
     stores,
-    readTranscript,
+    useTranscriptReader(
+      props.recordingOwner,
+      recordingSwapCallbacks,
+      props.readAgentRecordingPath,
+    ),
   );
 };
+
+function useTranscriptReader(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
+  readAgentRecordingPath: () => string | undefined,
+): () => string | undefined {
+  return useCallback(
+    () =>
+      getInteractiveTranscriptPath(
+        recordingOwner,
+        readAgentRecordingPath,
+        () =>
+          recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
+          undefined,
+      ),
+    [recordingOwner, recordingSwapCallbacks, readAgentRecordingPath],
+  );
+}
 
 interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   appCommands: AppCommandBindings;
@@ -601,7 +600,7 @@ function useInputBrowserCommands(
     Parameters<typeof useBrowserCatalogCommands>[2] &
     Parameters<typeof resolveEmojiFilterMode>[0],
   recordingOwner: 'agent' | 'raw' | undefined,
-  recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'],
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
   mediaStore: Agent['agentClient']['mediaStore'],
   readRawHistory: () => ReturnType<Agent['agentClient']['getHistoryService']>,
   turnStore: TurnStore,
@@ -797,6 +796,8 @@ function renderAppRuntimeView(
   disableLoadingPhrases: boolean,
   debugMode: boolean,
   bootstrap: AppBootstrapResult,
+  settings: LoadedSettings,
+  startupWarnings: string[] | undefined,
   layout: ReturnType<typeof useAppLayout>,
   commands: AppCommandBindings,
   stores: ReturnType<typeof useAppStores>,
@@ -811,8 +812,8 @@ function renderAppRuntimeView(
       screenReaderEnabled={screenReaderEnabled}
       disableLoadingPhrases={disableLoadingPhrases}
       debugMode={debugMode}
-      settings={bootstrap.settings}
-      startupWarnings={bootstrap.startupWarnings}
+      settings={settings}
+      startupWarnings={startupWarnings ?? []}
       nightly={bootstrap.nightly}
       updateInfo={bootstrap.updateInfo}
       mainControlsRef={layout.mainControlsRef}
