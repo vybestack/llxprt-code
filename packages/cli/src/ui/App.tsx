@@ -188,6 +188,11 @@ export class AppWrapper extends Component<AppProps> {
   #registration: CredentialCommandRegistration | undefined;
   #recordingPathAgent: Agent | undefined;
   #readAgentRecordingPath: (() => string | undefined) | undefined;
+  #autoPromptAgent: Agent | undefined;
+  #autoPromptRuntime: SlashCommandRuntime | undefined;
+  #generateSubagentPrompt:
+    | ReturnType<typeof bindAutoPromptOperation>
+    | undefined;
   readonly #toolkeys = createToolkeyCommands();
 
   private readAgentRecordingPath(): () => string | undefined {
@@ -199,6 +204,28 @@ export class AppWrapper extends Component<AppProps> {
     if (this.#readAgentRecordingPath === undefined)
       throw new Error('Agent recording reader was not initialized');
     return this.#readAgentRecordingPath;
+  }
+
+  private generateSubagentPrompt(): ReturnType<typeof bindAutoPromptOperation> {
+    const agent = this.props.agent;
+    const runtime = this.props.slashCommandRuntime;
+    if (
+      this.#autoPromptAgent !== agent ||
+      this.#autoPromptRuntime !== runtime
+    ) {
+      const sessionClient = agent.sessionClient;
+      this.#generateSubagentPrompt = bindAutoPromptOperation(
+        () => agent.getProvider(),
+        () => agent.agentClient,
+        () => sessionClient.createDetachedAgentClient(),
+        () => runtime.getContentGeneratorConfig(),
+      );
+      this.#autoPromptAgent = agent;
+      this.#autoPromptRuntime = runtime;
+    }
+    if (this.#generateSubagentPrompt === undefined)
+      throw new Error('Subagent prompt operation was not initialized');
+    return this.#generateSubagentPrompt;
   }
 
   private capture() {
@@ -667,6 +694,7 @@ export class AppWrapper extends Component<AppProps> {
                               historyReads={this.#history}
                               registerCredentials={registerCredentials}
                               readAgentRecordingPath={this.readAgentRecordingPath()}
+                              generateSubagentPrompt={this.generateSubagentPrompt()}
                             />
                           </OverflowProvider>
                         </ProviderAliasRefreshProvider>
@@ -708,6 +736,7 @@ const AppWithState = (
       loadRegisteredCommands: LoadRegisteredCommands;
       subscribeCommandChanges: SubscribeCommandChanges;
       readAgentRecordingPath: () => string | undefined;
+      generateSubagentPrompt: (description: string) => Promise<string>;
     },
 ) => {
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);

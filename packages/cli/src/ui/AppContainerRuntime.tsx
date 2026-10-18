@@ -119,7 +119,6 @@ import {
   useInputAgentOperations,
   useInputStreamPolicy,
 } from './inputOwnerBindings.js';
-import { useAutoPromptOperation } from './hooks/useAutoPromptOperation.js';
 import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
@@ -153,6 +152,7 @@ export interface AppContainerRuntimeProps
    */
   agent: Agent;
   readAgentRecordingPath: () => string | undefined;
+  generateSubagentPrompt: (description: string) => Promise<string>;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -241,18 +241,7 @@ function useAppDialogsRuntime(
       [setProvider],
     ),
     listTools: props.listCommandTools,
-    generatePrompt: useAutoPromptOperation(
-      useBound(props.agent, props.agent.getProvider),
-      useCallback(() => props.agent.agentClient, [props.agent]),
-      useBound(
-        props.agent.sessionClient,
-        props.agent.sessionClient.createDetachedAgentClient,
-      ),
-      useBound(
-        props.slashCommandRuntime,
-        props.slashCommandRuntime.getContentGeneratorConfig,
-      ),
-    ),
+    generatePrompt: props.generateSubagentPrompt,
     readPolicyRules: useMemo(
       () =>
         bindPolicyRulesReader(props.agent.policy, () =>
