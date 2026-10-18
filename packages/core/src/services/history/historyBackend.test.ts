@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { createHistoryStore } from './historyBackend.js';
 import { HISTORY_BACKEND_ENV, selectBackend } from './historyBackendSelect.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
+import type { JournalHistoryStore } from './journalHistoryStore.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
@@ -59,6 +60,14 @@ const everyPortMethodListed: Exclude<
   ? true
   : false = true;
 
+// Fails to compile when either store stops satisfying the port.
+const bothStoresArePorts: [HistoryJournalStore, JournalHistoryStore] extends [
+  HistoryStorePort,
+  HistoryStorePort,
+]
+  ? true
+  : false = true;
+
 // Fails to compile when the recorder class stops providing the recording port.
 const recorderIsARecordingPort: SessionRecordingService extends RecordingPort
   ? true
@@ -103,6 +112,7 @@ describe('createHistoryStore', () => {
   it('builds the old store, which provides every port method', async () => {
     expect(everyPortMethodListed).toBe(true);
     expect(recorderIsARecordingPort).toBe(true);
+    expect(bothStoresArePorts).toBe(true);
     const store = createHistoryStore({}, 'old');
     try {
       expect(store).toBeInstanceOf(HistoryJournalStore);

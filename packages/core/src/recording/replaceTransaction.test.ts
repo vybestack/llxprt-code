@@ -314,17 +314,17 @@ describe('replace transactions', () => {
       for (const text of OLD)
         store.apply({ kind: 'content', content: row(text) });
       for (const op of transactionOps('tx-live', NEW, false)) store.apply(op);
-      expect(store.materialize().map(textOf)).toStrictEqual(OLD);
+      expect(store.materializeSynchronously().map(textOf)).toStrictEqual(OLD);
       expect(overlayRows(store)).toStrictEqual(OLD);
       store.apply({
         kind: 'replaceCommit',
         txId: 'tx-live',
         rowCount: NEW.length,
       });
-      expect(store.materialize().map(textOf)).toStrictEqual(NEW);
+      expect(store.materializeSynchronously().map(textOf)).toStrictEqual(NEW);
       expect(overlayRows(store)).toStrictEqual(NEW);
       await store.waitForDurable();
-      expect(store.materialize().map(textOf)).toStrictEqual(NEW);
+      expect(store.materializeSynchronously().map(textOf)).toStrictEqual(NEW);
       expect(overlayRows(store)).toStrictEqual(NEW);
       await store.dispose();
       await recorder.dispose();

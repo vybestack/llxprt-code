@@ -410,11 +410,17 @@ export class HistoryJournalStore implements HistoryStorePort {
     this.binding.recorder?.retireIdleTicketStorage();
   }
 
+  /** Every row, as {@link materializeSynchronously} samples them. */
+  materialize(): Promise<IContent[]> {
+    return new Promise((resolve) => resolve(this.materializeSynchronously()));
+  }
+
   /**
    * Transient materialization: fold the durable journal prefix, then the
-   * pending overlay. Fresh array every call; nothing is retained.
+   * pending overlay. Fresh array every call; nothing is retained. TEST ONLY
+   * for callers that must sample the rows in the current turn.
    */
-  materialize(): IContent[] {
+  materializeSynchronously(): IContent[] {
     const tx = new ReplaceTransactionFold();
     const durable = this.foldDurable(tx);
     for (let index = 0; index < this.binding.pending.length; index++)
@@ -427,16 +433,17 @@ export class HistoryJournalStore implements HistoryStorePort {
     return durable;
   }
 
-  clear(request: HistoryClearRequest): void {
-    clearHistoryRows({ journal: this, ...request });
+  clear(request: HistoryClearRequest): Promise<void> {
+    return Promise.resolve(clearHistoryRows({ journal: this, ...request }));
   }
 
-  validateAndFix(request: HistoryRepairRequest): HistoryRepair {
-    return repairHistoryRows(this, request);
+  validateAndFix(request: HistoryRepairRequest): Promise<HistoryRepair> {
+    return Promise.resolve(repairHistoryRows(this, request));
   }
 
-  adoptMediaOwner(owner: HistoryMediaOwner): void {
-    this.withReadRows((cursor) => owner.adopt(cursor.rows()));
+  adoptMediaOwner(owner: HistoryMediaOwner): Promise<void> {
+    const adopt = this.withReadRows((cursor) => owner.adopt(cursor.rows()));
+    return Promise.resolve(adopt);
   }
 
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {

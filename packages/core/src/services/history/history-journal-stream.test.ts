@@ -287,7 +287,13 @@ async function parityCase(root: string, count: number): Promise<ParityCase> {
   });
   const pending = row(10_000_000, 'pending-before');
   store.apply({ kind: 'content', content: pending });
-  return { recording, store, gate, expected: store.materialize(), pending };
+  return {
+    recording,
+    store,
+    gate,
+    expected: store.materializeSynchronously(),
+    pending,
+  };
 }
 
 async function verifyParity(root: string, count: number): Promise<number> {
@@ -308,8 +314,8 @@ async function verifyParity(root: string, count: number): Promise<number> {
     slice: { value: forbidden, configurable: true },
     [Symbol.iterator]: { value: forbidden, configurable: true },
   });
-  const eager = HistoryJournalStore.prototype.materialize;
-  HistoryJournalStore.prototype.materialize = () => {
+  const eager = HistoryJournalStore.prototype.materializeSynchronously;
+  HistoryJournalStore.prototype.materializeSynchronously = () => {
     throw new Error('eager materialize trap');
   };
   const readFile = spyOn(fs, 'readFileSync').mockImplementation(() => {
@@ -336,7 +342,7 @@ async function verifyParity(root: string, count: number): Promise<number> {
   } finally {
     resources.restore();
     readFile.mockRestore();
-    HistoryJournalStore.prototype.materialize = eager;
+    HistoryJournalStore.prototype.materializeSynchronously = eager;
     Object.defineProperties(pendingArray, {
       map: { value: map, configurable: true },
       slice: { value: slice, configurable: true },

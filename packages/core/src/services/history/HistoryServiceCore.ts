@@ -774,9 +774,9 @@ export abstract class HistoryServiceCore
   }
 
   async registerMediaOwner(owner: HistoryMediaOwner): Promise<void> {
-    this.runSynchronousHistoryMutation(() => {
+    await this.enqueueAsynchronousHistoryMutation(async () => {
       this.mediaOwner = owner;
-      this.journal.adoptMediaOwner(owner);
+      await this.journal.adoptMediaOwner(owner);
     });
   }
 

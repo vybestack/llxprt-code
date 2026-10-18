@@ -85,7 +85,7 @@ async function verifyDetachesPendingWritesByCopyingRawJournalBytesWithoutMateria
   });
   const eager = spyOn(
     HistoryJournalStore.prototype,
-    'materialize',
+    'materializeSynchronously',
   ).mockImplementation(() => {
     throw new Error('eager lifecycle read');
   });

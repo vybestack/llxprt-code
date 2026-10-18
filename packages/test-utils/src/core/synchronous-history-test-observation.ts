@@ -12,5 +12,5 @@ export function observeHistorySynchronouslyForTest(service: {
       'Synchronous test observation requires the service journal',
     );
   }
-  return journal.materialize();
+  return journal.materializeSynchronously();
 }

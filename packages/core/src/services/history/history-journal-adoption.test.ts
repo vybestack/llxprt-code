@@ -93,16 +93,22 @@ async function verifyAdoptsAnExistingDurableRangeWithoutCopyingThePreviousConver
 
   const adoption = store.adoptJournal(next, nextSeed.watermark);
   expect(store.journalPath()).toBe(nextSeed.filePath);
-  expect(store.materialize()).toStrictEqual([row('next row')]);
+  expect(store.materializeSynchronously()).toStrictEqual([row('next row')]);
   await adoption.commit();
   expect(await fs.readFile(nextSeed.filePath, 'utf8')).toBe(before);
   expect(await fs.readFile(oldSeed.filePath, 'utf8')).toContain('previous row');
   expect(previous.isActive()).toBe(true);
 
   store.apply({ kind: 'content', content: row('live row') });
-  expect(store.materialize()).toStrictEqual([row('next row'), row('live row')]);
+  expect(store.materializeSynchronously()).toStrictEqual([
+    row('next row'),
+    row('live row'),
+  ]);
   await store.waitForDurable();
-  expect(store.materialize()).toStrictEqual([row('next row'), row('live row')]);
+  expect(store.materializeSynchronously()).toStrictEqual([
+    row('next row'),
+    row('live row'),
+  ]);
 }
 
 async function verifyRollsBackJournalIdentityAndPendingRowsWithoutRewritingEitherFile(): Promise<void> {
@@ -118,11 +124,11 @@ async function verifyRollsBackJournalIdentityAndPendingRowsWithoutRewritingEithe
 
   await durable;
   await previous.flush();
-  expect(store.materialize()).toStrictEqual([row('candidate')]);
+  expect(store.materializeSynchronously()).toStrictEqual([row('candidate')]);
   adoption.rollback();
   await store.waitForDurable();
   expect(store.journalPath()).toBe(previous.getFilePath());
-  expect(store.materialize()).toStrictEqual([pending]);
+  expect(store.materializeSynchronously()).toStrictEqual([pending]);
   expect(next.isActive()).toBe(true);
 }
 
@@ -139,7 +145,9 @@ async function verifyDoesNotDecodeEitherJournalDuringAdoptionOrRollback(): Promi
   expect(store.journalPath()).toBe(nextSeed.filePath);
   adoption.rollback();
   expect(store.journalPath()).toBe(previousSeed.filePath);
-  expect(() => store.materialize()).toThrow('Unsupported recording version');
+  expect(() => store.materializeSynchronously()).toThrow(
+    'Unsupported recording version',
+  );
 }
 
 async function verifyPinsTheAdoptedPrefixEvenWhenTheRecorderHasALaterDurable(): Promise<void> {
@@ -149,10 +157,12 @@ async function verifyPinsTheAdoptedPrefixEvenWhenTheRecorderHasALaterDurable(): 
   const store = new HistoryJournalStore();
 
   const adoption = store.adoptJournal(next, selected.watermark);
-  expect(store.materialize()).toStrictEqual([row('selected prefix')]);
+  expect(store.materializeSynchronously()).toStrictEqual([
+    row('selected prefix'),
+  ]);
   adoption.rollback();
   expect(store.journalPath()).toBeNull();
-  expect(store.materialize()).toStrictEqual([]);
+  expect(store.materializeSynchronously()).toStrictEqual([]);
 }
 
 async function verifyCanAdoptAnEmptyRangeWithoutReadingALaterDurableFile(): Promise<void> {
@@ -160,9 +170,9 @@ async function verifyCanAdoptAnEmptyRangeWithoutReadingALaterDurableFile(): Prom
   await seed(next, 'outside empty range');
   const store = new HistoryJournalStore();
   const adoption = store.adoptJournal(next, { seq: 0, byteOffset: 0 });
-  expect(store.materialize()).toStrictEqual([]);
+  expect(store.materializeSynchronously()).toStrictEqual([]);
   await adoption.commit();
-  expect(store.materialize()).toStrictEqual([]);
+  expect(store.materializeSynchronously()).toStrictEqual([]);
 }
 
 async function verifyRejectsWritesAndOverlappingTransitionsUntilAdoptionIsSettled(): Promise<void> {
@@ -182,7 +192,7 @@ async function verifyRejectsWritesAndOverlappingTransitionsUntilAdoptionIsSettle
   adoption.rollback();
   expect(() => adoption.rollback()).toThrow('settled');
   await expect(adoption.commit()).rejects.toThrow('settled');
-  expect(store.materialize()).toStrictEqual([]);
+  expect(store.materializeSynchronously()).toStrictEqual([]);
 }
 
 async function verifyRetiresASelfOwnedOldJournalOnlyAfterCommitPreservingRollback(): Promise<void> {
@@ -203,5 +213,5 @@ async function verifyRetiresASelfOwnedOldJournalOnlyAfterCommitPreservingRollbac
     code: 'ENOENT',
   });
   expect(next.isActive()).toBe(true);
-  expect(store.materialize()).toStrictEqual([row('candidate')]);
+  expect(store.materializeSynchronously()).toStrictEqual([row('candidate')]);
 }

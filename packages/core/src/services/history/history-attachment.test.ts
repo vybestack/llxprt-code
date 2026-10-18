@@ -167,9 +167,9 @@ async function verifyRejectsAStaleDestinationRangeWithoutRemovingAConcurrentlyAc
   await destination.flush();
   expect(history.journalPath()).toBe(source.getFilePath());
   const reopened = new HistoryJournalStore(destination);
-  expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('existing').blocks, row('concurrent accepted').blocks],
-  );
+  expect(
+    reopened.materializeSynchronously().map((content) => content.blocks),
+  ).toStrictEqual([row('existing').blocks, row('concurrent accepted').blocks]);
   await reopened.dispose();
 }
 
@@ -204,9 +204,9 @@ async function verifyReportsCommittedDestinationEffectsAfterAWriteFailureWithout
     ]);
   });
   const reopened = new HistoryJournalStore(destination);
-  expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('destination').blocks],
-  );
+  expect(
+    reopened.materializeSynchronously().map((content) => content.blocks),
+  ).toStrictEqual([row('destination').blocks]);
   await reopened.dispose();
 }
 
@@ -242,7 +242,7 @@ async function verifyLateAttachesBareHistoryThroughTheRecordingIntegrationWithou
   const integration = new RecordingIntegration(destination);
   const eager = spyOn(
     HistoryJournalStore.prototype,
-    'materialize',
+    'materializeSynchronously',
   ).mockImplementation(() => {
     throw new Error('eager attachment');
   });
@@ -322,7 +322,7 @@ async function verifyCopiesOnlyTheSelectedSourceRangeNotALaterExternalTail(): Pr
   await source.commit('content', { content: row('outside range') });
   const destination = recorder('pinned-target');
   await store.attachJournal(destination);
-  expect(store.materialize()).toStrictEqual([row('selected')]);
+  expect(store.materializeSynchronously()).toStrictEqual([row('selected')]);
   await store.dispose();
 }
 
@@ -373,7 +373,7 @@ async function verifyMakesProjectedMediaAndResponseStrippingDurableBeforeReleasi
   const destination = recorder('projected-target');
   await store.attachJournal(destination, true);
   const reopened = new HistoryJournalStore(destination);
-  expect(reopened.materialize()).toStrictEqual([
+  expect(reopened.materializeSynchronously()).toStrictEqual([
     {
       ...projected,
       metadata: { chronology: projected.metadata?.chronology },
@@ -452,7 +452,7 @@ async function verifyPreservesChronologyAndContextMembershipAcrossAttachmentAndS
     await history.replaceBatch([expectedRows[0], replacement]);
     await history.waitForCommit();
     const reopened = new HistoryJournalStore(destination);
-    expect(reopened.materialize()).toStrictEqual([
+    expect(reopened.materializeSynchronously()).toStrictEqual([
       expectedRows[0],
       replacement,
     ]);

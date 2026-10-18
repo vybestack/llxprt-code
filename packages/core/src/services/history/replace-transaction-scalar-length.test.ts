@@ -120,7 +120,9 @@ async function expectMembership(
   }));
   expect(cursor.length).toBe(expected.length);
   expect(cursor.texts).toStrictEqual([...expected]);
-  expect(store.materialize().map(textOf)).toStrictEqual([...expected]);
+  expect(store.materializeSynchronously().map(textOf)).toStrictEqual([
+    ...expected,
+  ]);
   expect(await streamedTexts(store)).toStrictEqual([...expected]);
 }
 

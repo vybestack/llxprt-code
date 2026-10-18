@@ -419,10 +419,11 @@ async function verifyRetainsTheOldRecordingSubscriptionWhenPublicationRollsBack(
   );
   await entered.promise;
   history.add(row('queued rollback row'));
-  await history.validateAndFix();
+  const repair = history.validateAndFix();
   const barrier = history.waitForCommit();
   release.resolve();
   await expect(adoption).rejects.toThrow('rollback owner');
+  await repair;
   await barrier;
   await integration.flushAtTurnBoundary();
   expect(

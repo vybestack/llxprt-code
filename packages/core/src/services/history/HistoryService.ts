@@ -340,22 +340,23 @@ export class HistoryService extends HistoryServiceReads {
    */
   async clear(): Promise<void> {
     const rebuilding = this.isCompressing && this.inRebuildScope;
-    const clearAndRelease = (): void => {
+    const clearAndRelease = (): Promise<void> => {
+      let cleared: Promise<void> = Promise.resolve();
       this.runSynchronousHistoryMutation(() => {
         try {
-          this.clearInternal(rebuilding);
+          cleared = this.clearInternal(rebuilding);
         } finally {
           if (!rebuilding) this.enqueueSynchronousOwnershipSettlement();
         }
       });
+      return cleared;
     };
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
       await new Promise<void>((resolve, reject) => {
         this.queueCompressionOperation(() => {
           try {
-            clearAndRelease();
-            resolve();
+            clearAndRelease().then(resolve, reject);
           } catch (error: unknown) {
             reject(error);
             throw error;
@@ -365,13 +366,13 @@ export class HistoryService extends HistoryServiceReads {
       return;
     }
 
-    clearAndRelease();
+    await clearAndRelease();
   }
 
-  private clearInternal(rebuilding: boolean): void {
+  private clearInternal(rebuilding: boolean): Promise<void> {
     const previousTokens = this.totalTokens;
     const previousSpans = this.spanWindow.get();
-    this.journal.clear({
+    return this.journal.clear({
       spans: previousSpans,
       rollbackOnFailure: !rebuilding,
       publish: (spans) => {
@@ -534,14 +535,16 @@ export class HistoryService extends HistoryServiceReads {
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   async validateAndFix(): Promise<void> {
-    this.runSynchronousHistoryMutation(() => this.validateAndFixInternal());
+    await this.enqueueAsynchronousHistoryMutation(() =>
+      this.validateAndFixInternal(),
+    );
   }
 
-  private validateAndFixInternal(): void {
+  private async validateAndFixInternal(): Promise<void> {
     const chronology = this.chronology.snapshot();
     let repair: HistoryRepair;
     try {
-      repair = this.journal.validateAndFix({
+      repair = await this.journal.validateAndFix({
         ownership: this.mutationOwnership,
         stamp: (row) => this.chronology.stamp(row),
       });
@@ -570,7 +573,7 @@ export class HistoryService extends HistoryServiceReads {
         }
       } catch (error) {
         try {
-          repair.rollback();
+          await repair.rollback();
         } finally {
           this.totalTokens = oldTokens;
           this.chronology.restore(chronology);

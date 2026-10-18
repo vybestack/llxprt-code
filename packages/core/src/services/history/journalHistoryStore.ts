@@ -19,6 +19,8 @@ import {
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
+  HistoryCompensationMark,
+  HistoryStorePort,
   HistoryClearRequest,
   HistoryJournalOp,
   HistoryMutationMark,
@@ -89,7 +91,7 @@ import {
   ownerChangeEdits,
   syntheticInsertEdits,
   type EditBuilder,
-  type JournalCompensationMark,
+  JournalCompensationMark,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
@@ -120,7 +122,7 @@ export interface JournalRepair {
  * every later `apply` throws it, because later operations were planned on a
  * count that no longer holds.
  */
-export class JournalHistoryStore {
+export class JournalHistoryStore implements HistoryStorePort {
   private tentativeRows: number;
   private queue: Promise<void> = Promise.resolve();
   private failure: { readonly error: unknown } | undefined;
@@ -738,10 +740,10 @@ export class JournalHistoryStore {
    */
   captureCompensation(): JournalCompensationMark {
     this.assertUsable();
-    return {
-      store: this,
-      saved: this.queue.then(() => this.session.store.snapshot()),
-    };
+    return new JournalCompensationMark(
+      this,
+      this.queue.then(() => this.session.store.snapshot()),
+    );
   }
 
   /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */
@@ -759,10 +761,10 @@ export class JournalHistoryStore {
    * itself fails the store keeps that failure.
    */
   async compensate(
-    mark: JournalCompensationMark,
+    mark: HistoryCompensationMark,
     held: unknown,
   ): Promise<void> {
-    if (mark.store !== this) {
+    if (!(mark instanceof JournalCompensationMark) || mark.store !== this) {
       throw new Error('The compensation mark was not captured by this store');
     }
     const saved = await mark.saved;

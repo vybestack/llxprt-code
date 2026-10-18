@@ -76,9 +76,9 @@ async function reportConcurrentFailure(): Promise<void> {
     await expect(integration.dispose()).rejects.toMatchObject(expected);
   }
   const reopened = new HistoryJournalStore(destination);
-  expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('existing destination').blocks],
-  );
+  expect(
+    reopened.materializeSynchronously().map((content) => content.blocks),
+  ).toStrictEqual([row('existing destination').blocks]);
   await reopened.dispose();
 }
 
@@ -100,7 +100,7 @@ async function reportPartialReplacement(): Promise<void> {
     expect(Buffer.compare(bytes, await readFile(file))).toBe(0);
     const reopened = new HistoryJournalStore(destination);
     expect(
-      reopened.materialize().map((content) => content.blocks),
+      reopened.materializeSynchronously().map((content) => content.blocks),
     ).toStrictEqual([row('existing destination').blocks]);
     await reopened.dispose();
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
@@ -127,9 +127,12 @@ async function reportPartialAppend(): Promise<void> {
   if (!selectedPath) throw new Error('Missing selected source');
   expect((await stat(selectedPath)).ino).toBe(sourceInode);
   const reopened = new HistoryJournalStore(destination);
-  expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('existing destination').blocks, row('accepted source').blocks],
-  );
+  expect(
+    reopened.materializeSynchronously().map((content) => content.blocks),
+  ).toStrictEqual([
+    row('existing destination').blocks,
+    row('accepted source').blocks,
+  ]);
   await reopened.dispose();
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
     expect(rows.map((content) => content.blocks)).toStrictEqual([

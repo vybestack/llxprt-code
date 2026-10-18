@@ -207,7 +207,10 @@ export function repairHistoryRows(
   }
   return {
     inserted: repair.inserted,
-    rollback: () => repair.rollback(journal),
+    rollback: () => {
+      repair.rollback(journal);
+      return Promise.resolve();
+    },
     close: () => repair.close(),
   };
 }

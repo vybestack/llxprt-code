@@ -11,12 +11,12 @@ export function forbidHistoryMaterializationForTest(
   if (!(journal instanceof HistoryJournalStore)) {
     throw new Error('Materialization guard requires the service journal');
   }
-  const original = journal.materialize;
-  journal.materialize = () => {
+  const original = journal.materializeSynchronously;
+  journal.materializeSynchronously = () => {
     if (forbidden()) throw new Error(message);
     return original.call(journal);
   };
   return () => {
-    journal.materialize = original;
+    journal.materializeSynchronously = original;
   };
 }

@@ -4,6 +4,7 @@ import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import type {
+  HistoryCompensationMark,
   HistoryMutationMark,
   HistoryPublicationScope,
 } from './historyStorePort.js';
@@ -20,9 +21,11 @@ import { encodeContentRow } from './journalRowCodec.js';
 export type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
 
 /** What a compensation puts back: the version the queue had reached when the mark was captured. */
-export interface JournalCompensationMark {
-  readonly store: JournalHistoryStore;
-  readonly saved: Promise<VersionSnapshot>;
+export class JournalCompensationMark implements HistoryCompensationMark {
+  constructor(
+    readonly store: JournalHistoryStore,
+    readonly saved: Promise<VersionSnapshot>,
+  ) {}
 }
 
 /**

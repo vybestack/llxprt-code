@@ -146,7 +146,7 @@ async function prepareParity(
   });
   await store.waitForDurable();
   store.apply({ kind: 'content', content: row(3_000_000) });
-  const expected = store.materialize();
+  const expected = store.materializeSynchronously();
   const snapshot = store.capturePendingFold();
   // The pending row's append is still in flight. Letting it land before the
   // tests unlink the journal keeps appendFile from recreating the path.
@@ -197,7 +197,7 @@ describe('private pending fold capture/open race', () => {
         await store.waitForDurable();
         const journalPath = store.journalPath();
         if (journalPath === null) throw new Error('Missing journal path');
-        const expected = store.materialize();
+        const expected = store.materializeSynchronously();
         const snapshot = store.capturePendingFold();
         fs.rmSync(journalPath);
         expect(fs.existsSync(journalPath)).toBe(false);
@@ -226,7 +226,7 @@ describe('private pending fold capture/open race', () => {
         await store.adoptJournal(recorder, boundary, true, projected).commit();
         store.apply({ kind: 'content', content: row(300) });
         await store.waitForDurable();
-        const expected = store.materialize();
+        const expected = store.materializeSynchronously();
         const snapshot = store.capturePendingFold();
         await store.dispose();
         expect(fs.existsSync(projected.filePath)).toBe(false);
@@ -256,7 +256,7 @@ describe('private pending fold retirement race', () => {
         await store.waitForDurable();
         const ownedPath = store.journalPath();
         if (ownedPath === null) throw new Error('Missing owned journal');
-        const expected = store.materialize();
+        const expected = store.materializeSynchronously();
         const snapshot = store.capturePendingFold();
         const watermark = await writeJournalRows(destination, 1);
         store.onRetired(() => fs.rmSync(ownedPath));
@@ -322,7 +322,7 @@ describe('private pending fold paused I/O races', () => {
       try {
         store.apply({ kind: 'content', content: row(1) });
         await store.waitForDurable();
-        const expected = store.materialize();
+        const expected = store.materializeSynchronously();
         const snapshot = store.capturePendingFold();
         const ownedPath = store.journalPath();
         if (ownedPath === null) throw new Error('Missing owned journal');
@@ -391,7 +391,7 @@ describe('private pending fold mutation after capture', () => {
         store.apply({ kind: 'content', content: pending });
         const snapshot = store.capturePendingFold();
         pending.blocks[0] = { type: 'text', text: 'changed after capture' };
-        const expected = store.materialize();
+        const expected = store.materializeSynchronously();
         const fold = await foldPendingRows(snapshot, { scratchRoot: root });
         try {
           await verifyRows(fold, expected);
@@ -509,13 +509,13 @@ describe('private pending fold empty-source and ownership boundaries', () => {
         const journalPath = recorder.getFilePath();
         if (journalPath === null) throw new Error('No queued journal path');
         expect(fs.statSync(journalPath).size).toBe(0);
-        expect(store.materialize()).toStrictEqual([]);
+        expect(store.materializeSynchronously()).toStrictEqual([]);
         const snapshot = store.capturePendingFold();
         const fold = await foldPendingRows(snapshot, { scratchRoot: root });
         try {
           expect(fold.length).toBe(0);
           await recorder.waitForCommit(first);
-          expect(store.materialize()).toStrictEqual([row(1)]);
+          expect(store.materializeSynchronously()).toStrictEqual([row(1)]);
           expect(fold.metrics().fileBytes).toBe(0);
         } finally {
           await fold.close();

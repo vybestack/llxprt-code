@@ -145,7 +145,7 @@ export interface HistoryRepairRequest {
 export interface HistoryRepair {
   readonly inserted: Iterable<IContent> & { readonly length: number };
   /** Takes the published repair back out of the store. */
-  rollback(): void;
+  rollback(): Promise<void>;
   close(): void;
 }
 
@@ -274,7 +274,8 @@ export interface HistoryStorePort {
 
   // Reads.
   getLength(): number;
-  materialize(): IContent[];
+  /** Every row; for tests and tools that need the whole history, which a send never does. */
+  materialize(): Promise<IContent[]>;
   streamRows(
     query?: HistorySuffixQuery,
     signal?: AbortSignal,
@@ -299,13 +300,13 @@ export interface HistoryStorePort {
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
 
   // Whole operations. Each one reads the rows it needs itself, so the caller
-  // holds no cursor. They run inside HistoryService's synchronous mutation
-  // FIFO: the old store has applied the effect when the call returns, and a
-  // journal-backed store, whose reads are asynchronous, returns a promise
-  // that the flip of the default (S13) makes the service await.
-  clear(request: HistoryClearRequest): void;
-  validateAndFix(request: HistoryRepairRequest): HistoryRepair;
-  adoptMediaOwner(owner: HistoryMediaOwner): void;
+  // holds no cursor. The journal store reads asynchronously and rejects on
+  // failure. The old store (deleted with the flip) applies the effect before
+  // it returns and throws instead of rejecting, so HistoryService keeps the
+  // synchronous failure of a queued clear that `endCompression()` reports.
+  clear(request: HistoryClearRequest): Promise<void>;
+  validateAndFix(request: HistoryRepairRequest): Promise<HistoryRepair>;
+  adoptMediaOwner(owner: HistoryMediaOwner): Promise<void>;
   /**
    * Removes the newest row (when it equals `request.match`, if given) and
    * returns it; undefined when there is none or it does not match. A failure

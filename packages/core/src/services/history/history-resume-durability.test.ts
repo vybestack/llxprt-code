@@ -214,7 +214,9 @@ async function preserveLiveMutations(): Promise<void> {
       });
       expect(await rows(boot.filePath)).toStrictEqual([response('summary')]);
       const independent = new HistoryJournalStore(recording);
-      expect(independent.materialize()).toStrictEqual([response('summary')]);
+      expect(independent.materializeSynchronously()).toStrictEqual([
+        response('summary'),
+      ]);
       await independent.dispose();
     },
   );
@@ -345,7 +347,7 @@ async function persistProjection(): Promise<void> {
     2, 1,
   ]);
   const independent = new HistoryJournalStore(recording);
-  expect(independent.materialize()).toStrictEqual(reopened);
+  expect(independent.materializeSynchronously()).toStrictEqual(reopened);
   await independent.dispose();
 }
 

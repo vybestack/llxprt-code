@@ -119,8 +119,8 @@ async function assertParity(
   pinned: number,
 ): Promise<number> {
   const expected = eagerOracle(file, pinned);
-  const original = HistoryJournalStore.prototype.materialize;
-  HistoryJournalStore.prototype.materialize = () => {
+  const original = HistoryJournalStore.prototype.materializeSynchronously;
+  HistoryJournalStore.prototype.materializeSynchronously = () => {
     throw new Error('materialize trap');
   };
   const readTrap = spyOn(fs, 'readFileSync').mockImplementation(() => {
@@ -128,7 +128,7 @@ async function assertParity(
   });
   try {
     expect(() => fs.readFileSync(file)).toThrow('readFileSync trap');
-    expect(() => new HistoryJournalStore().materialize()).toThrow(
+    expect(() => new HistoryJournalStore().materializeSynchronously()).toThrow(
       'materialize trap',
     );
     const folded = await foldDurableRows({
@@ -154,7 +154,7 @@ async function assertParity(
     }
   } finally {
     readTrap.mockRestore();
-    HistoryJournalStore.prototype.materialize = original;
+    HistoryJournalStore.prototype.materializeSynchronously = original;
   }
   expect(fs.readdirSync(root)).toStrictEqual(['journal.jsonl']);
   return expected.length;
@@ -262,7 +262,7 @@ async function buildCommittedCase(
   const file = recording.getFilePath();
   if (file === null) throw new Error('Recording did not create a journal');
   const eager = new HistoryJournalStore(recording);
-  const expected = eager.materialize();
+  const expected = eager.materializeSynchronously();
   await eager.dispose();
   return {
     recording,
@@ -326,8 +326,8 @@ async function assertCommittedParity(
   count: number,
 ): Promise<number> {
   const fixtureCase = await buildCommittedCase(root, count);
-  const materialize = HistoryJournalStore.prototype.materialize;
-  HistoryJournalStore.prototype.materialize = () => {
+  const materialize = HistoryJournalStore.prototype.materializeSynchronously;
+  HistoryJournalStore.prototype.materializeSynchronously = () => {
     throw new Error('materialize trap');
   };
   const readTrap = spyOn(fs, 'readFileSync').mockImplementation(() => {
@@ -337,7 +337,7 @@ async function assertCommittedParity(
     await assertFoldParity(fixtureCase, count);
   } finally {
     readTrap.mockRestore();
-    HistoryJournalStore.prototype.materialize = materialize;
+    HistoryJournalStore.prototype.materializeSynchronously = materialize;
     await fixtureCase.recording.dispose();
   }
   expect(fs.readdirSync(fixtureCase.scratch)).toStrictEqual([]);
@@ -423,7 +423,7 @@ async function densityCase(
   const file = recording.getFilePath();
   if (file === null) throw new Error('Missing density journal');
   const eager = new HistoryJournalStore(recording);
-  const expected = eager.materialize();
+  const expected = eager.materializeSynchronously();
   await eager.dispose();
   return { recording, file, watermark, expected };
 }
@@ -454,7 +454,7 @@ async function assertLiteralDensityParity(
   const raw = `{"v":2,"type":"density_mutation","payload":{"removedSeqs":[],"replacements":[${replacements}]}}\n`;
   fs.appendFileSync(journal, raw);
   const store = new HistoryJournalStore(recording);
-  const expected = store.materialize();
+  const expected = store.materializeSynchronously();
   await store.dispose();
   expect(expected[7]).toStrictEqual(content(applied ? 8 : 7));
   const scratch = path.join(root, 'scratch');

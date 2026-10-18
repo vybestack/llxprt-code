@@ -99,15 +99,16 @@ for (const count of [512, 8192])
         store.apply({ kind: 'content', content: fresh });
         expected.push(fresh);
         const snapshot = store.capturePendingFold();
-        const materialize = HistoryJournalStore.prototype.materialize;
-        HistoryJournalStore.prototype.materialize = () => {
+        const materialize =
+          HistoryJournalStore.prototype.materializeSynchronously;
+        HistoryJournalStore.prototype.materializeSynchronously = () => {
           throw new Error('eager path');
         };
         const trap = spyOn(fs, 'readFileSync').mockImplementation(() => {
           throw new Error('full read');
         });
         try {
-          expect(() => store.materialize()).toThrow('eager path');
+          expect(() => store.materializeSynchronously()).toThrow('eager path');
           expect(() => fs.readFileSync(root)).toThrow('full read');
           const fold = await foldPendingRows(snapshot, {
             scratchRoot: root,
@@ -128,7 +129,7 @@ for (const count of [512, 8192])
           }
         } finally {
           trap.mockRestore();
-          HistoryJournalStore.prototype.materialize = materialize;
+          HistoryJournalStore.prototype.materializeSynchronously = materialize;
           await store.dispose();
         }
       });

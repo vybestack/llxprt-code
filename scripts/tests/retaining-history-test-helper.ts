@@ -10,5 +10,5 @@ export function retainHistoryForMemoryTrap(
   const journal: unknown = Reflect.get(service, 'journal');
   if (!(journal instanceof HistoryJournalStore))
     throw new Error('Memory trap requires the service journal');
-  return journal.materialize();
+  return journal.materializeSynchronously();
 }

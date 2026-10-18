@@ -161,7 +161,7 @@ async function verifyBoundedTraversal(size: number): Promise<number> {
     async (service, ownership, counters) => {
       const eager = spyOn(
         HistoryJournalStore.prototype,
-        'materialize',
+        'materializeSynchronously',
       ).mockImplementation(() => {
         throw new Error('eager history trap');
       });

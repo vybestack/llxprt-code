@@ -20,7 +20,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
       store.apply({ kind: 'content', content: row('ai', 'two', 4) });
       const published: RemovedInteriorSpan[][] = [];
 
-      store.clear({
+      await store.clear({
         spans: [],
         rollbackOnFailure: true,
         publish: (spans) => {
@@ -54,7 +54,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
         },
       });
       let next = 2;
-      const repair = store.validateAndFix({
+      const repair = await store.validateAndFix({
         stamp: (content) => {
           if (content.metadata?.chronology !== undefined) return content;
           const seq = next++;
@@ -68,7 +68,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
       expect(repair.inserted.length).toBe(1);
       expect(store.getLength()).toBe(2);
 
-      repair.rollback();
+      await repair.rollback();
       repair.close();
       expect(store.getLength()).toBe(1);
     } finally {

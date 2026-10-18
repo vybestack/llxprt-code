@@ -136,8 +136,8 @@ async function compareRows(input: {
   const readTrap = spyOn(fs, 'readFileSync').mockImplementation(() => {
     throw new Error('full-file read');
   });
-  const materialize = HistoryJournalStore.prototype.materialize;
-  HistoryJournalStore.prototype.materialize = () => {
+  const materialize = HistoryJournalStore.prototype.materializeSynchronously;
+  HistoryJournalStore.prototype.materializeSynchronously = () => {
     throw new Error('eager fold');
   };
   try {
@@ -168,7 +168,7 @@ async function compareRows(input: {
       await fold.close();
     }
   } finally {
-    HistoryJournalStore.prototype.materialize = materialize;
+    HistoryJournalStore.prototype.materializeSynchronously = materialize;
     readTrap.mockRestore();
   }
 }
@@ -206,7 +206,7 @@ async function checkParity(
     store.apply({ kind: 'rewind', itemsRemoved: 1, cutSeq: count - 1 });
     store.apply({ kind: 'content', content: row(count + 1, true) });
     await store.waitForDurable();
-    const expected = store.materialize();
+    const expected = store.materializeSynchronously();
     const filePath = recorder.getFilePath();
     if (filePath === null) throw new Error('Missing journal');
     const watermark = fs.statSync(filePath).size;
@@ -308,7 +308,7 @@ describe('projection promotion and failure cleanup', () => {
       adoption.useDurableProjection(watermark);
       await adoption.commit();
       fs.rmSync(projectedRows.directory, { recursive: true });
-      const expected = store.materialize();
+      const expected = store.materializeSynchronously();
       const filePath = recorder.getFilePath();
       if (filePath === null) throw new Error('Missing journal');
       const scratchRoot = path.join(root, 'scratch');
