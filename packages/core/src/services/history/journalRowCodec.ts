@@ -247,7 +247,21 @@ export function encodeContentRow(
       JSON.stringify(
         metadata === undefined
           ? { speaker: content.speaker }
-          : { speaker: content.speaker, metadata },
+          : {
+              speaker: content.speaker,
+              metadata,
+              ...(chronology === undefined
+                ? {}
+                : {
+                    chronologyIndex: Object.keys(content.metadata ?? {})
+                      .filter(
+                        (key) =>
+                          key !== 'semanticMediaPurgeBoundary' &&
+                          key !== 'semanticMediaPurgeCacheWriteEvidence',
+                      )
+                      .indexOf('chronology'),
+                  }),
+            },
       ),
     ),
     blocks: content.blocks.map(encodeBlock),
@@ -257,6 +271,34 @@ export function encodeContentRow(
 interface MetaPiece {
   readonly speaker: IContent['speaker'];
   readonly metadata?: ContentMetadata;
+  readonly chronologyIndex?: number;
+}
+
+function decodedMetadata(
+  piece: MetaPiece,
+  header: StoredRow['header'],
+): ContentMetadata | undefined {
+  if (header.chronologySeq === CHRONOLOGY_SEQ_NONE) return piece.metadata;
+  const entries = Object.entries(piece.metadata ?? {});
+  const index = piece.chronologyIndex;
+  if (
+    index === undefined ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index > entries.length
+  ) {
+    throw new JournalFormatError('Invalid chronology metadata position');
+  }
+  entries.splice(index, 0, [
+    'chronology',
+    {
+      seq: Number(header.chronologySeq),
+      userTurn: header.chronologyUserTurn,
+      step: header.chronologyStep,
+      recordedAt: header.chronologyRecordedAt,
+    },
+  ]);
+  return Object.fromEntries(entries);
 }
 
 function decodeBlock(bytes: Uint8Array, type: number): ContentBlock {
@@ -290,18 +332,7 @@ export function decodeStoredRow(
       decodeBlock(bytes, header.blocks[index].type),
     ),
   };
-  const metadata: ContentMetadata | undefined =
-    header.chronologySeq === CHRONOLOGY_SEQ_NONE
-      ? piece.metadata
-      : {
-          ...piece.metadata,
-          chronology: {
-            seq: Number(header.chronologySeq),
-            userTurn: header.chronologyUserTurn,
-            step: header.chronologyStep,
-            recordedAt: header.chronologyRecordedAt,
-          },
-        };
+  const metadata = decodedMetadata(piece, header);
   if (metadata !== undefined) content.metadata = metadata;
   return (header.flags & ROW_FLAG.invalidateResponses) !== 0
     ? invalidateResponsesStatefulChain([content])[0]

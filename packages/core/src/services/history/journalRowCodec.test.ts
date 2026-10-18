@@ -56,6 +56,21 @@ describe('row codec round trip', () => {
     });
   }
 
+  for (const metadata of [
+    { chronology: CHRONOLOGY, model: 'm', cacheAnchor: true },
+    { model: 'm', chronology: CHRONOLOGY, cacheAnchor: true },
+    { model: 'm', cacheAnchor: true, chronology: CHRONOLOGY },
+  ]) {
+    it(`preserves serialized metadata key order ${Object.keys(metadata).join(',')}`, () => {
+      const content: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'ordered metadata' }],
+        metadata,
+      };
+      expect(JSON.stringify(roundTrip(content))).toBe(JSON.stringify(content));
+    });
+  }
+
   it('restores any entry made of the block kinds, fast-checked', () => {
     const text = fc.record({
       type: fc.constant('text' as const),
@@ -125,6 +140,7 @@ describe('row header fields', () => {
     expect(JSON.parse(meta)).toStrictEqual({
       speaker: 'human',
       metadata: { model: 'm' },
+      chronologyIndex: 0,
     });
   });
 
@@ -404,6 +420,31 @@ describe('media references', () => {
 });
 
 describe('a stored row that disagrees with itself', () => {
+  for (const chronologyIndex of [undefined, -1, 0.5, 2]) {
+    it(`rejects an invalid chronology position ${String(chronologyIndex)}`, () => {
+      const stored = storedOf(
+        encodeContentRow(
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'x' }],
+            metadata: { chronology: CHRONOLOGY, model: 'm' },
+          },
+          { owner: 0 },
+        ),
+      );
+      const meta = new TextEncoder().encode(
+        JSON.stringify({
+          speaker: 'human',
+          metadata: { model: 'm' },
+          chronologyIndex,
+        }),
+      );
+      expect(() => decodeStoredRow({ ...stored, meta })).toThrow(
+        JournalFormatError,
+      );
+    });
+  }
+
   it('throws when a block is not of the type its directory entry says', () => {
     const stored = storedOf(encodeContentRow(ROW_SHAPES[0][1], { owner: 0 }));
     const wrong: StoredRow = {

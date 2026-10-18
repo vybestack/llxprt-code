@@ -1,9 +1,12 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import {
+  suffixSeeder,
+  withSuffixFixtureGraph,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { providerFixtureRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -15,6 +18,10 @@ class CursorOnlyHistory extends HistoryService {
     super(options);
     forbidHistoryMaterializationForTest(this, 'eager recomposition');
   }
+
+  async eagerRowsForTest(): Promise<IContent[]> {
+    return this.journal.materialize();
+  }
 }
 
 describe('journal materialization guard', () => {
@@ -22,7 +29,7 @@ describe('journal materialization guard', () => {
     const history = new CursorOnlyHistory();
 
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(history.eagerRowsForTest()).rejects.toThrow(
         'eager recomposition',
       );
     } finally {
@@ -46,17 +53,39 @@ describe('invoked provider-source reopening', () => {
         pending,
         logger,
       );
-      await withSuffixFixture(
-        size,
-        async (history) => {
-          const actual = await recomposeFixture(history, pending);
-          expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
-        },
-        2048,
-        providerFixtureRow,
-        undefined,
-        (options) => new CursorOnlyHistory(options),
-      );
+      const backendBytes: string[] = [];
+      for (const backend of ['old', 'journal'] as const) {
+        await withSuffixFixtureGraph(
+          size,
+          (root) => {
+            const recording = createRecorderForTest(
+              { chatsDir: root },
+              { LLXPRT_HISTORY_BACKEND: backend },
+            );
+            const service = new CursorOnlyHistory({ backend, recording });
+            return {
+              service,
+              recording,
+              ownership: undefined,
+              counters: undefined,
+              seed: suffixSeeder(recording, service),
+            };
+          },
+          async (history) => {
+            const actual = await recomposeFixture(
+              history,
+              structuredClone(pending),
+            );
+            const bytes = JSON.stringify(actual);
+            expect(bytes).toBe(JSON.stringify(expected));
+            backendBytes.push(bytes);
+          },
+          2048,
+          (index) => structuredClone(input[index]),
+        );
+      }
+      expect(backendBytes).toHaveLength(2);
+      expect(backendBytes[1]).toBe(backendBytes[0]);
     }, 120_000);
   }
 });
