@@ -16,6 +16,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
@@ -44,7 +46,7 @@ const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
 
 /** The real recorded-file name shape for a session id. */
 function recordedName(sessionId: string): string {
-  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}.jsonl`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}${sessionFileExtension(selectBackend())}`;
 }
 
 function probeFailure(code: string, message: string): Error & { code: string } {

@@ -32,10 +32,7 @@ import { SessionClientOwner } from '../../../../agents/src/session/session-clien
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import {
-  assertDefined,
-  assertNotNull,
-} from '@vybestack/llxprt-code-test-utils';
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -46,20 +43,16 @@ import {
   LocalMediaStore,
   PerformCompressionResult,
   SessionDiscovery,
-  SessionRecordingService,
   type SessionRecordingPort,
   emptyModelOutput,
-  exportSessionMediaPackage,
   getProjectHash,
   type AgentChatContract,
   type AgentClientContract,
   type IContent,
   type RuntimeProviderManager,
   type LockHandle,
-  type MediaReferenceBlock,
   type RecordingIntegration,
   type SessionMetadata,
-  requireJsonlRecorder,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
@@ -70,6 +63,11 @@ import {
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
+import { useBackendEnv } from '../../../../core/src/recording/__tests__/support/backendEnv.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message } from '../types.js';
 import { CliSessionPersistence } from '../../cliSessionPersistence.js';
@@ -84,11 +82,6 @@ interface ActiveRecordingState {
   integration: RecordingIntegration | null;
   lock: LockHandle | null;
   metadata: SessionMetadata | null;
-}
-
-interface PackageFixture {
-  readonly directory: string;
-  readonly references: readonly MediaReferenceBlock[];
 }
 
 function createAgentClient(
@@ -255,6 +248,7 @@ async function createConfig(
     sessionClient,
     settingsOwner,
     dispose: async () => {
+      await history.dispose();
       await sessionClient.dispose();
       await settingsOwner.dispose();
       await client.dispose();
@@ -264,56 +258,6 @@ async function createConfig(
       await store.close();
     },
   };
-}
-
-async function createPackage(
-  root: string,
-  media: readonly Uint8Array[],
-): Promise<PackageFixture> {
-  const projectHash = 'portable-source-project';
-  const sourceRoot = join(root, `source-${randomUUID()}`);
-  const sourceStore = new LocalMediaStore({
-    rootDirectory: join(sourceRoot, 'media'),
-    quotaBytes: 1024 * 1024,
-  });
-  const references: MediaReferenceBlock[] = [];
-  for (const bytes of media) {
-    references.push(
-      await sourceStore.admit({
-        bytes,
-        mimeType: 'image/png',
-        semanticMetadata: {},
-      }),
-    );
-  }
-  const recording = new SessionRecordingService({
-    sessionId: randomUUID(),
-    projectHash,
-    chatsDir: join(sourceRoot, 'chats'),
-    workspaceDirs: [],
-    provider: 'source-provider',
-    model: 'source-model',
-    mediaStore: sourceStore,
-  });
-  recording.recordContent({
-    speaker: 'human',
-    blocks: [
-      { type: 'text', text: 'history restored through perform_resume' },
-      ...references,
-    ],
-  });
-  await recording.flush();
-  const recordingPath = recording.getFilePath();
-  assertNotNull(recordingPath, 'Expected source recording');
-  const directory = join(root, `package-${randomUUID()}`);
-  await exportSessionMediaPackage(
-    recordingPath,
-    projectHash,
-    sourceStore,
-    directory,
-  );
-  await recording.dispose();
-  return { directory, references };
 }
 
 function createActions(): SlashCommandProcessorActions {
@@ -432,6 +376,7 @@ async function readHistoryText(history: HistoryService): Promise<string> {
 }
 
 describe('continue package perform_resume integration', () => {
+  const backend = useBackendEnv();
   afterEach(() => {
     fixtureFilesystem = undefined;
   });
@@ -472,7 +417,8 @@ describe('continue package perform_resume integration', () => {
     });
 
     try {
-      const sessionPackage = await createPackage(root, []);
+      const mediaBytes = new Uint8Array([3, 1, 4, 1, 5]);
+      const sessionPackage = await createPackage(root, [mediaBytes]);
       const result = await processSlashCommand(
         createHandlerDeps(
           config,
@@ -491,8 +437,35 @@ describe('continue package perform_resume integration', () => {
 
       expect(result).toStrictEqual({ type: 'handled' });
       expect(sessions).toHaveLength(1);
+      expect(sessions[0]).toMatchObject({
+        projectHash: getProjectHash(config.getProjectRoot()),
+        ...(selectBackend() === 'journal'
+          ? { title: 'Portable title', name: 'portable-name' }
+          : {}),
+      });
       expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
       expect(state.recording?.getSessionId()).toBe(config.getSessionId());
+      const path = state.recording?.getFilePath();
+      if (path === undefined || path === null)
+        throw new Error('Missing imported recording');
+      expect(path.endsWith(sessionFileExtension(selectBackend()))).toBe(true);
+      const persisted = await recordedRows(
+        path,
+        getProjectHash(config.getProjectRoot()),
+        requireMediaStore(built.sessionClient.getAgentClient()),
+      );
+      expect(historyText(persisted)).toContain(
+        'history restored through perform_resume',
+      );
+      expect(state.metadata?.title).toBe('Portable title');
+      const reference = sessionPackage.references[0];
+      assertDefined(reference, 'Expected portable media');
+      expect(persisted[0]?.blocks).toContainEqual(reference);
+      expect(
+        await requireMediaStore(
+          built.sessionClient.getAgentClient(),
+        ).readVerified(reference),
+      ).toStrictEqual(mediaBytes);
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
         expect(historyText(rows)).not.toContain('prior session history');
       });
@@ -618,6 +591,72 @@ describe('continue package perform_resume integration', () => {
     }
   });
 
+  it('rejects a retired JSONL package through the slash front door without changing history or media', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'continue-package-retired-'));
+    backend('old');
+    const source = await createPackage(root, [new Uint8Array([8, 6, 7])]);
+    backend('journal');
+    const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'keep current history' }],
+    });
+    const id = randomUUID();
+    const built = await createConfig(join(root, 'workspace'), id, history);
+    const config = built.config;
+    const store = requireMediaStore(built.sessionClient.getAgentClient());
+    const persistence = new CliSessionPersistence(
+      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
+      {
+        mediaStore: store,
+        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+      },
+    );
+    const state: ActiveRecordingState = {
+      recording: null,
+      integration: null,
+      lock: null,
+      metadata: null,
+    };
+    const messages: Message[] = [];
+    try {
+      await processSlashCommand(
+        createHandlerDeps(
+          config,
+          built.sessionClient,
+          createRecordingCallbacks(state, false),
+          messages,
+          persistence,
+          built.settingsOwner,
+        ),
+        `/continue import ${source.directory}`,
+      );
+      expect(
+        messages.map((message) =>
+          'content' in message ? message.content : undefined,
+        ),
+      ).toStrictEqual([
+        `Session file ${join(source.directory, 'session.jsonl')} was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.`,
+      ]);
+      expect(config.getSessionId()).toBe(id);
+      expect(state.recording).toBeNull();
+      expect(await readHistoryText(history)).toBe('keep current history');
+      expect(await store.getStoredByteLength()).toBe(0);
+      expect(
+        await SessionDiscovery.listSessions(
+          config.projectChatsDir,
+          getProjectHash(config.getProjectRoot()),
+        ),
+      ).toStrictEqual([]);
+    } finally {
+      await disposeActiveState(state);
+      persistence.close();
+      await built.dispose();
+      await rm(config.projectTempDir, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('resumes before Agent construction and releases the lock and journal on exit', async () => {
     const root = await mkdtemp(join(tmpdir(), 'legacy-cli-resume-'));
     const workspace = join(root, 'workspace');
@@ -641,10 +680,16 @@ describe('continue package perform_resume integration', () => {
         first.sessionClient,
       );
       const sessionId = started.recordingService.getSessionId();
-      requireJsonlRecorder(started.recordingService).recordContent({
+      const firstHistory = first.sessionClient
+        .getAgentClient()
+        .getHistoryService();
+      if (firstHistory === null) throw new Error('Missing startup history');
+      await started.recordingIntegration.subscribeToJournal(firstHistory);
+      firstHistory.add({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'legacy early resume' }],
       });
+      await firstHistory.waitForCommit();
       await started.recordingService.flush();
       const oldJournal = started.sessionPersistence
         .forRecording(sessionId)

@@ -7,7 +7,12 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P19
  */
 
-import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
+import { createPortablePackage } from '../../../__tests__/support/portable-package.js';
+import { recordedRows } from '../../../../../agents/src/api/__tests__/support/recorded-rows.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { randomUUID } from 'node:crypto';
@@ -26,10 +31,10 @@ import { withRecordingLifetimeFixture } from '../../../../../agents/src/api/__te
 import { continueCommand } from '../continueCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
-  exportSessionMediaPackage,
+  validateSessionMediaPackage,
+  getProjectHash,
   LocalMediaStore,
   SessionDiscovery,
-  SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import type {
   CommandContext,
@@ -136,9 +141,15 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       );
       assertType(result, isMessageAction);
       expect(result.messageType).toBe('info');
-      expect(
-        await readFile(join(destination, 'session.jsonl'), 'utf8'),
-      ).toContain('pending export boundary');
+      const validated = await validateSessionMediaPackage(destination);
+      const rows = await recordedRows(
+        join(destination, validated.manifest.recording),
+        getProjectHash(config.getProjectRoot()),
+      );
+      expect(rows.flatMap((row) => row.blocks)).toContainEqual({
+        type: 'text',
+        text: 'pending export boundary',
+      });
     });
   }, 30000);
 
@@ -395,7 +406,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-completion-'));
       const projectTempDir = join(root, 'completion-project');
       const chatsDir = join(projectTempDir, 'chats');
-      const recording = new SessionRecordingService({
+      const recording = createSessionRecorder({
         sessionId: randomUUID(),
         projectHash: 'completion-project',
         chatsDir,
@@ -403,12 +414,14 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         provider: 'test-provider',
         model: 'test-model',
       });
+      const history = new HistoryService({ recording });
 
       try {
-        recording.recordContent({
+        history.add({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'checkpoint content' }],
         });
+        await history.waitForCommit();
         await recording.createCheckpoint('release-ready');
         const sessionId = recording.getSessionId();
 
@@ -440,6 +453,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         expect(values).toContain(sessionId);
       } finally {
         try {
+          await history.dispose();
           await recording.dispose();
         } finally {
           await rm(root, { recursive: true, force: true });
@@ -453,7 +467,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-completion-bad-'));
       const projectTempDir = join(root, 'completion-project');
       const chatsDir = join(projectTempDir, 'chats');
-      const recording = new SessionRecordingService({
+      const recording = createSessionRecorder({
         sessionId: randomUUID(),
         projectHash: 'completion-project',
         chatsDir,
@@ -461,6 +475,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         provider: 'test-provider',
         model: 'test-model',
       });
+      const history = new HistoryService({ recording });
       const warnings: string[] = [];
       const warn = vi
         .spyOn(debugLogger, 'warn')
@@ -469,15 +484,16 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         });
 
       try {
-        recording.recordContent({
+        history.add({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'healthy content' }],
         });
+        await history.waitForCommit();
         await recording.flush();
         await mkdir(chatsDir, { recursive: true });
         const brokenPath = join(
           chatsDir,
-          'session-2026-10-08T21-18-08-broken000001.jsonl',
+          `session-2026-10-08T21-18-08-broken000001${sessionFileExtension(selectBackend())}`,
         );
         await writeFile(brokenPath, '', 'utf-8');
 
@@ -512,6 +528,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       } finally {
         warn.mockRestore();
         try {
+          await history.dispose();
           await recording.dispose();
         } finally {
           await rm(root, { recursive: true, force: true });
@@ -615,7 +632,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         assertType(result, isMessageAction);
         expect(result.messageType).toBe('error');
         expect(result.content).toBe(
-          'Session package export and cleanup failed',
+          selectBackend() === 'journal'
+            ? 'Native package export and cleanup failed'
+            : 'Session package export and cleanup failed',
         );
         await expect(stat(destination)).rejects.toMatchObject({
           code: 'ENOTDIR',
@@ -625,36 +644,11 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
     it('validates an import into a staged resume action without publishing it', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-import-'));
-      const sourceProject = join(root, 'portable-project');
-      const sourceChats = join(sourceProject, 'chats');
-      const sourceStore = new LocalMediaStore({
-        rootDirectory: join(sourceProject, 'media'),
-        quotaBytes: 1024,
-      });
-      const recording = new SessionRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir: sourceChats,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        mediaStore: sourceStore,
-      });
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'portable import' }],
-      });
-      await recording.flush();
-      const recordingPath = recording.getFilePath();
-      assertNotNull(recordingPath, 'Expected recording path');
-      const packageDirectory = join(root, 'package');
-      await exportSessionMediaPackage(
-        recordingPath,
-        'portable-project',
-        sourceStore,
-        packageDirectory,
+      const { directory: packageDirectory } = await createPortablePackage(
+        root,
+        [],
+        'portable import',
       );
-      await recording.dispose();
       const destinationProject = join(root, 'destination-project');
       const destinationChats = join(destinationProject, 'chats');
       const destinationStore = new LocalMediaStore({
@@ -700,39 +694,15 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
     it('rejects a tampered import without publishing session artifacts', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-tampered-import-'));
-      const sourceProject = join(root, 'portable-project');
-      const sourceStore = new LocalMediaStore({
-        rootDirectory: join(sourceProject, 'media'),
-        quotaBytes: 1024,
-      });
-      const recording = new SessionRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir: join(sourceProject, 'chats'),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        mediaStore: sourceStore,
-      });
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'package to tamper' }],
-      });
-      await recording.flush();
-      const recordingPath = recording.getFilePath();
-      assertNotNull(recordingPath, 'Expected recording path');
-      const packageDirectory = join(root, 'package');
-      await exportSessionMediaPackage(
-        recordingPath,
-        'portable-project',
-        sourceStore,
-        packageDirectory,
+      const { directory: packageDirectory } = await createPortablePackage(
+        root,
+        [],
+        'package to tamper',
       );
-      await recording.dispose();
+      const validated = await validateSessionMediaPackage(packageDirectory);
       await appendFile(
-        join(packageDirectory, 'session.jsonl'),
-        `tampered
-`,
+        join(packageDirectory, validated.manifest.recording),
+        'tampered\n',
       );
       const destinationProject = join(root, 'destination-project');
       const destinationChats = join(destinationProject, 'chats');

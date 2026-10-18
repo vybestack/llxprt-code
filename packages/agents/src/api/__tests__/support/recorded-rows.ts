@@ -3,7 +3,10 @@ import { expect } from 'bun:test';
 import { basename } from 'node:path';
 import type { SessionControl } from '../../control/sessionControl.js';
 import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { replaySession } from '@vybestack/llxprt-code-core';
+import {
+  replaySession,
+  type LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
 import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -11,9 +14,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 export async function recordedRows(
   path: string,
   projectHash: string,
+  mediaStore?: LocalMediaStore,
 ): Promise<readonly IContent[]> {
   if (!isJournalFileName(path)) {
-    const replay = await replaySession(path, projectHash);
+    const replay = await replaySession(path, projectHash, { mediaStore });
     if (!replay.ok) throw new Error(replay.error);
     return replay.history;
   }
