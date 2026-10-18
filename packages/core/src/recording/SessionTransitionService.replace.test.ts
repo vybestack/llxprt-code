@@ -22,13 +22,17 @@ import {
   type InterruptedReplaceOptions,
 } from './__tests__/support/crashedReplaceFixture.js';
 import { CONTINUE_LATEST, resumeSession } from './resumeSession.js';
+import { SessionTransitionService } from './SessionTransitionService.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 import {
-  SessionTransitionService,
-  type ForkResult,
-} from './SessionTransitionService.js';
+  requireJsonlFork,
+  type JsonlFork,
+} from './__tests__/support/jsonlFork.js';
 
 const roots: string[] = [];
-const forks: ForkResult[] = [];
+pinHistoryBackend('old');
+
+const forks: JsonlFork[] = [];
 
 async function tempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -37,7 +41,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 interface Fork {
-  readonly child: ForkResult;
+  readonly child: JsonlFork;
   readonly childDir: string;
   readonly childFile: string;
 }
@@ -63,7 +67,7 @@ async function forkCheckpoint(
   const sourceFile = source.getFilePath();
   if (sourceFile === null) throw new Error('source has no journal');
   const stat = await fs.stat(sourceFile);
-  const child = await new SessionTransitionService().forkFromCheckpoint(
+  const result = await new SessionTransitionService().forkFromCheckpoint(
     {
       kind: 'checkpoint',
       checkpointId: checkpoint.checkpointId,
@@ -87,7 +91,7 @@ async function forkCheckpoint(
     'gpt-4.1',
     [childDir],
   );
-  if (!child.ok) throw new Error(child.error);
+  const child = requireJsonlFork(result);
   forks.push(child);
   const childFile = child.recording.getFilePath();
   if (childFile === null) throw new Error('child has no journal');

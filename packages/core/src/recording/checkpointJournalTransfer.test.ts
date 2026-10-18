@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { SessionTransitionService } from './SessionTransitionService.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 import {
-  SessionTransitionService,
-  type ForkResult,
-} from './SessionTransitionService.js';
+  requireJsonlFork,
+  type JsonlFork,
+} from './__tests__/support/jsonlFork.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
@@ -26,11 +28,13 @@ function row(text: string, seq: number): IContent {
   };
 }
 
+pinHistoryBackend('old');
+
 let root: string;
 
 let source: string;
 
-let forks: ForkResult[];
+let forks: JsonlFork[];
 
 async function fixture(
   events: ReadonlyArray<{ type: string; payload: unknown }>,
@@ -83,18 +87,18 @@ async function fork(
   target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
   maxQueueBytes?: number,
   mediaStore?: LocalMediaStore,
-): Promise<ForkResult> {
+): Promise<JsonlFork> {
   const kit = createRowCounters();
   const result = await new SessionTransitionService({
     counters: kit.counters,
     maxQueueBytes,
     mediaStore,
   }).forkFromCheckpoint(target, root, 'project', 'new', 'new', []);
-  if (!result.ok) throw new Error(result.error);
-  forks.push(result);
+  const child = requireJsonlFork(result);
+  forks.push(child);
   expect(kit.snapshot().recordsDecoded).toBeGreaterThan(0);
   expect(kit.snapshot().rowsDecoded).toBe(0);
-  return result;
+  return child;
 }
 
 describe('checkpoint logical journal range', () => {
@@ -347,7 +351,7 @@ async function verifyRemovesAPreparedChildIfReleasingTheSourceLockFails(): Promi
     );
     expect(result.ok).toBe(false);
     if (result.ok) {
-      forks.push(result);
+      forks.push(requireJsonlFork(result));
       throw new Error('Unexpected successful fork');
     }
     expect(result.error).toContain('source release failed');

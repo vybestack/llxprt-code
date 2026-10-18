@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import type { SessionRecordingPort } from './recordingPort.js';
+import type { ResumeBootHandle } from './resumeSession.js';
+import { forkJournalFromCheckpoint } from './journalFork.js';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import { requireJournalRecorder } from '../services/history/recorderBackend.js';
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
 import { scanResumeMetadata } from './resumeMetadata.js';
 import { copyCheckpointRange } from './checkpointJournalTransfer.js';
@@ -18,12 +23,19 @@ import type {
 
 export type { ContinueTarget } from './types.js';
 
+/** The child session, held by its recorder and lock, and the boot a history adopts it from. */
 export interface ForkResult {
   ok: true;
-  recording: SessionRecordingService;
+  recording: SessionRecordingPort;
   lockHandle: LockHandle;
-  boot: ResumeCursorBoot;
+  boot: ResumeBootHandle;
   metadata: SessionMetadata;
+}
+
+/** The old layout's child: its file is named by the cursor boot. */
+interface JsonlForkResult extends ForkResult {
+  recording: SessionRecordingService;
+  boot: ResumeCursorBoot;
 }
 
 export interface ForkError {
@@ -37,6 +49,8 @@ export interface SessionTransitionServiceOptions {
   readonly mediaStore?: LocalMediaStore;
   readonly maxQueueBytes?: number;
   readonly counters?: JournalReadCounters;
+  /** File seams of the journal (tests); the JSONL fork ignores them. */
+  readonly journal?: JournalSessionOptions;
 }
 
 function failureDetail(error: unknown): string {
@@ -78,8 +92,8 @@ async function failedChild(
 
 async function releaseSource(
   sourceLock: LockHandle | undefined,
-  result: ForkResult | ForkError,
-): Promise<ForkResult | ForkError> {
+  result: JsonlForkResult | ForkError,
+): Promise<JsonlForkResult | ForkError> {
   try {
     await sourceLock?.release();
     return result;
@@ -121,7 +135,7 @@ async function prepareChild(
   chatsDir: string,
   metadata: SessionMetadata,
   options: SessionTransitionServiceOptions,
-): Promise<ForkResult | ForkError> {
+): Promise<JsonlForkResult | ForkError> {
   const timestamp = metadata.startTime.slice(0, 19).replace(/:/g, '-');
   const filePath = join(
     chatsDir,
@@ -193,6 +207,7 @@ async function prepareChild(
 export class SessionTransitionService {
   constructor(private readonly options: SessionTransitionServiceOptions = {}) {}
 
+  /** Restores a checkpoint as a new child session, in the layout the backend selects. */
   async forkFromCheckpoint(
     target: CheckpointTarget,
     chatsDir: string,
@@ -202,6 +217,40 @@ export class SessionTransitionService {
     workspaceDirs: string[],
     activeSource?: SessionRecordingPort | null,
   ): Promise<ForkResult | ForkError> {
+    if (selectBackend() === 'journal') {
+      return forkJournalFromCheckpoint({
+        target,
+        chatsDir,
+        projectHash,
+        currentProvider,
+        currentModel,
+        workspaceDirs,
+        ...(activeSource
+          ? { activeSource: requireJournalRecorder(activeSource) }
+          : {}),
+        ...(this.options.journal ? { journal: this.options.journal } : {}),
+      });
+    }
+    return this.forkJsonlFromCheckpoint(
+      target,
+      chatsDir,
+      projectHash,
+      currentProvider,
+      currentModel,
+      workspaceDirs,
+      activeSource,
+    );
+  }
+
+  private async forkJsonlFromCheckpoint(
+    target: CheckpointTarget,
+    chatsDir: string,
+    projectHash: string,
+    currentProvider: string,
+    currentModel: string,
+    workspaceDirs: string[],
+    activeSource?: SessionRecordingPort | null,
+  ): Promise<JsonlForkResult | ForkError> {
     let sourceLock: LockHandle | undefined;
     if (
       activeSource?.getSessionId() !== target.source.sessionId ||

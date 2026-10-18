@@ -47,7 +47,7 @@ import {
   importSessionMediaPackage,
   scanResumeMetadata,
   type SessionRecordingPort,
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type ResumeResult,
   type ContinueTarget,
   type ReplayResult,
@@ -778,7 +778,7 @@ export class SessionControl implements AgentSessionControl {
 
   private async forkTarget(
     target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
-  ): Promise<ResumeCursorBoot> {
+  ): Promise<ResumeBootHandle> {
     if (this.recording?.getSessionId() === target.source.sessionId) {
       await this.recording.flush();
     }

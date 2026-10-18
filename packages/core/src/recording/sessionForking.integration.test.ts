@@ -31,6 +31,13 @@ import {
 import { CheckpointService } from './CheckpointService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import {
+  requireJsonlFork,
+  type JsonlFork,
+} from './__tests__/support/jsonlFork.js';
+
+pinHistoryBackend('old');
 
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,
@@ -43,11 +50,8 @@ function requireReplaySuccess(
 
 function requireForkSuccess(
   result: Awaited<ReturnType<SessionTransitionService['forkFromCheckpoint']>>,
-): asserts result is Extract<
-  Awaited<ReturnType<SessionTransitionService['forkFromCheckpoint']>>,
-  { ok: true }
-> {
-  if (!result.ok) throw new Error(`Expected fork success: ${result.error}`);
+): asserts result is JsonlFork {
+  requireJsonlFork(result);
 }
 import { type SessionRecordingServiceConfig } from './types.js';
 import { type IContent } from '../services/history/IContent.js';

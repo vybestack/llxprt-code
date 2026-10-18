@@ -151,13 +151,10 @@ export function forkBootOf(
   if (!result.ok) {
     throw new Error(`${label} failed: ${result.error}`);
   }
-  const boot = (result as { boot?: ResumeCursorBoot }).boot;
-  if (boot === undefined) {
-    throw new Error(
-      'P05d red: ForkResult.boot (cursor boot) does not exist yet',
-    );
+  if (!('cursor' in result.boot)) {
+    throw new Error(`${label} did not return a cursor boot`);
   }
-  return boot;
+  return result.boot;
 }
 
 /** Assert a result carries no materialized history array (the P05d ban). */
