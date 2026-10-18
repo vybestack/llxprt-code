@@ -94,7 +94,7 @@ export interface DetachedHistoryHost {
     tokensDelta: number,
     rows: DetachedHistoryJournal,
     start: number,
-  ): void;
+  ): Promise<void> | undefined;
   /** The published batch as one event, announced after its group is acked (journal store). */
   notifyRows(rows: HistoryBatchRowSource): void;
   notifyTokens(tokensDelta: number): void;
@@ -318,9 +318,11 @@ function notifyPublishedTokens(
   start: number,
   delta: number,
   options: DetachedHistoryOptions,
-): void {
-  if (options.publishBatch === true) host.notifyBatch(delta, next, start);
-  else if (options.publishTokens === true) host.notifyTokens(delta);
+): Promise<void> | undefined {
+  if (options.publishBatch === true)
+    return host.notifyBatch(delta, next, start);
+  if (options.publishTokens === true) host.notifyTokens(delta);
+  return undefined;
 }
 
 function stampCandidate(
@@ -345,7 +347,7 @@ async function finishDetachedPublication(
   effects: readonly PreparedHistoryBatchEffect[],
   options: DetachedHistoryOptions,
 ): Promise<void> {
-  notifyPublishedTokens(host, next, publishedStart, delta, options);
+  await notifyPublishedTokens(host, next, publishedStart, delta, options);
   await options.onAcknowledged?.();
   options.signal?.throwIfAborted();
   await options.afterPublication?.();

@@ -54,7 +54,7 @@ export async function openOwnedJournal(
     waitForTokenUpdates: () => Promise.resolve(),
     estimate: (rows) => Promise.resolve([...rows].length),
     notify: () => {},
-    notifyBatch: () => {},
+    notifyBatch: () => undefined,
     notifyRows: () => {},
     notifyTokens: () => {},
     notifyRange: () => {},

@@ -18,7 +18,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import { blockTextOrEmpty } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import { batchValues } from './batch-event-test-helpers.js';
+import { readBatch } from './batch-event-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
 
@@ -136,6 +136,15 @@ async function batchCase3(): Promise<string[]> {
         externalRecords.pop();
       },
     }),
+    // The journal store reserves a batch's media through this entry point; it records like the replacement.
+    prepareReferenceAddition: () => ({
+      publish: () => {
+        externalRecords.push('published');
+      },
+      rollback: () => {
+        externalRecords.pop();
+      },
+    }),
   });
   history.on('contentBatchAdded', () => {
     throw new Error('publication failed');
@@ -154,14 +163,9 @@ async function batchCase3(): Promise<string[]> {
 
 async function batchCase4(): Promise<string[][]> {
   const history = new HistoryService();
-  const observed: string[][] = [];
+  const reads: Array<Promise<string[]>> = [];
   history.on('contentBatchAdded', (contents) => {
-    const texts: string[] = [];
-    batchValues(contents).withRows((cursor) => {
-      for (let item = cursor.next(); item.done !== true; item = cursor.next())
-        texts.push(textOf(item.value));
-    });
-    observed.push(texts);
+    reads.push(readBatch(contents, textOf));
     throw new Error('batch listener failed');
   });
 
@@ -173,7 +177,7 @@ async function batchCase4(): Promise<string[][]> {
     expect(rows).toStrictEqual([]);
   });
   expect(history.getTotalTokens()).toBe(0);
-  return observed;
+  return Promise.all(reads);
 }
 
 async function batchCase5(
@@ -217,15 +221,10 @@ async function batchCase6(): Promise<{
   totalTokens: number;
 }> {
   const history = new HistoryService();
-  const events: string[][] = [];
+  const reads: Array<Promise<string[]>> = [];
   const tokenDeltas: number[] = [];
   history.on('contentBatchAdded', (contents) => {
-    const texts: string[] = [];
-    batchValues(contents).withRows((cursor) => {
-      for (let item = cursor.next(); item.done !== true; item = cursor.next())
-        texts.push(textOf(item.value));
-    });
-    events.push(texts);
+    reads.push(readBatch(contents, textOf));
   });
   history.on('tokensUpdated', (event) => {
     tokenDeltas.push(event.addedTokens);
@@ -240,7 +239,9 @@ async function batchCase6(): Promise<{
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
     expect(rows.map(textOf)).toStrictEqual(['first', 'second', 'third']);
   });
-  expect(events).toStrictEqual([['first', 'second', 'third']]);
+  expect(await Promise.all(reads)).toStrictEqual([
+    ['first', 'second', 'third'],
+  ]);
   expect(tokenDeltas).toHaveLength(1);
   return { tokenDelta: tokenDeltas[0], totalTokens: history.getTotalTokens() };
 }

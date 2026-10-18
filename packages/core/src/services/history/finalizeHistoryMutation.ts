@@ -20,7 +20,7 @@ export async function finalizeHistoryMutation(
   spans: readonly RemovedInteriorSpan[],
   emitEagerRange: () => void,
 ): Promise<void> {
-  publishMutationTokens(history, input, addedTokens);
+  await publishMutationTokens(history, input, addedTokens);
   await input.options.afterPublication?.();
   input.signal?.throwIfAborted();
   await finalizeMutationEffects(effects);

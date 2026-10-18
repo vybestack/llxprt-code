@@ -8,7 +8,7 @@ import {
   mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { batchValues } from '../../../core/src/services/history/batch-event-test-helpers.js';
+import { batchRowSource } from '../../../core/src/services/history/batch-event-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import {
   boundedOwners,
@@ -22,24 +22,23 @@ async function observerOwners(size: number, retain: boolean): Promise<boolean> {
     const subscriber: { rows: IContent[] } = { rows: [] };
     let transient = owners.snapshot();
     let held = owners.snapshot();
+    const passes: Array<Promise<void>> = [];
     history.once('contentBatchAdded', (rows) => {
       expect(rows.length).toBe(size);
-      batchValues(rows).withRows((cursor) => {
-        let count = 0;
-        for (
-          let item = cursor.next();
-          item.done !== true;
-          item = cursor.next()
-        ) {
-          if (retain) {
-            subscriber.rows.push(item.value);
-            owners.retain(item.value);
+      passes.push(
+        (async () => {
+          let count = 0;
+          for await (const row of batchRowSource(rows).rows()) {
+            if (retain) {
+              subscriber.rows.push(row);
+              owners.retain(row);
+            }
+            transient = owners.snapshot();
+            count++;
           }
-          transient = owners.snapshot();
-          count++;
-        }
-        expect(count).toBe(size);
-      });
+          expect(count).toBe(size);
+        })(),
+      );
     });
     const failure = new Error('observer owner checkpoint');
     await history.registerMediaOwner(
@@ -61,6 +60,7 @@ async function observerOwners(size: number, retain: boolean): Promise<boolean> {
           ),
         ),
       ).toBe(failure);
+      await Promise.all(passes);
       if (retain) {
         expect(transient.liveRows).toBeGreaterThanOrEqual(size);
         expect(transient.liveSerializedBytes).toBeGreaterThan(size * 2048);

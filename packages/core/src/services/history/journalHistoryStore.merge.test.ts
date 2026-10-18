@@ -71,7 +71,7 @@ describe('JournalHistoryStore.mergeFrom', () => {
       waitForTokenUpdates: () => Promise.resolve(),
       estimate: (rows) => Promise.resolve([...rows].length),
       notify: () => {},
-      notifyBatch: () => {},
+      notifyBatch: () => undefined,
       notifyRows: (source) => {
         batches.push(source);
       },

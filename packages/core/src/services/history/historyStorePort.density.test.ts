@@ -137,7 +137,7 @@ describe('HistoryStorePort.optimizeDensity', () => {
           return Promise.resolve([...rows].length);
         },
         notify: () => {},
-        notifyBatch: () => {},
+        notifyBatch: () => undefined,
         notifyRows: (source) => {
           batches.push(source);
         },

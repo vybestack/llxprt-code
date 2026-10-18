@@ -177,11 +177,41 @@ the event does not bound borrowed inputs or synchronous pending publication
 queues. Use the scoped detached row-transform API for value-based publication
 that does not require a complete caller array or exact caller marker identity.
 
-## Scoped synchronous batch event
+## Batch event: one row source for both stores
 
-`contentBatchAdded` now supplies `HistoryBatchValues`, exported with
-`HistoryBatchCursor` from Core. Its `length` is the complete appended suffix or
-replacement cardinality. Read values synchronously during the listener:
+`contentBatchAdded` carries a row source, `HistoryBatchRowSource`, exported from
+Core. The file-backed store's payload is `HistoryBatchValues`, which extends it,
+so one listener works on both stores. `length` is the complete appended suffix
+or replacement cardinality. `rows()` returns an async generator that reads one
+row at a time; each call is an independent pass and nothing is retained between
+reads. The source is valid from dispatch until the dispatcher calls `retire()`,
+which it does once every listener has been handed the payload. A pass must start
+during dispatch (call `next()` before the listener returns, which a `for await`
+loop in an async function does). Passes already started finish; a pass started
+after `retire()` throws.
+
+```typescript
+history.on('contentBatchAdded', (batch) => {
+  void (async () => {
+    for await (const row of batch.rows()) consume(row);
+  })();
+});
+```
+
+The event fires once per published batch, after the batch is committed, and
+never for a publication that failed. If a listener throws, the batch is rolled
+back and passes it started are allowed to finish before the failure is reported.
+Finish or `return()` every pass you start: on the file-backed store the
+publication waits for it, because the rows belong to the publication's scope.
+
+The journal store reads the version that was acked when the event fired, so
+later mutations do not change what a pass reads. The file-backed store reads the
+publication's own rows and closes that scope once the last pass has finished.
+
+### File-backed store: scoped synchronous reader
+
+`HistoryBatchValues` also keeps the scoped synchronous reader that existing
+listeners use, exported with `HistoryBatchCursor`:
 
 ```typescript
 history.on('contentBatchAdded', (batch) => {
@@ -193,39 +223,20 @@ history.on('contentBatchAdded', (batch) => {
 });
 ```
 
-Only one cursor may be active on a batch at a time. Each listener can traverse
-independently. Rows are read through disk without an array cache. Early
-`cursor.return()`, callback failure, and dispatch completion release reader
+Only one `withRows` cursor may be active on a batch at a time. Each listener can
+traverse independently. Rows are read through disk without an array cache. Early
+`cursor.return()`, callback failure, and the end of the batch release reader
 ownership. Both handles expire at the end of their synchronous scope and drop
-their source references. An asynchronous reader callback is unsupported.
+their source references. An asynchronous `withRows` callback is unsupported;
+use `rows()`. The journal store's payload has no `withRows`.
 
-The event name, native ordered synchronous dispatch, unsubscribe behavior,
-reentrant mutation FIFO, token updates, and observer-failure compensation remain
+The event name, native ordered dispatch, unsubscribe behavior, reentrant
+mutation FIFO, token updates, and observer-failure compensation remain
 unchanged. There is no array indexing, array iterator, shared row identity or
-cross-listener mutation, and no readable retained handle after dispatch.
+cross-listener mutation, and no readable retained handle after the batch.
 Consumers outside this checkout must migrate. A consumer that saves every
 returned row creates its own unbounded collection. Complete large rows are
 still accepted; the controlled fixture's 8 MiB cap is not a row-size limit.
-
-### Journal backend: committed row source
-
-When history runs on the journal store, `contentBatchAdded` carries a
-`HistoryBatchRowSource` (exported from Core) instead of `HistoryBatchValues`.
-The event fires once per published batch, after the batch is durable and never
-for a publication that failed. `length` is the batch cardinality, and
-`rows()` returns an async generator that reads one row at a time from the
-version that was published when the event fired. Later mutations do not change
-what it reads, each call starts a new pass, and nothing is retained between
-reads:
-
-```typescript
-history.on('contentBatchAdded', (batch) => {
-  if (!('rows' in batch)) return; // the scoped values of the file-backed store
-  void (async () => {
-    for await (const row of batch.rows()) consume(row);
-  })();
-});
-```
 
 ## Deferred disk-source admission
 

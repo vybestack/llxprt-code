@@ -13,7 +13,7 @@ import {
 import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
-import { visitBatch } from '../../packages/core/src/services/history/batch-event-test-helpers.js';
+import { readBatch } from '../../packages/core/src/services/history/batch-event-test-helpers.js';
 
 function acceptedRow(index: number): ReturnType<typeof providerFarFixtureRow> {
   const row = providerFarFixtureRow(index);
@@ -27,20 +27,24 @@ function acceptedRow(index: number): ReturnType<typeof providerFarFixtureRow> {
 }
 async function compare(size: number): Promise<void> {
   await withBatchFixture(async ({ history }) => {
-    let observed = 0;
+    let index = 0;
+    const passes: Array<Promise<unknown[]>> = [];
     history.once('contentBatchAdded', (values) => {
       expect(values.length).toBe(size);
-      observed = visitBatch(values, (row) => {
-        const expected = acceptedRow(observed++);
-        expect(row.speaker).toBe(expected.speaker);
-        expect(row.blocks).toStrictEqual(expected.blocks);
-      });
+      passes.push(
+        readBatch(values, (row) => {
+          const expected = acceptedRow(index++);
+          expect(row.speaker).toBe(expected.speaker);
+          expect(row.blocks).toStrictEqual(expected.blocks);
+        }),
+      );
     });
     const batch = Array.from({ length: size }, (_, index) =>
       acceptedRow(index),
     );
     await history.addBatch(batch, undefined, { streamPublication: true });
-    expect(observed).toBe(size);
+    await Promise.all(passes);
+    expect(index).toBe(size);
     const logger = new DebugLogger('test:batch-event-body');
     const expectedRows = buildProviderContent(
       buildCuratedHistory(

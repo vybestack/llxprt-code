@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { batchValues } from '../../../core/src/services/history/batch-event-test-helpers.js';
+import { batchRowSource } from '../../../core/src/services/history/batch-event-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import { withDetachedFixture } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
@@ -28,24 +28,23 @@ function registerObserver(size: number, retain: boolean): void {
           let emitted = owners.snapshot();
           let finalized = owners.snapshot();
           const failure = new Error('client observer checkpoint');
+          const passes: Array<Promise<void>> = [];
           history.on('contentBatchAdded', (rows) => {
             expect(rows.length).toBe(size);
-            batchValues(rows).withRows((cursor) => {
-              let count = 0;
-              for (
-                let item = cursor.next();
-                item.done !== true;
-                item = cursor.next()
-              ) {
-                if (retain) {
-                  held.rows.push(item.value);
-                  owners.retain(item.value);
+            passes.push(
+              (async () => {
+                let count = 0;
+                for await (const row of batchRowSource(rows).rows()) {
+                  if (retain) {
+                    held.rows.push(row);
+                    owners.retain(row);
+                  }
+                  emitted = owners.snapshot();
+                  count++;
                 }
-                emitted = owners.snapshot();
-                count++;
-              }
-              expect(count).toBe(size);
-            });
+                expect(count).toBe(size);
+              })(),
+            );
           });
           await history.registerMediaOwner(
             mediaParticipant(() => ({
@@ -63,6 +62,7 @@ function registerObserver(size: number, retain: boolean): void {
               client.restoreHistory(clientArrayRows(size)),
             );
             expect(error).toBeInstanceOf(Error);
+            await Promise.all(passes);
             expectBatchObserverOwners(emitted, size, retain);
             expect(boundedOwners(finalized)).toBe(!retain);
             recordClientProof({

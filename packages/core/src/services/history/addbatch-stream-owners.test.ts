@@ -6,7 +6,7 @@ import {
   withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { batchValues } from './batch-event-test-helpers.js';
+import { batchRowSource } from './batch-event-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -24,24 +24,23 @@ describe('addBatch actual disk publication owners', () => {
         owners.registerInput(batch);
         history.setBaseTokenOffset(37);
         let observed = 0;
+        const passes: Array<Promise<void>> = [];
         history.on('contentBatchAdded', (published) => {
           expect(published).toHaveLength(size);
-          batchValues(published).withRows((cursor) => {
-            let index = 0;
-            for (
-              let item = cursor.next();
-              item.done !== true;
-              item = cursor.next()
-            ) {
-              expect(item.value).not.toBe(batch[index]);
-              expect(item.value).toStrictEqual(batch[index]);
-              expect(item.value.metadata?.chronology).toStrictEqual(
-                batch[index].metadata?.chronology,
-              );
-              index++;
-            }
-            expect(index).toBe(size);
-          });
+          passes.push(
+            (async () => {
+              let index = 0;
+              for await (const row of batchRowSource(published).rows()) {
+                expect(row).not.toBe(batch[index]);
+                expect(row).toStrictEqual(batch[index]);
+                expect(row.metadata?.chronology).toStrictEqual(
+                  batch[index].metadata?.chronology,
+                );
+                index++;
+              }
+              expect(index).toBe(size);
+            })(),
+          );
           observed++;
         });
         await history.addBatch(batch, undefined, {
@@ -54,6 +53,7 @@ describe('addBatch actual disk publication owners', () => {
             expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
           },
         });
+        await Promise.all(passes);
         expect(observed).toBe(1);
         expect(history.getTotalTokens()).toBe(37 + 4 * size);
         let index = 0;

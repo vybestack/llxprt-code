@@ -126,7 +126,7 @@ async function openJournal(
     notify: (_delta, range) => {
       observed.ranges.push(range);
     },
-    notifyBatch: () => {},
+    notifyBatch: () => undefined,
     notifyRows: (source) => {
       observed.batches.push({
         source,

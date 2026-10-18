@@ -42,14 +42,34 @@ import type {
   HistoryServiceEventEmitter,
 } from './historyEventTypes.js';
 
+/**
+ * Batch event, per-row events, then the token update. Returns a promise only
+ * when a batch listener started a pass: the rows stay readable until it
+ * finishes, and the remaining events follow it.
+ */
 export function publishMutationTokens(
   history: HistoryServiceEventEmitter & { getTotalTokens(): number },
   input: HistoryMutationInput,
   addedTokens: number,
-): void {
-  if (input.publishedBatch !== undefined) {
-    emitHistoryBatchValues(history, input.publishedBatch);
+): Promise<void> | undefined {
+  const drained =
+    input.publishedBatch === undefined
+      ? undefined
+      : emitHistoryBatchValues(history, input.publishedBatch);
+  if (drained === undefined) {
+    publishRowsAndTokens(history, input, addedTokens);
+    return undefined;
   }
+  return drained.then(() => {
+    publishRowsAndTokens(history, input, addedTokens);
+  });
+}
+
+function publishRowsAndTokens(
+  history: HistoryServiceEventEmitter & { getTotalTokens(): number },
+  input: HistoryMutationInput,
+  addedTokens: number,
+): void {
   if (input.publishedRowStart !== undefined) {
     let index = 0;
     for (const row of input.nextHistory) {

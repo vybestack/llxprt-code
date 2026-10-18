@@ -59,13 +59,20 @@ function notifyDetachedBatch(
   addedTokens: number,
   rows: HistoryBatchRows,
   start: number,
-): void {
-  emitHistoryBatchValues(history, rows, start, ownership);
-  history.emit('tokensUpdated', {
-    totalTokens: history.getTotalTokens(),
-    addedTokens,
-    contentId: null,
-  });
+): Promise<void> | undefined {
+  const emitTokens = (): void => {
+    history.emit('tokensUpdated', {
+      totalTokens: history.getTotalTokens(),
+      addedTokens,
+      contentId: null,
+    });
+  };
+  const drained = emitHistoryBatchValues(history, rows, start, ownership);
+  if (drained === undefined) {
+    emitTokens();
+    return undefined;
+  }
+  return drained.then(emitTokens);
 }
 
 /** The committed batch as one `contentBatchAdded`; the row ownership census counts each row while a listener holds it. */
