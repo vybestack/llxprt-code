@@ -7,7 +7,7 @@ import {
   type RuntimeProviderManager,
   type Config,
   type AgentClientContract,
-  SessionRecordingService,
+  createLockedSessionRecorder,
   type SessionRecordingPort,
   RecordingIntegration,
   SessionDiscovery,
@@ -664,14 +664,14 @@ export async function setupOwnerSessionRecording(
   }
 }
 
-/** Build and lock a fresh SessionRecordingService for the current run. */
+/** Build and lock a fresh session recorder (the backend's own kind) for the current run. */
 export function buildNewRecordingService(
   config: Config,
   projectHash: string,
   chatsDir: string,
   sessionClient: RecordingClientOwner,
 ): Promise<SessionRecordingPort> {
-  return SessionRecordingService.createLocked({
+  return createLockedSessionRecorder({
     sessionId: config.getSessionId(),
     projectHash,
     chatsDir,

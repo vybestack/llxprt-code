@@ -1,0 +1,54 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import {
+  JournalRecordingService,
+  type JournalRecordingConfig,
+} from './journalRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import type { SessionRecordingServiceConfig } from './types.js';
+
+/**
+ * The one place a session recorder class is chosen (#854 G8). Callers hold the
+ * result as the session surface and never convert it to the other kind; the
+ * history store checks the kind it is given.
+ *
+ * The journal recorder has no use for the JSONL writer's queue bound, media
+ * store or I/O seams, so those fields of the shared config are not passed on.
+ */
+function journalConfig(
+  config: SessionRecordingServiceConfig,
+): JournalRecordingConfig {
+  return {
+    sessionId: config.sessionId,
+    projectHash: config.projectHash,
+    chatsDir: config.chatsDir,
+    workspaceDirs: config.workspaceDirs,
+    cwd: config.cwd,
+    provider: config.provider,
+    model: config.model,
+    kind: config.kind,
+    parentSessionId: config.parentSessionId,
+    resolveProviderModel: config.resolveProviderModel,
+  };
+}
+
+/** A recorder for a new session; its file is created when first needed. */
+export function createSessionRecorder(
+  config: SessionRecordingServiceConfig,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): SessionRecordingPort {
+  return selectBackend(env) === 'journal'
+    ? JournalRecordingService.create(journalConfig(config))
+    : new SessionRecordingService(config);
+}
+
+/** `createSessionRecorder`, holding the session lock. */
+export function createLockedSessionRecorder(
+  config: SessionRecordingServiceConfig,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<SessionRecordingPort> {
+  return selectBackend(env) === 'journal'
+    ? JournalRecordingService.createLocked(journalConfig(config))
+    : SessionRecordingService.createLocked(config);
+}

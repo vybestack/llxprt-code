@@ -5,7 +5,7 @@
  */
 import {
   RecordingIntegration,
-  SessionRecordingService,
+  createLockedSessionRecorder,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { basename } from 'node:path';
@@ -41,7 +41,7 @@ export async function startNewSessionTransition(
   let retirementStarted = false;
   try {
     if (state.owner.getRecording().enabled) {
-      recording = await SessionRecordingService.createLocked({
+      recording = await createLockedSessionRecorder({
         sessionId: nextSessionId,
         projectHash: basename(deps.config.projectTempDir),
         chatsDir: deps.config.projectChatsDir,

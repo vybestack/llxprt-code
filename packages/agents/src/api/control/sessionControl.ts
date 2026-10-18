@@ -40,8 +40,8 @@ import {
   RecordingIntegration,
   withRecordingFailureReport,
   SessionDiscovery,
-  SessionRecordingService,
   SessionTransitionService,
+  createLockedSessionRecorder,
   requireJsonlRecorder,
   deleteSession as deleteRecordedSession,
   importSessionMediaPackage,
@@ -59,7 +59,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
@@ -869,7 +868,7 @@ export class SessionControl implements AgentSessionControl {
     // survive across the fresh service swap.
     await this.ensureSubscribed();
     await this.teardownActiveSession();
-    const service = await SessionRecordingService.createLocked({
+    const service = await createLockedSessionRecorder({
       sessionId: this.recordingSessionId,
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
@@ -921,7 +920,7 @@ export class SessionControl implements AgentSessionControl {
    * header and a monotonic sequence.
    */
   private async continueAdoptedRecording(
-    service: RecordingPort,
+    service: SessionRecordingPort,
   ): Promise<void> {
     const filePath = this.adoptedPath;
     if (filePath === null) return;
@@ -934,7 +933,7 @@ export class SessionControl implements AgentSessionControl {
     if (replay.sequenceCorrupt) {
       throw new Error('Cannot restart recording: non-monotonic sequences');
     }
-    service.initializeForResume(
+    requireJsonlRecorder(service).initializeForResume(
       filePath,
       replay.lastSeq,
       replay.metadata.title,
