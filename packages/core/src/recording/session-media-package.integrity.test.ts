@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -23,7 +25,8 @@ import type {
   MediaStoredObject,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { parseManifest } from './session-media-package-validation.js';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
@@ -134,7 +137,7 @@ describe('session media package integrity and cancellation', () => {
         semanticMetadata: {},
       }),
     ];
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'integrity-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'source', 'chats'),
@@ -148,7 +151,7 @@ describe('session media package integrity and cancellation', () => {
       blocks: [reference],
       metadata: { turnId: `integrity-turn-${index}` },
     }));
-    for (const row of rows) recording.recordContent(row);
+    for (const row of rows) await recordRowsForTest(recording, [row]);
     await recording.flush();
     const recordingPath = recording.getFilePath();
     assertNotNull(recordingPath, 'Expected recording path');
@@ -178,9 +181,9 @@ describe('session media package integrity and cancellation', () => {
   it('writes blobs and manifest digests that match independently computed sha256 values', async () => {
     const exported = await exportPackage();
 
-    const manifest = JSON.parse(
+    const manifest = parseManifest(
       await readFile(join(exported.directory, 'manifest.json'), 'utf8'),
-    ) as { objects: MediaStoredObject[]; recording: string };
+    );
     const expectedIds = [FIRST_BYTES, SECOND_BYTES]
       .map((bytes) => `sha256:${sha256Hex(bytes)}`)
       .sort();
@@ -224,7 +227,9 @@ describe('session media package integrity and cancellation', () => {
     const exported = await exportPackage();
     const destination = join(tempDirectory, 'cancelled-export');
     // Calls 1 and 2 verify each row during replay; call 3 is the first blob copy.
-    exported.sourceStore.cancelReadObjectAfter(3);
+    exported.sourceStore.cancelReadObjectAfter(
+      selectBackend() === 'journal' ? 1 : 3,
+    );
     const sourceBefore = await stat(exported.recordingPath);
 
     await expect(

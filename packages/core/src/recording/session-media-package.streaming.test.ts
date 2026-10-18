@@ -19,21 +19,36 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import {
+  packageRecordingName,
+  writePackageRecording,
+  readPackageRows,
+} from './__tests__/support/packageRecording.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import type { IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import {
-  HASH_CHUNK_BYTES,
-  readBoundedFile,
-} from './session-media-package-validation.js';
+import { HASH_CHUNK_BYTES } from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'streaming-project';
 const ROW_TEXT = 'x'.repeat(4096);
 
-function recordingLine(seq: number, type: string, payload: unknown): string {
-  return `${JSON.stringify({ v: 2, seq, type, payload })}\n`;
+function* rowBatches(rows: number): Generator<readonly IContent[]> {
+  for (let first = 0; first < rows; first += 256) {
+    yield Array.from(
+      { length: Math.min(256, rows - first) },
+      (_, index): IContent => ({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `${first + index}:${ROW_TEXT}` }],
+      }),
+    );
+  }
 }
 
 async function writePackage(
@@ -41,48 +56,61 @@ async function writePackage(
   rows: number,
 ): Promise<{ recordingPath: string; bytes: number }> {
   await mkdir(directory, { recursive: true });
-  const recordingPath = join(directory, 'session.jsonl');
-  await writeFile(
-    recordingPath,
-    recordingLine(1, 'session_start', {
-      sessionId: 'streamed-source',
-      projectHash: 'other-project',
-      workspaceDirs: ['/elsewhere'],
-      cwd: '/elsewhere',
-    }),
+  const recordingPath = await writePackageRecording(
+    directory,
+    rowBatches(rows),
+    'other-project',
   );
-  const batch = 256;
-  for (let first = 0; first < rows; first += batch) {
-    let chunk = '';
-    for (let row = first; row < Math.min(rows, first + batch); row += 1) {
-      chunk += recordingLine(row + 2, 'content', {
-        content: {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: `${row}:${ROW_TEXT}` }],
-        },
-      });
-    }
-    await appendFile(recordingPath, chunk);
-  }
   await writeFile(
     join(directory, 'manifest.json'),
     JSON.stringify({
       version: 2,
-      recording: 'session.jsonl',
+      recording: packageRecordingName(),
       persistedStates: [],
       references: [],
       objects: [],
     }),
   );
-  const bytes = (await stat(recordingPath)).size;
-  return { recordingPath, bytes };
+  return { recordingPath, bytes: (await stat(recordingPath)).size };
 }
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+async function assertNativeIdentity(
+  path: string,
+  sessionId: string,
+): Promise<void> {
+  const facts = await readJournalFileFacts(path);
+  expect(facts?.facts.sessionId).toBe(sessionId);
+  expect(facts?.facts.start.projectHash).toBe(PROJECT_HASH);
+  expect(facts?.facts.start.cwd).toBeUndefined();
+  expect(facts?.facts.directories).toStrictEqual([]);
+}
+
+async function assertLegacyIdentity(
+  path: string,
+  sessionId: string,
+): Promise<void> {
+  const lines = (await readFile(path, 'utf8'))
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  expect(lines).toHaveLength(301);
+  const start = lines[0]['payload'] as Record<string, unknown>;
+  expect(start['sessionId']).toBe(sessionId);
+  expect(start['projectHash']).toBe(PROJECT_HASH);
+  expect(start['cwd']).toBeUndefined();
+  const last = lines[300]['payload'] as {
+    content: { blocks: Array<{ text: string }> };
+  };
+  expect(last.content.blocks[0].text.startsWith('299:')).toBe(true);
+}
+
 async function peakExternalBuffers(work: () => Promise<void>): Promise<number> {
+  Bun.gc(true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   Bun.gc(true);
   const baseline = process.memoryUsage().arrayBuffers;
   let peak = 0;
@@ -162,6 +190,7 @@ async function countFileHandleReads(
 }
 
 describe('streamed portable session import', () => {
+  const backend = useBackendEnv();
   let tempDirectory = '';
   let store: LocalMediaStore;
 
@@ -189,24 +218,23 @@ describe('streamed portable session import', () => {
       store,
     );
 
-    const lines = (await readFile(imported.recordingPath, 'utf8'))
-      .trimEnd()
-      .split('\n')
-      .map((line) => JSON.parse(line) as Record<string, unknown>);
-    expect(lines).toHaveLength(301);
-    const start = lines[0]['payload'] as Record<string, unknown>;
-    expect(start['sessionId']).toBe(imported.sessionId);
-    expect(start['projectHash']).toBe(PROJECT_HASH);
-    expect(start['cwd']).toBeUndefined();
-    const last = lines[300]['payload'] as {
-      content: { blocks: Array<{ text: string }> };
-    };
-    expect(last.content.blocks[0].text.startsWith('299:')).toBe(true);
+    const assertIdentity =
+      selectBackend() === 'journal'
+        ? assertNativeIdentity
+        : assertLegacyIdentity;
+    await assertIdentity(imported.recordingPath, imported.sessionId);
+    const rows = await readPackageRows(imported.recordingPath, PROJECT_HASH);
+    expect(rows).toHaveLength(300);
+    for (const [index, row] of rows.entries()) {
+      expect(row.blocks).toStrictEqual([
+        { type: 'text', text: `${index}:${ROW_TEXT}` },
+      ]);
+    }
     expect(sha256(await readFile(recordingPath))).not.toBe(
       sha256(await readFile(imported.recordingPath)),
     );
     expect((await readdir(chats)).sort()).toStrictEqual([
-      `session-imported-${imported.sessionId}.jsonl`,
+      `session-imported-${imported.sessionId}${selectBackend() === 'journal' ? '.llxj' : '.jsonl'}`,
     ]);
   });
 
@@ -215,8 +243,12 @@ describe('streamed portable session import', () => {
     const { recordingPath, bytes } = await writePackage(packageDirectory, 20);
     const validated = await validateSessionMediaPackage(packageDirectory);
     expect(validated.recording.byteLength).toBe(bytes);
-    const original = await readFile(recordingPath, 'utf8');
-    await writeFile(recordingPath, original.replace('0:xxxx', '0:yyyy'));
+    const original = await readFile(recordingPath);
+    const changed = Buffer.from(original);
+    const textOffset = changed.indexOf('0:xxxx');
+    expect(textOffset).toBeGreaterThan(0);
+    changed.write('0:yyyy', textOffset);
+    await writeFile(recordingPath, changed);
     const chats = join(tempDirectory, 'chats');
 
     await expect(
@@ -248,6 +280,7 @@ describe('streamed portable session import', () => {
   });
 
   it('rejects a recording line above the finite line limit', async () => {
+    backend('old');
     const packageDirectory = join(tempDirectory, 'package');
     const { recordingPath } = await writePackage(packageDirectory, 1);
     await appendFile(recordingPath, `${'y'.repeat(65 * 1024 * 1024)}\n`);
@@ -255,6 +288,91 @@ describe('streamed portable session import', () => {
     await expect(validateSessionMediaPackage(packageDirectory)).rejects.toThrow(
       /line exceeds finite byte limit/,
     );
+  });
+
+  it('validates native chunk boundaries and short state keys without changing recording digests', async () => {
+    backend('journal');
+    const directory = join(tempDirectory, 'boundaries');
+    await mkdir(directory);
+    const rows: IContent[] = [
+      4,
+      20,
+      HASH_CHUNK_BYTES - 1,
+      HASH_CHUNK_BYTES,
+      HASH_CHUNK_BYTES + 1,
+      3 * HASH_CHUNK_BYTES,
+    ].map((size, index) => ({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: `${index}:${'z'.repeat(size)}` }],
+    }));
+    const path = await writePackageRecording(directory, [rows], PROJECT_HASH);
+    const session = await JournalSession.open(path);
+    try {
+      await session.store.commit([
+        { kind: 'setState', key: 'abcd', value: Buffer.from('four') },
+        {
+          kind: 'setState',
+          key: 'abcdefghijklmnopqrst',
+          value: Buffer.from('twenty'),
+        },
+      ]);
+    } finally {
+      await session.close();
+    }
+    await writeFile(
+      join(directory, 'manifest.json'),
+      JSON.stringify({
+        version: 2,
+        recording: 'session.llxj',
+        persistedStates: [],
+        references: [],
+        objects: [],
+      }),
+    );
+    const validated = await validateSessionMediaPackage(directory);
+    expect(validated.recording.sha256).toBe(sha256(await readFile(path)));
+    const imported = await importSessionMediaPackage(
+      validated,
+      join(tempDirectory, 'chats'),
+      PROJECT_HASH,
+      store,
+    );
+    expect(
+      (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(
+        (row) => row.blocks,
+      ),
+    ).toStrictEqual(rows.map((row) => row.blocks));
+    const bytes = await readFile(path);
+    const bodyOffset = bytes.indexOf('5:zzzz');
+    expect(bodyOffset).toBeGreaterThan(0);
+    bytes[bodyOffset + HASH_CHUNK_BYTES + 1] ^= 1;
+    await writeFile(path, bytes);
+    await expect(validateSessionMediaPackage(directory)).rejects.toMatchObject({
+      name: 'JournalCorruptionError',
+      path,
+      cause: { code: 'body-crc-mismatch' },
+    });
+  });
+
+  it('rejects a native recording with an uncommitted oversized tail before publication', async () => {
+    backend('journal');
+    const directory = join(tempDirectory, 'native-tail');
+    const { recordingPath } = await writePackage(directory, 1);
+    await appendFile(recordingPath, Buffer.alloc(65 * 1024 * 1024, 121));
+    await expect(
+      importSessionMediaPackage(
+        directory,
+        join(tempDirectory, 'chats'),
+        PROJECT_HASH,
+        store,
+      ),
+    ).rejects.toThrow(
+      'Packaged journal is truncated or has an uncommitted tail',
+    );
+    await expect(readdir(join(tempDirectory, 'chats'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(await store.getStoredByteLength()).toBe(0);
   });
 
   it('validates and imports a large recording without buffering it whole', async () => {
@@ -265,10 +383,8 @@ describe('streamed portable session import', () => {
 
     // Trap control: the sampler must see a whole-file read as a whole file.
     const wholeFile = await peakExternalBuffers(async () => {
-      const held = await readBoundedFile(
-        join(packageDirectory, 'session.jsonl'),
-        256 * 1024 * 1024,
-        'trap',
+      const held = await readFile(
+        join(packageDirectory, packageRecordingName()),
       );
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(held.byteLength).toBe(bytes);
@@ -285,7 +401,7 @@ describe('streamed portable session import', () => {
   it('reads the recording only in bounded chunks and a whole-file read trips the same check', async () => {
     const packageDirectory = join(tempDirectory, 'package');
     const { bytes } = await writePackage(packageDirectory, 16_000);
-    const recordingPath = join(packageDirectory, 'session.jsonl');
+    const recordingPath = join(packageDirectory, packageRecordingName());
     const bounded = (counts: FileReadCounts) =>
       counts.maxRequestBytes <= HASH_CHUNK_BYTES;
 

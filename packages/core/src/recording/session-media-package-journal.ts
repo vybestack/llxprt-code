@@ -10,12 +10,12 @@ import {
 import { stateReaderOf } from '../journal/journalReaderState.js';
 import { RECORD_KIND } from '../journal/recordKinds.js';
 import { decodeIdPiece, decodeRowHeader } from '../journal/rowRecord.js';
-import {
-  encodeFrameStart,
-  FRAME_FLAG_BODY,
-  type FrameHead,
-} from '../journal/frame.js';
+import { FRAME_HEAD_BYTES, type FrameHead } from '../journal/frame.js';
 import { crc32 } from '../journal/bytes.js';
+import {
+  createRecordAccess,
+  type RecordAccess,
+} from '../journal/recordAccess.js';
 import { createFileHandleSink } from '../journal/positionalFile.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { decodeStoredRow } from '../services/history/journalRowCodec.js';
@@ -38,10 +38,14 @@ async function scanRow(
   hash: Hash,
 ): Promise<IContent> {
   const header = decodeRowHeader(head.kindHeader);
-  const body = Buffer.allocUnsafe(head.bodyLen);
+  const singleChunk = head.bodyLen <= HASH_CHUNK_BYTES;
+  let body: Uint8Array = singleChunk
+    ? new Uint8Array(0)
+    : Buffer.allocUnsafe(head.bodyLen);
   let offset = 0;
   for await (const chunk of hashBody(reader, head, hash)) {
-    body.set(chunk, offset);
+    if (singleChunk) body = chunk;
+    else body.set(chunk, offset);
     offset += chunk.length;
   }
   const content = decodeStoredRow({
@@ -60,13 +64,6 @@ async function* hashBody(
   head: FrameHead,
   hash: Hash,
 ): AsyncGenerator<Uint8Array> {
-  hash.update(
-    encodeFrameStart(
-      head.kind,
-      head.kindHeader,
-      (head.frameFlags & FRAME_FLAG_BODY) === 0 ? null : head.bodyLen,
-    ),
-  );
   let checksum = 0;
   for await (const chunk of reader.readRecordBody(head, HASH_CHUNK_BYTES)) {
     hash.update(chunk);
@@ -78,18 +75,77 @@ async function* hashBody(
   hash.update(crc);
 }
 
+interface PackageScanAccess {
+  readonly records: RecordAccess;
+  readonly frameHead: Uint8Array;
+  readHead(offset: number): Promise<FrameHead>;
+}
+
+function createPackageScanAccess(
+  reader: JournalReader,
+  handle: FileHandle,
+): PackageScanAccess {
+  const buffer = Buffer.allocUnsafe(HASH_CHUNK_BYTES);
+  const frameHead = new Uint8Array(FRAME_HEAD_BYTES);
+  const bodyCrc = new Uint8Array(4);
+  let headOffset = -1;
+  if (reader.trailer === undefined)
+    throw new Error('Packaged journal has no trailer');
+  function readBuffer(position: number, length: number): Uint8Array {
+    if (position === headOffset) return frameHead;
+    if (length === 4) return bodyCrc;
+    if (length <= buffer.length) return buffer.subarray(0, length);
+    return new Uint8Array(length);
+  }
+  const records = createRecordAccess(
+    reader.path,
+    {
+      async readAt(position: number, length: number): Promise<Uint8Array> {
+        const target = readBuffer(position, length);
+        let filled = 0;
+        while (filled < length) {
+          const { bytesRead } = await handle.read(
+            target,
+            filled,
+            length - filled,
+            position + filled,
+          );
+          if (bytesRead === 0)
+            throw new Error('Packaged journal was truncated during validation');
+          filled += bytesRead;
+        }
+        return target;
+      },
+    },
+    reader.trailer,
+  );
+  return {
+    records,
+    frameHead,
+    readHead: async (offset: number): Promise<FrameHead> => {
+      headOffset = offset;
+      return records.readRecordHead(offset);
+    },
+  };
+}
+
 async function scanFrames(
   reader: JournalReader,
   hash: Hash,
   onContents: (contents: readonly IContent[]) => void,
+  handle: FileHandle,
 ): Promise<void> {
+  const bodies = createPackageScanAccess(reader, handle);
+  const scanReader: JournalReader = { ...reader, ...bodies.records };
   let offset = JOURNAL_HEADER_BYTES;
   while (offset < reader.fileSize) {
-    const head = await reader.readRecordHead(offset);
+    const head = await bodies.readHead(offset);
+    hash.update(bodies.frameHead);
+    hash.update(head.kindHeader);
     if (head.kind === RECORD_KIND.ROW) {
-      onContents([await scanRow(reader, head, hash)]);
+      onContents([await scanRow(scanReader, head, hash)]);
     } else {
-      for await (const chunk of hashBody(reader, head, hash)) {
+      for await (const chunk of hashBody(scanReader, head, hash)) {
         void chunk;
       }
     }
@@ -126,10 +182,10 @@ export async function validateJournalRecording(
       if (bytesRead !== bytes.length)
         throw new Error('Truncated journal header');
       hash.update(bytes);
+      await scanFrames(reader, hash, onContents, header);
     } finally {
       await header.close();
     }
-    await scanFrames(reader, hash, onContents);
     const after = await stat(path);
     if (boundedReadChanged(before, after, after, reader.fileSize))
       throw new Error('Packaged journal changed during validation');

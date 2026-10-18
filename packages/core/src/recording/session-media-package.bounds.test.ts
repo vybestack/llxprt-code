@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -23,11 +25,19 @@ import type {
   MediaStoredObject,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import {
+  writePackageRecording,
+  packageRecordingName,
+} from './__tests__/support/packageRecording.js';
+import { useBackendEnv } from './__tests__/support/backendEnv.js';
 import {
   exportSessionMediaPackage,
+  importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readPackageRows } from './__tests__/support/packageRecording.js';
+import { readJournalCheckpoints } from './journalSessionListing.js';
 import { MAX_PERSISTED_STATE_BYTES } from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'package-bounds-project';
@@ -97,23 +107,10 @@ async function writePackage(
     Buffer.from([1, 2, 3]),
   );
   const sessionId = 'bounded-package-session';
-  const recording = [
-    {
-      v: 2,
-      seq: 1,
-      type: 'session_start',
-      payload: { sessionId, projectHash: PROJECT_HASH, workspaceDirs: [] },
-    },
-    {
-      v: 2,
-      seq: 2,
-      type: 'content',
-      payload: { content: history(recordingReference)[0] },
-    },
-  ];
-  await writeFile(
-    join(packageDirectory, 'session.jsonl'),
-    `${recording.map((line) => JSON.stringify(line)).join('\n')}\n`,
+  await writePackageRecording(
+    packageDirectory,
+    [history(recordingReference)],
+    PROJECT_HASH,
   );
   const persistedStates =
     persistedHistory.length === 0
@@ -135,7 +132,7 @@ async function writePackage(
     join(packageDirectory, 'manifest.json'),
     JSON.stringify({
       version: 2,
-      recording: 'session.jsonl',
+      recording: packageRecordingName(),
       persistedStates,
       references: [manifestReference],
       objects: [object],
@@ -144,7 +141,29 @@ async function writePackage(
   return packageDirectory;
 }
 
+type SidecarKind = 'count' | 'bytes';
+
+async function writeLegacySidecars(
+  chats: string,
+  kind: SidecarKind,
+): Promise<void> {
+  for (let index = 0; index < (kind === 'count' ? 257 : 6); index += 1) {
+    const file = await open(
+      join(chats, `persisted-session-${index}.json`),
+      'wx',
+    );
+    try {
+      if (kind === 'count') await file.writeFile('{');
+      else
+        await file.truncate(MAX_PERSISTED_STATE_BYTES + (index === 0 ? 1 : 0));
+    } finally {
+      await file.close();
+    }
+  }
+}
+
 describe('session media package bounded validation', () => {
+  const backend = useBackendEnv();
   let tempDirectory = '';
 
   beforeEach(async () => {
@@ -290,12 +309,13 @@ describe('session media package bounded validation', () => {
   });
 
   it('bounds export persisted states by count before reading their contents', async () => {
+    backend('old');
     const chatsDirectory = join(tempDirectory, 'state-count-chats');
     const store = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'state-count-media'),
       quotaBytes: 1024,
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'state-count-session',
       projectHash: PROJECT_HASH,
       chatsDir: chatsDirectory,
@@ -305,10 +325,12 @@ describe('session media package bounded validation', () => {
       mediaStore: store,
     });
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'bounded state source' }],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'bounded state source' }],
+        },
+      ]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
@@ -333,12 +355,13 @@ describe('session media package bounded validation', () => {
   });
 
   it('bounds each export persisted state and aggregate bytes before materialization', async () => {
+    backend('old');
     const chatsDirectory = join(tempDirectory, 'state-bytes-chats');
     const store = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'state-bytes-media'),
       quotaBytes: 1024,
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'state-bytes-session',
       projectHash: PROJECT_HASH,
       chatsDir: chatsDirectory,
@@ -348,10 +371,12 @@ describe('session media package bounded validation', () => {
       mediaStore: store,
     });
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'bounded state bytes' }],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'bounded state bytes' }],
+        },
+      ]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
@@ -400,6 +425,61 @@ describe('session media package bounded validation', () => {
     }
   });
 
+  const sidecarCases: readonly SidecarKind[] = ['count', 'bytes'];
+  for (const kind of sidecarCases) {
+    it(`exports native checkpoint state without reading legacy sidecars exceeding ${kind} bounds`, async () => {
+      backend('journal');
+      const chats = join(tempDirectory, 'native-chats');
+      const media = new LocalMediaStore({
+        rootDirectory: join(tempDirectory, 'native-media'),
+        quotaBytes: 1024,
+      });
+      const recorder = createPackageRecorder({
+        chatsDir: chats,
+        projectHash: PROJECT_HASH,
+      });
+      if (!(recorder instanceof JournalRecordingService))
+        throw new Error('Expected native recorder');
+      const rows: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'bounded native state' }],
+        },
+      ];
+      let path: string;
+      try {
+        await recordRowsForTest(recorder, rows);
+        await recorder.createCheckpoint('Saved');
+        const recorded = recorder.getFilePath();
+        assertNotNull(recorded, 'Expected native path');
+        path = recorded;
+      } finally {
+        await recorder.dispose();
+      }
+      await writeLegacySidecars(chats, kind);
+      const directory = join(tempDirectory, 'native-package');
+      await exportSessionMediaPackage(path, PROJECT_HASH, media, directory);
+      const validated = await validateSessionMediaPackage(directory);
+      expect(validated.manifest.persistedStates).toStrictEqual([]);
+      const imported = await importSessionMediaPackage(
+        validated,
+        join(tempDirectory, 'import-chats'),
+        PROJECT_HASH,
+        media,
+      );
+      expect(
+        (await readPackageRows(imported.recordingPath, PROJECT_HASH)).map(
+          (row) => row.blocks,
+        ),
+      ).toStrictEqual(rows.map((row) => row.blocks));
+      expect(
+        (await readJournalCheckpoints(imported.recordingPath)).map(
+          (point) => point.name,
+        ),
+      ).toStrictEqual(['Saved']);
+    });
+  }
+
   it('releases temporary export owners after successful publication', async () => {
     const store = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'media'),
@@ -410,7 +490,7 @@ describe('session media package bounded validation', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    const recording = new SessionRecordingService({
+    const recording = createPackageRecorder({
       sessionId: 'owner-release-session',
       projectHash: PROJECT_HASH,
       chatsDir: join(tempDirectory, 'chats'),
@@ -420,7 +500,7 @@ describe('session media package bounded validation', () => {
       mediaStore: store,
     });
     try {
-      recording.recordContent(history(reference)[0]);
+      await recordRowsForTest(recording, [history(reference)[0]]);
       await recording.flush();
       const recordingPath = recording.getFilePath();
       assertNotNull(recordingPath, 'Expected recording path');
