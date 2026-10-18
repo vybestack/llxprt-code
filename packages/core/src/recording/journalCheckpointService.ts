@@ -16,6 +16,8 @@ import {
   type NamedOperation,
 } from './checkpointNaming.js';
 import type { JournalRecordingService } from './journalRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
+import { requireJournalRecorder } from '../services/history/recorderBackend.js';
 import {
   readJournalCheckpoints,
   type JournalCheckpointFact,
@@ -111,12 +113,13 @@ export class JournalCheckpointService {
     return this.listCheckpoints(filePath);
   }
 
-  createCheckpoint(
-    recording: JournalRecordingService,
+  async createCheckpoint(
+    session: SessionRecordingPort,
     projectHash: string,
     name: string,
     overwrite = false,
   ): Promise<RecordingCheckpointInfo> {
+    const recording = requireJournalRecorder(session);
     return this.runNamedOperation(
       recording,
       projectHash,
@@ -133,12 +136,13 @@ export class JournalCheckpointService {
   }
 
   async renameCheckpoint(
-    recording: JournalRecordingService,
+    session: SessionRecordingPort,
     projectHash: string,
     checkpointId: string,
     name: string,
     overwrite = false,
   ): Promise<void> {
+    const recording = requireJournalRecorder(session);
     await this.requireActiveCheckpoint(recording, checkpointId);
     await this.runNamedOperation(
       recording,
@@ -160,20 +164,22 @@ export class JournalCheckpointService {
   }
 
   async deleteCheckpoint(
-    recording: JournalRecordingService,
+    session: SessionRecordingPort,
     _projectHash: string,
     checkpointId: string,
   ): Promise<void> {
+    const recording = requireJournalRecorder(session);
     await this.requireActiveCheckpoint(recording, checkpointId);
     await recording.deleteCheckpoint(checkpointId);
   }
 
   async setSessionName(
-    recording: JournalRecordingService,
+    session: SessionRecordingPort,
     projectHash: string,
     name: string,
     overwrite = false,
   ): Promise<void> {
+    const recording = requireJournalRecorder(session);
     const sessionId = recording.getSessionId();
     await this.runNamedOperation(
       recording,

@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckpointService,
+  createCheckpointService,
   SessionDiscovery,
   SessionLockManager,
   deleteSession,
@@ -682,14 +682,14 @@ async function deleteCheckpointTarget(
   props: UseSessionBrowserProps,
 ): Promise<void> {
   if (props.activeRecording?.getSessionId() === target.source.sessionId) {
-    await new CheckpointService(props.mediaStore).deleteCheckpoint(
+    await createCheckpointService(props.mediaStore).deleteCheckpoint(
       props.activeRecording,
       props.projectHash,
       target.checkpointId,
     );
     return;
   }
-  await new CheckpointService(props.mediaStore).deleteCheckpointClosed(
+  await createCheckpointService(props.mediaStore).deleteCheckpointClosed(
     target.source.filePath,
     props.projectHash,
     props.chatsDir,

@@ -22,6 +22,10 @@ import type { CommandContext, SlashCommand } from './types.js';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { publicChat } from '../../__tests__/public-history-cursor.js';
+import { pinHistoryBackend } from '../../services/__tests__/support/pinHistoryBackend.js';
+
+// The fixtures are JSONL recordings; chatCommand.backends.test.ts covers both backends.
+pinHistoryBackend('old');
 
 const PROJECT_HASH = 'chat-command-checkpoints';
 

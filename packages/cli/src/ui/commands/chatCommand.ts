@@ -16,7 +16,7 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import {
-  CheckpointService,
+  createCheckpointService,
   SessionDiscovery,
   getProjectHash,
   type ContinueTarget,
@@ -174,7 +174,7 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService(
+      await createCheckpointService(
         context.services.agent?.agentClient.mediaStore,
       ).createCheckpoint(
         recording,
@@ -291,7 +291,7 @@ const deleteCommand: SlashCommand = {
     const target = resolved.target;
 
     try {
-      const service = new CheckpointService(
+      const service = createCheckpointService(
         context.services.agent?.agentClient.mediaStore,
       );
       if (recording?.getSessionId() === target.source.sessionId) {
@@ -332,7 +332,7 @@ async function renameCheckpointTarget(
   projectHash: string,
 ): Promise<void> {
   const recording = getRecording(context);
-  const service = new CheckpointService(
+  const service = createCheckpointService(
     context.services.agent?.agentClient.mediaStore,
   );
   if (recording?.getSessionId() === target.source.sessionId) {
@@ -559,7 +559,7 @@ const nameCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService(
+      await createCheckpointService(
         context.services.agent?.agentClient.mediaStore,
       ).setSessionName(
         recording,

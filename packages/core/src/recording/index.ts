@@ -134,6 +134,10 @@ export {
 } from './sessionManagement.js';
 export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
 export {
+  createCheckpointService,
+  type CheckpointServicePort,
+} from './checkpointServiceFactory.js';
+export {
   SessionTransitionService,
   type ForkResult,
   type ForkError,

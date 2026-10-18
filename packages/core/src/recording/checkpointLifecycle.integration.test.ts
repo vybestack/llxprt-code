@@ -35,6 +35,10 @@ import {
 } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+// The fixtures are JSONL recordings and the old checkpoint service.
+pinHistoryBackend('old');
 
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,

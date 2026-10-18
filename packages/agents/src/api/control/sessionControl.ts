@@ -36,7 +36,8 @@ import {
   openSessionResume,
 } from './sessionResumeAdoption.js';
 import {
-  CheckpointService,
+  createCheckpointService,
+  type CheckpointServicePort,
   RecordingIntegration,
   withRecordingFailureReport,
   SessionDiscovery,
@@ -197,14 +198,14 @@ export class SessionControl implements AgentSessionControl {
    * session; a new session clears it.
    */
   private adoptedPath: string | null = null;
-  private checkpointService: CheckpointService | undefined;
+  private checkpointService: CheckpointServicePort | undefined;
 
   constructor(private readonly deps: SessionControlDeps) {
     this.recordingSessionId = deps.sessionId();
   }
 
-  private getCheckpointService(): CheckpointService {
-    this.checkpointService ??= new CheckpointService(this.deps.mediaStore);
+  private getCheckpointService(): CheckpointServicePort {
+    this.checkpointService ??= createCheckpointService(this.deps.mediaStore);
     return this.checkpointService;
   }
 
