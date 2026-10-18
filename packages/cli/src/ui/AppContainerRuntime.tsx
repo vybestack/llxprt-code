@@ -241,7 +241,7 @@ function useAppDialogsRuntime(
         props.agent.setProvider(provider, undefined, { autoOAuth: false }),
       [props.agent],
     ),
-    listTools: useBound(props.agent.tools, props.agent.tools.list),
+    listTools: props.listCommandTools,
     generatePrompt: useAutoPromptOperation(
       useBound(props.agent, props.agent.getProvider),
       useCallback(() => props.agent.agentClient, [props.agent]),
