@@ -15,8 +15,8 @@ import {
   PROJECT_HASH,
 } from '../../recording/__tests__/support/p05dTestKit.js';
 import {
-  resumeSession,
-  type ResumeResult,
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
 } from '../../recording/resumeSession.js';
 import { JournalResolver } from '../../recording/journalResolver.js';
 
@@ -47,7 +47,7 @@ let resumed: ResumeResult | undefined;
 
 async function candidate(): Promise<ResumeResult> {
   const fixture = await createRecordedSession(directory, { rows: 3 });
-  const result = await resumeSession({
+  const result = await resumeJsonlSession({
     continueRef: fixture.sessionId,
     chatsDir: directory,
     projectHash: PROJECT_HASH,

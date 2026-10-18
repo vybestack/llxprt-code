@@ -106,6 +106,7 @@ export {
   resumeSession,
   ResumeCursorBoot,
   CONTINUE_LATEST,
+  type ResumeBootHandle,
   type ResumeRequest,
   type ResumeResult,
   type ResumeError,

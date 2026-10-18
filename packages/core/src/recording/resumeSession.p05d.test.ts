@@ -62,7 +62,7 @@ import {
   writeRawJournal,
   type ResumeRequest,
 } from './__tests__/support/p05dTestKit.js';
-import { CONTINUE_LATEST, resumeSession } from './resumeSession.js';
+import { CONTINUE_LATEST, resumeJsonlSession } from './resumeSession.js';
 import type { IContent } from '../services/history/IContent.js';
 
 let chatsDir: string;
@@ -84,7 +84,7 @@ async function resumeWithCounters(
   kit: ReturnType<typeof createRowCounters>,
   overrides: Partial<ResumeRequest> = {},
 ) {
-  return resumeSession(withCounters(makeRequest(overrides), kit.counters));
+  return resumeJsonlSession(withCounters(makeRequest(overrides), kit.counters));
 }
 
 describe('P05d resumeSession cursor boot @issue:854', () => {

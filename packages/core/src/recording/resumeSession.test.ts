@@ -31,7 +31,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { SessionLockManager } from './SessionLockManager.js';
-import { resumeSession } from './resumeSession.js';
+import { resumeJsonlSession } from './resumeSession.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { type IContent } from '../services/history/IContent.js';
 import {
@@ -72,7 +72,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes the mo
         contents: [makeContent('second session message')],
       });
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       expect(await collectBootRows(okResult.boot.streamRows())).toHaveLength(1);
@@ -113,7 +113,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes a spec
         contents: [makeContent('other content')],
       });
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), { continueRef: targetId }),
       );
 
@@ -157,7 +157,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         contents,
       });
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);
@@ -233,7 +233,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
       await svc.flush();
       await svc.dispose();
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);
@@ -282,7 +282,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns correc
         model: 'gemini-3',
       });
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), {
           currentProvider: 'google',
           currentModel: 'gemini-3',
@@ -313,7 +313,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      * @requirement REQ-RSM-001
      */
     it('returns error when no sessions exist', async () => {
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('no session');
@@ -336,7 +336,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
     it('returns error when specific session ID is not found', async () => {
       await createTestSession(chatsDir(), { projectHash: PROJECT_HASH });
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), {
           continueRef: 'nonexistent-session-id',
         }),
@@ -370,7 +370,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
       const handle = await SessionLockManager.acquire(chatsDir(), sessionId);
       lockHandles.push(handle);
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), { continueRef: sessionId }),
       );
 
@@ -412,7 +412,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: CONTINUE_LATES
       );
       lockHandles.push(handle);
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);
@@ -455,7 +455,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
         lockHandles.push(handle);
       }
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('in use');
@@ -483,7 +483,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: records provid
         contents: [makeContent('original content')],
       });
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), {
           currentProvider: 'openai',
           currentModel: 'gpt-5',
@@ -536,7 +536,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: new events aft
         ],
       });
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);
@@ -582,7 +582,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returned recor
         projectHash: PROJECT_HASH,
       });
 
-      const result = await resumeSession(
+      const result = await resumeJsonlSession(
         makeResumeRequest(chatsDir(), { continueRef: sessionId }),
       );
 
@@ -625,7 +625,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: passes through
         '\n';
       await fs.writeFile(filePath, withCorruption, 'utf-8');
 
-      const result = await resumeSession(makeResumeRequest(chatsDir()));
+      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
       lockHandles.push(okResult.lockHandle);

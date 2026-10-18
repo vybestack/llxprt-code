@@ -8,8 +8,8 @@ import {
   PROJECT_HASH,
 } from '../../recording/__tests__/support/p05dTestKit.js';
 import {
-  resumeSession,
-  type ResumeResult,
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
 } from '../../recording/resumeSession.js';
 import { useBackendEnv } from '../../recording/__tests__/support/backendEnv.js';
 import {
@@ -24,7 +24,7 @@ let resumed: ResumeResult | undefined;
 
 async function resumedSession(): Promise<ResumeResult> {
   const fixture = await createRecordedSession(root, { rows: 3 });
-  const result = await resumeSession({
+  const result = await resumeJsonlSession({
     continueRef: fixture.sessionId,
     chatsDir: root,
     projectHash: PROJECT_HASH,

@@ -12,8 +12,8 @@ import { ResumeCursorBoot } from '../../resumeCursorBoot.js';
 import { scanResumeMetadata } from '../../resumeMetadata.js';
 import {
   CONTINUE_LATEST,
-  resumeSession,
-  type ResumeResult,
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
 } from '../../resumeSession.js';
 import { SessionRecordingService } from '../../SessionRecordingService.js';
 
@@ -113,7 +113,7 @@ export class CrashedReplaceSession {
 
   /** Resume the session as `--continue` does, owning the result until `close`. */
   async resume(model = MODEL): Promise<ResumeResult> {
-    const resumed = await resumeSession({
+    const resumed = await resumeJsonlSession({
       continueRef: CONTINUE_LATEST,
       projectHash: PROJECT_HASH,
       chatsDir: this.dir,

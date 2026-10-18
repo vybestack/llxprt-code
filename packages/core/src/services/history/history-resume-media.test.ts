@@ -11,8 +11,8 @@ import { MediaAdmissionService } from '../../storage/media-admission-service.js'
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import {
-  resumeSession,
-  type ResumeResult,
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
 } from '../../recording/resumeSession.js';
 
 let root: string;
@@ -69,7 +69,7 @@ describe('resume media lifecycle', () => {
     });
     await recording.flush();
     await recording.dispose();
-    const result = await resumeSession({
+    const result = await resumeJsonlSession({
       continueRef: 'next',
       chatsDir: root,
       projectHash: 'project',
@@ -148,7 +148,7 @@ async function verifyKeepsInlineMediaProjectionsOnAdoptedReadsWithoutReleasingAn
   recording.recordContent(inline);
   await recording.flush();
   await recording.dispose();
-  const result = await resumeSession({
+  const result = await resumeJsonlSession({
     continueRef: 'inline',
     chatsDir: root,
     projectHash: 'project',

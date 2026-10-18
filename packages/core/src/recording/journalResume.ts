@@ -27,6 +27,7 @@ import type {
   SessionSummary,
   UnreadableRecording,
 } from './types.js';
+import type { IContent } from '../services/history/IContent.js';
 
 export interface JournalResumeRequest {
   continueRef: string;
@@ -45,6 +46,36 @@ export interface ResumePoint {
   readonly rows: number;
   /** Rows with a label below this were written by an earlier process. */
   readonly nextLabel: bigint;
+}
+
+/**
+ * What a journal resume hands to the history and the UI: the version the file
+ * was opened at plus the restored rows. It holds no file or cursor of its own
+ * (the recorder owns the file), so closing it releases nothing.
+ */
+export class JournalResumeBoot implements ResumePoint {
+  readonly commitSeq: number;
+  readonly rows: number;
+  readonly nextLabel: bigint;
+
+  constructor(
+    private readonly recording: JournalRecordingService,
+    point: ResumePoint,
+  ) {
+    this.commitSeq = point.commitSeq;
+    this.rows = point.rows;
+    this.nextLabel = point.nextLabel;
+  }
+
+  /** The restored history, one decoded row at a time (see {@link resumedRows}). */
+  async *streamRows(): AsyncGenerator<IContent> {
+    const session = await this.recording.session();
+    for await (const row of resumedRows(session, this)) yield row.content;
+  }
+
+  close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 export interface JournalResumeResult {
@@ -94,35 +125,40 @@ function recordingConfig(
   };
 }
 
+/** The version the opened file is at now; rows below `nextLabel` are the earlier process's. */
+async function pointOf(
+  recording: JournalRecordingService,
+): Promise<ResumePoint> {
+  const { store } = await recording.session();
+  const published = store.published;
+  return {
+    commitSeq: published?.commitSeq ?? 0,
+    rows: published?.rows ?? 0,
+    nextLabel: published?.nextLabel ?? 1n,
+  };
+}
+
 async function describeOpened(
   recording: JournalRecordingService,
-): Promise<Pick<Booted, 'metadata' | 'resumePoint'>> {
+): Promise<SessionMetadata> {
   const { store } = await recording.session();
   const facts = await readSessionFacts((key) => store.getState(key));
   if (facts === undefined) {
     throw new Error(`Session file ${store.path} holds no committed session`);
   }
-  const published = store.published;
   return {
-    metadata: {
-      sessionId: facts.sessionId,
-      projectHash: facts.start.projectHash,
-      provider: facts.provider,
-      model: facts.model,
-      workspaceDirs: facts.directories,
-      startTime: facts.start.startTime,
-      kind: facts.start.kind,
-      ...(facts.start.cwd === undefined ? {} : { cwd: facts.start.cwd }),
-      ...(facts.start.parentSessionId === undefined
-        ? {}
-        : { parentSessionId: facts.start.parentSessionId }),
-      ...(facts.title === undefined ? {} : { title: facts.title }),
-    },
-    resumePoint: {
-      commitSeq: published?.commitSeq ?? 0,
-      rows: published?.rows ?? 0,
-      nextLabel: published?.nextLabel ?? 1n,
-    },
+    sessionId: facts.sessionId,
+    projectHash: facts.start.projectHash,
+    provider: facts.provider,
+    model: facts.model,
+    workspaceDirs: facts.directories,
+    startTime: facts.start.startTime,
+    kind: facts.start.kind,
+    ...(facts.start.cwd === undefined ? {} : { cwd: facts.start.cwd }),
+    ...(facts.start.parentSessionId === undefined
+      ? {}
+      : { parentSessionId: facts.start.parentSessionId }),
+    ...(facts.title === undefined ? {} : { title: facts.title }),
   };
 }
 
@@ -149,9 +185,19 @@ async function bootLocked(
   // From here the recorder owns the lock and disposing it releases it.
   recording.adoptLock(lockHandle);
   try {
-    const described = await describeOpened(recording);
-    noteProviderChange(recording, request, described.metadata);
-    return { ok: true, recording, lockHandle, ...described };
+    const metadata = await describeOpened(recording);
+    noteProviderChange(recording, request, metadata);
+    // The resume's own facts are committed groups. The point is the version
+    // after them, so a history adopting right away finds the file where the
+    // resume left it.
+    await recording.flush();
+    return {
+      ok: true,
+      recording,
+      lockHandle,
+      metadata,
+      resumePoint: await pointOf(recording),
+    };
   } catch (error) {
     await recording.dispose();
     return failure(error);

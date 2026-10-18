@@ -15,7 +15,12 @@ import {
   createRecordedSession,
   PROJECT_HASH,
 } from '../../recording/__tests__/support/p05dTestKit.js';
-import { resumeSession } from '../../recording/resumeSession.js';
+import { useBackendEnv } from '../../recording/__tests__/support/backendEnv.js';
+import { createResumableSession } from '../../recording/__tests__/support/resumableSession.js';
+import {
+  resumeJsonlSession,
+  resumeSession,
+} from '../../recording/resumeSession.js';
 
 interface JournalShape {
   readonly bytes: number;
@@ -27,7 +32,7 @@ interface JournalShape {
 let root: string;
 
 async function resumeOnce(sessionId: string): Promise<JournalShape> {
-  const result = await resumeSession({
+  const result = await resumeJsonlSession({
     continueRef: sessionId,
     chatsDir: root,
     projectHash: PROJECT_HASH,
@@ -36,7 +41,7 @@ async function resumeOnce(sessionId: string): Promise<JournalShape> {
     workspaceDirs: [],
   });
   if (!result.ok) throw new Error(result.error);
-  const service = new HistoryService();
+  const service = new HistoryService({ backend: 'old' });
   try {
     await service.adoptResumeBoot(result.recording, result.boot);
     await result.recording.flush();
@@ -66,8 +71,11 @@ async function resumeOnce(sessionId: string): Promise<JournalShape> {
   }
 }
 
-describe('repeated resume of an unchanged session', () => {
+describe('repeated resume of an unchanged JSONL session', () => {
+  const selectBackendForTest = useBackendEnv();
   beforeEach(async () => {
+    // Session discovery follows the env; this fixture is a JSONL file.
+    selectBackendForTest('old');
     root = await mkdtemp(join(tmpdir(), 'history-resume-repeat-'));
   });
 
@@ -92,5 +100,72 @@ describe('repeated resume of an unchanged session', () => {
       expect(later.bytes).toBe(shapes[0].bytes);
       expect(later.chronology).toStrictEqual(shapes[0].chronology);
     }
+  });
+});
+
+interface JournalRowsShape {
+  readonly rows: number;
+  readonly texts: string[];
+  readonly chronology: unknown[];
+}
+
+async function resumeJournalOnce(sessionId: string): Promise<JournalRowsShape> {
+  const result = await resumeSession(
+    {
+      continueRef: sessionId,
+      chatsDir: root,
+      projectHash: PROJECT_HASH,
+      currentProvider: 'anthropic',
+      currentModel: 'model-1',
+      workspaceDirs: [],
+    },
+    { LLXPRT_HISTORY_BACKEND: 'journal' },
+  );
+  if (!result.ok) throw new Error(result.error);
+  const service = new HistoryService({ backend: 'journal' });
+  try {
+    await service.adoptResumeBoot(result.recording, result.boot);
+    await result.recording.flush();
+    const shape: JournalRowsShape = { rows: 0, texts: [], chronology: [] };
+    await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+      for (const row of rows) {
+        shape.texts.push(
+          row.blocks[0].type === 'text' ? row.blocks[0].text : '',
+        );
+        shape.chronology.push(row.metadata?.chronology);
+      }
+    });
+    return { ...shape, rows: shape.texts.length };
+  } finally {
+    await service.dispose();
+    await result.recording.dispose();
+  }
+}
+
+describe('repeated resume of an unchanged journal session', () => {
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'history-resume-repeat-journal-'));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('keeps the rows and their chronology the same on every resume', async () => {
+    const fixture = await createResumableSession(
+      root,
+      { rows: 3 },
+      { LLXPRT_HISTORY_BACKEND: 'journal' },
+    );
+
+    const shapes: JournalRowsShape[] = [];
+    for (let resume = 0; resume < 4; resume += 1)
+      shapes.push(await resumeJournalOnce(fixture.sessionId));
+
+    expect(shapes[0].rows).toBe(3);
+    expect(shapes[0].chronology.every((marker) => marker !== undefined)).toBe(
+      true,
+    );
+    for (const later of shapes.slice(1)) expect(later).toStrictEqual(shapes[0]);
   });
 });

@@ -280,6 +280,21 @@ describe('resuming a session on the journal', () => {
     ).toStrictEqual({ provider: 'openai', model: 'gpt' });
   });
 
+  it('takes the resume point after the facts the resume itself records', async () => {
+    const chats = chatsDirIn(directory());
+    await recordJournal(chats, 'session-a', { rows: [userRow('one')] });
+
+    const result = await resume('session-a', {
+      currentProvider: 'openai',
+      currentModel: 'gpt',
+    });
+    await result.recording.flush();
+    const { store } = await result.recording.session();
+
+    expect(store.published?.commitSeq).toBe(result.resumePoint.commitSeq);
+    expect(result.resumePoint.rows).toBe(1);
+  });
+
   it('opens to the previous version when the last group was cut short', async () => {
     const chats = chatsDirIn(directory());
     const { filePath } = await recordJournal(chats, 'session-a', {

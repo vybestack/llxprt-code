@@ -12,11 +12,13 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryService } from './HistoryService.js';
+import { selectBackend } from './historyBackendSelect.js';
 import type { TextBlock } from './IContent.js';
+import { PROJECT_HASH } from '../../recording/__tests__/support/p05dTestKit.js';
 import {
-  createRecordedSession,
-  PROJECT_HASH,
-} from '../../recording/__tests__/support/p05dTestKit.js';
+  createResumableSession,
+  JOURNAL_FIXTURE_RECORDED_AT,
+} from '../../recording/__tests__/support/resumableSession.js';
 import {
   resumeSession,
   type ResumeResult,
@@ -28,8 +30,14 @@ let service: HistoryService;
 
 let resumed: ResumeResult | undefined;
 
+function adoptedPath(result: ResumeResult): string {
+  const filePath = result.recording.getFilePath();
+  if (filePath === null) throw new Error('The resumed session has no file');
+  return filePath;
+}
+
 async function candidate(): Promise<ResumeResult> {
-  const fixture = await createRecordedSession(root, { rows: 3 });
+  const fixture = await createResumableSession(root, { rows: 3 });
   const result = await resumeSession({
     continueRef: fixture.sessionId,
     chatsDir: root,
@@ -114,7 +122,7 @@ async function verifyAdoptsTheValidatedJournalWithoutCopyingRowsAndRestoresPrior
   await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
     const prior = rows;
     const tokens = service.getTotalTokens();
-    const bytes = await readFile(result.boot.filePath);
+    const bytes = await readFile(adoptedPath(result));
     await expect(
       service.adoptResumeBoot(result.recording, result.boot, () => {
         throw new Error('publication failed');
@@ -125,14 +133,14 @@ async function verifyAdoptsTheValidatedJournalWithoutCopyingRowsAndRestoresPrior
       expect(rows).toStrictEqual(prior);
     });
     expect(service.getTotalTokens()).toBe(tokens);
-    expect(await readFile(result.boot.filePath)).toStrictEqual(bytes);
+    expect(await readFile(adoptedPath(result))).toStrictEqual(bytes);
   });
 }
 
 async function verifyCommitsJournalIdentityAndContinuesNewHistoryOnTheAdoptedRecording(): Promise<void> {
   const result = await candidate();
   await service.adoptResumeBoot(result.recording, result.boot);
-  expect(service.journalPath()).toBe(result.boot.filePath);
+  expect(service.journalPath()).toBe(adoptedPath(result));
   await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
     expect(rows.map((row) => row.blocks[0])).toStrictEqual(
       [0, 1, 2].map<TextBlock>((index) => ({
@@ -248,15 +256,21 @@ async function verifyNotifiesLaterObserversOfRestorationWhenAnEarlierObserverThr
 async function verifyKeepsChronologyStableOnSubsequentReadsAndAppends(): Promise<void> {
   const result = await candidate();
   const adoptedAt = new Date('2026-09-21T12:00:00Z');
+  // JSONL rows get their chronology bound at adoption; journal rows carry the
+  // one they were written with.
+  const recordedAt =
+    selectBackend() === 'journal'
+      ? JOURNAL_FIXTURE_RECORDED_AT
+      : adoptedAt.getTime();
   setSystemTime(adoptedAt);
   try {
     await service.adoptResumeBoot(result.recording, result.boot);
     setSystemTime(new Date('2026-09-21T13:00:00Z'));
     await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
       expect(rows.map((row) => row.metadata?.chronology)).toStrictEqual([
-        { seq: 1, userTurn: 1, step: 1, recordedAt: adoptedAt.getTime() },
-        { seq: 2, userTurn: 1, step: 2, recordedAt: adoptedAt.getTime() },
-        { seq: 3, userTurn: 2, step: 1, recordedAt: adoptedAt.getTime() },
+        { seq: 1, userTurn: 1, step: 1, recordedAt },
+        { seq: 2, userTurn: 1, step: 2, recordedAt },
+        { seq: 3, userTurn: 2, step: 1, recordedAt },
       ]);
     });
   } finally {
@@ -374,6 +388,6 @@ async function verifyRemovalBehindFailedAdoption(
         { type: 'text', text: 'replacement' },
       ]);
     });
-    expect(service.journalPath()).not.toBe(result.boot.filePath);
+    expect(service.journalPath()).not.toBe(adoptedPath(result));
   });
 }

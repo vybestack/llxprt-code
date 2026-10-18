@@ -23,7 +23,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { resumeSession } from './resumeSession.js';
+import { resumeJsonlSession } from './resumeSession.js';
 import { type IContent } from '../services/history/IContent.js';
 import {
   PROJECT_HASH,
@@ -76,7 +76,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
                 contents,
               });
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -136,7 +136,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
                 model: 'model-a',
               });
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir, {
                   currentProvider,
                   currentModel: 'model-b',
@@ -205,7 +205,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
                 contents: originalContents,
               });
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -267,7 +267,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
                 contents,
               });
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -338,7 +338,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
               await svc.flush();
               await svc.dispose();
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -389,7 +389,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
                 contents,
               });
 
-              const result = await resumeSession(
+              const result = await resumeJsonlSession(
                 makeResumeRequest(localChatsDir),
               );
 

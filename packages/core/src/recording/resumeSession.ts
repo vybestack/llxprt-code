@@ -26,6 +26,10 @@
 import { stat, open, appendFile } from 'node:fs/promises';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
 export { ResumeCursorBoot } from './resumeCursorBoot.js';
+import { JournalResumeBoot, resumeJournalSession } from './journalResume.js';
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import {
   type SessionMetadata,
   type SessionSummary,
@@ -65,7 +69,12 @@ export interface ResumeRequest {
   maxQueueBytes?: number;
   /** Injectable read counters (issue #854 P05d); absent = uninstrumented. */
   counters?: JournalReadCounters;
+  /** File seams of the journal (tests); the JSONL resume ignores it. */
+  journal?: JournalSessionOptions;
 }
+
+/** What a resumed history is booted from: a replayed cursor or a journal version. */
+export type ResumeBootHandle = ResumeCursorBoot | JournalResumeBoot;
 
 /**
  * Successful resume result — contains reconstructed history, metadata,
@@ -75,9 +84,9 @@ export interface ResumeRequest {
  */
 export interface ResumeResult {
   ok: true;
-  boot: ResumeCursorBoot;
+  boot: ResumeBootHandle;
   metadata: SessionMetadata;
-  recording: SessionRecordingService;
+  recording: SessionRecordingPort;
   lockHandle: LockHandle;
   warnings: string[];
   /** Recordings in the project that could not be read and were passed over. */
@@ -98,7 +107,19 @@ interface BootFailure {
   reason: string;
 }
 
-type BootedSession = Omit<ResumeResult, 'skippedRecordings'>;
+type BootedSession = Omit<
+  ResumeResult,
+  'skippedRecordings' | 'boot' | 'recording'
+> & {
+  boot: ResumeCursorBoot;
+  recording: SessionRecordingService;
+};
+
+/** The JSONL resume's result: the old recorder and the replayed cursor. */
+export type JsonlResumeResult = Omit<ResumeResult, 'boot' | 'recording'> & {
+  boot: ResumeCursorBoot;
+  recording: SessionRecordingService;
+};
 
 type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
 
@@ -237,7 +258,39 @@ async function bootNewestReadableSession(
 }
 
 /**
- * Resume a previously recorded session.
+ * The one resume front door: the backend `selectBackend(env)` names resumes
+ * the session (a JSONL recording with a cursor boot, or a journal with the
+ * version it was opened at). The history adopts either through
+ * `HistoryService.adoptResumeBoot`.
+ */
+export async function resumeSession(
+  request: ResumeRequest,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<ResumeResult | ResumeError> {
+  if (selectBackend(env) === 'old') return resumeJsonlSession(request);
+  const result = await resumeJournalSession({
+    continueRef: request.continueRef,
+    projectHash: request.projectHash,
+    chatsDir: request.chatsDir,
+    currentProvider: request.currentProvider,
+    currentModel: request.currentModel,
+    workspaceDirs: request.workspaceDirs,
+    ...(request.journal === undefined ? {} : { journal: request.journal }),
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    boot: new JournalResumeBoot(result.recording, result.resumePoint),
+    metadata: result.metadata,
+    recording: result.recording,
+    lockHandle: result.lockHandle,
+    warnings: [],
+    skippedRecordings: result.skippedRecordings,
+  };
+}
+
+/**
+ * Resume a previously recorded JSONL session.
  *
  * Discovers sessions, resolves the target, acquires a lock, scans the journal
  * metadata and opens a cursor boot (no rows are replayed into memory), and
@@ -247,9 +300,9 @@ async function bootNewestReadableSession(
  *
  * @pseudocode resume-flow.md lines 50-124
  */
-export async function resumeSession(
+export async function resumeJsonlSession(
   request: ResumeRequest,
-): Promise<ResumeResult | ResumeError> {
+): Promise<JsonlResumeResult | ResumeError> {
   // Step 1: Discover sessions
   const { sessions, unreadableRecordings } =
     await SessionDiscovery.listSessionsDetailed(

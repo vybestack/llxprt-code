@@ -4,7 +4,10 @@ import { mkdtemp, rm, readFile, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { resumeSession, type ResumeResult } from './resumeSession.js';
+import {
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
+} from './resumeSession.js';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
 import { JournalResolver } from './journalResolver.js';
 import { replaySession } from './ReplayEngine.js';
@@ -19,7 +22,7 @@ let writer: SessionRecordingService;
 let result: ResumeResult | undefined;
 
 async function boot(): Promise<ResumeResult> {
-  const resumed = await resumeSession({
+  const resumed = await resumeJsonlSession({
     continueRef: writer.getSessionId(),
     projectHash: 'project',
     chatsDir: root,
