@@ -18,7 +18,9 @@ import {
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { LoadedSettings } from '../config/settings.js';
-import { setupOwnerSessionRecording } from '../cliSessionBootstrap.js';
+import {
+  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
+} from '../cliSessionBootstrap.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
   __setRenderForTesting,
@@ -41,6 +43,23 @@ const fixture = fileURLToPath(
 const settings = {
   merged: { ui: { hideWindowTitle: true, unicode: 'auto' } },
 } as LoadedSettings;
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    () => agent.agentClient.mediaStore,
+    argv,
+    selection,
+    warnings,
+  );
+}
 
 describe('interactive CLI owner startup', () => {
   const roots: string[] = [];

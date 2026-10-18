@@ -358,7 +358,8 @@ class ForegroundSessionHost {
     const warnings: string[] = [];
     const history = await setupOwnerSessionRecording(
       this.config,
-      agent,
+      agent.session,
+      () => agent.agentClient.mediaStore,
       this.argv,
       this.bootstrapSelection,
       warnings,
