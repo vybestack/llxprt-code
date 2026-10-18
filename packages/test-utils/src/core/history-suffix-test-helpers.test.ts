@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
@@ -65,6 +66,37 @@ describe('suffix fixture journal lifecycle', () => {
       );
     }, 120_000);
   }
+});
+
+function historicalEmptyRow(index: number): IContent {
+  const speakers: ReadonlyArray<IContent['speaker']> = ['human', 'tool', 'ai'];
+  return { ...suffixRow(index), speaker: speakers[index], blocks: [] };
+}
+
+describe('historical suffix rows', () => {
+  it('preserves empty recorded rows without admitting new zero-block turns', async () => {
+    await withSuffixFixture(
+      3,
+      async (history) => {
+        const rows: IContent[] = [];
+        for await (const row of history.streamRawHistory()) rows.push(row);
+        expect(rows).toStrictEqual([
+          { ...suffixRow(0), speaker: 'human', blocks: [] },
+          { ...suffixRow(1), speaker: 'tool', blocks: [] },
+          { ...suffixRow(2), speaker: 'ai', blocks: [] },
+        ]);
+        history.add({ speaker: 'human', blocks: [] });
+        await history.waitForCommit();
+        expect(history.length()).toBe(3);
+        const curated: IContent[] = [];
+        for await (const row of history.streamCuratedHistory())
+          curated.push(row);
+        expect(curated).toStrictEqual(rows.slice(0, 2));
+      },
+      0,
+      historicalEmptyRow,
+    );
+  });
 });
 
 describe('suffix fixture failure cleanup', () => {

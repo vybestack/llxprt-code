@@ -50,6 +50,24 @@ export interface SuffixFixtureGraph<Service, Ownership, Counters> {
 
 const SEED_BATCH_ROWS = 256;
 
+function isHistoricalRowWriter(value: unknown): value is {
+  apply(op: { kind: 'content'; content: IContent }): void;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'apply' in value &&
+    typeof value.apply === 'function'
+  );
+}
+
+function writeHistoricalRow(service: object, row: IContent): void {
+  const journal: unknown = Reflect.get(service, 'journal');
+  if (!isHistoricalRowWriter(journal))
+    throw new Error('Historical suffix rows require a journal store');
+  journal.apply({ kind: 'content', content: row });
+}
+
 /**
  * How a fixture's rows reach its history, by the kind of recorder it was given.
  * The old backend reads a history out of the recorder's file, so the rows are
@@ -57,9 +75,9 @@ const SEED_BATCH_ROWS = 256;
  * the recorder as a mirror of the history, so the rows are added to the
  * history and the recorder follows. Every journal operation is its own durable
  * commit, so runs of ordinary rows go in as batches (one commit each, and no
- * more than a batch in memory). A row with no blocks is rejected by
- * `addBatch`, though a fixture may need one, so it goes in through `add` in
- * its place in the order.
+ * more than a batch in memory). Historical zero-block rows bypass admission
+ * through the real store, just as legacy fixtures write the recorder directly.
+ * Both `add` and `addBatch` reject new zero-block turns.
  */
 export function suffixSeeder(
   recording: SessionRecordingPort,
@@ -81,7 +99,7 @@ export function suffixSeeder(
       for (const row of rows) {
         if (row.blocks.length === 0) {
           await flush();
-          service.add(row);
+          writeHistoricalRow(service, row);
           continue;
         }
         run.push(row);

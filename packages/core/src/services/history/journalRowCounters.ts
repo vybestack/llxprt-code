@@ -20,8 +20,11 @@ export function countDecodedRow(
     counters.rowReleased();
     throw error;
   }
+  let held: IContent | undefined = row;
   return () => {
-    counters.ownership?.release(row);
+    if (held === undefined) throw new Error('Decoded row already released');
+    counters.ownership?.release(held);
+    held = undefined;
     counters.rowReleased();
   };
 }
