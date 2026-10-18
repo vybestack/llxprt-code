@@ -31,11 +31,15 @@ import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { z } from 'zod';
+import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { recordedRows } from './support/recorded-rows.js';
 import { createHash } from 'node:crypto';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
+  internalConfig,
   drain,
   captureHistoryServiceIdentity,
   respondToFirstConfirmation,
@@ -133,7 +137,14 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
         // Disable to flush + dispose the service so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = readFileSync(path, 'utf8');
+        const raw = isJournalFileName(path)
+          ? JSON.stringify(
+              await recordedRows(
+                path,
+                basename(internalConfig(agent).projectTempDir),
+              ),
+            )
+          : readFileSync(path, 'utf8');
         // The SECOND turn's user prompt and assistant reply are both present.
 
         return { path, raw };
@@ -197,7 +208,14 @@ describe('SessionControl post-resume recording', () => {
       // Disable to flush the appended content.
       await agent.session.setRecording({ enabled: false });
 
-      const raw = readFileSync(path, 'utf8');
+      const raw = isJournalFileName(path)
+        ? JSON.stringify(
+            await recordedRows(
+              path,
+              basename(internalConfig(agent).projectTempDir),
+            ),
+          )
+        : readFileSync(path, 'utf8');
 
       return { path, raw };
     });
@@ -245,7 +263,14 @@ describe('SessionControl completed tool recording', () => {
         // Disable to flush + dispose so all queued writes land.
         await agent.session.setRecording({ enabled: false });
 
-        const raw = readFileSync(path, 'utf8');
+        const raw = isJournalFileName(path)
+          ? JSON.stringify(
+              await recordedRows(
+                path,
+                basename(internalConfig(agent).projectTempDir),
+              ),
+            )
+          : readFileSync(path, 'utf8');
         // The recorded transcript carries the tool CALL block for read_file …
 
         // … its RESPONSE block …
@@ -256,20 +281,29 @@ describe('SessionControl completed tool recording', () => {
         // recorded call's id (the runtime normalizes ids in history, so the
         // fixture's raw id is not asserted — the pairing invariant is what the
         // #1604 replay's tool_call/tool_call_update matching depends on).
-        const blocks = raw
-          .split('\n')
-          .filter((line) => line.trim().length > 0)
-          .map((line) => JSON.parse(line) as Record<string, unknown>)
-          .flatMap((entry) => {
-            const payload = entry['payload'] as
-              | {
-                  content?: {
-                    blocks?: ReadonlyArray<Record<string, unknown>>;
-                  };
-                }
-              | undefined;
-            return payload?.content?.blocks ?? [];
-          });
+        const blocks = isJournalFileName(path)
+          ? (
+              await recordedRows(
+                path,
+                basename(internalConfig(agent).projectTempDir),
+              )
+            )
+              .flatMap((row) => row.blocks)
+              .map((block) => z.record(z.unknown()).parse(block))
+          : raw
+              .split('\n')
+              .filter((line) => line.trim().length > 0)
+              .map((line) => JSON.parse(line) as Record<string, unknown>)
+              .flatMap((entry) => {
+                const payload = entry['payload'] as
+                  | {
+                      content?: {
+                        blocks?: ReadonlyArray<Record<string, unknown>>;
+                      };
+                    }
+                  | undefined;
+                return payload?.content?.blocks ?? [];
+              });
         const callBlock = blocks.find((b) => b['type'] === 'tool_call');
         const responseBlock = blocks.find((b) => b['type'] === 'tool_response');
 

@@ -190,7 +190,8 @@ export class RecordingIntegration {
           );
     this.attachmentOperation = operation;
     this.attachmentSettlement = operation.catch((error: unknown) => {
-      this.releaseSubscription(generation);
+      if (generation === this.subscriptionGeneration)
+        this.unsubscribeFromHistory();
       this.attachmentFailure = { error };
     });
     return operation;

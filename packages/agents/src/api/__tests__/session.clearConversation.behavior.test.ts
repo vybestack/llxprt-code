@@ -19,8 +19,13 @@ import {
   SessionLockManager,
   SessionLockedError,
   SessionRecordingService,
+  type SessionRecordingPort,
+  type SessionRecordingServiceConfig,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { AgentClient } from '../../core/client.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
@@ -78,7 +83,22 @@ function itemText(item: AgentHistoryItem): string {
   return item.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
 }
 
-function recordingSessionId(path: string): string {
+const RecordingService: {
+  readonly prototype: { dispose(): Promise<void> };
+  createLocked(
+    config: SessionRecordingServiceConfig,
+  ): Promise<SessionRecordingPort>;
+} =
+  selectBackend() === 'journal'
+    ? JournalRecordingService
+    : SessionRecordingService;
+
+async function recordingSessionId(path: string): Promise<string> {
+  if (selectBackend() === 'journal') {
+    const found = await readJournalFileFacts(path);
+    if (found === undefined) throw new Error('Missing session facts');
+    return found.facts.sessionId;
+  }
   return z
     .object({ payload: z.object({ sessionId: z.string() }) })
     .parse(JSON.parse(readFileSync(path, 'utf8').split('\n')[0])).payload
@@ -117,16 +137,41 @@ async function withRecordedConversation<T>(
   }
 }
 
+function verifyOldSessionLayout(
+  oldPath: string,
+  newPath: string,
+  nextId: string,
+): void {
+  expect(
+    JSON.parse(readFileSync(newPath, 'utf8').split('\n')[0]),
+  ).toMatchObject({ payload: { sessionId: nextId } });
+  expect(
+    recordedLineTypes(oldPath).filter((type) => type === 'rewind'),
+  ).toStrictEqual([]);
+  expect(
+    recordedLineTypes(oldPath).filter((type) => type === 'content'),
+  ).toHaveLength(4);
+}
+
+async function verifyJournalSessionLayout(
+  oldPath: string,
+  newPath: string,
+  nextId: string,
+): Promise<void> {
+  expect(await recordingSessionId(newPath)).toBe(nextId);
+  expect((await readJournalFileFacts(oldPath))?.rows).toBe(4);
+}
+
 describe('starting a new conversation session', () => {
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
       const release = deferred();
-      const original = SessionRecordingService.prototype.dispose;
+      const original = RecordingService.prototype.dispose;
       const pause = spyOn(
-        SessionRecordingService.prototype,
+        RecordingService.prototype,
         'dispose',
-      ).mockImplementationOnce(async function (this: SessionRecordingService) {
+      ).mockImplementationOnce(async function (this: SessionRecordingPort) {
         entered.resolve();
         await release.promise;
         await original.call(this);
@@ -214,11 +259,11 @@ describe('starting a new conversation session', () => {
   ] as const) {
     it(`preserves the old recorded conversation when ${stage} preparation fails`, async () => {
       await withRecordedConversation(async (agent, oldPath) => {
-        const oldId = recordingSessionId(oldPath);
+        const oldId = await recordingSessionId(oldPath);
         let candidateIds: readonly string[] = [];
-        const createLocked = SessionRecordingService.createLocked;
+        const createLocked = RecordingService.createLocked;
         const recordingAcquisition = spyOn(
-          SessionRecordingService,
+          RecordingService,
           'createLocked',
         ).mockImplementation(async (options) => {
           if (stage === 'recording')
@@ -325,7 +370,7 @@ describe('starting a new conversation session', () => {
   for (const stage of ['recording', 'telemetry', 'client'] as const) {
     it(`closes admission when ${stage} retirement fails`, async () => {
       await withRecordedConversation(async (agent, oldPath) => {
-        const oldId = recordingSessionId(oldPath);
+        const oldId = await recordingSessionId(oldPath);
         const injectFailure = (): { mockRestore: () => void } => {
           if (stage === 'telemetry') {
             return spyOn(
@@ -343,13 +388,11 @@ describe('starting a new conversation session', () => {
               },
             );
           }
-          const original = SessionRecordingService.prototype.dispose;
+          const original = RecordingService.prototype.dispose;
           return spyOn(
-            SessionRecordingService.prototype,
+            RecordingService.prototype,
             'dispose',
-          ).mockImplementationOnce(async function (
-            this: SessionRecordingService,
-          ) {
+          ).mockImplementationOnce(async function (this: SessionRecordingPort) {
             await original.call(this);
             throw new Error('retirement failed');
           });
@@ -527,15 +570,11 @@ describe('starting a new conversation session', () => {
       if (newPath === undefined) throw new Error('Expected new recording');
       expect(newPath).not.toBe(oldPath);
       expect(readFileSync(oldPath, 'utf8')).toBe(oldContents);
-      expect(
-        JSON.parse(readFileSync(newPath, 'utf8').split('\n')[0]),
-      ).toMatchObject({ payload: { sessionId: nextId } });
-      expect(
-        recordedLineTypes(oldPath).filter((type) => type === 'rewind'),
-      ).toStrictEqual([]);
-      expect(
-        recordedLineTypes(oldPath).filter((type) => type === 'content'),
-      ).toHaveLength(4);
+      if (selectBackend() === 'old') {
+        verifyOldSessionLayout(oldPath, newPath, nextId);
+      } else {
+        await verifyJournalSessionLayout(oldPath, newPath, nextId);
+      }
       expect(
         (await agent.session.listSessions()).map((session) => session.id),
       ).toHaveLength(2);

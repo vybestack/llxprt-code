@@ -6,13 +6,21 @@
 
 import {
   SessionPersistenceService,
-  replaySession,
-  type ReplayResult,
+  createLockedSessionRecorder,
+  SessionLockManager,
+  scanResumeMetadata,
+  type SessionRecordingServiceConfig,
   type LocalMediaStore,
   type SessionPersistenceServiceOptions,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { stat } from 'node:fs/promises';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import {
+  isJsonlRecorder,
+  requireJsonlRecorder,
+} from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 
 export function requireActiveRecording(
   recording: SessionRecordingPort | null,
@@ -69,15 +77,17 @@ import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/service
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 export async function persistSemanticMediaPurge(
-  recording: RecordingPort,
+  recording: SessionRecordingPort,
   candidate: SemanticPurgeRowSource,
   frontier: SemanticMediaPurgeFrontier,
 ): Promise<void> {
-  await recording.recordSemanticMediaPurgeRows(
-    candidate.streamRows(),
-    frontier,
-    { requireLiveFold: true },
-  );
+  if (isJsonlRecorder(recording)) {
+    await recording.recordSemanticMediaPurgeRows(
+      candidate.streamRows(),
+      frontier,
+      { requireLiveFold: true },
+    );
+  }
   await recording.flush();
   if (!recording.isActive()) {
     throw new Error('Semantic media purge recording did not remain active');
@@ -85,45 +95,56 @@ export async function persistSemanticMediaPurge(
 }
 
 export async function restoreRecordedHistory(
-  recording: RecordingPort,
+  recording: SessionRecordingPort,
   removedHistory: readonly IContent[],
 ): Promise<void> {
-  for (const content of removedHistory) recording.recordContent(content);
+  if (isJsonlRecorder(recording)) {
+    for (const content of removedHistory) recording.recordContent(content);
+  }
   await recording.flush();
   if (!recording.isActive()) {
     throw new Error('Recording failed during history rollback');
   }
 }
 
-export async function replayOwnerRecording(
-  filePath: string | null,
-  projectHash: string,
-  mediaStore: LocalMediaStore,
-): Promise<Extract<ReplayResult, { ok: true }>> {
-  if (filePath === null) throw new Error('Recording is not materialized');
-  const replay = await replaySession(filePath, projectHash, { mediaStore });
-  if (!replay.ok) throw new Error(replay.error);
-  return replay;
-}
-
 export async function restartRecording(
-  recording: RecordingPort,
+  config: SessionRecordingServiceConfig,
   filePath: string | null,
-  mediaStore: LocalMediaStore,
-): Promise<void> {
-  if (filePath === null) return;
-  const replay = await replayOwnerRecording(
-    filePath,
-    recording.getProjectHash(),
-    mediaStore,
-  );
-  if (replay.sequenceCorrupt) {
-    throw new Error('Cannot restart recording: non-monotonic sequences');
+): Promise<SessionRecordingPort> {
+  if (filePath !== null && selectBackend() === 'journal') {
+    const lock = await SessionLockManager.acquire(
+      config.chatsDir,
+      config.sessionId,
+    );
+    try {
+      const recording = await JournalRecordingService.open(config, filePath);
+      recording.adoptLock(lock);
+      return recording;
+    } catch (error) {
+      await lock.release();
+      throw error;
+    }
   }
-  recording.initializeForResume(
-    filePath,
-    replay.lastSeq,
-    replay.metadata.title,
-  );
-  recording.recordRewind(replay.history.length);
+  const recording = await createLockedSessionRecorder(config);
+  try {
+    if (filePath !== null) {
+      const { replay } = await scanResumeMetadata(
+        filePath,
+        config.projectHash,
+        (await stat(filePath)).size,
+      );
+      if (!replay.ok) throw new Error(replay.error);
+      if (replay.sequenceCorrupt)
+        throw new Error('Cannot restart recording: non-monotonic sequences');
+      requireJsonlRecorder(recording).initializeForResume(
+        filePath,
+        replay.lastSeq,
+        replay.metadata.title,
+      );
+    }
+    return recording;
+  } catch (error) {
+    await recording.dispose();
+    throw error;
+  }
 }

@@ -28,7 +28,6 @@
  */
 
 import { basename } from 'node:path';
-import { stat } from 'node:fs/promises';
 import { clearClientHistory } from './sessionHistoryClear.js';
 import { collectAsync } from './collectAsync.js';
 import {
@@ -42,16 +41,12 @@ import {
   withRecordingFailureReport,
   SessionDiscovery,
   SessionTransitionService,
-  createLockedSessionRecorder,
-  requireJsonlRecorder,
   deleteSession as deleteRecordedSession,
   importSessionMediaPackage,
-  scanResumeMetadata,
   type SessionRecordingPort,
   type ResumeBootHandle,
   type ResumeResult,
   type ContinueTarget,
-  type ReplayResult,
   type SessionSummary,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
@@ -78,6 +73,7 @@ import type { SessionRecordingEvent } from './recordSessionEvent.js';
 import {
   persistSemanticMediaPurge as persistPurge,
   requireActiveRecording,
+  restartRecording,
 } from './recordedHistoryPersistence.js';
 import { restoreOwnerTurns } from './sessionControlHistoryMutation.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
@@ -90,7 +86,11 @@ import type {
   SessionRecordingState,
 } from '../agent.js';
 
-const RECORDING_FORMAT = 'jsonl';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import {
+  readRecordingMetadata,
+  type RecordingMetadata,
+} from './recordingMetadata.js';
 
 /**
  * Module logger mirroring the neighboring toolControl.ts precedent
@@ -440,25 +440,20 @@ export class SessionControl implements AgentSessionControl {
     return this.runExclusive(async () => {
       const targets = await this.continueTargets();
       const checkpoints: CheckpointInfo[] = [];
-      const replayByFilePath = new Map<string, ReplayResult>();
+      const replayByFilePath = new Map<string, RecordingMetadata>();
       for (const target of targets) {
         if (target.kind !== 'checkpoint') continue;
         let replay = replayByFilePath.get(target.source.filePath);
         if (replay === undefined) {
-          replay = (
-            await scanResumeMetadata(
-              target.source.filePath,
-              this.persistenceProjectHash(),
-              (await stat(target.source.filePath)).size,
-            )
-          ).replay;
+          replay = await readRecordingMetadata(
+            target.source.filePath,
+            this.persistenceProjectHash(),
+          );
           replayByFilePath.set(target.source.filePath, replay);
         }
-        const checkpoint = replay.ok
-          ? replay.checkpoints?.find(
-              (candidate) => candidate.checkpointId === target.checkpointId,
-            )
-          : undefined;
+        const checkpoint = replay.checkpoints?.find(
+          (candidate) => candidate.checkpointId === target.checkpointId,
+        );
         if (checkpoint !== undefined && !checkpoint.deleted) {
           checkpoints.push({
             checkpointId: checkpoint.checkpointId,
@@ -712,7 +707,7 @@ export class SessionControl implements AgentSessionControl {
     const path = this.recording?.getFilePath() ?? null;
     return {
       enabled: this.recording?.isActive() ?? false,
-      format: RECORDING_FORMAT,
+      format: selectBackend() === 'journal' ? 'journal' : 'jsonl',
       ...(path !== null ? { path } : {}),
     };
   }
@@ -735,16 +730,10 @@ export class SessionControl implements AgentSessionControl {
 
   private async replayRecording(
     recording: SessionRecordingPort,
-  ): Promise<Extract<ReplayResult, { ok: true }>> {
+  ): Promise<RecordingMetadata> {
     const filePath = recording.getFilePath();
     if (filePath === null) throw new Error('Recording is not materialized');
-    const { replay } = await scanResumeMetadata(
-      filePath,
-      this.persistenceProjectHash(),
-      (await stat(filePath)).size,
-    );
-    if (!replay.ok) throw new Error(replay.error);
-    return replay;
+    return readRecordingMetadata(filePath, this.persistenceProjectHash());
   }
 
   /** Readable continue targets; skipped recordings go to the module logger. */
@@ -869,17 +858,20 @@ export class SessionControl implements AgentSessionControl {
     // survive across the fresh service swap.
     await this.ensureSubscribed();
     await this.teardownActiveSession();
-    const service = await createLockedSessionRecorder({
-      sessionId: this.recordingSessionId,
-      projectHash: this.persistenceProjectHash(),
-      chatsDir: this.chatsDir(),
-      workspaceDirs: this.workspaceDirs(),
-      cwd: this.deps.config.getProjectRoot(),
-      provider: this.deps.getProvider(),
-      model: this.deps.getModel(),
-      mediaStore: this.deps.mediaStore,
-      maxQueueBytes: this.deps.readRecordingQueueLimit(),
-    });
+    const service = await restartRecording(
+      {
+        sessionId: this.recordingSessionId,
+        projectHash: this.persistenceProjectHash(),
+        chatsDir: this.chatsDir(),
+        workspaceDirs: this.workspaceDirs(),
+        cwd: this.deps.config.getProjectRoot(),
+        provider: this.deps.getProvider(),
+        model: this.deps.getModel(),
+        mediaStore: this.deps.mediaStore,
+        maxQueueBytes: this.deps.readRecordingQueueLimit(),
+      },
+      this.adoptedPath,
+    );
     // The integration attaches to the journal, which seeds the new recording
     // from the durable history rows; no history array is read here.
     const integration = new RecordingIntegration(
@@ -887,7 +879,6 @@ export class SessionControl implements AgentSessionControl {
       this.deps.persistence.forRecording(service.getSessionId()),
     );
     try {
-      await this.continueAdoptedRecording(service);
       const subscribed = await this.attachHistory(integration);
       await service.flush();
       this.recording = service;
@@ -915,41 +906,11 @@ export class SessionControl implements AgentSessionControl {
     }
   }
 
-  /**
-   * Points a fresh recorder at the adopted recording's file so the journal
-   * attachment replaces that file's history in one transaction, keeping one
-   * header and a monotonic sequence.
-   */
-  private async continueAdoptedRecording(
-    service: SessionRecordingPort,
-  ): Promise<void> {
-    const filePath = this.adoptedPath;
-    if (filePath === null) return;
-    const { replay } = await scanResumeMetadata(
-      filePath,
-      service.getProjectHash(),
-      (await stat(filePath)).size,
-    );
-    if (!replay.ok) throw new Error(replay.error);
-    if (replay.sequenceCorrupt) {
-      throw new Error('Cannot restart recording: non-monotonic sequences');
-    }
-    requireJsonlRecorder(service).initializeForResume(
-      filePath,
-      replay.lastSeq,
-      replay.metadata.title,
-    );
-  }
-
   async persistSemanticMediaPurge(
     candidate: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ): Promise<void> {
-    return persistPurge(
-      requireJsonlRecorder(this.requireRecording()),
-      candidate,
-      frontier,
-    );
+    return persistPurge(this.requireRecording(), candidate, frontier);
   }
 
   /**

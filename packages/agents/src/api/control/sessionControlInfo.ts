@@ -4,17 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { stat } from 'node:fs/promises';
+import { type SessionSummary } from '@vybestack/llxprt-code-core';
 import {
-  scanResumeMetadata,
-  type ReplayResult,
-  type SessionSummary,
-} from '@vybestack/llxprt-code-core';
+  readRecordingMetadata,
+  type RecordingMetadata,
+} from './recordingMetadata.js';
 import type { SessionInfo } from '../agent.js';
 
 export function sessionInfoFromReplay(
   id: string,
-  replay: Extract<ReplayResult, { ok: true }>,
+  replay: RecordingMetadata,
   modifiedAt: string,
 ): SessionInfo {
   return {
@@ -38,12 +37,7 @@ export async function readSessionInfo(
   summary: SessionSummary,
   projectHash: string,
 ): Promise<SessionInfo> {
-  const { replay } = await scanResumeMetadata(
-    summary.filePath,
-    projectHash,
-    (await stat(summary.filePath)).size,
-  );
-  if (!replay.ok) throw new Error(replay.error);
+  const replay = await readRecordingMetadata(summary.filePath, projectHash);
   return sessionInfoFromReplay(
     summary.sessionId,
     replay,

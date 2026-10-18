@@ -46,7 +46,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { LocalMediaStore, replaySession } from '@vybestack/llxprt-code-core';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import {
+  humanText,
+  recordedRows,
+  verifyCheckpointFlush,
+} from './support/recorded-rows.js';
 import { SessionControl } from '../control/sessionControl.js';
 import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -63,11 +68,6 @@ class IsolatedTestStorage extends Storage {
   override getProjectTempDir(): string {
     return this.projectTempDir;
   }
-}
-
-/** A single human text IContent turn (the neutral recorded shape). */
-function humanText(text: string): IContent {
-  return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
 /**
@@ -418,9 +418,8 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         await history.waitForCommit();
         const filePath = control.getRecording().path;
         assertNotNull(filePath);
-        const replay = await replaySession(filePath, basename(projectRoot));
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.history.map((content) => content.blocks)).toStrictEqual([
+        const persisted = await recordedRows(filePath, basename(projectRoot));
+        expect(persisted.map((content) => content.blocks)).toStrictEqual([
           humanText('journal seed').blocks,
           humanText('continuous').blocks,
         ]);
@@ -762,9 +761,8 @@ describe('SessionControl checkpoints', () => {
         await history.waitForCommit();
         const filePath = control.getRecording().path;
         if (filePath === undefined) throw new Error('Missing child journal');
-        const replay = await replaySession(filePath, basename(projectRoot));
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.history.map((row) => row.blocks)).toStrictEqual([
+        const persisted = await recordedRows(filePath, basename(projectRoot));
+        expect(persisted.map((row) => row.blocks)).toStrictEqual([
           humanText('checkpoint prefix').blocks,
           humanText('after fork').blocks,
         ]);
@@ -796,9 +794,11 @@ describe('SessionControl checkpoints', () => {
       historyService.add(humanText('pending persistence generation'));
 
       try {
-        await expect(control.createCheckpoint('must-flush')).rejects.toThrow(
-          /EEXIST|ENOTDIR/,
-        );
+        expect(control.getRecording().enabled).toBe(true);
+        await verifyCheckpointFlush(control, projectRoot, [
+          humanText('checkpoint seed'),
+          humanText('pending persistence generation'),
+        ]);
       } finally {
         rmSync(persistenceChats, { force: true });
         mkdirSync(persistenceChats, { recursive: true });
@@ -889,11 +889,11 @@ describe('SessionControl clear rollback', () => {
       );
       expect(resetAttempt).toBe(1);
       expect(client.replacementCount()).toBe(1);
-      const replay = await replaySession(recordingPath, basename(projectRoot));
-      if (replay.ok !== true) {
-        throw new Error(`Expected replay success: ${replay.error}`);
-      }
-      expect(replay.history).toStrictEqual(originalHistory);
+      const persisted = await recordedRows(
+        recordingPath,
+        basename(projectRoot),
+      );
+      expect(persisted).toStrictEqual(originalHistory);
       await control.dispose();
     });
   });
