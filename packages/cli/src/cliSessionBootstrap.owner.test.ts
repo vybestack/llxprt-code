@@ -10,9 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
-import {
-  setupOwnerSessionRecording as setupOwnerSessionRecordingCore,
-} from './cliSessionBootstrap.js';
+import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from './cliSessionBootstrap.js';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
