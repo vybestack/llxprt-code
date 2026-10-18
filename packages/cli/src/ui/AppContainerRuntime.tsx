@@ -18,6 +18,7 @@ import {
   useGetActiveProfileName,
   useGetActiveProviderName,
   useGetLoadBalancerStats,
+  useHasActiveProvider,
   useListAvailableModels,
   useListProviders,
   useListSavedProfiles,
@@ -209,8 +210,9 @@ function useUnconfiguredGuidance(
   turnStore: TurnStore,
   dialogStore: DialogStore,
 ): void {
+  const hasActiveProvider = useHasActiveProvider();
   useUnconfiguredProviderGuidance({
-    hasActiveProvider: props.agent.hasActiveProvider(),
+    hasActiveProvider: hasActiveProvider(),
     addItem: turnStore.commands.addItem,
     store: dialogStore,
   });
