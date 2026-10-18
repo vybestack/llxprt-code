@@ -6,7 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, rename, rm, rmdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { pathExists } from './session-media-package-validation.js';
 
@@ -68,7 +68,10 @@ export async function publishImportedSession(
       mode: 0o700,
     });
     await mkdir(stagingDirectory, { mode: 0o700 });
-    const stagedRecording = join(stagingDirectory, 'recording.jsonl');
+    const stagedRecording = join(
+      stagingDirectory,
+      basename(input.recordingPath),
+    );
     await input.writeRecording(stagedRecording);
     for (const state of input.persistedStates) {
       await state.write(join(stagingDirectory, state.fileName));

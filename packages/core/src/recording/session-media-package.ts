@@ -18,6 +18,13 @@ import {
   collectMediaReferences,
   verifyHistoryMedia,
 } from '../storage/media-reference-lifecycle.js';
+import { selectBackend } from '../services/history/historyBackendSelect.js';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
+import {
+  validateJournalRecording,
+  writeImportedJournal,
+} from './session-media-package-journal.js';
+import { sessionFileExtension } from './sessionFileExtension.js';
 import { replaySessionRows } from './ReplayEngine.js';
 import {
   MANIFEST_FILE,
@@ -25,6 +32,7 @@ import {
   MAX_OBJECT_AGGREGATE_BYTES,
   MAX_OBJECT_BYTES,
   RECORDING_FILE,
+  JOURNAL_RECORDING_FILE,
   boundedAggregate,
   parseManifest,
   readBoundedFile,
@@ -239,10 +247,10 @@ export interface ValidatedSessionMediaPackage {
   readonly persistedStates: readonly PinnedPersistedState[];
 }
 
-export async function validateSessionMediaPackage(
+async function readPackageManifest(
   packageDirectory: string,
-): Promise<ValidatedSessionMediaPackage> {
-  const manifest = parseManifest(
+): Promise<MediaPackageManifest> {
+  return parseManifest(
     (
       await readBoundedFile(
         join(packageDirectory, MANIFEST_FILE),
@@ -251,6 +259,21 @@ export async function validateSessionMediaPackage(
       )
     ).toString('utf8'),
   );
+}
+
+export async function validateSessionMediaPackage(
+  packageDirectory: string,
+): Promise<ValidatedSessionMediaPackage> {
+  return validatePackageContents(
+    packageDirectory,
+    await readPackageManifest(packageDirectory),
+  );
+}
+
+async function validatePackageContents(
+  packageDirectory: string,
+  manifest: MediaPackageManifest,
+): Promise<ValidatedSessionMediaPackage> {
   const references = uniqueReferences(manifest.references);
   const objects = requiredObjects(references);
   verifyManifestObjectSet(objects, manifest.objects);
@@ -265,13 +288,22 @@ export async function validateSessionMediaPackage(
     'Session media package objects',
   );
   const verifyRecording = createReferenceVerifier('recording', references);
-  const recording = await streamPortableRecording({
-    source: join(packageDirectory, manifest.recording),
-    label: 'Session media package recording',
-    destinationProjectHash: 'package-validation-project',
-    destinationSessionId: 'package-validation-session',
-    onContents: (contents) => verifyRecording(collectMediaReferences(contents)),
-  });
+  const recording =
+    manifest.recording === JOURNAL_RECORDING_FILE
+      ? await validateJournalRecording(
+          join(packageDirectory, manifest.recording),
+          (contents) => verifyRecording(collectMediaReferences(contents)),
+        )
+      : (
+          await streamPortableRecording({
+            source: join(packageDirectory, manifest.recording),
+            label: 'Session media package recording',
+            destinationProjectHash: 'package-validation-project',
+            destinationSessionId: 'package-validation-session',
+            onContents: (contents) =>
+              verifyRecording(collectMediaReferences(contents)),
+          })
+        ).pinned;
   const persistedStates = await pinPersistedStates(
     packageDirectory,
     manifest.persistedStates,
@@ -284,7 +316,7 @@ export async function validateSessionMediaPackage(
     references,
     objects,
     blobs,
-    recording: recording.pinned,
+    recording,
     persistedStates,
   };
 }
@@ -300,6 +332,15 @@ function importPublication(
     destinationChatsDirectory,
     recordingPath,
     writeRecording: async (outputPath) => {
+      if (validated.manifest.recording === JOURNAL_RECORDING_FILE) {
+        await writeImportedJournal(
+          validated.recording,
+          outputPath,
+          projectHash,
+          sessionId,
+        );
+        return;
+      }
       await streamPortableRecording({
         source: validated.recording,
         label: 'Session media package recording',
@@ -384,6 +425,39 @@ async function rollbackWithDurableMedia(
   );
 }
 
+function assertPackageBackend(
+  manifest: MediaPackageManifest,
+  directory: string,
+): void {
+  const journal = selectBackend() === 'journal';
+  if (journal && manifest.recording === RECORDING_FILE) {
+    throw new Error(retiredJournalMessage(join(directory, manifest.recording)));
+  }
+  if (!journal && manifest.recording === JOURNAL_RECORDING_FILE) {
+    throw new Error(
+      'Session package recording/backend mismatch: journal package requires journal backend',
+    );
+  }
+}
+
+async function selectedPackage(
+  packageSource: string | ValidatedSessionMediaPackage,
+): Promise<ValidatedSessionMediaPackage> {
+  const manifest =
+    typeof packageSource === 'string'
+      ? await readPackageManifest(packageSource)
+      : packageSource.manifest;
+  assertPackageBackend(
+    manifest,
+    typeof packageSource === 'string'
+      ? packageSource
+      : packageSource.packageDirectory,
+  );
+  return typeof packageSource === 'string'
+    ? validatePackageContents(packageSource, manifest)
+    : packageSource;
+}
+
 export function importSessionMediaPackage(
   packageSource: string | ValidatedSessionMediaPackage,
   destinationChatsDirectory: string,
@@ -404,15 +478,12 @@ export async function importSessionMediaPackage<T>(
   mediaStore: LocalMediaStore,
   activate?: (imported: ImportedSessionMediaPackage) => Promise<T>,
 ): Promise<T | ImportedSessionMediaPackage> {
-  const validated =
-    typeof packageSource === 'string'
-      ? await validateSessionMediaPackage(packageSource)
-      : packageSource;
+  const validated = await selectedPackage(packageSource);
   await mediaStore.preflightObjects(validated.objects);
   const importedSessionId = randomUUID();
   const recordingPath = join(
     destinationChatsDirectory,
-    `session-imported-${importedSessionId}.jsonl`,
+    `session-imported-${importedSessionId}${sessionFileExtension(selectBackend())}`,
   );
   const imported: ImportedSessionMediaPackage = {
     recordingPath,

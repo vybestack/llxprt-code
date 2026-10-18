@@ -18,6 +18,7 @@ export const PACKAGE_VERSION = 2;
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 export const SUPPORTED_PERSISTED_SESSION_VERSION = 1;
 export const RECORDING_FILE = 'session.jsonl';
+export const JOURNAL_RECORDING_FILE = 'session.llxj';
 export const MANIFEST_FILE = 'manifest.json';
 const CONTENT_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const MIME_TYPE_PATTERN =
@@ -221,7 +222,10 @@ export function parseManifest(serialized: string): MediaPackageManifest {
       `Unsupported session media package version ${String(parsed['version'])}`,
     );
   }
-  if (parsed['recording'] !== RECORDING_FILE) {
+  if (
+    parsed['recording'] !== RECORDING_FILE &&
+    parsed['recording'] !== JOURNAL_RECORDING_FILE
+  ) {
     throw new Error('Invalid session media package manifest');
   }
   const references = parsed['references'];
@@ -252,7 +256,7 @@ export function parseManifest(serialized: string): MediaPackageManifest {
   }
   return {
     version: PACKAGE_VERSION,
-    recording: RECORDING_FILE,
+    recording: parsed['recording'],
     persistedStates,
     references,
     objects,
