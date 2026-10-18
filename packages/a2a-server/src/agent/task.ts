@@ -9,8 +9,13 @@ import type {
   StructuredError,
   ToolConfirmation,
   ToolUpdate,
+  AgentInput,
+  McpServerInfo,
+  ToolDecision,
+  ToolDecisionPayload,
+  ToolInfo,
+  TurnOptions,
 } from '@vybestack/llxprt-code-agents';
-import type { Agent, McpServerInfo } from '@vybestack/llxprt-code-agents';
 import {
   parseAndFormatApiError,
   ToolConfirmationOutcome,
@@ -121,13 +126,21 @@ export class Task {
   constructor(
     taskId: string,
     contextId: string,
-    private readonly streamTurn: Agent['stream'],
-    private readonly injectSteer: Agent['injectSteer'],
-    private readonly readModel: Agent['getModel'],
-    private readonly readProvider: Agent['getProvider'],
-    private readonly listTools: Agent['listTools'],
-    private readonly listMcpServers: Agent['mcp']['listServers'],
-    private readonly respondToConfirmation: Agent['tools']['respondToConfirmation'],
+    private readonly streamTurn: (
+      input: AgentInput,
+      opts?: TurnOptions,
+    ) => AsyncIterable<AgentEvent>,
+    private readonly injectSteer: (text: string) => void,
+    private readonly readModel: () => string,
+    private readonly readProvider: () => string,
+    private readonly listTools: () => readonly ToolInfo[],
+    private readonly listMcpServers: () => readonly McpServerInfo[],
+    private readonly respondToConfirmation: (
+      confirmationId: string,
+      decision: ToolDecision,
+      payload?: ToolDecisionPayload,
+      requiresUserConfirmation?: boolean,
+    ) => void,
     private readonly disposeAgent: () => Promise<void>,
     eventBus?: ExecutionEventBus,
     autoExecute = false,

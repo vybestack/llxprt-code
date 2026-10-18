@@ -31,11 +31,12 @@ import {
   useUpdateActiveProviderApiKey,
 } from './contexts/RuntimeContext.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
-import { registerCleanup } from '../utils/cleanup.js';
+import { useBootstrapRuntime } from './containers/AppContainer/hooks/useBootstrapRuntime.js';
 import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './containers/AppContainer/hooks/historyTokenSubscriptions.js';
+  useRecordingInfrastructure,
+  type UseRecordingInfrastructureResult,
+} from './containers/AppContainer/hooks/useRecordingInfrastructure.js';
+import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 
 import type React from 'react';
 import type {
@@ -46,6 +47,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
@@ -56,12 +58,20 @@ import {
   DefaultAppLayout,
   type DefaultAppLayoutProps,
 } from './layouts/DefaultAppLayout.js';
-import { useAppBootstrap } from './containers/AppContainer/hooks/useAppBootstrap.js';
-import type { AppBootstrapResult } from './containers/AppContainer/hooks/useAppBootstrap.js';
+import type {
+  AppBootstrapProps,
+  AppBootstrapResult,
+} from './containers/AppContainer/hooks/useAppBootstrap.js';
 import { useAppDialogs } from './containers/AppContainer/hooks/useAppDialogs.js';
-import type { AppDialogsResult } from './containers/AppContainer/hooks/useAppDialogs.js';
+import type {
+  AppDialogsParams,
+  AppDialogsResult,
+} from './containers/AppContainer/hooks/useAppDialogs.js';
 import { useAppInput } from './containers/AppContainer/hooks/useAppInput.js';
-import type { AppInputResult } from './containers/AppContainer/hooks/useAppInput.js';
+import type {
+  AppInputParams,
+  AppInputResult,
+} from './containers/AppContainer/hooks/useAppInput.js';
 import { useAppLayout } from './containers/AppContainer/hooks/useAppLayout.js';
 import { useAppCommands } from './appCommandBindings.js';
 import { useUnconfiguredProviderGuidance } from './hooks/useUnconfiguredProviderGuidance.js';
@@ -92,10 +102,7 @@ import {
 } from './contexts/AppCommandsContext.js';
 import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
 import { useRef, useMemo, useCallback } from 'react';
-import {
-  useBound,
-  useContentIdentityReader,
-} from './hooks/agentStream/useStreamOwnerCallbacks.js';
+import { useBound } from './hooks/agentStream/useStreamOwnerCallbacks.js';
 import { useBrowserCatalogCommands } from './hooks/useBrowserCatalogCommands.js';
 import {
   bindOwnerBrowserResume,
@@ -114,13 +121,10 @@ import type {
 } from './hooks/useSlashCommandProcessorCore.js';
 import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCore.js';
 import type { HistoryItem } from './types.js';
-import type { PromptContentGenerator } from './hooks/usePromptCompletion.js';
 import {
   useInputAgentOperations,
   useInputStreamPolicy,
 } from './inputOwnerBindings.js';
-import { useAutoPromptOperation } from './hooks/useAutoPromptOperation.js';
-import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -141,6 +145,15 @@ export interface AppContainerRuntimeProps
     | 'startCommandSession'
     | 'listCommandTools'
   > {
+  triggerSessionStart: AppBootstrapProps['triggerSessionStart'];
+  appendHistory: AppBootstrapProps['appendHistory'];
+  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
+  metrics: SessionMetricUpdates;
+  readTokenHistory: () => ReturnType<
+    Agent['agentClient']['getHistoryService']
+  > | null;
+  readProviderMetrics: AppBootstrapProps['readProviderMetrics'];
+  readSessionTokenUsage: AppBootstrapProps['readSessionTokenUsage'];
   historyReads: RegisteredHistoryReads;
   registerCredentials: CredentialCommandRegistration;
   readBuiltinCommands: ReadBuiltinCommands;
@@ -148,10 +161,28 @@ export interface AppContainerRuntimeProps
   subscribeCommandChanges: SubscribeCommandChanges;
   uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
-  /**
-   * The single interactive Agent threaded from the composition root.
-   */
-  agent: Agent;
+  session: Parameters<typeof useInputBrowserCommands>[0] &
+    Parameters<typeof useInputAgentOperations>[10];
+  mediaStore: Parameters<typeof useInputBrowserCommands>[4];
+  readClientHistory: Parameters<typeof useInputBrowserCommands>[5];
+  readHistory: Parameters<typeof useInputAgentOperations>[0];
+  stream: Parameters<typeof useInputAgentOperations>[1];
+  injectSteer: Parameters<typeof useInputAgentOperations>[3];
+  getProviderContextLimit: Parameters<typeof useInputAgentOperations>[4];
+  getContentPrefixIdentity: Parameters<typeof useInputAgentOperations>[5];
+  tools: Parameters<typeof useInputAgentOperations>[6];
+  mcp: Parameters<typeof useInputAgentOperations>[7];
+  tasks: Parameters<typeof useInputAgentOperations>[9];
+  disposeInput: AppInputParams['disposeInput'];
+  readApprovalMode: AppInputParams['readApprovalMode'];
+  setApprovalMode: AppInputParams['setApprovalMode'];
+  generatePromptContent: AppInputParams['generatePromptContent'];
+  readPolicyRules: AppDialogsParams['readPolicyRules'];
+  subagentDefinitions: AppDialogsParams['subagentDefinitions'];
+  subagentWrites: AppDialogsParams['subagentWrites'];
+  profileDefinitions: AppDialogsParams['profileDefinitions'];
+  readAgentRecordingPath: () => string | undefined;
+  generateSubagentPrompt: (description: string) => Promise<string>;
   settings: LoadedSettings;
   startupWarnings?: string[];
   resumedHistory?: IContent[];
@@ -222,6 +253,7 @@ function useAppDialogsRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
   stores: ReturnType<typeof useAppStores>,
+  recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
 ): AppDialogsResult {
   const {
     dialogStore,
@@ -230,41 +262,27 @@ function useAppDialogsRuntime(
     settingsStore,
     turnStore,
   } = stores;
+  useExtensionAutoUpdate({
+    settings: props.settings,
+    onConsoleMessage: bootstrap.handleNewMessage,
+  });
+  useUnconfiguredGuidance(turnStore, dialogStore);
+  const setProvider = useSetProvider();
   return useAppDialogs({
     config: props.slashCommandRuntime,
-    recordRecordingEvent: useBound(
-      props.agent.session,
-      props.agent.session.recordRecordingEvent,
-    ),
+    recordRecordingEvent: bootstrap.recordRecordingEvent,
     switchProviderAfterAuth: useCallback(
       (provider: string) =>
-        props.agent.setProvider(provider, undefined, { autoOAuth: false }),
-      [props.agent],
+        setProvider(provider, undefined, { autoOAuth: false }),
+      [setProvider],
     ),
     listTools: props.listCommandTools,
-    generatePrompt: useAutoPromptOperation(
-      useBound(props.agent, props.agent.getProvider),
-      useCallback(() => props.agent.agentClient, [props.agent]),
-      useBound(
-        props.agent.sessionClient,
-        props.agent.sessionClient.createDetachedAgentClient,
-      ),
-      useBound(
-        props.slashCommandRuntime,
-        props.slashCommandRuntime.getContentGeneratorConfig,
-      ),
-    ),
-    readPolicyRules: useMemo(
-      () =>
-        bindPolicyRulesReader(props.agent.policy, () =>
-          props.slashCommandRuntime.getApprovalMode(),
-        ),
-      [props.agent.policy, props.slashCommandRuntime],
-    ),
-    subagentDefinitions: props.agent.workspace.subagentDefinitions,
-    subagentWrites: props.agent.workspace.subagentWrites,
-    profileDefinitions: props.agent.workspace.profileDefinitions,
-    settings: bootstrap.settings,
+    generatePrompt: props.generateSubagentPrompt,
+    readPolicyRules: props.readPolicyRules,
+    subagentDefinitions: props.subagentDefinitions,
+    subagentWrites: props.subagentWrites,
+    profileDefinitions: props.profileDefinitions,
+    settings: props.settings,
     store: dialogStore,
     dialogs: dialogOpeners,
     terminalStore,
@@ -272,9 +290,9 @@ function useAppDialogsRuntime(
     turnStore,
     appDispatch: props.appDispatch,
     handleNewMessage: bootstrap.handleNewMessage,
-    recordingIntegration: bootstrap.recordingIntegration,
-    recordingOwner: bootstrap.recordingOwner,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    recordingIntegration: props.recordingIntegration,
+    recordingOwner: props.recordingOwner,
+    recordingIntegrationRef,
     getActiveModelName: useGetActiveModelName(),
     getActiveProfileName: useGetActiveProfileName(),
     getActiveProviderName: useGetActiveProviderName(),
@@ -287,7 +305,7 @@ function useAppDialogsRuntime(
     saveProfileSnapshot: useSaveProfileSnapshot(),
     setActiveModel: useSetActiveModel(),
     setDefaultProfileName: useSetDefaultProfileName(),
-    setProvider: useSetProvider(),
+    setProvider,
     updateActiveProviderApiKey: useUpdateActiveProviderApiKey(),
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
@@ -296,41 +314,41 @@ function useAppDialogsRuntime(
 }
 
 /** Input runtime: wiring only; every param is bootstrap/store-owned. */
-function useAppInputRuntime(
+function useInputBindings(
   commands: SlashCommandProcessorCoreResult,
   setQuittingMessagesRef: React.MutableRefObject<
     ((messages: HistoryItem[]) => void) | null
   >,
   props: AppContainerRuntimeProps,
-  bootstrap: AppBootstrapResult,
   inputView: ReturnType<typeof buildInputView>,
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ): AppInputResult {
   const { dialogStore, turnStore } = inputView;
-  const { agent, uiRuntime: runtime, slashCommandRuntime: config } = props;
+  const { uiRuntime: runtime, slashCommandRuntime: config } = props;
   const browser = useInputBrowserCommands(
-    agent.session,
+    props.session,
     config,
-    bootstrap.recordingOwner,
-    bootstrap.recordingSwapCallbacks,
-    agent.agentClient.mediaStore,
-    useCallback(() => agent.agentClient.getHistoryService(), [agent]),
+    props.recordingOwner,
+    recordingSwapCallbacks,
+    props.mediaStore,
+    props.readClientHistory,
     turnStore,
     dialogStore,
     commands.commandContext.ui.clear,
   );
   const stream = useInputAgentOperations(
-    useBound(agent, agent.getHistory),
-    useBound(agent, agent.stream),
-    useBound(agent, agent.addHistory),
-    useBound(agent, agent.injectSteer),
-    useBound(agent, agent.getProviderContextLimit),
-    useContentIdentityReader(agent),
-    agent.tools,
-    agent.mcp,
-    agent.metrics,
-    agent.tasks,
-    agent.session,
-    bootstrap.recordingOwner,
+    props.readHistory,
+    props.stream,
+    props.appendHistory,
+    props.injectSteer,
+    props.getProviderContextLimit,
+    props.getContentPrefixIdentity,
+    props.tools,
+    props.mcp,
+    props.metrics,
+    props.tasks,
+    props.session,
+    props.recordingOwner,
     props.recordingIntegration,
   );
   const policy = useInputStreamPolicy(
@@ -353,15 +371,11 @@ function useAppInputRuntime(
     ...browser,
     commands,
     setQuittingMessagesRef,
-    disposeInput: useBound(agent, agent.dispose),
-    readApprovalMode: useBound(agent, agent.getApprovalMode),
-    setApprovalMode: useBound(agent, agent.setApprovalMode),
-    generatePromptContent: useCallback(
-      (...args: Parameters<PromptContentGenerator>) =>
-        agent.agentClient.generateContent(...args),
-      [agent],
-    ),
-    injectInputSteer: useBound(agent, agent.injectSteer),
+    disposeInput: props.disposeInput,
+    readApprovalMode: props.readApprovalMode,
+    setApprovalMode: props.setApprovalMode,
+    generatePromptContent: props.generatePromptContent,
+    injectInputSteer: props.injectSteer,
     ...useInputReadOperations(
       runtime.hooks,
       runtime.app,
@@ -376,88 +390,24 @@ function useAppInputRuntime(
   });
 }
 
-function useBootstrapRuntime(
-  props: AppContainerRuntimeProps,
-  stores: ReturnType<typeof useAppStores>,
-): AppBootstrapResult {
-  const { terminalStore, turnStore, settingsStore } = stores;
-  const { agent, uiRuntime, ...bootstrapProps } = props;
-  const tokenLogger = useMemo(
-    () => new DebugLogger('llxprt:ui:tokentracking'),
-    [],
-  );
-  const readTokenHistory = useCallback(() => {
-    const client = agent.agentClient;
-    return client.hasChatInitialized() === true
-      ? (client.getHistoryService() ?? null)
-      : null;
-  }, [agent]);
-  return useAppBootstrap({
-    ...bootstrapProps,
-    readEmojiFilterMode: useCallback(
-      () => resolveEmojiFilterMode(uiRuntime.ephemeral),
-      [uiRuntime],
-    ),
-    readLlxprtMdFileCount: useBound(
-      uiRuntime.memory,
-      uiRuntime.memory.getLlxprtMdFileCount,
-    ),
-    readCoreMemoryFileCount: useBound(
-      uiRuntime.memory,
-      uiRuntime.memory.getCoreMemoryFileCount,
-    ),
-    readTerminalBackground: useBound(
-      uiRuntime.shell,
-      uiRuntime.shell.getTerminalBackground,
-    ),
-    readCurrentIde: useCallback(
-      () => uiRuntime.ide.getIdeClient()?.getCurrentIde(),
-      [uiRuntime],
-    ),
-    readIdeMode: useBound(uiRuntime.ide, uiRuntime.ide.getIdeMode),
-    registerIdeCleanup: useCallback(() => {
-      const ideClient = uiRuntime.ide.getIdeClient();
-      if (ideClient !== undefined)
-        registerCleanup(() => {
-          void ideClient.disconnect();
-        });
-    }, [uiRuntime]),
-    readDebugMode: useBound(uiRuntime.app, uiRuntime.app.getDebugMode),
-    triggerSessionStart: useBound(agent.hooks, agent.hooks.triggerSessionStart),
-    appendHistory: useBound(agent, agent.addHistory),
-    recordRecordingEvent: useBound(
-      agent.session,
-      agent.session.recordRecordingEvent,
-    ),
-    metrics: agent.metrics,
-    subscribeHistoryTokens: useMemo(
-      () => bindHistoryTokenSubscription(readTokenHistory, tokenLogger),
-      [readTokenHistory, tokenLogger],
-    ),
-    subscribeRecordingHistory: useMemo(
-      () => bindRecordingHistorySubscription(readTokenHistory, tokenLogger),
-      [readTokenHistory, tokenLogger],
-    ),
-    readProviderMetrics: useBound(
-      agent.providerReads,
-      agent.providerReads.getActiveProviderMetrics,
-    ),
-    readSessionTokenUsage: useBound(
-      agent.providerReads,
-      agent.providerReads.getSessionTokenUsage,
-    ),
-    terminalStore,
-    turnStore,
-    settingsStore,
-  });
-}
-
-function useRuntimeCommandProcessor(
+function useAppInputRuntime(
   props: AppContainerRuntimeProps,
   bootstrap: AppBootstrapResult,
-  view: ReturnType<typeof useInputCommandView>,
+  stores: ReturnType<typeof useAppStores>,
+  recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
 ) {
-  return useSlashCommandProcessorCore({
+  const view = useInputCommandView(
+    useBound(
+      props.slashCommandRuntime,
+      props.slashCommandRuntime.getExtensions,
+    ),
+    props.slashCommandRuntime.getWorkingDir(),
+    stores,
+    props.settings,
+    bootstrap.setLlxprtMdFileCount,
+  );
+  const commands = useSlashCommandProcessorCore({
     registerCredentials: props.registerCredentials,
     readBuiltinCommands: props.readBuiltinCommands,
     loadRegisteredCommands: props.loadRegisteredCommands,
@@ -477,35 +427,10 @@ function useRuntimeCommandProcessor(
     startCommandSession: props.startCommandSession,
     listCommandTools: props.listCommandTools,
     ...view,
-    recordingIntegration:
-      bootstrap.recordingIntegrationRef?.current ?? undefined,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingOwner: bootstrap.recordingOwner,
+    recordingIntegration: recordingIntegrationRef?.current ?? undefined,
+    recordingSwapCallbacks,
+    recordingOwner: props.recordingOwner,
   });
-}
-
-export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
-  debug.debug('AppContainer architecture active (v2)');
-  const stores = useAppStores(props.slashCommandRuntime);
-  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
-  const bootstrap = useBootstrapRuntime(props, stores);
-  const dialogs = useAppDialogsRuntime(props, bootstrap, stores);
-  const inputCommandView = useInputCommandView(
-    useBound(
-      props.slashCommandRuntime,
-      props.slashCommandRuntime.getExtensions,
-    ),
-    props.slashCommandRuntime.getWorkingDir(),
-    stores,
-    props.settings,
-    bootstrap.setLlxprtMdFileCount,
-  );
-  const setQuittingMessagesRef = inputCommandView.setQuittingMessagesRef;
-  const commands = useRuntimeCommandProcessor(
-    props,
-    bootstrap,
-    inputCommandView,
-  );
   const inputView = buildInputView(
     stores,
     props.settings,
@@ -516,49 +441,120 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     bootstrap.setIdePromptAnswered,
     bootstrap.setLlxprtMdFileCount,
   );
-  const input = useAppInputRuntime(
+  return useInputBindings(
     commands,
-    setQuittingMessagesRef,
+    view.setQuittingMessagesRef,
+    props,
+    inputView,
+    recordingSwapCallbacks,
+  );
+}
+
+function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
+  return {
+    readLlxprtMdFileCount: useBound(memory, memory.getLlxprtMdFileCount),
+    readCoreMemoryFileCount: useBound(memory, memory.getCoreMemoryFileCount),
+  };
+}
+
+export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
+  debug.debug('AppContainer architecture active (v2)');
+  const { uiRuntime, slashCommandRuntime: config, settings, metrics } = props;
+  const stores = useAppStores(config);
+  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
+  const { recordingIntegrationRef, recordingSwapCallbacks } =
+    useRecordingInfrastructure(
+      props.initialRecordingService,
+      props.recordingIntegration,
+      props.initialLockHandle,
+      props.recordingOwner,
+    );
+  const bootstrap = useBootstrapRuntime(
+    {
+      ...useBootstrapMemoryReads(uiRuntime.memory),
+      triggerSessionStart: props.triggerSessionStart,
+      appendHistory: props.appendHistory,
+      recordRecordingEvent: props.recordRecordingEvent,
+      setTokenTrackingMetrics: useBound(
+        metrics,
+        metrics.setTokenTrackingMetrics,
+      ),
+      readProviderMetrics: props.readProviderMetrics,
+      readSessionTokenUsage: props.readSessionTokenUsage,
+      resumedHistory: props.resumedHistory,
+      version: props.version,
+      memoryController: props.memoryController,
+    },
+    settings.merged,
+    stores,
+    uiRuntime.ephemeral,
+    uiRuntime.shell,
+    uiRuntime.ide,
+    uiRuntime.app,
+    props.readTokenHistory,
+    props.recordingOwner,
+    recordingIntegrationRef,
+  );
+  const dialogs = useAppDialogsRuntime(
     props,
     bootstrap,
-    inputView,
+    stores,
+    recordingIntegrationRef,
+  );
+  const input = useAppInputRuntime(
+    props,
+    bootstrap,
+    stores,
+    recordingIntegrationRef,
+    recordingSwapCallbacks,
   );
   const layout = useAppLayout({
-    uiRuntime: props.uiRuntime,
-    settings: props.settings,
+    uiRuntime,
+    settings,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
     turnStore,
     store: dialogStore,
     terminalStore,
     settingsStore,
   });
-  useUnconfiguredGuidance(turnStore, dialogStore);
-  const readTranscript = useCallback(
-    () =>
-      getInteractiveTranscriptPath(
-        bootstrap.recordingOwner,
-        () => props.agent.session.getRecording().path,
-        () =>
-          bootstrap.recordingSwapCallbacks
-            ?.getCurrentRecording()
-            ?.getFilePath() ?? undefined,
-      ),
-    [bootstrap.recordingOwner, bootstrap.recordingSwapCallbacks, props.agent],
-  );
   return renderAppRuntimeView(
     props.runtimeMessageBus,
-    props.slashCommandRuntime,
+    config,
     props.version,
-    props.uiRuntime.app.getScreenReader(),
-    props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
-    props.uiRuntime.app.getDebugMode(),
+    uiRuntime.app.getScreenReader(),
+    uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
+    uiRuntime.app.getDebugMode(),
     bootstrap,
+    settings,
+    props.startupWarnings,
     layout,
     useAppCommands(dialogs, input, layout, terminalStore),
     stores,
-    readTranscript,
+    useTranscriptReader(
+      props.recordingOwner,
+      recordingSwapCallbacks,
+      props.readAgentRecordingPath,
+    ),
   );
 };
+
+function useTranscriptReader(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
+  readAgentRecordingPath: () => string | undefined,
+): () => string | undefined {
+  return useCallback(
+    () =>
+      getInteractiveTranscriptPath(
+        recordingOwner,
+        readAgentRecordingPath,
+        () =>
+          recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
+          undefined,
+      ),
+    [recordingOwner, recordingSwapCallbacks, readAgentRecordingPath],
+  );
+}
 
 interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   appCommands: AppCommandBindings;
@@ -604,7 +600,7 @@ function useInputBrowserCommands(
     Parameters<typeof useBrowserCatalogCommands>[2] &
     Parameters<typeof resolveEmojiFilterMode>[0],
   recordingOwner: 'agent' | 'raw' | undefined,
-  recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'],
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
   mediaStore: Agent['agentClient']['mediaStore'],
   readRawHistory: () => ReturnType<Agent['agentClient']['getHistoryService']>,
   turnStore: TurnStore,
@@ -800,6 +796,8 @@ function renderAppRuntimeView(
   disableLoadingPhrases: boolean,
   debugMode: boolean,
   bootstrap: AppBootstrapResult,
+  settings: LoadedSettings,
+  startupWarnings: string[] | undefined,
   layout: ReturnType<typeof useAppLayout>,
   commands: AppCommandBindings,
   stores: ReturnType<typeof useAppStores>,
@@ -814,8 +812,8 @@ function renderAppRuntimeView(
       screenReaderEnabled={screenReaderEnabled}
       disableLoadingPhrases={disableLoadingPhrases}
       debugMode={debugMode}
-      settings={bootstrap.settings}
-      startupWarnings={bootstrap.startupWarnings}
+      settings={settings}
+      startupWarnings={startupWarnings ?? []}
       nightly={bootstrap.nightly}
       updateInfo={bootstrap.updateInfo}
       mainControlsRef={layout.mainControlsRef}

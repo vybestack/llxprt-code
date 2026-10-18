@@ -61,7 +61,11 @@ describe('token metrics captured history ownership', () => {
           Object.assign(
             {
               uiRuntime,
-              metrics: active.metrics,
+              setTokenTrackingMetrics: useMemo(
+                () =>
+                  active.metrics.setTokenTrackingMetrics.bind(active.metrics),
+                [active],
+              ),
               updateHistoryTokenCount: setCount,
             },
             {

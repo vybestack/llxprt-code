@@ -24,11 +24,12 @@ import type { SettingsProfileStore } from '../../../stores/settings/settingsStor
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
+import type { LoadedSettings } from '../../../../config/settings.js';
 
 export interface AppLayoutParams {
   // From bootstrap
   uiRuntime: UiRuntime;
-  settings: AppBootstrapResult['settings'];
+  settings: LoadedSettings;
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'];
   /**
    * Turn store; the command context gets addItem and the clear-screen action

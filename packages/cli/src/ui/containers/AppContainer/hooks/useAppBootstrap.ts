@@ -6,14 +6,12 @@
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useStdin, useStdout } from 'ink';
 import { useResponsive } from '../../../hooks/useResponsive.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useBracketedPaste } from '../../../hooks/useBracketedPaste.js';
 import { useConsoleMessages } from '../../../hooks/useConsoleMessages.js';
-import { useExtensionAutoUpdate } from '../../../hooks/useExtensionAutoUpdate.js';
 import { useCoreEventHandlers } from '../../../hooks/useCoreEventHandlers.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -24,28 +22,17 @@ import {
   type UseHistoryManagerReturn,
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
-import {
-  type IContent,
-  type IdeInfo,
-  type MessageBus,
-  type RecordingIntegration,
-  type SessionRecordingService,
-  type LockHandle,
-} from '@vybestack/llxprt-code-core';
+import type { IContent, IdeInfo } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
-import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
 import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
-import { useTodoContext } from '../../../contexts/TodoContext.js';
-import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
 import type { SessionRecordingEvent } from '@vybestack/llxprt-code-agents';
 import type { UseSessionInitializationParams } from './useSessionInitialization.js';
 import type { MemoryTelemetryController } from '../../../hooks/memoryTrend/memoryTelemetry.js';
-import type { LoadedSettings } from '../../../../config/settings.js';
 
 export interface AppBootstrapProps {
   readEmojiFilterMode: UseSessionInitializationParams['readEmojiFilterMode'];
@@ -59,7 +46,13 @@ export interface AppBootstrapProps {
   triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'];
   appendHistory: (content: IContent) => Promise<void>;
   recordRecordingEvent: (event: SessionRecordingEvent) => Promise<void>;
-  metrics: Parameters<typeof useTokenMetricsTracking>[0]['metrics'];
+  recordFeedback: (
+    severity: 'warning' | 'error',
+    message: string,
+  ) => void | Promise<void>;
+  setTokenTrackingMetrics: Parameters<
+    typeof useTokenMetricsTracking
+  >[0]['setTokenTrackingMetrics'];
   subscribeHistoryTokens: Parameters<
     typeof useTokenMetricsTracking
   >[0]['subscribeHistoryTokens'];
@@ -72,17 +65,11 @@ export interface AppBootstrapProps {
   readSessionTokenUsage: Parameters<
     typeof useTokenMetricsTracking
   >[0]['readSessionTokenUsage'];
-  settings: LoadedSettings;
-  startupWarnings?: string[];
+  historyMaxItems?: number;
+  historyMaxBytes?: number;
+  hasSeenIdeIntegrationNudge?: boolean;
   resumedHistory?: IContent[];
   version: string;
-  runtimeMessageBus?: MessageBus;
-  appState: AppState;
-  appDispatch: React.Dispatch<AppAction>;
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
-  initialRecordingService?: SessionRecordingService;
-  initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;
   /** Terminal store; bootstrap owns the focus/narrow writer effects. */
@@ -97,33 +84,17 @@ export interface AppBootstrapProps {
 }
 
 export interface AppBootstrapResult {
-  settings: LoadedSettings;
   setLlxprtMdFileCount: (count: number) => void;
   handleNewMessage: ReturnType<typeof useConsoleMessages>['handleNewMessage'];
   clearConsoleMessagesState: ReturnType<
     typeof useConsoleMessages
   >['clearConsoleMessages'];
-  todos: ReturnType<typeof useTodoContext>['todos'];
-  updateTodos: ReturnType<typeof useTodoContext>['updateTodos'];
-  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  recordingSwapCallbacks: ReturnType<
-    typeof useRecordingInfrastructure
-  >['recordingSwapCallbacks'];
-  idePromptAnswered: boolean;
   setIdePromptAnswered: React.Dispatch<React.SetStateAction<boolean>>;
   currentIDE: IdeInfo | undefined;
   shouldShowIdePrompt: boolean | null | undefined;
   updateInfo: UpdateObject | null;
-  setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>;
-  stdin: ReturnType<typeof useStdin>['stdin'];
-  setRawMode: ReturnType<typeof useStdin>['setRawMode'];
-  stdout: ReturnType<typeof useStdout>['stdout'];
   nightly: boolean;
-  runtimeMessageBus?: MessageBus;
-  startupWarnings: string[];
-  resumedHistory?: IContent[];
-  recordingIntegration?: RecordingIntegration;
-  recordingOwner?: 'agent' | 'raw';
+  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
 }
 
 function useInitializationBindings(
@@ -152,7 +123,7 @@ function useInitializationBindings(
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { settings, resumedHistory } = props;
+  const { resumedHistory, historyMaxItems, historyMaxBytes } = props;
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -172,21 +143,19 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     );
   });
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
-  const { stdout } = useStdout();
-  const { stdin, setRawMode } = useStdin();
   const nightly = props.version.includes('nightly');
   const historyLimits = useMemo(
     () => ({
       maxItems:
-        typeof settings.merged.ui.historyMaxItems === 'number'
-          ? settings.merged.ui.historyMaxItems
+        typeof historyMaxItems === 'number'
+          ? historyMaxItems
           : DEFAULT_HISTORY_MAX_ITEMS,
       maxBytes:
-        typeof settings.merged.ui.historyMaxBytes === 'number'
-          ? settings.merged.ui.historyMaxBytes
+        typeof historyMaxBytes === 'number'
+          ? historyMaxBytes
           : DEFAULT_HISTORY_MAX_BYTES,
     }),
-    [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
+    [historyMaxItems, historyMaxBytes],
   );
   const { addItem, loadHistory } = useRetractableHistory(
     props.turnStore,
@@ -220,50 +189,16 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   return {
     updateInfo,
     setUpdateInfo,
-    stdout,
-    stdin,
-    setRawMode,
     nightly,
     addItem,
     setLlxprtMdFileCount,
   };
 }
 
-/** Initializes task-list state */
-function useBootstrapTodo() {
-  const { todos, updateTodos } = useTodoContext();
-  return { todos, updateTodos };
-}
-
 function useIdeClientCleanup(registerIdeCleanup: () => void): void {
   useEffect(() => {
     registerIdeCleanup();
   }, [registerIdeCleanup]);
-}
-
-function useFeedbackRecording(
-  recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'],
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recordingIntegrationRef:
-    | React.MutableRefObject<RecordingIntegration | null>
-    | undefined,
-) {
-  return useCallback(
-    (severity: 'warning' | 'error', message: string) => {
-      if (recordingOwner === 'agent') {
-        return recordRecordingEvent({
-          type: 'session_event',
-          severity,
-          message,
-        });
-      }
-      return recordingIntegrationRef?.current?.recordSessionEvent(
-        severity,
-        message,
-      );
-    },
-    [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
-  );
 }
 
 function useMirroredTokenMetrics(
@@ -286,28 +221,13 @@ function useBootstrapEvents(
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
 ) {
   const oauthControl = useOAuthControl();
-  const {
-    settings,
-    recordingIntegration,
-    initialRecordingService,
-    initialLockHandle,
-    recordRecordingEvent,
-    recordingOwner,
-  } = props;
-  const { recordingIntegrationRef, recordingSwapCallbacks } =
-    useRecordingInfrastructure(
-      initialRecordingService,
-      recordingIntegration,
-      initialLockHandle,
-      props.recordingOwner,
-    );
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = props.readCurrentIde();
   useIdeClientCleanup(props.registerIdeCleanup);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
     !props.readIdeMode() &&
-    settings.merged.hasSeenIdeIntegrationNudge !== true &&
+    props.hasSeenIdeIntegrationNudge !== true &&
     !idePromptAnswered;
   useUpdateAndOAuthBridges({
     addItem,
@@ -319,24 +239,19 @@ function useBootstrapEvents(
     handleNewMessage,
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
-  useExtensionAutoUpdate({ settings, onConsoleMessage: handleNewMessage });
-  const readDebugMode = props.readDebugMode;
-  const recordFeedback = useFeedbackRecording(
-    recordRecordingEvent,
-    recordingOwner,
-    recordingIntegrationRef,
-  );
-  useCoreEventHandlers({ handleNewMessage, readDebugMode, recordFeedback });
+  useCoreEventHandlers({
+    handleNewMessage,
+    readDebugMode: props.readDebugMode,
+    recordFeedback: props.recordFeedback,
+  });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
-    metrics: props.metrics,
+    setTokenTrackingMetrics: props.setTokenTrackingMetrics,
     subscribeHistoryTokens: props.subscribeHistoryTokens,
     subscribeRecordingHistory: props.subscribeRecordingHistory,
     readProviderMetrics: props.readProviderMetrics,
     readSessionTokenUsage: props.readSessionTokenUsage,
     updateHistoryTokenCount,
-    recordingIntegrationRef,
-    recordingOwner: props.recordingOwner,
   });
   useMirroredTokenMetrics(
     props.settingsStore,
@@ -344,9 +259,6 @@ function useBootstrapEvents(
     sessionStats.historyTokenCount,
   );
   return {
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
-    idePromptAnswered,
     setIdePromptAnswered,
     currentIDE,
     shouldShowIdePrompt,
@@ -358,30 +270,15 @@ function useBootstrapEvents(
 
 export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
-  const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
   return {
-    settings: props.settings,
-    runtimeMessageBus: props.runtimeMessageBus,
-    startupWarnings: props.startupWarnings ?? [],
-    resumedHistory: props.resumedHistory,
-    recordingIntegration: props.recordingIntegration,
-    recordingOwner: props.recordingOwner,
+    recordRecordingEvent: props.recordRecordingEvent,
     nightly: h.nightly,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,
     updateInfo: h.updateInfo,
-    setUpdateInfo: h.setUpdateInfo,
-    stdin: h.stdin,
-    setRawMode: h.setRawMode,
-    stdout: h.stdout,
-    todos: t.todos,
-    updateTodos: t.updateTodos,
-    recordingIntegrationRef: e.recordingIntegrationRef,
-    recordingSwapCallbacks: e.recordingSwapCallbacks,
-    idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,
     shouldShowIdePrompt: e.shouldShowIdePrompt,
