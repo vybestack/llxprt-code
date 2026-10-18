@@ -68,23 +68,34 @@ export class CursorCompressionHistory extends HistoryService {
 
   constructor(options: HistoryServiceJournalOptions) {
     super(options);
-    const replace = this.detachedValues.replace;
-    this.detachedValues.replace = (rows, model, options) => {
-      if (Array.isArray(rows)) throw new Error('Array facade submitted');
-      const setReceipt = (receipt: string): void => {
-        this.replacementReceipt = receipt;
-      };
-      async function* observe(): AsyncGenerator<IContent, void, unknown> {
-        const receipt = createHash('sha256').update('[');
-        let separator = '';
-        for await (const row of rows) {
-          receipt.update(separator).update(JSON.stringify(row));
-          separator = ',';
-          yield row;
-        }
-        setReceipt(receipt.update(']').digest('hex'));
-      }
-      return replace(observe(), model, options);
+    const transform = this.detachedValues.transform;
+    this.detachedValues.transform = (produce, model, options) =>
+      transform(
+        async (source, sink) => {
+          const receipt = createHash('sha256').update('[');
+          let separator = '';
+          const observe = (row: IContent): void => {
+            receipt.update(separator).update(JSON.stringify(row));
+            separator = ',';
+          };
+          await produce(source, {
+            ...sink,
+            appendValue: async (row) => {
+              observe(row);
+              await sink.appendValue(row);
+            },
+            appendDerived: async (ordinal, row) => {
+              observe(row);
+              await sink.appendDerived(ordinal, row);
+            },
+          });
+          this.replacementReceipt = receipt.update(']').digest('hex');
+        },
+        model,
+        options,
+      );
+    this.detachedValues.replace = () => {
+      throw new Error('Replacement facade submitted instead of transform');
     };
   }
 

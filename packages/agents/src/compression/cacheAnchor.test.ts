@@ -316,9 +316,9 @@ describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
   });
 });
 
-describe('applyCompressionWithAnchor under an active compression lock (#3338)', () => {
+describe('applyCompressionWithAnchor under an active compression lock, old synchronous protocol (#3338)', () => {
   it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', async () => {
-    const historyService = new HistoryService();
+    const historyService = new HistoryService({ backend: 'old' });
     for (const c of [
       human('original-1'),
       ai('original-2'),

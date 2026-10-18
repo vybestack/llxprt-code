@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
-  withFallbackFixture,
   enforceFallback,
   type FallbackHarness,
 } from './provider-fallback-disk-helpers.js';
+import { withSelectedFallbackFixture } from './support/selected-fallback-fixture.js';
 import { middleoutSetup } from './middleout-disk-helpers.js';
 import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { digestRows } from './tool-truncation-stream-helpers.js';
@@ -84,42 +84,52 @@ function harnessFor(history: HistoryService, state: State): FallbackHarness {
 }
 async function retry(size: number): Promise<number> {
   let remaining = 0;
-  await withFallbackFixture(size, async ({ history, before }) => {
-    const state: State = {
-      accepted: false,
-      rejectNext: true,
-      stop: false,
-      baseline: 123,
-      events: [],
-    };
-    const harness = harnessFor(history, state);
-    const tokens = history.getTotalTokens();
-    await expect(enforceFallback(harness)).rejects.toThrow(
-      'post-truncation stage',
-    );
-    expect(await digestRows(history.streamRawHistory())).toBe(before);
-    expect(history.getTotalTokens() - tokens).toBe(0);
-    expect(harness.baseline()).toBe(123);
-    state.stop = false;
-    expect(await enforceFallback(harness)).not.toHaveLength(0);
-    expect(state.events).toStrictEqual([
-      'optimize',
-      'primary',
-      'primary',
-      'fallback',
-      'reject',
-      'optimize',
-      'primary',
-      'primary',
-      'fallback',
-      'accept',
-    ]);
-    expect(harness.baseline()).toBe(null);
-    expect(history.getTotalTokens() - history.getBaseTokenOffset()).toBe(
-      await history.estimateTokensForContents(history.streamRawHistory()),
-    );
-    remaining = history.getTotalTokens();
-  });
+  await withSelectedFallbackFixture(
+    size,
+    async ({ history, before, reads, owners }) => {
+      const state: State = {
+        accepted: false,
+        rejectNext: true,
+        stop: false,
+        baseline: 123,
+        events: [],
+      };
+      const harness = harnessFor(history, state);
+      const tokens = history.getTotalTokens();
+      await expect(enforceFallback(harness)).rejects.toThrow(
+        'post-truncation stage',
+      );
+      expect(await digestRows(history.streamRawHistory())).toBe(before);
+      expect(history.getTotalTokens() - tokens).toBe(0);
+      expect(harness.baseline()).toBe(123);
+      expect(history.getBaseTokenOffset()).toBe(37);
+      expect(history.getCacheAnchorSeq()).toBe(1);
+      expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
+      expect(
+        owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+      ).toBe(true);
+      expect(owners.snapshot().liveRows).toBe(0);
+      state.stop = false;
+      expect(await enforceFallback(harness)).not.toHaveLength(0);
+      expect(state.events).toStrictEqual([
+        'optimize',
+        'primary',
+        'primary',
+        'fallback',
+        'reject',
+        'optimize',
+        'primary',
+        'primary',
+        'fallback',
+        'accept',
+      ]);
+      expect(harness.baseline()).toBe(null);
+      expect(history.getTotalTokens() - history.getBaseTokenOffset()).toBe(
+        await history.estimateTokensForContents(history.streamRawHistory()),
+      );
+      remaining = history.getTotalTokens();
+    },
+  );
   return remaining;
 }
 describe('provider hard-limit disk retry ordering', () => {
