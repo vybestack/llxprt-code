@@ -1,21 +1,13 @@
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  type SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type LlxprtExtension,
-  type RuntimeProviderManager,
   type Config,
   OutputFormat,
+  coreEvents,
 } from '@vybestack/llxprt-code-core';
 
 import { writeFileSync } from 'node:fs';
@@ -25,6 +17,8 @@ import {
 } from '@vybestack/llxprt-code-telemetry';
 import type {
   Agent,
+  AgentProfilePreflight,
+  AgentForegroundHost,
   ActivationPreflight,
   ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
@@ -38,10 +32,8 @@ import { appEvents, AppEvent } from './utils/events.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { registerDynamicToolSettings } from './cliBootstrap.js';
-import {
-  createForegroundAgent,
-  type ForegroundAgentOptions,
-} from './cliAgentBootstrap.js';
+import { createForegroundAgent } from './cliAgentBootstrap.js';
+import { cliSkillOperations } from './config/configBuilder.js';
 
 /**
  * Initialize Config, showing an MCP initialization spinner when interactive and
@@ -130,21 +122,16 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
  */
 export async function constructAgentWithSpinner(
   config: Config,
-  providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  activationPreflight?: ActivationPreflight,
-  activationPreflightIntent?: ProviderActivationIntent,
-  getMcpAuthProviderFactory?: ForegroundAgentOptions['getMcpAuthProviderFactory'],
-  onSkills?: ForegroundAgentOptions['onSkills'],
-  onExtensionRestart?: (
-    restart: (extension: LlxprtExtension) => Promise<void>,
-  ) => void,
-  policyOwner?: RuntimePolicyOwner,
-  oauthManager?: OAuthManager,
-  providerFileLifecycle?: ProviderFileLifecycle,
+  preflight: AgentProfilePreflight,
+  token: ActivationPreflight['token'],
+  activationPreflightIntent: ProviderActivationIntent,
+  credentialAuthority: CredentialAuthority,
+  getMcpAuthProviderFactory?: NonNullable<
+    AgentForegroundHost['mcpHost']
+  >['getAuthProviderFactory'],
+  onSkills?: AgentForegroundHost['onSkills'],
+  onExtensionRestart?: AgentForegroundHost['onExtensionRestart'],
   argv?: ParsedCliArgs,
-  credentialAuthority?: CredentialAuthority,
 ): Promise<Agent> {
   const mcpServers = config.getMcpServers();
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
@@ -158,21 +145,23 @@ export async function constructAgentWithSpinner(
     : undefined;
 
   try {
-    const agent = await createForegroundAgent({
-      credentialAuthority,
-      config,
-      providerManager,
-      settingsService,
-      settingsOwner,
-      activationPreflight,
+    const skills = cliSkillOperations(config);
+    const agent = await createForegroundAgent(
+      preflight,
+      token,
       activationPreflightIntent,
-      getMcpAuthProviderFactory,
-      onSkills,
-      onExtensionRestart,
-      policyOwner,
-      oauthManager,
-      providerFileLifecycle,
-    });
+      credentialAuthority,
+      {
+        mcpHost: {
+          getAuthProviderFactory: getMcpAuthProviderFactory,
+          emitFeedback: (...args) => coreEvents.emitFeedback(...args),
+        },
+        skillPolicy: skills.reloadPolicy,
+        registerSkillTools: skills.registerTools,
+        onSkills,
+        onExtensionRestart,
+      },
+    );
     if (argv) registerSessionSummaryWriter(argv, agent.metrics);
     registerDynamicToolSettings(() => agent.tools.describeConfiguration());
     registerShellJobShutdownNotice(() =>

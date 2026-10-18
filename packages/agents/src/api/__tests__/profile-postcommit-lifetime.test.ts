@@ -544,28 +544,30 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         new AnthropicOAuthProvider(globalThis.fetch, store),
       );
       await oauth.toggleOAuthEnabled('claudecode');
-      const agent = await fromConfig({
-        oauthManager: oauth,
-        providerFileLifecycle: builtCallerFiles,
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-        sessionId: label,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { sessionId: label },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        oauth,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        builtCallerFiles,
+      );
       agents.push(agent);
-      const ownerB = await fromConfig({
-        settingsOwner: otherCallerSettingsOwner,
-        settingsService: otherCallerSettings,
-        providerManager: otherCallerManager,
-        config: otherCallerConfig,
-        mcpRuntime: otherCallerMcp,
-        messageBus: otherCallerPolicy.session.messageBus,
-        sessionId: label,
-      });
+      const ownerB = await fromConfig(
+        otherCallerConfig,
+        otherCallerSettings,
+        { sessionId: label },
+        otherCallerSettingsOwner,
+        otherCallerManager,
+        undefined,
+        otherCallerPolicy.session.messageBus,
+        otherCallerMcp,
+      );
 
       agents.push(ownerB);
       if (renewal) {
@@ -702,16 +704,18 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         await builtCallerOwner
           .getAgentClient()
           .startChat(await builtCallerOwner.getAgentClient().getHistory());
-        const successor = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          messageBus: builtCallerPolicy.session.messageBus,
-          sessionId: `${label}-successor`,
-        });
+        const successor = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { sessionId: `${label}-successor` },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+        );
         try {
           agents.push(successor);
           await successfulTurn(successor);

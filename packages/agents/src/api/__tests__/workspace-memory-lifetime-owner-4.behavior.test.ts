@@ -177,17 +177,32 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     const intent = { provider: 'fake', model: 'fake-model' };
     const result = await operation.preflight(intent);
     if (!result.token) throw new Error('Missing actual preflight token');
-    const adopting = fromConfig({
-      config: built_builtFactorylessConfig,
-      settingsService: built_builtFactorylessSettings,
-      settingsOwner: built_builtFactorylessSettingsOwner,
-      messageBus: built_builtFactorylessPolicy.session.messageBus,
-      policyOwner: built_builtFactorylessPolicy,
-      providerManager: manager,
-      activation: intent,
-      activationPreflight: { operation, token: result.token },
-      memoryOwner: { owner: memory },
-    });
+    const adopting = fromConfig(
+      built_builtFactorylessConfig,
+      built_builtFactorylessSettings,
+      { activation: intent },
+      built_builtFactorylessSettingsOwner,
+      manager,
+      undefined,
+      built_builtFactorylessPolicy.session.messageBus,
+      undefined,
+      { operation, token: result.token },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      built_builtFactorylessPolicy,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { owner: memory },
+    );
     const outcome = await adopting.then(
       async (facade) => {
         await facade.dispose();

@@ -337,7 +337,7 @@ export function buildConfig(input: ConfigBuildInput): Config {
  * Priority: CLI arg > HTTPS_PROXY > https_proxy > HTTP_PROXY > http_proxy
  * Intentionally uses falsy coalescing (empty string should fall back to env vars).
  */
-function resolveProxy(cliProxy: string | undefined): string | undefined {
+export function resolveProxy(cliProxy: string | undefined): string | undefined {
   const httpsProxy = firstNonEmptyString(
     process.env.HTTPS_PROXY,
     process.env.https_proxy,

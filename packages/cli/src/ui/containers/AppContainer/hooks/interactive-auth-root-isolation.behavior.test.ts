@@ -11,7 +11,7 @@ import {
   MemoryTokenStore,
   makeToken,
 } from '../../../../../../providers/src/auth/__tests__/behavioral/test-utils.js';
-import { createOAuthControl } from '../../../../runtime/createOAuthControl.js';
+import { assembleSessionAuthentication } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 
@@ -50,7 +50,15 @@ function heldLogin() {
     undefined,
     new SettingsService(),
   );
-  const control = createOAuthControl(() => manager, providers);
+  const control = assembleSessionAuthentication(manager, (provider) => {
+    const instance = providers.getProviderByName(provider);
+    if (
+      instance &&
+      'clearClientCache' in instance &&
+      typeof instance.clearClientCache === 'function'
+    )
+      instance.clearClientCache();
+  });
   return {
     manager,
     messages,

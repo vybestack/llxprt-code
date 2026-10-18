@@ -1,28 +1,19 @@
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   type SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type RuntimeProviderManager,
-  type ProviderSwitcher,
   FatalError,
-  type MessageBus,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 
 import {
   prepareAgentPreflight,
   captureAgentPreflightHostInput,
   type AgentProfilePreflight,
-  type AgentActivationOperation,
-  type AgentProfileApplication,
 } from '@vybestack/llxprt-code-agents';
 
 /**
@@ -34,7 +25,6 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 
@@ -72,21 +62,9 @@ export interface BootstrapProfileArgs {
 }
 
 export interface RuntimeBootstrapMetadata {
-  readonly credentialAuthority?: CredentialAuthority;
-  readonly sessionSettingsOwner?: SessionSettingsOwner;
-  settingsService?: SettingsService;
-  config?: Config;
-  oauthManager?: OAuthManager;
-  runtimeId?: string;
-  messageBus?: MessageBus;
-  metadata?: Record<string, unknown>;
-  /**
-   * The provider contribution registry produced by discovering and loading
-   * the installed plugin packages once at CLI startup (issue #2758).
-   * Forwarded to the providers assembly so alias construction dispatches
-   * through it.
-   */
-  providerContributions?: ProviderContributionRegistry;
+  readonly proxy?: string;
+  readonly runtimeId?: string;
+  readonly metadata?: Record<string, unknown>;
 }
 
 export interface ParsedBootstrapArgs {
@@ -99,24 +77,6 @@ export interface ParsedBootstrapArgs {
  * Both are resolved before Config exists and are threaded to the pre-Config
  * provider assembly and the post-Config re-assembly alike.
  */
-export interface CliRuntimeOverrides {
-  readonly credentialAuthority?: CredentialAuthority;
-  onOAuthManagerReady?: (manager: OAuthManager | undefined) => void;
-  onProviderFilesReady?: (lifecycle: ProviderFileLifecycle) => void;
-  readonly sessionSettingsOwner?: SessionSettingsOwner;
-  onPolicyOwnerReady?: (owner: RuntimePolicyOwner) => void;
-  onProviderManagerReady?: (manager: RuntimeProviderManager) => void;
-  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void;
-  onProfileApplicationReady?: (application: AgentProfileApplication) => void;
-  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void;
-  onPreflightReady?: (operation: AgentProfilePreflight) => void;
-  settingsService?: SettingsService;
-  /**
-   * Provider contributions from the installed plugin packages, discovered and
-   * loaded once at startup (issue #2758).
-   */
-  providerContributions?: ProviderContributionRegistry;
-}
 
 export interface ProfileApplicationResult {
   providerName: string | null;
@@ -425,20 +385,25 @@ ${baseProfile.error}`);
  */
 export async function prepareRuntimeForProfile(
   parsed: ParsedBootstrapArgs,
+  authority?: CredentialAuthority,
+  settingsService?: SettingsService,
+  settingsOwner?: SessionSettingsOwner,
+  providerContributions?: ProviderContributionRegistry,
 ): Promise<AgentProfilePreflight> {
   const metadata = parsed.runtimeMetadata;
-  if (metadata.credentialAuthority === undefined)
+  if (authority === undefined)
     throw new Error('CLI profile bootstrap requires a credential authority');
   const host = captureAgentPreflightHostInput({
     runtimeId: metadata.runtimeId ?? DEFAULT_RUNTIME_ID,
+    proxy: metadata.proxy,
     metadata: { ...metadata.metadata, stage: 'prepareRuntimeForProfile' },
   });
   return prepareAgentPreflight(
     host,
-    metadata.credentialAuthority,
-    metadata.settingsService,
-    metadata.sessionSettingsOwner,
-    metadata.providerContributions,
+    authority,
+    settingsService,
+    settingsOwner,
+    providerContributions,
     createOAuthSettingsAdapter(),
   );
 }
@@ -711,21 +676,16 @@ ${baseProfile.error}`);
   return applyOverridesToProfile(baseProfile, bootstrapArgs);
 }
 
-interface ProfileLookupService {
-  getProfile?(
-    name: string | null,
-  ): { provider?: string; model?: string } | null | undefined;
-}
+type ProfileLookup = (
+  name: string | null,
+) => { provider?: string; model?: string } | null | undefined;
 
 function createLoadedProfileBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
+  readProfile?: ProfileLookup,
 ): ProfileApplicationResult {
-  const settingsService = runtimeMetadata.settingsService as
-    | ProfileLookupService
-    | undefined;
-  if (settingsService) {
-    const profile = settingsService.getProfile?.(bootstrapArgs.profileName);
+  if (readProfile !== undefined) {
+    const profile = readProfile(bootstrapArgs.profileName);
     if (profile !== null && profile !== undefined) {
       return applyOverridesToProfile(
         {
@@ -765,13 +725,13 @@ function createEmptyProfileBootstrapResult(): ProfileApplicationResult {
 
 function createTestingBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
+  readProfile?: ProfileLookup,
 ): ProfileApplicationResult {
   if (bootstrapArgs.profileJson !== null) {
     return createInlineProfileBootstrapResult(bootstrapArgs);
   }
   if (bootstrapArgs.profileName !== null) {
-    return createLoadedProfileBootstrapResult(bootstrapArgs, runtimeMetadata);
+    return createLoadedProfileBootstrapResult(bootstrapArgs, readProfile);
   }
   if (
     bootstrapArgs.providerOverride !== null ||
@@ -784,9 +744,9 @@ function createTestingBootstrapResult(
 
 export function createBootstrapResult(
   bootstrapArgs: BootstrapProfileArgs,
-  runtimeMetadata: RuntimeBootstrapMetadata,
+  readProfile?: ProfileLookup,
 ): ProfileApplicationResult {
-  return createTestingBootstrapResult(bootstrapArgs, runtimeMetadata);
+  return createTestingBootstrapResult(bootstrapArgs, readProfile);
 }
 
 /**

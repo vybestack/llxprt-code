@@ -187,18 +187,25 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
           );
           try {
             await callerMcp.initialize();
-            const agent: Agent = await fromConfig({
-              settingsOwner: builtFactorylessSettingsOwner,
-              settingsService: builtFactorylessSettings,
-              agentClient: builtFactorylessNoClient,
-              providerManager: builtFactorylessNoManager,
-              runtimeFactoryBindings: builtFactorylessFactories,
-              config: builtFactorylessConfig,
-              sessionId,
-              messageBus: builtFactorylessPolicy.session.messageBus,
-              policyOwner: builtFactorylessPolicy,
-              mcpRuntime: callerMcp,
-            });
+            const agent: Agent = await fromConfig(
+              builtFactorylessConfig,
+              builtFactorylessSettings,
+              { sessionId },
+              builtFactorylessSettingsOwner,
+              builtFactorylessNoManager,
+              undefined,
+              builtFactorylessPolicy.session.messageBus,
+              callerMcp,
+              undefined,
+              builtFactorylessNoClient,
+              undefined,
+              undefined,
+              undefined,
+              builtFactorylessFactories,
+              undefined,
+              undefined,
+              builtFactorylessPolicy,
+            );
             try {
               return agentToolNames(agent).includes('task');
             } finally {

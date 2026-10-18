@@ -417,24 +417,26 @@ describe('interactive runtime owner admission', () => {
   it('rejects ownerless service reads while two same-label Agents are active', async () => {
     await openfirstCaller('multi-turn-text.jsonl');
     await opensecondCaller('multi-turn-text.jsonl');
-    const a = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      messageBus: firstCallerPolicy.session.messageBus,
-      mcpRuntime: firstCallerMcp,
-      sessionId: 'shared-service-label',
-    });
-    const b = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      messageBus: secondCallerPolicy.session.messageBus,
-      mcpRuntime: secondCallerMcp,
-      sessionId: 'shared-service-label',
-    });
+    const a = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'shared-service-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
+    const b = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'shared-service-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     try {
       const missingOwner = (): unknown =>
         Reflect.construct(SessionProviderReads, []);

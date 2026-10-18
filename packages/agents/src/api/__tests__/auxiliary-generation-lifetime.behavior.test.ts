@@ -509,14 +509,18 @@ describe('auxiliary generation lifetime', () => {
         await release.promise;
         throw failure;
       };
-      const agent = await fromConfig({
-        settingsService: builtCallerSettings,
-        settingsOwner: builtCallerSettingsOwner,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        mcpRuntime: builtCallerMcp,
-        agentClient: builtCallerOwner.getAgentClient(),
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       const pending =
         kind === 'json'
           ? agent.generateJson(contents(), { type: 'object' })

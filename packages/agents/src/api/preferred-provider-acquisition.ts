@@ -68,6 +68,7 @@ export async function acquirePreferredFiles(
   const files = new ProviderFileLifecycle({
     maxFiles: 100,
     maxBytes: 512 * 1024 * 1024,
+    proxy: config.getProxy(),
   });
   for (const scope of runtimeId === config.getSessionId()
     ? [runtimeId]

@@ -111,20 +111,31 @@ describe('finalizeAgent post-auth client guard', () => {
     try {
       let captured: unknown;
       try {
-        await fromConfig({
-          settingsOwner: builtFactorylessSettingsOwner,
-          settingsService: builtFactorylessSettings,
-          providerManager: builtFactorylessNoManager,
-          runtimeFactoryBindings: builtFactorylessFactories,
-          config: builtFactorylessConfig,
-          messageBus: builtFactorylessPolicy.session.messageBus,
-          policyOwner: builtFactorylessPolicy,
-          activation: {
-            provider: 'fake',
-            model: 'fake-model',
-            authMode: 'none',
+        await fromConfig(
+          builtFactorylessConfig,
+          builtFactorylessSettings,
+          {
+            activation: {
+              provider: 'fake',
+              model: 'fake-model',
+              authMode: 'none',
+            },
           },
-        });
+          builtFactorylessSettingsOwner,
+          builtFactorylessNoManager,
+          undefined,
+          builtFactorylessPolicy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessFactories,
+          undefined,
+          undefined,
+          builtFactorylessPolicy,
+        );
         expect.unreachable('fromConfig should have rejected');
       } catch (error) {
         captured = error;

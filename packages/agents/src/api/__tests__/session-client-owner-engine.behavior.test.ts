@@ -189,15 +189,41 @@ describe('Explicit session client lifetime', () => {
       }
 
       const caller = builtOwner.getAgentClient();
-      const options = {
-        settingsService: builtSettings,
-        config: builtConfig,
-        providerManager: builtManager,
-        messageBus: builtMessageBus,
-        mcpRuntime: builtMcp,
-        agentClient: caller,
-      };
-      const facades = [await fromConfig(options), await fromConfig(options)];
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtManager;
+      const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+        builtMessageBus;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = builtMcp;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] = caller;
+      const facades = [
+        await fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          {},
+          undefined,
+          optionsProviderManager,
+          undefined,
+          optionsMessageBus,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
+        await fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          {},
+          undefined,
+          optionsProviderManager,
+          undefined,
+          optionsMessageBus,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
+      ];
       try {
         const closing = facades[firstClosed].dispose();
         expect(new Set([closing, facades[firstClosed].dispose()]).size).toBe(1);
@@ -367,21 +393,40 @@ describe('Explicit session client lifetime', () => {
     }
 
     const caller = builtOwner.getAgentClient();
-    const options = {
-      settingsService: builtSettings,
-      config: builtConfig,
-      providerManager: builtManager,
-      messageBus: builtMessageBus,
-      mcpRuntime: builtMcp,
-      agentClient: caller,
-    };
-    const facade = await fromConfig(options);
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+      builtSettings;
+    const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
+    const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+      builtManager;
+    const optionsMessageBus: Parameters<typeof fromConfig>[6] = builtMessageBus;
+    const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = builtMcp;
+    const optionsAgentClient: Parameters<typeof fromConfig>[9] = caller;
+    const facade = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      {},
+      undefined,
+      optionsProviderManager,
+      undefined,
+      optionsMessageBus,
+      optionsMcpRuntime,
+      undefined,
+      optionsAgentClient,
+    );
     try {
       await expect(
-        fromConfig({
-          ...options,
-          activation: { provider: 'missing-shared-provider' },
-        }),
+        fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          { activation: { provider: 'missing-shared-provider' } },
+          undefined,
+          optionsProviderManager,
+          undefined,
+          optionsMessageBus,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
       ).rejects.toThrow(/activation failed/i);
       await builtMcp.refreshContext();
       await facade.setHistory([

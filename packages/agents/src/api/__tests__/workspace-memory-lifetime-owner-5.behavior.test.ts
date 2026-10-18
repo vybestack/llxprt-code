@@ -138,15 +138,32 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     );
     cleanups.push(built_builtFactorylessClose);
     await expect(
-      fromConfig({
-        config: built_builtFactorylessConfig,
-        settingsService: built_builtFactorylessSettings,
-        settingsOwner: built_builtFactorylessSettingsOwner,
-        messageBus: built_builtFactorylessPolicy.session.messageBus,
-        policyOwner: built_builtFactorylessPolicy,
-        sessionId: '',
-        memoryOwner: { owner: memory },
-      }),
+      fromConfig(
+        built_builtFactorylessConfig,
+        built_builtFactorylessSettings,
+        { sessionId: '' },
+        built_builtFactorylessSettingsOwner,
+        undefined,
+        undefined,
+        built_builtFactorylessPolicy.session.messageBus,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        built_builtFactorylessPolicy,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { owner: memory },
+      ),
     ).rejects.toThrow('runtimeId');
     expect(memory.operations.snapshot().memoryContent).toContain(
       'Initial caller instructions.',

@@ -19,8 +19,8 @@ export function createInteractiveConfigFactory(configs: Config[]) {
       sessionId,
       targetDir: directory,
       cwd: directory,
-      model: 'gemini-2.5-pro',
-      provider: 'gemini',
+      model: 'cli-interactive-model',
+      provider: 'fake',
       interactive: true,
       debugMode: false,
     });
@@ -33,15 +33,15 @@ export function createInteractiveConfigFactory(configs: Config[]) {
       config,
     );
     const provider: IProvider = {
-      name: 'gemini',
-      getDefaultModel: () => 'gemini-2.5-pro',
+      name: 'fake',
+      getDefaultModel: () => 'cli-interactive-model',
       getModels: async () => [],
       async *generateChatCompletion() {
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
       },
     };
     manager.registerProvider(provider);
-    manager.setActiveProvider('gemini');
+    manager.setActiveProvider('fake');
     configureProviderTokenizer(manager);
     configs.push(config);
     return { config, manager };

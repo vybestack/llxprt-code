@@ -12,8 +12,6 @@ import type {
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { MemoryTokenStore } from '../../../providers/src/auth/__tests__/behavioral/test-utils.js';
 import type { LoadedSettings } from '../config/settings.js';
 import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import { startInteractiveUI as startOwnedInteractiveUI } from '../session/interactiveUI.js';
@@ -47,7 +45,6 @@ export function startInteractiveUI(
     workspaceRoot,
     {
       recordingOwner,
-      oauthManager: new OAuthManager(new MemoryTokenStore()),
       runtimeSettings,
       sessionPersistence,
       runtimeMessageBus,

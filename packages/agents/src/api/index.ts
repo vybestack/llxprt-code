@@ -33,7 +33,7 @@ export type {
   AgentSchedulerFactoryOptions,
   AgentSchedulerFactory,
   AgentConfig,
-  FromConfigOptions,
+  AgentAdoptionIntent,
   ProviderActivationIntent,
 } from './config-types.js';
 export {

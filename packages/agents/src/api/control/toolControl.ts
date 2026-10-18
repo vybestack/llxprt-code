@@ -1,15 +1,10 @@
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
-import type {
-  ToolExecutionPolicy,
-  ToolGovernance,
-} from '@vybestack/llxprt-code-tools';
+import type {} from '@vybestack/llxprt-code-tools';
 
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import { bindChildToolRegistry } from '../../session/childToolAssembly.js';
@@ -19,7 +14,6 @@ import {
   ChildToolDisplay,
   type ChildToolDisplayCallbacks,
 } from '../../session/childToolDisplay.js';
-import type { SchedulerConstruction } from '../../session/assembleSchedulerOwner.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P17
@@ -36,8 +30,6 @@ import type { SchedulerConstruction } from '../../session/assembleSchedulerOwner
  */
 
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 // @plan:ISSUE-2376 the real tool/invocation types the get() handle wraps.
 import type {
   AnyDeclarativeTool,
@@ -70,9 +62,7 @@ import {
 } from '../agentBootstrap.js';
 import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { ToolKeysControl } from './toolKeysControl.js';
-import type { ToolKeysControlDeps } from './toolKeysControl.js';
-import { createClientToolChannel } from '../../session/clientToolChannel.js';
+import type { createClientToolChannel } from '../../session/clientToolChannel.js';
 
 const logger = new DebugLogger('llxprt:agents:tool-control');
 
@@ -98,42 +88,6 @@ export class ToolControlError extends Error {
  * @plan:PLAN-20260617-COREAPI.P17
  * @requirement:REQ-006
  */
-export interface ToolControlDeps {
-  readonly assertSessionAdmission?: () => void;
-  readonly telemetry: RootTelemetry;
-  readonly taskLaunchOwner?: TaskLaunchOwner;
-  readonly shellOwner: ShellJobOwner;
-  readonly childDisplay?: ChildToolDisplay;
-  readonly schedulerFactory?: SchedulerConstruction;
-  /** The shared confirmation bus (respondToConfirmation publishes here). */
-  readonly messageBus: MessageBus;
-  /** The Config carrying the tool registry + settings service. */
-  readonly config: Config;
-  readonly selection: ToolSelection;
-  readonly readExecutionPolicy: () => ToolExecutionPolicy;
-  readonly readApprovalMode?: () => ApprovalMode;
-  readonly getToolGovernance: () => ToolGovernance;
-  readonly setAllowedTools: (names: readonly string[]) => void;
-  readonly describeConfiguration: AgentToolControl['describeConfiguration'];
-  /**
-   * The mutable editor-callbacks holder shared with the scheduler factory so
-   * `setEditorCallbacks` is observable by the next turn's scheduler.
-   */
-  readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
-  /**
-   * The mutable display-callbacks holder shared with the scheduler factory so
-   * `setDisplayCallbacks` is observable by the CURRENT loop's turn (and
-   * survives loop rebuilds via the stable forwarding object).
-   */
-  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
-  /**
-   * Resolves the live AgentClient (for recordCompletedToolCalls). Never cached.
-   */
-  readonly resolveClient: () => AgentClientContract;
-  // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
-  /** The deps bundle for the constructed ToolKeysControl. */
-  readonly keysDeps: ToolKeysControlDeps;
-}
 
 type ConfirmationCallback = (req: ToolConfirmation) => void;
 type ToolUpdateCallback = (u: ToolUpdate) => void;
@@ -173,26 +127,18 @@ export class ToolControl implements AgentToolControl {
     onComplete?: (calls: CompletedToolCall[]) => void | Promise<void>,
   ): ReturnType<AgentToolControl['openClientChannel']> {
     if (this.disposal) throw new Error('Agent tools disposed');
-    const channel = createClientToolChannel(
-      this.deps.config,
-      this.deps.messageBus,
-      () => this.deps.editorCallbacksHolder.editorCallbacks,
+    const channel = this.openClientToolChannel(
+      () => this.editorCallbacksHolder.editorCallbacks,
       async (calls) => {
         this.recordCompletedToolCalls(calls);
         await onComplete?.(calls);
       },
-      this.deps.selection,
-      this.deps.schedulerFactory,
-      this.deps.readExecutionPolicy,
-      this.deps.getToolGovernance,
-      this.deps.readApprovalMode,
-      this.deps.telemetry,
     );
     this.clientChannels.add(channel);
     return {
       ...channel,
       schedule: async (request, signal) => {
-        this.deps.assertSessionAdmission?.();
+        this.assertSessionAdmission?.();
         this.pendingClientWork++;
         try {
           await channel.schedule(request, signal);
@@ -227,9 +173,30 @@ export class ToolControl implements AgentToolControl {
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
   readonly keys: AgentToolKeyControl;
 
-  constructor(private readonly deps: ToolControlDeps) {
-    this.childDisplay = deps.childDisplay ?? new ChildToolDisplay();
-    this.keys = new ToolKeysControl(deps.keysDeps);
+  constructor(
+    private readonly openClientToolChannel: (
+      readEditor: () => EditorCallbacks,
+      onComplete: (calls: CompletedToolCall[]) => void | Promise<void>,
+    ) => ReturnType<typeof createClientToolChannel>,
+    private readonly assertSessionAdmission: (() => void) | undefined,
+    private readonly taskLaunchOwner: TaskLaunchOwner | undefined,
+    private readonly shellOwner: ShellJobOwner,
+    childDisplay: ChildToolDisplay | undefined,
+    private readonly messageBus: MessageBus,
+    private readonly selection: ToolSelection,
+    private readonly setAllowedTools: (names: readonly string[]) => void,
+    private readonly describeToolConfiguration: AgentToolControl['describeConfiguration'],
+    private readonly editorCallbacksHolder: {
+      editorCallbacks: EditorCallbacks;
+    },
+    private readonly displayCallbacksHolder: StableDisplayCallbacksHolder,
+    private readonly recordCompletions: (
+      completed: readonly CompletedToolCall[],
+    ) => void,
+    keys: AgentToolKeyControl,
+  ) {
+    this.childDisplay = childDisplay ?? new ChildToolDisplay();
+    this.keys = keys;
   }
 
   /**
@@ -248,11 +215,11 @@ export class ToolControl implements AgentToolControl {
   describeConfiguration(): ReturnType<
     AgentToolControl['describeConfiguration']
   > {
-    return this.deps.describeConfiguration();
+    return this.describeToolConfiguration();
   }
 
   list(): readonly ToolInfo[] {
-    const registry = this.deps.selection;
+    const registry = this.selection;
     const allTools = registry.getAllTools().map((t) =>
       projectRegistryTool({
         name: t.name,
@@ -279,12 +246,12 @@ export class ToolControl implements AgentToolControl {
    * @plan:ISSUE-2376
    */
   get(name: string): AgentToolHandle | undefined {
-    const registry = this.deps.selection;
+    const registry = this.selection;
     const tool = bindChildToolRegistry(
       registry,
       this.childDisplay,
-      this.deps.taskLaunchOwner,
-      this.deps.shellOwner,
+      this.taskLaunchOwner,
+      this.shellOwner,
     ).getTool(name);
     if (tool === undefined) {
       return undefined;
@@ -301,7 +268,7 @@ export class ToolControl implements AgentToolControl {
    * @requirement:REQ-006
    */
   async setEnabled(names: readonly string[]): Promise<void> {
-    this.deps.setAllowedTools(names);
+    this.setAllowedTools(names);
   }
 
   /**
@@ -342,7 +309,7 @@ export class ToolControl implements AgentToolControl {
     if (!this.seen.has(confirmationId)) {
       throw new ToolControlError('unknown confirmationId: ' + confirmationId);
     }
-    this.deps.messageBus.respondToConfirmation(
+    this.messageBus.respondToConfirmation(
       confirmationId,
       decision,
       payload,
@@ -377,7 +344,7 @@ export class ToolControl implements AgentToolControl {
    * @requirement:REQ-006
    */
   setEditorCallbacks(cbs: EditorCallbacks): void {
-    this.deps.editorCallbacksHolder.editorCallbacks = cbs;
+    this.editorCallbacksHolder.editorCallbacks = cbs;
   }
 
   /**
@@ -388,10 +355,9 @@ export class ToolControl implements AgentToolControl {
    * REPLACES previously registered display callbacks (no merge).
    */
   setDisplayCallbacks(cbs: AgentDisplayCallbacks): void {
-    this.deps.displayCallbacksHolder.onToolCallsUpdate = cbs.onToolCallsUpdate;
-    this.deps.displayCallbacksHolder.outputUpdateHandler =
-      cbs.outputUpdateHandler;
-    this.deps.displayCallbacksHolder.onAllToolCallsComplete =
+    this.displayCallbacksHolder.onToolCallsUpdate = cbs.onToolCallsUpdate;
+    this.displayCallbacksHolder.outputUpdateHandler = cbs.outputUpdateHandler;
+    this.displayCallbacksHolder.onAllToolCallsComplete =
       cbs.onAllToolCallsComplete;
   }
 
@@ -403,10 +369,7 @@ export class ToolControl implements AgentToolControl {
    */
   recordCompletedToolCalls(completed: readonly CompletedToolCall[]): void {
     try {
-      const client = this.deps.resolveClient();
-      const model =
-        client.getCurrentSequenceModel() ?? this.deps.config.getModel();
-      client.getChat().recordCompletedToolCalls(model, [...completed]);
+      this.recordCompletions(completed);
     } catch (error) {
       // History persistence is best-effort.
       logger.debug(

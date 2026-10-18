@@ -194,18 +194,29 @@ async function withSharedConfig(
   const workspace = await createWorkspace(config);
   let agents: readonly Agent[] = [];
   const adopt = async (settings: SettingsService): Promise<Agent> => {
-    const options = {
-      config,
-      mcpRuntime: workspace,
-      settingsService: settings,
-      sessionId: 'same-settings-owner-label',
-      activation: {
-        provider: 'openai',
-        model: 'settings-model',
-        cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
-      },
+    const optionsConfig: Parameters<typeof fromConfig>[0] = config;
+    const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = workspace;
+    const optionsSettingsService: Parameters<typeof fromConfig>[1] = settings;
+    const optionsSessionId: NonNullable<
+      Parameters<typeof fromConfig>[2]
+    >['sessionId'] = 'same-settings-owner-label';
+    const optionsActivation: NonNullable<
+      Parameters<typeof fromConfig>[2]
+    >['activation'] = {
+      provider: 'openai',
+      model: 'settings-model',
+      cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
     };
-    const agent = await fromConfig(options);
+    const agent = await fromConfig(
+      optionsConfig,
+      optionsSettingsService,
+      { sessionId: optionsSessionId, activation: optionsActivation },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      optionsMcpRuntime,
+    );
     agents = [...agents, agent];
     return agent;
   };

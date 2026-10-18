@@ -1,3 +1,4 @@
+import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,10 +40,7 @@ import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { switchActiveProvider } from './provider-switch/provider-switch.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
-import {
-  AgentActivationBootstrap,
-  type AgentActivationOperation,
-} from './activationPreflightState.js';
+import { AgentActivationBootstrap } from './activationPreflightState.js';
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 
@@ -238,7 +236,7 @@ export async function assembleAgentActivationBootstrap(
   providerFileLifecycle?: ProviderFileLifecycle,
   messageBus?: ConstructorParameters<typeof SessionClientOwner>[11],
   memoryOwnership: 'borrowed' | 'transferred' = 'borrowed',
-): Promise<AgentActivationOperation> {
+): Promise<AgentActivationBootstrap> {
   const release = new AcquisitionRelease();
   try {
     return await prepareActivationOwner(
@@ -300,7 +298,7 @@ async function completeActivationAcquisition(
   bus: ConstructorParameters<typeof SessionClientOwner>[11],
   memoryOwnership: 'borrowed' | 'transferred',
   release: AcquisitionRelease,
-): Promise<AgentActivationOperation> {
+): Promise<AgentActivationBootstrap> {
   const factoriesTokenizer = configureProviderTokenizer(manager, tokenizer);
   const factoriesContent = content ?? createRuntimeContentGeneratorFactory();
   const client = await SessionClientOwner.create(
@@ -318,6 +316,7 @@ async function completeActivationAcquisition(
     bus,
   );
   release.acquire('manager', () => client.dispose());
+  const selectedFiles = acquireActivationFiles(files, config.getProxy());
   const execute = bindActivationClient(
     client,
     config,
@@ -328,7 +327,7 @@ async function completeActivationAcquisition(
     memory,
     owner,
     mcp,
-    files,
+    selectedFiles,
     readKind,
   );
   if (providerLifetime !== 'borrowed')
@@ -337,6 +336,7 @@ async function completeActivationAcquisition(
     config,
     manager,
     execute,
+    selectedFiles,
     media,
     client,
     filesystem,
@@ -381,7 +381,7 @@ function bindActivationClient(
   memory: WorkspaceMemoryOwner,
   owner: SessionSettingsOwner,
   mcpRuntime: McpRuntimeOwner | undefined,
-  providerFileLifecycle: ProviderFileLifecycle | undefined,
+  providerFileLifecycle: ProviderFileLifecycle,
   readKind: () => RuntimeKind | undefined,
 ): ReturnType<typeof assembleActivationExecutor> {
   assembleSessionImages(
@@ -459,7 +459,7 @@ async function prepareActivationOwner(
   content: SessionClientOwner['contentGeneratorFactory'] | undefined,
   files: ProviderFileLifecycle | undefined,
   bus: ConstructorParameters<typeof SessionClientOwner>[11],
-): Promise<AgentActivationOperation> {
+): Promise<AgentActivationBootstrap> {
   client?.assertConfig(config);
   client?.assertProviderManager(manager);
   const { ownedTrust, workspaceTrust } = resolveActivationTrust(
@@ -526,7 +526,7 @@ async function completeWorkspaceActivation(
   content: SessionClientOwner['contentGeneratorFactory'] | undefined,
   files: ProviderFileLifecycle | undefined,
   bus: ConstructorParameters<typeof SessionClientOwner>[11],
-): Promise<AgentActivationOperation> {
+): Promise<AgentActivationBootstrap> {
   const workspaceFilesystem = acquireActivationFilesystem(
     config,
     mcp,
@@ -602,19 +602,16 @@ function bindActivationCapabilities(
     | 'bindDefinitionReads'
     | 'bindWorkspaceInstructions'
   >,
-  providerFileLifecycle: ProviderFileLifecycle | undefined,
+  files: ProviderFileLifecycle,
   oauth: OAuthManager | null,
   workspaceDefinitions: WorkspaceDefinitionOwner,
   workspaceMemory: WorkspaceMemoryOwner,
   mcpRuntime: McpRuntimeOwner | undefined,
 ): void {
-  const files =
-    providerFileLifecycle ??
-    new ProviderFileLifecycle({ maxFiles: 100, maxBytes: 512 * 1024 * 1024 });
   sessionClient.bindProviderFiles(
     files,
     (provider) => oauth?.composeRetryOperations(provider) ?? {},
-    (scope) => SessionClientOwner.cleanupProviderScope(files, scope),
+    (scope) => cleanupProviderScope(files, scope),
   );
   if (mcpRuntime !== undefined) {
     sessionClient.bindMcpRuntime(mcpRuntime);
@@ -678,4 +675,18 @@ function defaultSettingsOwnership(
   owner: SessionSettingsOwner | undefined,
 ): 'borrowed' | 'transferred' {
   return owner === undefined ? 'transferred' : 'borrowed';
+}
+
+function acquireActivationFiles(
+  supplied: ProviderFileLifecycle | undefined,
+  proxy: string | undefined,
+): ProviderFileLifecycle {
+  return (
+    supplied ??
+    new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+      proxy,
+    })
+  );
 }

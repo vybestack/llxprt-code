@@ -24,15 +24,14 @@ async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
       args[3],
       args[4],
       args[5],
-      {
-        ...args[6],
-        credentialAuthority: new CredentialAuthority(),
-        settingsService: store,
-        sessionSettingsOwner: settingsOwner,
-        onActivationBootstrapReady: (operation) => {
-          operation.takeSettingsOwner(store);
-          retainedActivationOperations.push(operation);
-        },
+      undefined,
+      store,
+      settingsOwner,
+      new CredentialAuthority(),
+      undefined,
+      (operation) => {
+        operation.takeSettingsOwner(store);
+        retainedActivationOperations.push(operation);
       },
     );
     const root = { config, settingsOwner };

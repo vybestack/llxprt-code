@@ -231,15 +231,39 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
 
     try {
       const config = builtCallerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: builtCallerMcp,
-        onApproval: () => ToolConfirmationOutcome.ProceedOnce,
-      });
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => ToolConfirmationOutcome.ProceedOnce,
+      );
       return await withFixtureAgent(agent, async () => {
         // REQ-INT-001: the adopted Config is the SAME instance.
         expect(internalConfig(agent)).toBe(config);

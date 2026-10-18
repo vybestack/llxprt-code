@@ -18,7 +18,7 @@ import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.j
 
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
+import { discoverProviderBuckets } from '@vybestack/llxprt-code-agents';
 
 const optionalOAuthManagerMock = vi.fn();
 

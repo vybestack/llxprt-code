@@ -3,10 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 import {
-  type SessionSettingsOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
@@ -29,11 +27,7 @@ import {
   type ValidatedNonInteractiveRun,
 } from '../session/nonInteractiveSession.js';
 export interface SessionDispatchOptions {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -70,7 +64,6 @@ export function createSessionDispatch(
       recordingOwner,
       workspaceRoot,
       resumedHistory,
-      oauthManager,
       skillOperations,
       restartExtension,
       suppressStartupWelcome,
@@ -93,7 +86,6 @@ export function createSessionDispatch(
           workspaceRoot,
           {
             recordingOwner: 'agent',
-            oauthManager,
             runtimeSettings,
             skillOperations,
             restartExtension,
@@ -109,11 +101,11 @@ export function createSessionDispatch(
           initialInput,
           options.hasPipedInput,
           options.readStdinData,
-          () => validateRun(config, agent, settings, runtimeSettings.owner),
+          () => validateRun(config, agent, settings, runtimeSettings),
           agent.hooks.triggerSessionStart.bind(agent.hooks),
           agent.hooks.triggerSessionEnd.bind(agent.hooks),
           (error) => reportNonInteractiveError(config, error),
-          () => runtimeSettings.owner.telemetry.flush(),
+          () => runtimeSettings.flushTelemetry(),
         ),
     );
   };
@@ -122,7 +114,7 @@ async function validateRun(
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
-  owner: SessionSettingsOwner,
+  owner: SessionSettingsOperations,
 ): Promise<ValidatedNonInteractiveRun> {
   const validated = await validateNonInteractiveAuth(
     settings.merged.useExternalAuth,
@@ -134,7 +126,7 @@ async function validateRun(
   );
   return {
     run: captureNonInteractiveRun(validated, agent, true, () =>
-      owner.telemetry.flush(),
+      owner.flushTelemetry(),
     ),
     report: (error) => reportNonInteractiveError(validated, error),
   };

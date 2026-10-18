@@ -8,19 +8,12 @@ import type { Agent } from './helpers/agentHarness.js';
 
 function activationSettings(agent: Agent): SettingsService {
   if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
+    !('settingsService' in agent) ||
+    !(agent.settingsService instanceof SettingsService)
   ) {
     throw new Error('Expected the actual adopted activation store');
   }
-  if (
-    !('settingsService' in agent.deps) ||
-    !(agent.deps.settingsService instanceof SettingsService)
-  ) {
-    throw new Error('Expected the actual adopted activation store');
-  }
-  return agent.deps.settingsService;
+  return agent.settingsService;
 }
 
 import { describe, expect, it } from 'bun:test';

@@ -1,3 +1,4 @@
+import type { AgentSessionAuthentication } from './control/session-authentication.js';
 import type { AgentProviderFileOperations } from './provider-file-domain.js';
 import type { AgentModelParametersControl } from './model-parameters.js';
 import type { AgentSettingsControl } from './control/settings-control.js';
@@ -77,9 +78,9 @@ import type {
   ToolUpdate,
 } from './event-types.js';
 
-import type { SessionStats } from './agentMetrics.js';
+import type { SessionStats, CompressionResult } from './agentMetrics.js';
 import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
-export type { SessionStats } from './agentMetrics.js';
+export type { SessionStats, CompressionResult } from './agentMetrics.js';
 
 export type Unsubscribe = () => void;
 
@@ -136,13 +137,6 @@ export interface AgentResult {
   readonly finishReason: DoneReason;
   readonly error?: AgentError;
   readonly usage?: SessionStats;
-}
-
-export interface CompressionResult {
-  readonly status: 'compressed' | 'skipped' | 'failed' | 'noop';
-  readonly originalTokenCount?: number;
-  readonly newTokenCount?: number;
-  readonly promptId?: string;
 }
 
 export interface ProviderInfo {
@@ -1175,6 +1169,7 @@ export interface Agent extends AgentProviderFileOperations {
   readonly tools: AgentToolControl;
   readonly mcp: AgentMcpControl;
   readonly auth: AgentAuthControl;
+  readonly authentication: AgentSessionAuthentication;
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
   readonly metrics: SessionMetricOperations;

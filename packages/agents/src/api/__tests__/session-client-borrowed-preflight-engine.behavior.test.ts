@@ -322,14 +322,18 @@ describe('Explicit session client lifetime', () => {
 
     try {
       await expect(
-        fromConfig({
-          settingsService: rightSettings,
-          config: rightConfig,
-          providerManager: rightManager,
-          messageBus: rightMessageBus,
-          mcpRuntime: rightMcp,
-          agentClient: leftOwner.getAgentClient(),
-        }),
+        fromConfig(
+          rightConfig,
+          rightSettings,
+          {},
+          undefined,
+          rightManager,
+          undefined,
+          rightMessageBus,
+          rightMcp,
+          undefined,
+          leftOwner.getAgentClient(),
+        ),
       ).rejects.toThrow(/different Config/i);
     } finally {
       await rightClose();
@@ -486,16 +490,18 @@ describe('Explicit session client lifetime', () => {
       const result = await operation.preflight(intent);
       if (result.token === undefined)
         throw new Error('Missing preflight receipt');
-      const agent = await fromConfig({
-        settingsService: builtSettings,
-        config: builtConfig,
-        providerManager: builtManager,
-        messageBus: builtMessageBus,
-        mcpRuntime: builtMcp,
-        agentClient: client,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
+      const agent = await fromConfig(
+        builtConfig,
+        builtSettings,
+        { activation: intent },
+        undefined,
+        builtManager,
+        undefined,
+        builtMessageBus,
+        builtMcp,
+        { operation, token: result.token },
+        client,
+      );
       try {
         expect(agent.agentClient).toBe(client);
         expect(agent.agentClient).toBe(

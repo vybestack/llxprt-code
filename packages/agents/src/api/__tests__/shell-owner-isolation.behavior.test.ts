@@ -270,16 +270,16 @@ describe('Public Agent managed shell ownership (#2616)', () => {
       const busSubscriptions: Array<() => void> = [];
       unsubscribe = () => busSubscriptions.forEach((stop) => stop());
       async function facade(): Promise<Agent> {
-        const agent = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          providerManager: builtCallerManager,
-          sessionId: 'shell-owner-same-label',
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          mcpOwnership: 'caller',
-          messageBus: builtCallerPolicy.session.messageBus,
-        });
+        const agent = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { sessionId: 'shell-owner-same-label', mcpOwnership: 'caller' },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+        );
 
         agents.push(agent);
         expect(agent.getMessageBus()).not.toBe(
@@ -686,16 +686,18 @@ describe('Public Agent managed shell ownership (#2616)', () => {
       );
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        mcpOwnership: 'caller',
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { mcpOwnership: 'caller' },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       const shell = agent.tools.get('run_shell_command');
       if (!shell) throw new Error('Missing public Agent shell tool');
       const marker = join(root, 'descendant.marker');

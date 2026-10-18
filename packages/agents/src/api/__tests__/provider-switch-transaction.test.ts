@@ -497,24 +497,30 @@ describe('provider switch transaction ownership', () => {
     await opensecondCaller('multi-turn-text.jsonl');
     firstCallerConfig.adoptSessionId('same-label');
     secondCallerConfig.adoptSessionId('same-label');
-    const a = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      agentClient: firstCallerOwner.getAgentClient(),
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      mcpRuntime: firstCallerMcp,
-      messageBus: firstCallerPolicy.session.messageBus,
-    });
-    const b = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      agentClient: secondCallerOwner.getAgentClient(),
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      mcpRuntime: secondCallerMcp,
-      messageBus: secondCallerPolicy.session.messageBus,
-    });
+    const a = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      {},
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+      undefined,
+      firstCallerOwner.getAgentClient(),
+    );
+    const b = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      {},
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+      undefined,
+      secondCallerOwner.getAgentClient(),
+    );
     const managerA = firstCallerManager;
     const managerB = secondCallerManager;
 

@@ -76,6 +76,7 @@ export function normalizeRuntimeInputs(
     metadata,
     invocation: createRuntimeInvocationContext({
       runtimeId: invocation.runtimeId,
+      fetch: invocation.fetch,
       sessionId: invocation.sessionId,
       providerName: targetProvider,
       ephemeralsSnapshot: invocation.ephemerals,

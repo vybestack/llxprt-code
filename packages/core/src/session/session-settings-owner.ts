@@ -4,6 +4,10 @@ import {
   UiTelemetryService,
   logCliConfiguration,
   StartSessionEvent,
+  logUserPrompt,
+  logSlashCommand,
+  type UserPromptEvent,
+  type SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
 import type { TelemetrySettings } from '../config/config.js';
 import type { Config } from '../config/config.js';
@@ -162,6 +166,29 @@ export class SessionSettingsOwner {
         );
       });
     return this.telemetryStarted;
+  }
+
+  logUserPrompt(
+    config: Parameters<typeof logUserPrompt>[0],
+    event: UserPromptEvent,
+  ): void {
+    logUserPrompt(config, event, this.telemetry);
+  }
+  logSlashCommand(
+    config: Parameters<typeof logSlashCommand>[0],
+    event: SlashCommandEvent,
+  ): void {
+    logSlashCommand(config, event, this.telemetry);
+  }
+  isTelemetryEnabled(): boolean {
+    return this.telemetry.isEnabled();
+  }
+  flushTelemetry(): Promise<void> {
+    return this.telemetry.flush();
+  }
+  readDefaultProfileName(): string | null {
+    const name = this.settings.get('defaultProfile');
+    return typeof name === 'string' ? name : null;
   }
 
   readTelemetrySettings(): TelemetrySettings {

@@ -103,23 +103,31 @@ export function projectCompressionResult(
   promptId: string,
   originalTokenCount: number,
   newTokenCount: number,
+  wasRecentlyCompressed: boolean,
 ): CompressionResult {
+  const detail = {
+    result: raw,
+    originalTokenCount,
+    newTokenCount,
+    wasRecentlyCompressed,
+  };
   if (raw === PerformCompressionResult.COMPRESSED) {
     return {
       status: 'compressed',
       originalTokenCount: Math.max(originalTokenCount, newTokenCount),
       newTokenCount,
       promptId,
+      detail,
     };
   }
   if (raw === PerformCompressionResult.NOOP) {
     // Structural no-op: history unchanged by a deterministic strategy guard.
     // Distinct from 'skipped' (cooldown/empty) per issue #2602.
-    return { status: 'noop', promptId };
+    return { status: 'noop', promptId, detail };
   }
   const status: 'skipped' | 'failed' =
     raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped';
-  return { status, promptId };
+  return { status, promptId, detail };
 }
 /**
  * Reads the conversation turn/message count from the HistoryService. Returns 0

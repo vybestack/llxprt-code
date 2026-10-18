@@ -147,10 +147,18 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, cwd: string = process.cwd()) {
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', argv, cwd, {
-    credentialAuthority: new CredentialAuthority(),
-    settingsService: runtimeSettingsService,
-  });
+  return loadCliConfig(
+    settings,
+    [],
+    makeExtMgr(),
+    'test-session',
+    argv,
+    cwd,
+    undefined,
+    runtimeSettingsService,
+    undefined,
+    new CredentialAuthority(),
+  );
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────

@@ -261,20 +261,30 @@ describe('preflight adoption boundaries', () => {
     try {
       const result = await built_operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
-      const options = {
-        settingsService: built_builtCallerSettings,
-        config: built_builtCallerConfig,
-        mcpRuntime: built_builtCallerMcp,
-        activation: intent,
-        activationPreflight: {
-          operation: built_operation,
-          token: result.token,
-        },
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        built_builtCallerSettings;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        built_builtCallerMcp;
+      const optionsActivation: NonNullable<
+        Parameters<typeof fromConfig>[2]
+      >['activation'] = intent;
+      const optionsActivationPreflight: Parameters<typeof fromConfig>[8] = {
+        operation: built_operation,
+        token: result.token,
       };
-      Reflect.deleteProperty(options, 'config');
-      await expect(fromConfig(options)).rejects.toThrow(
-        'requires an existing Config',
-      );
+      await expect(
+        fromConfig(
+          undefined as never,
+          optionsSettingsService,
+          { activation: optionsActivation },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          optionsMcpRuntime,
+          optionsActivationPreflight,
+        ),
+      ).rejects.toThrow('requires an existing Config');
       expect((await built_operation.preflight(intent)).authFailed).toBe(true);
     } finally {
       await built_operation.dispose();

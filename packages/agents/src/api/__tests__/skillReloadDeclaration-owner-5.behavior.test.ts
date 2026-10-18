@@ -356,14 +356,18 @@ describe('workspace skill root lifetime @issue:2615', () => {
 
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        agentClient: builtCallerOwner.getAgentClient(),
-        mcpRuntime: builtCallerMcp,
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       await settle(agent);
       const loader = builtCallerMcp.extensionOperations;
       const extension = {

@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * Behavioral tests for the production guard helper (#2481) and capability
  * consumption ordering (#1954 AC4/AC5). Exercises the REAL guard helper and
@@ -19,7 +19,7 @@ import {
   afterEach,
   mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { makeConfig } from './__tests__/startup-config-fixture.js';
 import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
 const makeStartupOwner = installCommandOwners();
@@ -33,7 +33,7 @@ import * as credentialModule from '@vybestack/llxprt-code-providers/auth.js';
 import fs from 'node:fs';
 const credentialExports = { ...credentialModule };
 import { installDefinitionRuntimeFixture } from './__tests__/definition-runtime-fixture.js';
-const definitionFixture = installDefinitionRuntimeFixture();
+installDefinitionRuntimeFixture();
 import {
   guardUnconfiguredProvider,
   UNCONFIGURED_PROVIDER_MESSAGE,
@@ -57,18 +57,28 @@ type ZedIntegrationCall = {
 };
 
 /** The contributions `bootstrapRuntimeAndConfig` reports as already loaded. */
-const loadedProviderContributions = Object.freeze({ loaded: 'by-cli' });
+const loadedProviderContributions = buildProviderContributionRegistry([]);
 /** The OAuth settings surface the CLI's own provider manager is built with. */
 const cliOAuthSettings = Object.freeze({ source: 'cli-adapter' });
 const zedIntegrationCalls: ZedIntegrationCall[] = [];
 
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliProviderInit.js', () => ({
-    activateConfiguredProvider: async () => {
+    activateConfiguredProvider: async (
+      _config: unknown,
+      _manager: unknown,
+      _argv: unknown,
+      operation: {
+        preflight(intent: {
+          authMode: 'none';
+        }): Promise<{ token?: object; authFailed: boolean }>;
+      },
+    ) => {
       callOrder.push('activation');
-      return { authFailed: false, token: undefined, intent: undefined };
+      const intent = { authMode: 'none' } as const;
+      return { ...(await operation.preflight(intent)), intent };
     },
-    configureProvidersAndServices: async (...args: unknown[]) => args[5],
+    configureProvidersAndServices: async () => {},
     connectIdeClientIfEnabled: async () => {},
     ensureAcpProviderActivated: () => {
       callOrder.push('acp-activated');
@@ -82,19 +92,30 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     prepareTerminalSession: async () => {},
   }));
   void mock.module('./cliSessionBootstrap.js', () => ({
-    bootstrapRuntimeAndConfig: async () => ({
-      config,
-      providerManager: {
-        hasActiveProvider: () => config.getProvider() !== undefined,
-      },
-      runtimeSettingsService: {},
-      profileApplication: {},
+    discoverCliProviderContributions: async () => ({
       providerContributions: loadedProviderContributions,
-      activationOperation: {
-        dispose: () => {},
-        workspaceDefinitions: definitionFixture().definitionOwner,
-      },
+      authFactories: new Map(),
     }),
+    bootstrapRuntimeAndConfig: async (
+      _settings: unknown,
+      _argv: unknown,
+      _root: unknown,
+      _authority: unknown,
+      preflight: {
+        hasActiveProvider(): boolean;
+        prepareConfiguredWorkspace(
+          config: Config,
+          before: () => void,
+        ): Promise<void>;
+      },
+    ) => {
+      if (config instanceof Config)
+        await preflight.prepareConfiguredWorkspace(config, () => {});
+      vi.spyOn(preflight, 'hasActiveProvider').mockImplementation(
+        () => config.getProvider() !== undefined,
+      );
+      return config;
+    },
     setupSessionRecording: async () => undefined,
     setupOwnerSessionRecording: async () => null,
   }));
@@ -119,6 +140,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     },
   }));
   void mock.module('./cliBootstrap.js', () => ({
+    captureBootstrapEnvPath: () => null,
     configureEarlyDebugLogging: () => {},
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
@@ -186,7 +208,9 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     });
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('returns void when a provider is configured', async () => {
     const result = await guardUnconfiguredProvider(
@@ -502,7 +526,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
         token: undefined,
         intent: undefined,
       }),
-      configureProvidersAndServices: async (...args: unknown[]) => args[5],
+      configureProvidersAndServices: async () => {},
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
     }));
@@ -511,15 +535,11 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       prepareTerminalSession: async () => {},
     }));
     void mock.module('./cliSessionBootstrap.js', () => ({
-      bootstrapRuntimeAndConfig: async () => ({
-        config,
-        runtimeSettingsService: {},
-        profileApplication: {},
-        activationOperation: {
-          dispose: () => {},
-          workspaceDefinitions: definitionFixture().definitionOwner,
-        },
+      discoverCliProviderContributions: async () => ({
+        providerContributions: loadedProviderContributions,
+        authFactories: new Map(),
       }),
+      bootstrapRuntimeAndConfig: async () => config,
       setupSessionRecording: async () => undefined,
       setupOwnerSessionRecording: async () => null,
     }));
@@ -547,6 +567,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       }),
     }));
     void mock.module('./cliBootstrap.js', () => ({
+      captureBootstrapEnvPath: () => null,
       configureEarlyDebugLogging: () => {},
       createMemoizedStdinReader: () => async () => '',
       // Track whether the guard is invoked.

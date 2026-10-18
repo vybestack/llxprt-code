@@ -612,15 +612,16 @@ describe('session-owned model notifications', () => {
         bCallerConfig.getTargetDir(),
       ),
     );
-    const agentB = await fromConfig({
-      config: bCallerConfig,
-      settingsOwner: bCallerSettingsOwner,
-      settingsService: bCallerSettings,
-      providerManager: bCallerManager,
-      oauthManager: bProfileOAuth,
-      mcpRuntime: bCallerMcp,
-      messageBus: bCallerPolicy.session.messageBus,
-    });
+    const agentB = await fromConfig(
+      bCallerConfig,
+      bCallerSettings,
+      {},
+      bCallerSettingsOwner,
+      bCallerManager,
+      bProfileOAuth,
+      bCallerPolicy.session.messageBus,
+      bCallerMcp,
+    );
     await agentB.agentClient.startChat();
     const chat = agentB.agentClient.getChat();
     const model = bCallerSettingsOwner.readSelectedModel();

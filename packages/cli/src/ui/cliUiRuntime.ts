@@ -1,3 +1,5 @@
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { createKeyCommandReads } from './commands/key-completion-owner.js';
 import type {
@@ -5,7 +7,7 @@ import type {
   SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
 import { buildSettingsRuntime } from '../runtime/createRuntimeOwnerFeatures.js';
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -34,7 +36,7 @@ import type {
   ShellReplacementMode,
   TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import {
   readGitHubCompletionReport,
@@ -755,7 +757,7 @@ function buildStreamWorkspaceRuntime(
   > & {
     mcp: McpUiSelection;
   },
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): Omit<StreamRuntime, 'agentClientSource'> {
   return {
     session: buildSessionRuntime(source),
@@ -801,7 +803,7 @@ function buildUiWorkspaceRuntime(
       tools: Pick<Agent['tools'], 'get'>;
     },
   bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): Omit<UiRuntime, 'agentClientSource'> {
   return {
     ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
@@ -876,7 +878,7 @@ export function buildUiRuntimeFromSource(
     mcp: McpUiSelection;
   },
   bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): UiRuntime {
   return {
     ...buildUiWorkspaceRuntime(
@@ -919,7 +921,7 @@ export function buildSlashCommandRuntime(
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >,
   restartExtension?: (extension: LlxprtExtension) => Promise<void>,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): CliUiRuntime {
   // Non-slice members must be destructured out and re-attached explicitly.
   // The spread below only flattens capability SLICE OBJECTS; a member whose

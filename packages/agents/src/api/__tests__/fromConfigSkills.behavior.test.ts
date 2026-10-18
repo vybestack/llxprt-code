@@ -354,14 +354,18 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
     });
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       for await (const _event of agent.stream('hello')) {
         // Drain the turn so the chat session and its tool list exist.
       }

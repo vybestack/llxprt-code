@@ -236,15 +236,35 @@ describe('UI session client ownership', () => {
     if (address === null || typeof address === 'string')
       throw new Error('Missing completion server');
     const endpoint = `http://127.0.0.1:${address.port}`;
-    const agent = await fromConfig({
-      config: fixtureConfig,
-      settingsService: fixtureSettings,
-      settingsOwner: fixtureSettingsOwner,
-      providerManager: fixtureManager,
-      messageBus: fixtureMessageBus,
-      mcpRuntime: fixtureMcp,
-      agentClient: fixtureOwner.getAgentClient(),
-      githubBrokerClient: {
+    const agent = await fromConfig(
+      fixtureConfig,
+      fixtureSettings,
+      {},
+      fixtureSettingsOwner,
+      fixtureManager,
+      undefined,
+      fixtureMessageBus,
+      fixtureMcp,
+      undefined,
+      fixtureOwner.getAgentClient(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
         runOperation: async (op, params, signal) => {
           const response = await fetch(endpoint, {
             method: 'POST',
@@ -255,7 +275,7 @@ describe('UI session client ownership', () => {
           return z.record(z.unknown()).parse(input);
         },
       },
-    });
+    );
     try {
       const runtime = buildUiRuntimeFromSource(fixtureConfig, agent);
       const reads = runtime.app.githubCompletion;
@@ -443,15 +463,18 @@ describe('UI session client ownership', () => {
       await cleanupAfterFailure(primary, fixtureClose);
     }
 
-    const agent = await fromConfig({
-      settingsService: fixtureSettings,
-      settingsOwner: fixtureSettingsOwner,
-      config: fixtureConfig,
-      providerManager: fixtureManager,
-      messageBus: fixtureMessageBus,
-      mcpRuntime: fixtureMcp,
-      agentClient: fixtureOwner.getAgentClient(),
-    });
+    const agent = await fromConfig(
+      fixtureConfig,
+      fixtureSettings,
+      {},
+      fixtureSettingsOwner,
+      fixtureManager,
+      undefined,
+      fixtureMessageBus,
+      fixtureMcp,
+      undefined,
+      fixtureOwner.getAgentClient(),
+    );
     try {
       const ui = buildUiRuntimeFromSource(fixtureConfig, agent);
       const workspace = buildSlashCommandRuntime(fixtureConfig, agent);
@@ -644,15 +667,18 @@ describe('UI session client ownership', () => {
     }
 
     try {
-      const agent = await fromConfig({
-        config: fixtureConfig,
-        settingsService: fixtureSettings,
-        settingsOwner: fixtureSettingsOwner,
-        providerManager: fixtureManager,
-        messageBus: fixtureMessageBus,
-        mcpRuntime: fixtureMcp,
-        agentClient: fixtureOwner.getAgentClient(),
-      });
+      const agent = await fromConfig(
+        fixtureConfig,
+        fixtureSettings,
+        {},
+        fixtureSettingsOwner,
+        fixtureManager,
+        undefined,
+        fixtureMessageBus,
+        fixtureMcp,
+        undefined,
+        fixtureOwner.getAgentClient(),
+      );
       const ui = buildUiRuntimeFromSource(fixtureConfig, agent);
       const detached = await ui.agentClientSource.createDetachedAgentClient?.();
       expect(detached).toBeDefined();

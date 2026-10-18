@@ -223,6 +223,7 @@ function createNormalizedInvocation(
     const providedSignal = extractLegacySignal(providedInvocation);
     return createRuntimeInvocationContext({
       runtimeId: providedInvocation.runtimeId,
+      fetch: providedInvocation.fetch,
       sessionId: providedInvocation.sessionId,
       runtimeMetadata: input.runtimeMetadata,
       modelParams: input.modelParams,

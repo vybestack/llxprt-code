@@ -1,4 +1,4 @@
-import { resolveActiveProviderForAlias } from '../../runtime/providerInspection.js';
+import { resolveActiveProviderForAlias } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

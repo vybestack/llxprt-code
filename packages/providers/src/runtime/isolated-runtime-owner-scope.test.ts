@@ -74,24 +74,46 @@ describe('isolated runtime owner activation', () => {
   }
 
   async function openFirst(runtimeId: string | undefined): Promise<void> {
-    first = await fromConfig({
-      config: firstConfig,
-      settingsService: firstSettings,
-      settingsOwner: firstOwner,
-      sessionId: runtimeId,
-      credentialAuthority: credentials().authority,
-    });
+    first = await fromConfig(
+      firstConfig,
+      firstSettings,
+      { sessionId: runtimeId },
+      firstOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentials().authority,
+    );
     const agent = first;
     retiring.push(() => agent.dispose());
   }
   async function openSecond(runtimeId: string | undefined): Promise<void> {
-    second = await fromConfig({
-      config: secondConfig,
-      settingsService: secondSettings,
-      settingsOwner: secondOwner,
-      sessionId: runtimeId,
-      credentialAuthority: credentials().authority,
-    });
+    second = await fromConfig(
+      secondConfig,
+      secondSettings,
+      { sessionId: runtimeId },
+      secondOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentials().authority,
+    );
     const agent = second;
     retiring.push(() => agent.dispose());
   }
@@ -132,18 +154,46 @@ describe('isolated runtime owner activation', () => {
     await openFirst('same-label-abort');
     firstOwner.writeUserParameter('auth-key', 'sibling-credential');
     await expect(
-      fromConfig({
-        config: secondConfig,
-        settingsService: secondSettings,
-        settingsOwner: secondOwner,
-        sessionId: 'same-label-abort',
-        credentialAuthority: credentials().authority,
-        prepareSessionTools: () => {
+      fromConfig(
+        secondConfig,
+        secondSettings,
+        { sessionId: 'same-label-abort' },
+        secondOwner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => {
           const error = new Error('activation aborted');
           error.name = 'AbortError';
           throw error;
         },
-      }),
+      ),
     ).rejects.toThrow('activation aborted');
     expect(firstOwner.readNamedParameter('auth-key')).toBe(
       'sibling-credential',
@@ -159,19 +209,46 @@ describe('isolated runtime owner activation', () => {
       maxBytes: 512 * 1024 * 1024,
     });
     let admittedConfig: Config | undefined;
-    first = await fromConfig({
-      config: firstConfig,
-      settingsService: firstSettings,
-      settingsOwner: firstOwner,
-      sessionId: 'callback-owner',
-      credentialAuthority: credentials().authority,
-      providerFileLifecycle: files,
-      prepareSessionTools: (config) => {
+    first = await fromConfig(
+      firstConfig,
+      firstSettings,
+      { sessionId: 'callback-owner' },
+      firstOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      files,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentials().authority,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (config) => {
         expect(config).toBe(firstConfig);
         admittedConfig = config;
         observed.push('callback-owner');
       },
-    });
+    );
     const agent = first;
     retiring.push(() => agent.dispose());
     const path = join(firstConfig.getTargetDir(), 'remote-owner-file');

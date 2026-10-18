@@ -1,4 +1,7 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import {
+  detectFromProviderConfig,
+  discoverProviderBuckets,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,22 +9,21 @@ import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
  */
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { setGlobal, restoreGlobals } from '@vybestack/llxprt-code-test-utils';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  setSystemTime,
-  type Mock,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+  vi,
+  type Mock,
 } from 'bun:test';
 import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
 
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatDuration } from '../utils/formatters.js';
 
 const oauthManagerMock = vi.fn();

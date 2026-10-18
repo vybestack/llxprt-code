@@ -306,13 +306,16 @@ describe('shared workspace session approval ownership', () => {
       CONFIRMATION_FORCING_SOURCE,
     );
     const adopt = () =>
-      fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        providerManager: builtCallerManager,
-        mcpRuntime: builtCallerMcp,
-      });
+      fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+      );
     const first = await adopt();
     const second = await adopt();
     const signal = new AbortController().signal;

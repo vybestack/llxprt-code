@@ -187,14 +187,18 @@ describe('Explicit session client lifetime', () => {
     }
 
     const client = builtOwner.getAgentClient();
-    const agent = await fromConfig({
-      settingsService: builtSettings,
-      config: builtConfig,
-      providerManager: builtManager,
-      messageBus: builtMessageBus,
-      mcpRuntime: builtMcp,
-      agentClient: client,
-    });
+    const agent = await fromConfig(
+      builtConfig,
+      builtSettings,
+      {},
+      undefined,
+      builtManager,
+      undefined,
+      builtMessageBus,
+      builtMcp,
+      undefined,
+      client,
+    );
     try {
       await agent.setHistory([
         {
@@ -489,14 +493,18 @@ describe('Explicit session client lifetime', () => {
 
     try {
       await expect(
-        fromConfig({
-          settingsService: leftSettings,
-          config: leftConfig,
-          providerManager: rightManager,
-          messageBus: leftMessageBus,
-          mcpRuntime: leftMcp,
-          agentClient: leftOwner.getAgentClient(),
-        }),
+        fromConfig(
+          leftConfig,
+          leftSettings,
+          {},
+          undefined,
+          rightManager,
+          undefined,
+          leftMessageBus,
+          leftMcp,
+          undefined,
+          leftOwner.getAgentClient(),
+        ),
       ).rejects.toThrow(/different ProviderManager/i);
     } finally {
       await rightClose();

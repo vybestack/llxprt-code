@@ -9,7 +9,7 @@ import {
   ExitCodes,
   WorkspaceFilesystemOwner,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 import {
   setTuiOwnsTerminal,
   type CredentialAuthority,
@@ -22,7 +22,7 @@ import {
   computeSandboxMemoryArgs,
   parseDockerMemoryToMB,
 } from './utils/bootstrap.js';
-import { runExitCleanup } from './utils/cleanup.js';
+import { runExitCleanup, registerCleanup } from './utils/cleanup.js';
 import { sessionId } from '@vybestack/llxprt-code-telemetry';
 import { ExtensionStorage } from './config/extension.js';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
@@ -142,7 +142,7 @@ export interface SandboxHopOptions {
   settings: LoadedSettings;
   argv: ParsedCliArgs;
   workspaceRoot: string;
-  runtimeSettingsService: SettingsService;
+  prepareSandboxPreflight: () => Promise<AgentProfilePreflight>;
   credentialAuthority: CredentialAuthority;
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
@@ -169,7 +169,7 @@ export async function maybeHopIntoSandbox(
     settings,
     argv,
     workspaceRoot,
-    runtimeSettingsService,
+    prepareSandboxPreflight,
     initialAuthFailed,
     readStdin: readStdinData,
     hasPipedInput,
@@ -189,6 +189,8 @@ export async function maybeHopIntoSandbox(
   }
 
   const sandboxMemoryArgs = computeSandboxMemoryArgsFromEnv(config, settings);
+  const sandboxPreflight = await prepareSandboxPreflight();
+  registerCleanup(() => sandboxPreflight.dispose());
   const partialConfig = await loadCliConfig(
     settings.merged,
     [],
@@ -196,12 +198,13 @@ export async function maybeHopIntoSandbox(
     sessionId,
     argv,
     workspaceRoot,
-    {
-      settingsService: runtimeSettingsService,
-      credentialAuthority: options.credentialAuthority,
-    },
+    sandboxPreflight,
+    undefined,
+    undefined,
+    options.credentialAuthority,
   );
 
+  await sandboxPreflight.dispose();
   const stdinData = hasPipedInput ? await readStdinData() : '';
   const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
   // Transport the env-origin bootstrap selection into the child argv (without

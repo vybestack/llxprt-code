@@ -8,6 +8,7 @@ import type {
   Agent,
   AgentProfileDefinitions,
   SessionProviderReads,
+  createProviderInspection,
 } from '@vybestack/llxprt-code-agents';
 import type {
   NetworkFetch,
@@ -15,8 +16,6 @@ import type {
   ApiKeyUpdateResult,
   BaseUrlUpdateResult,
 } from '@vybestack/llxprt-code-core';
-import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
-import type { createProviderInspection } from '../../runtime/providerInspection.js';
 
 export type GetActiveProviderDetailsOperation = ReturnType<
   typeof createProviderInspection
@@ -520,7 +519,7 @@ export function useGetDefaultProfileName(): GetDefaultProfileNameOperation {
 }
 
 export type GetOpenAIProviderInfoOperation = () => ReturnType<
-  typeof getOpenAIProviderInfo
+  SessionProviderReads['readOpenAIInfo']
 >;
 const GetOpenAIProviderInfoContext =
   createContext<GetOpenAIProviderInfoOperation | null>(null);

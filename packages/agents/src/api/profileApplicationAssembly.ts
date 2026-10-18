@@ -7,27 +7,21 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import { assembleModelSelection } from './model-selection.js';
 
 import type {
-  Config,
+  ProfileDefinitionReads,
+  ProviderSwitcher,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { applyProfileCascade } from './profileApplication.js';
 import {
-  captureProfileModelParams,
   finishProfileApplication,
   type ProfileLoadOptions,
   type ProfileLoadResult,
 } from './profileSnapshot.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
-import type { Agent } from './agent.js';
-import type { AgentProviderState } from './agentImpl.js';
-import type { AgentAuthState } from './control/authState.js';
-import { ProfilesControl } from './control/profilesControl.js';
 
 export interface PreparedProfileFacade {
   publish(): void;
@@ -269,69 +263,4 @@ function queueProfileApplications(
       return enqueue(() => apply(captured, capturedOptions, signal));
     },
   };
-}
-
-export function assembleAgentProfiles(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  oauth: OAuthManager | null,
-  switchProvider: ProviderSwitcher,
-  settingsOwner: SessionSettingsOwner,
-  providerState: AgentProviderState,
-  authState: AgentAuthState,
-  captureProfile: Agent['captureProfile'],
-  prepareReplacement: (
-    providerChanged: boolean,
-    signal: AbortSignal,
-  ) => Promise<PreparedProfileFacade>,
-  profiles: ProfileDefinitionReads,
-  assertAdmission: () => void,
-): ProfilesControl {
-  const readString = (key: string): string | undefined => {
-    const value = settingsOwner.readNamedParameter(key);
-    return typeof value === 'string' && value.length > 0 ? value : undefined;
-  };
-  return new ProfilesControl({
-    getState: () => providerState,
-    application: assembleProfileApplication(
-      settings,
-      manager,
-      oauth,
-      (name, options) =>
-        switchProvider(name, { ...options, clientReplacement: 'deferred' }),
-      settingsOwner,
-      profiles,
-      async (result, signal) => {
-        const modelParams = captureProfileModelParams(
-          settings.getProviderSettings(result.providerName),
-        );
-        const replacement = await prepareReplacement(
-          result.providerChanged,
-          signal,
-        );
-        return {
-          publish: () => {
-            replacement.publish();
-            providerState.provider = result.providerName;
-            providerState.model = result.modelName;
-            providerState.modelParams = modelParams;
-            providerState.baseUrl = result.baseUrl;
-            providerState.keyName = readString('auth-key-name');
-            providerState.isLoadBalancer =
-              result.providerName === 'load-balancer';
-            authState.keyFile = readString('auth-keyfile');
-            authState.rawKeyPresent = readString('auth-key') !== undefined;
-            authState.inlineKeyPresent = false;
-            authState.baseUrl = result.baseUrl;
-          },
-          retire: () => replacement.retire(),
-          discard: () => replacement.discard(),
-        };
-      },
-      assertAdmission,
-    ),
-    captureEphemerals: () => ({ ...settingsOwner.captureUserParameters() }),
-    workingDir: config.getTargetDir(),
-  });
 }

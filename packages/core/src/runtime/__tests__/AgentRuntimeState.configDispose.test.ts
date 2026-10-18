@@ -73,14 +73,24 @@ async function owner() {
       ),
     ),
   );
-  const agent = await fromConfig({
-    credentialAuthority,
-    settingsService,
+  const agent = await fromConfig(
     config,
-    mcpRuntime: mcp,
-    providerManager: manager,
-    activation: { provider: 'fake', model: 'fake-model' },
-  });
+    settingsService,
+    { activation: { provider: 'fake', model: 'fake-model' } },
+    undefined,
+    manager,
+    undefined,
+    undefined,
+    mcp,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    credentialAuthority,
+  );
   await agent.agentClient.startChat();
   return { config, manager, agent, mcp };
 }

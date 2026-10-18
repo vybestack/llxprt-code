@@ -290,13 +290,16 @@ describe('tool catalog publication and cleanup ownership', () => {
 
   async function publicationClose(): Promise<void> {
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+    );
     await agent.agentClient.startChat();
     const entered = engineGate();
     const release = engineGate();
@@ -336,13 +339,16 @@ describe('tool catalog publication and cleanup ownership', () => {
 
   it('joins an admitted workspace context publication before clearing and withdrawing its physical roots', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+    );
     await agent.agentClient.startChat();
     const entered = engineGate();
     const release = engineGate();
@@ -536,20 +542,26 @@ describe('tool catalog publication and cleanup ownership', () => {
 
   it('joins admitted publication and does not read a peer that closed while the first publication awaited', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    const first = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      mcpRuntime: builtCallerMcp,
-    });
-    const second = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      mcpRuntime: builtCallerMcp,
-    });
+    const first = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+    );
+    const second = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+    );
     await first.agentClient.startChat();
     await second.agentClient.startChat();
     const entered = engineGate();

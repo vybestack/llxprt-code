@@ -16,8 +16,6 @@ import {
 } from './cliUiRuntime.js';
 import { AppWrapper } from './App.js';
 import { createRuntimeOwnerFeatures } from '../__tests__/runtime-owner-features-fixture.js';
-import { createProviderAliasRefresh } from '../runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from '../runtime/createOAuthControl.js';
 
 /**
  * @license
@@ -41,53 +39,45 @@ describe('interactive Agent owner AppWrapper', () => {
     fixtureFilesystem = undefined;
   });
   it('mounts with no raw recording integration, recording service or lock', async () => {
-    await withRecordingLifetimeFixture(
-      async (agent, config, settingsOwner, settingsService, oauthManager) => {
-        await agent.setHistory([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'owner mount' }] },
-        ]);
-        await agent.session.setRecording({ enabled: true });
-        const settings = createMockSettings({});
-        const view = renderWithProviders(
-          <AppWrapper
-            uiRuntime={buildUiRuntimeFromSource(config, agent)}
-            slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
-            agent={agent}
-            {...runtimeAppFixture(
-              agent,
-              createRuntimeOwnerFeatures(
-                config,
-                agent.providerManager,
-                fixturePaths().directories,
-                createSessionModelCommand(agent),
-                settingsOwner,
-                settingsService,
-                agent.workspace,
-                agent.modelParameters,
-                agent.settings,
-                agent.toolFormat,
-                agent.providerReads,
-                agent.auth.keys,
-              ),
-              agent.sessionClient.fetch,
-            )}
-            providerAliasRefresh={createProviderAliasRefresh(
-              agent.providerManager,
-            )}
-            oauthControl={createOAuthControl(
-              () => oauthManager,
-              agent.providerManager,
-            )}
-            settings={settings}
-            version="test-owner"
-            recordingOwner="agent"
-          />,
-          { settings },
-        );
-        expect(view.lastFrame()).toBeDefined();
-        view.unmount();
-        expect(agent.session.getRecording().enabled).toBe(true);
-      },
-    );
+    await withRecordingLifetimeFixture(async (agent, config, settingsOwner) => {
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'owner mount' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const settings = createMockSettings({});
+      const view = renderWithProviders(
+        <AppWrapper
+          uiRuntime={buildUiRuntimeFromSource(config, agent)}
+          slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
+          agent={agent}
+          {...runtimeAppFixture(
+            agent,
+            createRuntimeOwnerFeatures(
+              agent.providerReads.inspection,
+              fixturePaths().directories,
+              createSessionModelCommand(agent),
+              settingsOwner,
+              agent.workspace,
+              agent.modelParameters,
+              agent.settings,
+              agent.toolFormat,
+              agent.providerReads,
+              agent.auth.keys,
+              () => agent.providerReads.readOpenAIInfo(),
+            ),
+            agent.sessionClient.fetch,
+          )}
+          providerAliasRefresh={() => agent.providerReads.refreshAliases()}
+          oauthControl={agent.authentication}
+          settings={settings}
+          version="test-owner"
+          recordingOwner="agent"
+        />,
+        { settings },
+      );
+      expect(view.lastFrame()).toBeDefined();
+      view.unmount();
+      expect(agent.session.getRecording().enabled).toBe(true);
+    });
   }, 30000);
 });

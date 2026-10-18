@@ -242,15 +242,18 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
     await openCaller('plain-text.jsonl');
     try {
       const callerBus: MessageBus = callerPolicy.session.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        messageBus: callerBus,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         // The public accessor returns the EXACT caller bus — no second bus.
         expect(agent.getMessageBus()).toBe(callerBus);
@@ -265,14 +268,18 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
   it('returns a single defined bus when none is supplied, stable across repeated reads', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         const first = agent.getMessageBus();
         const second = agent.getMessageBus();
@@ -304,15 +311,18 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
     await openCaller('plain-text.jsonl');
     try {
       const callerBus: MessageBus = callerPolicy.session.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        messageBus: callerBus,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         const exposed = agent.getMessageBus();
         // The exposed bus IS the caller bus, so a subscription on the caller bus

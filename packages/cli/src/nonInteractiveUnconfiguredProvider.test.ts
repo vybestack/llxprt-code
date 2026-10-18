@@ -1,3 +1,4 @@
+import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -45,7 +46,10 @@ import {
   ProviderManager,
   type IProvider,
 } from '@vybestack/llxprt-code-providers';
-import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
+import {
+  runNonInteractive,
+  buildNonInteractiveActivationIntent,
+} from './__tests__/noninteractive-run-fixture.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
 
@@ -256,7 +260,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -273,7 +277,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -290,7 +294,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -307,7 +311,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -323,7 +327,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -355,7 +359,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -378,7 +382,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -400,12 +404,35 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     );
 
     await runNonInteractive({
-      credentialAuthority,
-      runtimeSettings,
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: buildNonInteractiveActivationIntent(
+              config,
+              makeSettings(),
+            ),
+          },
+          runtimeSettings.owner,
+          providerManager,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          credentialAuthority,
+        ),
+      runtimeSettings: runtimeSettings.owner,
       config,
       settings: makeSettings(),
       input: 'hello',
-      providerManager,
       prompt_id: 'test-configured',
     });
 
@@ -424,12 +451,35 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     );
 
     await runNonInteractive({
-      credentialAuthority,
-      runtimeSettings,
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: buildNonInteractiveActivationIntent(
+              config,
+              makeSettings(),
+            ),
+          },
+          runtimeSettings.owner,
+          providerManager,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          credentialAuthority,
+        ),
+      runtimeSettings: runtimeSettings.owner,
       config,
       settings: makeSettings(),
       input: 'hello',
-      providerManager,
       prompt_id: 'test-env-provider',
     });
 
@@ -508,7 +558,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -530,7 +580,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -554,7 +604,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
 
     await expect(
       runNonInteractive({
-        runtimeSettings,
+        runtimeSettings: runtimeSettings.owner,
         config,
         settings: makeSettings(),
         input: 'hello',

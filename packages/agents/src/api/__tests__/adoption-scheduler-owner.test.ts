@@ -80,14 +80,22 @@ describe('adopted Agent scheduler ownership', () => {
       builtFactorylessPreviousReplay,
     );
 
-    const agent = await fromConfig({
-      settingsOwner: builtFactorylessSettingsOwner,
-      settingsService: builtFactorylessSettings,
-      agentClient: builtFactorylessNoClient,
-      providerManager: builtFactorylessNoManager,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      config: builtFactorylessConfig,
-    });
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      builtFactorylessSettingsOwner,
+      builtFactorylessNoManager,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessNoClient,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+    );
     try {
       const events = await drain(agent.stream('read package metadata'));
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);
@@ -161,14 +169,42 @@ describe('adopted Agent scheduler ownership', () => {
 
     let activeHandles = 0;
     let createdHandles = 0;
-    const agent = await fromConfig({
-      settingsOwner: builtFactorylessSettingsOwner,
-      settingsService: builtFactorylessSettings,
-      agentClient: builtFactorylessNoClient,
-      providerManager: builtFactorylessNoManager,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      config: builtFactorylessConfig,
-      toolSchedulerFactory: () => {
+    const agent = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      builtFactorylessSettingsOwner,
+      builtFactorylessNoManager,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessNoClient,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => {
         activeHandles += 1;
         createdHandles += 1;
         return {
@@ -177,7 +213,7 @@ describe('adopted Agent scheduler ownership', () => {
           },
         };
       },
-    });
+    );
     try {
       const events = await drain(agent.stream('read package metadata'));
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);

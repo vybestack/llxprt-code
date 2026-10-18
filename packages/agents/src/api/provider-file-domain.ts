@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 export type AgentRetainedProviderFile = Omit<
@@ -37,6 +39,46 @@ export function assembleProviderFileOperations(
   };
 }
 
+export class SessionProviderFileBinding {
+  private lifecycle: object | undefined;
+  private retry: ((provider: string) => ProviderRetryOperations) | undefined;
+  private cleanup: ((scope: string) => Promise<void>) | undefined;
+
+  bind(
+    client: Pick<AgentClientContract, 'bindProviderFiles'>,
+    lifecycle: object,
+    retry: (provider: string) => ProviderRetryOperations,
+    cleanup: ((scope: string) => Promise<void>) | undefined,
+  ): void {
+    if (this.lifecycle !== undefined && this.lifecycle !== lifecycle)
+      throw new Error('Session provider files cannot change owner');
+    this.lifecycle = lifecycle;
+    this.retry = retry;
+    this.cleanup = cleanup ?? this.cleanup;
+    this.bindClient(client);
+  }
+
+  bindClient(client: Pick<AgentClientContract, 'bindProviderFiles'>): void {
+    if (this.lifecycle !== undefined && this.retry !== undefined)
+      client.bindProviderFiles?.(this.lifecycle, this.retry);
+  }
+
+  cleanupScope(scope: string): Promise<void> | undefined {
+    return this.cleanup?.(scope);
+  }
+
+  operations(
+    scope: string,
+    assertAdmission: () => void,
+  ): AgentProviderFileOperations {
+    return assembleProviderFileOperations(
+      this.lifecycle,
+      scope,
+      assertAdmission,
+    );
+  }
+}
+
 export abstract class AgentProviderFileDomain
   implements AgentProviderFileOperations
 {
@@ -44,14 +86,9 @@ export abstract class AgentProviderFileDomain
   readonly captureProviderFiles: AgentProviderFileOperations['captureProviderFiles'];
   readonly retryProviderFileDeletions: AgentProviderFileOperations['retryProviderFileDeletions'];
 
-  protected constructor(owner: object | undefined, scopeId: string) {
-    const files = assembleProviderFileOperations(owner, scopeId, () =>
-      this.assertFileAdmission(),
-    );
-    this.retainProviderFile = files.retainProviderFile;
-    this.captureProviderFiles = files.captureProviderFiles;
-    this.retryProviderFileDeletions = files.retryProviderFileDeletions;
+  protected constructor(operations: AgentProviderFileOperations) {
+    this.retainProviderFile = operations.retainProviderFile;
+    this.captureProviderFiles = operations.captureProviderFiles;
+    this.retryProviderFileDeletions = operations.retryProviderFileDeletions;
   }
-
-  protected abstract assertFileAdmission(): void;
 }

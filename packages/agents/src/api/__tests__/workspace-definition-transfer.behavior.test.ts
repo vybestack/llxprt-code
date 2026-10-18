@@ -353,16 +353,29 @@ describe('public Agent workspace definition lifetime', () => {
       join(root, 'owned/profiles'),
       join(root, 'owned/subagents'),
     );
-    const agent = await fromConfig({
-      config: callerCallerConfig,
-      settingsService: callerCallerSettings,
-      settingsOwner: callerCallerSettingsOwner,
-      providerManager: callerCallerManager,
-      messageBus: callerCallerPolicy.session.messageBus,
-      mcpRuntime: callerCallerMcp,
-      definitionOwner: definitions,
-      definitionOwnership: 'agent',
-    });
+    const agent = await fromConfig(
+      callerCallerConfig,
+      callerCallerSettings,
+      { definitionOwnership: 'agent' },
+      callerCallerSettingsOwner,
+      callerCallerManager,
+      undefined,
+      callerCallerPolicy.session.messageBus,
+      callerCallerMcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      definitions,
+    );
     await mkdir(join(root, 'owned/profiles'), { recursive: true });
     const fifo = join(root, 'owned/profiles/held.json');
     execFileSync('mkfifo', [fifo]);
@@ -400,16 +413,29 @@ describe('public Agent workspace definition lifetime', () => {
       workingDir: root,
     });
     const definitions = callerCallerMcp.workspaceDefinitions;
-    const agent = await fromConfig({
-      config: callerCallerConfig,
-      settingsService: callerCallerSettings,
-      settingsOwner: callerCallerSettingsOwner,
-      providerManager: callerCallerManager,
-      messageBus: callerCallerPolicy.session.messageBus,
-      mcpRuntime: callerCallerMcp,
-      definitionOwner: definitions,
-      definitionOwnership: 'agent',
-    });
+    const agent = await fromConfig(
+      callerCallerConfig,
+      callerCallerSettings,
+      { definitionOwnership: 'agent' },
+      callerCallerSettingsOwner,
+      callerCallerManager,
+      undefined,
+      callerCallerPolicy.session.messageBus,
+      callerCallerMcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      definitions,
+    );
     try {
       await agent.saveProfileSnapshot('transferred');
       await agent.dispose();
@@ -440,17 +466,29 @@ describe('public Agent workspace definition lifetime', () => {
     );
     try {
       await expect(
-        fromConfig({
-          config: callerCallerConfig,
-          settingsService: callerCallerSettings,
-          settingsOwner: callerCallerSettingsOwner,
-          providerManager: callerCallerManager,
-          messageBus: callerCallerPolicy.session.messageBus,
-          mcpRuntime: callerCallerMcp,
-          definitionOwner: definitions,
-          definitionOwnership: 'agent',
-          sessionId: '',
-        }),
+        fromConfig(
+          callerCallerConfig,
+          callerCallerSettings,
+          { sessionId: '', definitionOwnership: 'agent' },
+          callerCallerSettingsOwner,
+          callerCallerManager,
+          undefined,
+          callerCallerPolicy.session.messageBus,
+          callerCallerMcp,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          definitions,
+        ),
       ).rejects.toThrow('non-empty');
       expect(() => definitions.profileReads.listProfiles()).toThrow('closed');
       expect(callerCallerMcp.isStopped()).toBe(false);

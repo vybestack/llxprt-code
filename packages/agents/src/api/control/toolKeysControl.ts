@@ -1,3 +1,4 @@
+import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,7 +17,6 @@
  * call); its throw propagates (delegate, never swallow).
  */
 
-import type { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import {
   getSupportedToolNames,
   getToolKeyEntry,
@@ -29,17 +29,6 @@ import type {
 } from '../agent.js';
 
 /**
- * Dependencies injected into {@link ToolKeysControl}.
- *
- * @plan:PLAN-20260622-COREAPIGAP.P16
- * @requirement:REQ-007
- */
-export interface ToolKeysControlDeps {
-  /** Resolves the shared ToolKeyStorage (core lazy singleton). Never cached. */
-  readonly getStorage: () => ToolKeyStorage;
-}
-
-/**
  * The public built-in tool-key control surface (masked).
  *
  * @plan:PLAN-20260622-COREAPIGAP.P16
@@ -47,7 +36,20 @@ export interface ToolKeysControlDeps {
  * @pseudocode tool-keys.md steps 1-73
  */
 export class ToolKeysControl implements AgentToolKeyControl {
-  constructor(private readonly deps: ToolKeysControlDeps) {}
+  constructor(
+    private readonly readKeyRecord: (name: string) => Promise<{
+      key: string | null;
+      keyFile: string | null;
+    }>,
+    private readonly saveKey: (name: string, key: string) => Promise<void>,
+    private readonly deleteKey: (name: string) => Promise<void>,
+    private readonly writeKeyfile: (
+      name: string,
+      file: string,
+    ) => Promise<void>,
+    private readonly clearKeyfile: (name: string) => Promise<void>,
+    private readonly readKeyfile: (name: string) => Promise<string | null>,
+  ) {}
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 1-11
   supported(): readonly ToolKeyInfo[] {
@@ -68,9 +70,7 @@ export class ToolKeysControl implements AgentToolKeyControl {
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 20-34
   async status(toolName: string): Promise<ToolKeyStatus> {
-    const storage = this.deps.getStorage();
-    const rawKey = await storage.getKey(toolName);
-    const keyFile = await storage.getKeyfilePath(toolName);
+    const { key: rawKey, keyFile } = await this.readKeyRecord(toolName);
     if (rawKey !== null) {
       return {
         toolName,
@@ -88,25 +88,42 @@ export class ToolKeysControl implements AgentToolKeyControl {
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 40-43
   async save(toolName: string, key: string): Promise<void> {
-    await this.deps.getStorage().saveKey(toolName, key);
+    await this.saveKey(toolName, key);
   }
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 50-53
   async delete(toolName: string): Promise<void> {
-    await this.deps.getStorage().deleteKey(toolName);
+    await this.deleteKey(toolName);
   }
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 60-67
   async setKeyFile(toolName: string, path: string | null): Promise<void> {
     if (path === null) {
-      await this.deps.getStorage().clearKeyfilePath(toolName);
+      await this.clearKeyfile(toolName);
     } else {
-      await this.deps.getStorage().setKeyfilePath(toolName, path);
+      await this.writeKeyfile(toolName, path);
     }
   }
 
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007 @pseudocode lines 70-73
   async getKeyFile(toolName: string): Promise<string | null> {
-    return this.deps.getStorage().getKeyfilePath(toolName);
+    return this.readKeyfile(toolName);
   }
+}
+
+export function assembleToolKeys(): ToolKeysControl {
+  return new ToolKeysControl(
+    async (name) => {
+      const storage = getToolKeyStorage();
+      return {
+        key: await storage.getKey(name),
+        keyFile: await storage.getKeyfilePath(name),
+      };
+    },
+    (name, key) => getToolKeyStorage().saveKey(name, key),
+    (name) => getToolKeyStorage().deleteKey(name),
+    (name, file) => getToolKeyStorage().setKeyfilePath(name, file),
+    (name) => getToolKeyStorage().clearKeyfilePath(name),
+    (name) => getToolKeyStorage().getKeyfilePath(name),
+  );
 }

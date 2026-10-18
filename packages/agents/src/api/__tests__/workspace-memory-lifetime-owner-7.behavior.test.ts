@@ -205,16 +205,25 @@ describe('supplied workspace memory lifetime through public adoption', () => {
           built_builtFactorylessPolicy,
           memory,
         );
-      const facade = await fromConfig({
-        config: built_builtFactorylessConfig,
-        settingsService: built_builtFactorylessSettings,
-        settingsOwner: built_builtFactorylessSettingsOwner,
-        messageBus: built_builtFactorylessPolicy.session.messageBus,
-        policyOwner: built_builtFactorylessPolicy,
-        providerManager: manager,
-        activation: intent,
-        activationPreflight: { operation, token },
-      });
+      const facade = await fromConfig(
+        built_builtFactorylessConfig,
+        built_builtFactorylessSettings,
+        { activation: intent },
+        built_builtFactorylessSettingsOwner,
+        manager,
+        undefined,
+        built_builtFactorylessPolicy.session.messageBus,
+        undefined,
+        { operation, token },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        built_builtFactorylessPolicy,
+      );
       cleanups.push(() => facade.dispose());
       await writeFile(file, 'Borrowed during adopted preflight.');
       await facade.memory.refresh();

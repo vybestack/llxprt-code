@@ -74,26 +74,39 @@ async function loadOwner(
     'same-label-cli',
     argv,
     process.cwd(),
-    {
-      credentialAuthority,
-      settingsService,
-      sessionSettingsOwner: settingsOwner,
-      onActivationBootstrapReady: (operation) =>
-        operation.takeSettingsOwner(settingsService),
-      onPreflightReady: (owner) => {
-        registration = owner;
-      },
+    undefined,
+    settingsService,
+    settingsOwner,
+    credentialAuthority,
+    undefined,
+    (operation) => operation.takeSettingsOwner(settingsService),
+    undefined,
+    undefined,
+    (owner) => {
+      registration = owner;
     },
   );
   if (!registration) throw new Error('CLI did not provide its owner handle');
   return {
     config,
-    agent: await fromConfig({
-      credentialAuthority,
-      settingsService,
-      settingsOwner,
+    agent: await fromConfig(
       config,
-    }),
+      settingsService,
+      {},
+      settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentialAuthority,
+    ),
     registration,
   };
 }

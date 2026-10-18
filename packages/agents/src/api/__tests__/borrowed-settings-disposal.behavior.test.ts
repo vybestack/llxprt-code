@@ -190,16 +190,36 @@ describe('borrowed settings disposal', () => {
         await cleanupAfterFailure(primary, builtClose);
       }
 
-      const options = {
-        config: builtConfig,
-        settingsService: builtSettings,
-        settingsOwner: builtSettingsOwner,
-        providerManager: builtManager,
-        messageBus: builtMessageBus,
-        mcpRuntime: builtMcp,
-      };
-      const first = await fromConfig(options);
-      const second = await fromConfig(options);
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtSettings;
+      const optionsSettingsOwner: Parameters<typeof fromConfig>[3] =
+        builtSettingsOwner;
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtManager;
+      const optionsMessageBus: Parameters<typeof fromConfig>[6] =
+        builtMessageBus;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] = builtMcp;
+      const first = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
+      const second = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        optionsSettingsOwner,
+        optionsProviderManager,
+        undefined,
+        optionsMessageBus,
+        optionsMcpRuntime,
+      );
       const closing = closingIndex === 0 ? first : second;
       const peer = closingIndex === 0 ? second : first;
       try {

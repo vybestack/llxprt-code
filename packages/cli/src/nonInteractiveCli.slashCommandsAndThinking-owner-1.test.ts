@@ -74,7 +74,7 @@ import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
 import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from './config/settings.js';
 import { CommandContext } from './ui/commands/types.js';
-import { bindAutoPromptOperation } from './ui/commands/subagentCommandHost.js';
+import { bindCommandErrorRecorder } from './ui/hooks/commandErrorRecorderHost.js';
 import { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 /**
@@ -135,9 +135,12 @@ function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
 ): Promise<void> {
   return runHeadlessPolicyFixture(
-    { ...params, credentialAuthority: mockCredentialAuthority },
-    mockRuntimeSettings,
+    params,
+    mockRuntimeSettings.owner,
     mockProviderManager,
+    mockRuntimeSettings.store,
+    mockRuntimeSettings.owner,
+    mockCredentialAuthority,
   );
 }
 
@@ -322,15 +325,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   it('rejects a registered headless operation without an Agent owner', async () => {
-    const unavailable = (): never => {
-      throw new Error('Session agent is unavailable');
-    };
-    const generatePrompt = bindAutoPromptOperation(
-      unavailable,
-      unavailable,
-      unavailable,
-      unavailable,
-    );
+    const recordError = bindCommandErrorRecorder(null, 'agent', undefined);
     mockGetCommands.mockReturnValue([
       {
         name: 'runtime',
@@ -340,10 +335,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
           expect(Reflect.has(invocation, 'runtimeApi')).toBe(false);
           expect(Reflect.has(invocation, 'oauthControl')).toBe(false);
           expect(Reflect.has(invocation, 'refreshProviderAliases')).toBe(false);
-          return {
-            type: 'submit_prompt',
-            content: await generatePrompt('Describe the workspace'),
-          };
+          await recordError('Headless command requires an owning session');
+          return { type: 'submit_prompt', content: 'unreachable' };
         },
       },
     ]);
@@ -539,29 +532,34 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
 
-    const agent = await original.fromConfig({
-      settingsService: builtCallerSettings,
-      settingsOwner: builtCallerSettingsOwner,
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-      policyOwner: builtCallerPolicy,
-      sessionId: builtCallerConfig.getSessionId(),
-    });
+    const agent = await original.fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      { sessionId: builtCallerConfig.getSessionId() },
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtCallerPolicy,
+    );
     mockGetCommands.mockReturnValue([createAgentSetCommand(agent)]);
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     try {
       await expect(
         runNonInteractive({
           config: builtCallerConfig,
-          runtimeSettings: {
-            owner: builtCallerSettingsOwner,
-            store: builtCallerSettings,
-          },
+          runtimeSettings: builtCallerSettingsOwner,
           settings: mockSettings,
           agent,
-          runtimeMessageBus: builtCallerPolicy.session.messageBus,
           input: '/set emojifilter error',
           prompt_id: 'headless-owned-set',
         }),
@@ -609,8 +607,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const options = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0];
-    expect(options.mcpRuntime?.messageBus).toBe(options.messageBus);
+    const call = (fromConfig as Mock<typeof fromConfig>).mock.calls[0];
+    expect(call[16]?.session.messageBus).toBe(call[6]);
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
   });
 
@@ -635,8 +633,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0]
-      .activation;
+    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
+      ?.activation;
     expect(activation).toMatchObject({
       provider: 'openai',
       model: 'kimi-k2.5',

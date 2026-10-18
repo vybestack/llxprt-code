@@ -17,7 +17,6 @@ import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 
-import { FromConfigOptions } from '../config-types.js';
 import { fromConfig } from '../fromConfig.js';
 
 describe('fromConfig admission before resource effects', () => {
@@ -45,19 +44,17 @@ describe('fromConfig admission before resource effects', () => {
   });
 
   async function rejectWithoutAcquisition(
-    options: FromConfigOptions,
+    workspaceDirectory: string,
+    adopt: () => ReturnType<typeof fromConfig>,
   ): Promise<unknown> {
     const home = process.env.LLXPRT_CONFIG_HOME;
     if (home === undefined) throw new Error('Missing fixture config home');
     const before = (await readdir(home, { recursive: true })).sort();
     const workspaceBefore = (
-      await readdir(options.config.getTargetDir(), { recursive: true })
+      await readdir(workspaceDirectory, { recursive: true })
     ).sort();
     const transports = credentials().snapshot();
-    const outcome = await fromConfig({
-      ...options,
-      credentialAuthority: credentials().authority,
-    }).then(
+    const outcome = await adopt().then(
       async (agent) => {
         await agent.dispose();
         return undefined;
@@ -65,7 +62,7 @@ describe('fromConfig admission before resource effects', () => {
       (error: unknown) => error,
     );
     const after = await readdir(home, { recursive: true });
-    const workspaceAfter = await readdir(options.config.getTargetDir(), {
+    const workspaceAfter = await readdir(workspaceDirectory, {
       recursive: true,
     });
     expect([
@@ -151,14 +148,27 @@ describe('fromConfig admission before resource effects', () => {
     );
     cleanups.push(builtFactorylessClose);
     await expect(
-      rejectWithoutAcquisition({
-        config: builtFactorylessConfig,
-        settingsOwner: builtFactorylessSettingsOwner,
-        policyOwner: builtFactorylessPolicy,
-        messageBus: builtFactorylessPolicy.session.messageBus,
-        runtimeFactoryBindings: builtFactorylessFactories,
-        settingsService: new SettingsService(),
-      }),
+      rejectWithoutAcquisition(builtFactorylessConfig.getTargetDir(), () =>
+        fromConfig(
+          builtFactorylessConfig,
+          new SettingsService(),
+          {},
+          builtFactorylessSettingsOwner,
+          undefined,
+          undefined,
+          builtFactorylessPolicy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessFactories,
+          undefined,
+          credentials().authority,
+          builtFactorylessPolicy,
+        ),
+      ),
     ).resolves.toMatchObject({ message: expect.stringMatching(/settings/i) });
   });
 });

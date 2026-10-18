@@ -406,17 +406,28 @@ async function createEngineEnv(): Promise<EngineEnv> {
     // No explicit config.initialize() here: fromConfig installs the default
     // agent runtime factories (agentClientFactory et al.) and runs
     // ensureInitialized during adoption — the factory-less Config idiom.
-    agent = await fromConfig({
-      settingsService,
-      credentialAuthority,
-      settingsOwner,
+    agent = await fromConfig(
       config,
+      settingsService,
+      {
+        sessionId: SESSION_ID,
+        activation: { provider: 'fake', model: 'fake-model' },
+      },
+      settingsOwner,
       providerManager,
-      sessionId: SESSION_ID,
+      undefined,
       messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentialAuthority,
       policyOwner,
-      activation: { provider: 'fake', model: 'fake-model' },
-    });
+    );
 
     const builtConfig = config;
     const builtManager = providerManager;

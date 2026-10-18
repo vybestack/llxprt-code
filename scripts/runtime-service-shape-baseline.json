@@ -5,12 +5,12 @@
       "runtime-service-bag-parameter": 0
     },
     "agents": {
-      "runtime-service-bundle": 145,
-      "runtime-service-bag-parameter": 46
+      "runtime-service-bundle": 142,
+      "runtime-service-bag-parameter": 31
     },
     "cli": {
-      "runtime-service-bag-parameter": 29,
-      "runtime-service-bundle": 105
+      "runtime-service-bag-parameter": 17,
+      "runtime-service-bundle": 60
     },
     "core": {
       "runtime-service-bag-parameter": 0,

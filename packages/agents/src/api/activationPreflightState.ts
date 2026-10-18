@@ -13,17 +13,15 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
+import type { PreparedProfileFacade } from './profileApplicationAssembly.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderActivationResult } from './providerActivationExecutor.js';
-import type {
-  ProviderActivationIntent,
-  FromConfigOptions,
-} from './config-types.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderActivationIntent } from './config-types.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { AgentBootstrapError } from './agentBootstrap.js';
 
 export type ActivationPreflightToken = Readonly<object>;
@@ -102,6 +100,60 @@ export function canonicalProviderActivationIntent(
 }
 
 export class AgentActivationBootstrap implements AgentActivationOperation {
+  static assertAdoption(
+    preflight: ActivationPreflight | undefined,
+    config: Config,
+    intent: ProviderActivationIntent | undefined,
+    manager: RuntimeProviderManager | undefined,
+    settings: SettingsService,
+    image: Parameters<typeof AgentActivationBootstrap.assertRetainedOwners>[1],
+    oauth: OAuthManager | undefined,
+    bus: MessageBus | undefined,
+    tokenizer: SessionClientOwner['tokenizerFactory'] | undefined,
+    content: SessionClientOwner['contentGeneratorFactory'] | undefined,
+    files: ProviderFileLifecycle | undefined,
+    hasMemory: boolean,
+  ): void {
+    this.assertRetainedOwners(
+      preflight?.operation,
+      image,
+      oauth,
+      bus,
+      tokenizer,
+      content,
+      files,
+    );
+    if (preflight !== undefined && hasMemory)
+      throw new AgentBootstrapError(
+        'Preflight memory ownership cannot be replaced during adoption',
+      );
+    if (preflight !== undefined)
+      this.validate(preflight, config, intent, manager, settings);
+  }
+  static assertBorrowedClient(
+    client: ReturnType<SessionClientOwner['getAgentClient']> | undefined,
+    config: Config,
+    manager: RuntimeProviderManager | undefined,
+    hasMcp: boolean,
+    preflight: ReturnType<SessionClientOwner['getAgentClient']> | undefined,
+  ): void {
+    if (client === undefined) return;
+    if (!hasMcp)
+      throw new AgentBootstrapError(
+        'Borrowed session client requires an explicit MCP runtime handoff',
+      );
+    client.assertConfig(config);
+    if (manager === undefined)
+      throw new AgentBootstrapError(
+        'Initialized Config adoption requires an explicit providerManager owner',
+      );
+    client.assertProviderManager(manager);
+    if (preflight !== undefined && preflight !== client)
+      throw new AgentBootstrapError(
+        'Borrowed client differs from the preflight session client',
+      );
+  }
+
   readonly #config: Config;
   readonly #manager: RuntimeProviderManager | undefined;
   readonly #execute: (
@@ -132,13 +184,6 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
   get contentGeneratorFactory(): SessionClientOwner['contentGeneratorFactory'] {
     return this.ownedSessionClient.contentGeneratorFactory;
   }
-  get providerFileLifecycle(): ProviderFileLifecycle | undefined {
-    const files = this.ownedSessionClient.providerFiles;
-    if (files === undefined) return undefined;
-    if (!(files instanceof ProviderFileLifecycle))
-      throw new Error('Preflight requires its selected provider file owner');
-    return files;
-  }
 
   constructor(
     config: Config,
@@ -146,6 +191,7 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     execute: (
       intent: ProviderActivationIntent,
     ) => Promise<ProviderActivationResult>,
+    readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
     mediaOwner: SessionMediaOwner | undefined,
     private readonly ownedSessionClient: SessionClientOwner,
     readonly workspaceFilesystem: WorkspaceFilesystemOwner,
@@ -176,6 +222,39 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     this.#config = config;
     this.#manager = manager;
     this.#execute = execute;
+  }
+
+  prepareProfileActivation(
+    signal: AbortSignal,
+  ): Promise<PreparedProfileFacade> {
+    return this.#admitPublic(async () => {
+      signal.throwIfAborted();
+      const replacement =
+        await this.ownedSessionClient.prepareProfileClientReplacement();
+      try {
+        signal.throwIfAborted();
+        const commitHistory = await replacement.prepareHistoryCommit();
+        signal.throwIfAborted();
+        return {
+          publish: () => {
+            commitHistory();
+            replacement.publish();
+          },
+          retire: replacement.retire,
+          discard: replacement.discard,
+        };
+      } catch (error) {
+        try {
+          await replacement.discard();
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            'Profile preparation failed and candidate cleanup was incomplete',
+          );
+        }
+        throw error;
+      }
+    });
   }
 
   preflight(
@@ -390,29 +469,35 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       await operation.dispose();
     }
   }
-}
-
-export function assertPreflightOwners(options: FromConfigOptions): void {
-  const preflight = options.activationPreflight?.operation;
-  if (preflight === undefined) return;
-  if (options.imageOperation !== undefined)
-    throw new AgentBootstrapError(
-      'Preflight image operations cannot be replaced during adoption',
-    );
-  for (const [supplied, retained] of [
-    [options.oauthManager, preflight.oauthManager],
-    [options.messageBus, preflight.messageBus],
-    [options.tokenizerFactory, preflight.tokenizerFactory],
-    [options.contentGeneratorFactory, preflight.contentGeneratorFactory],
-    [options.providerFileLifecycle, preflight.providerFileLifecycle],
-  ]) {
-    if (
-      supplied !== undefined &&
-      retained !== undefined &&
-      supplied !== retained
-    )
+  static assertRetainedOwners(
+    preflight: AgentActivationOperation | undefined,
+    imageOperation: unknown,
+    oauth: OAuthManager | undefined,
+    bus: MessageBus | undefined,
+    tokenizer: SessionClientOwner['tokenizerFactory'] | undefined,
+    content: SessionClientOwner['contentGeneratorFactory'] | undefined,
+    files: ProviderFileLifecycle | undefined,
+  ): void {
+    if (preflight === undefined) return;
+    if (imageOperation !== undefined)
       throw new AgentBootstrapError(
-        'Preflight owners cannot be replaced during adoption',
+        'Preflight image operations cannot be replaced during adoption',
       );
+    for (const [supplied, retained] of [
+      [oauth, preflight.oauthManager],
+      [bus, preflight.messageBus],
+      [tokenizer, preflight.tokenizerFactory],
+      [content, preflight.contentGeneratorFactory],
+      [files, preflight.providerFileLifecycle],
+    ]) {
+      if (
+        supplied !== undefined &&
+        retained !== undefined &&
+        supplied !== retained
+      )
+        throw new AgentBootstrapError(
+          'Preflight owners cannot be replaced during adoption',
+        );
+    }
   }
 }

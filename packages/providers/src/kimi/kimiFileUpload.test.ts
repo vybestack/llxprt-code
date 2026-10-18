@@ -57,6 +57,9 @@ function createMockClient(
     client: {
       apiKey: 'test-key',
       baseURL: 'https://api.kimi.com/coding/v1',
+      withOptions() {
+        return this;
+      },
       files: {
         create: filesCreate,
         delete: fileDeleteImpl,

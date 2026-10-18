@@ -469,14 +469,18 @@ describe('MCP Config lifetime deletion', () => {
   it('rejects late instruction-consuming requests on a disposed borrowed facade', async () => {
     const { fromConfig } = await import('../fromConfig.js');
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     try {
       await agent.dispose();
       await expect(agent.generate('Do not send this request')).rejects.toThrow(

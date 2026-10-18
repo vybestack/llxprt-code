@@ -1,3 +1,5 @@
+import * as agents from '@vybestack/llxprt-code-agents';
+import { spyOn, afterEach, describe, expect, it } from 'bun:test';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   prepareAgentPreflight,
@@ -35,7 +37,6 @@ import { join } from 'node:path';
  * helper, and ProviderManager are all real.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   discoverRuntimePluginPackages,
@@ -181,19 +182,27 @@ describe('runtime plugin startup wiring', () => {
       await rm(root, { recursive: true, force: true });
     });
     let manager: RuntimeProviderManager | undefined;
-    await operation.preparePostConfiguration(
-      config,
-      filesystem,
-      memory,
-      trust,
-      undefined,
-      undefined,
-      undefined,
-      (value) => {
-        manager = value;
-      },
-    );
-    if (manager === undefined) throw new Error('Missing published manager');
+    const assemble = agents.assembleAgentActivationBootstrap;
+    const observation = spyOn(
+      agents,
+      'assembleAgentActivationBootstrap',
+    ).mockImplementation(async (...args) => {
+      const activation = await assemble(...args);
+      manager = args[2];
+      return activation;
+    });
+    try {
+      await operation.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        undefined,
+      );
+    } finally {
+      observation.mockRestore();
+    }
+    if (manager === undefined) throw new Error('Missing assembled manager');
     await inspect(manager);
   }
 

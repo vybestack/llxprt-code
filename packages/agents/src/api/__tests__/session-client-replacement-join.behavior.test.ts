@@ -228,6 +228,7 @@ describe('Session owner cleanup joining', () => {
         await owner.refreshAuth();
         return { authFailed: false, infoMessages: [] };
       },
+      undefined,
       builtMedia,
       owner,
       builtMcp.workspaceFilesystem,
@@ -245,21 +246,27 @@ describe('Session owner cleanup joining', () => {
       const receipt = await operation.preflight(intent);
       if (receipt.token === undefined) throw new Error('Missing receipt');
       await expect(
-        fromConfig({
-          settingsService: builtSettings,
-          config: builtConfig,
-          providerManager: builtManager,
-          messageBus: builtMessageBus,
-          mcpRuntime: builtMcp,
-          activation: intent,
-          activationPreflight: { operation, token: receipt.token },
-          runtimeFactoryBindings: {
+        fromConfig(
+          builtConfig,
+          builtSettings,
+          { activation: intent },
+          undefined,
+          builtManager,
+          undefined,
+          builtMessageBus,
+          builtMcp,
+          { operation, token: receipt.token },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
             ...createAgentRuntimeFactoryBindings(builtMedia.store),
             taskToolRegistration: () => {
               throw new Error('Runtime assembly fault');
             },
           },
-        }),
+        ),
       ).rejects.toThrow('Runtime assembly fault');
       expect(cleanupStates).not.toContain(false);
       await expect(builtMedia.store.getStoredByteLength()).rejects.toThrow(
@@ -634,6 +641,7 @@ describe('Session owner cleanup joining', () => {
           authError: new Error('Activation failed'),
         };
       },
+      undefined,
       builtMedia,
       owner,
       builtMcp.workspaceFilesystem,

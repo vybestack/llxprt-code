@@ -349,17 +349,22 @@ describe('MCP public tool approval owner isolation', () => {
         builtCallerMcp.policyOwner.session.confirmation.removeRulesBySource(
           CONFIRMATION_FORCING_SOURCE,
         );
-        const agent = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          runtimeFactoryBindings: builtCallerFactories,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          mcpOwnership: 'caller',
-          messageBus: builtCallerPolicy.session.messageBus,
-        });
+        const agent = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { mcpOwnership: 'caller' },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+          undefined,
+          undefined,
+          undefined,
+          builtCallerFactories,
+        );
 
         agents.push(agent);
         expect(agent.policy.getDefaultDecision()).toBe(PolicyDecision.ASK_USER);
@@ -693,15 +698,16 @@ describe('MCP public tool approval owner isolation', () => {
         ownerCCallerMcp.policyOwner.session.confirmation.removeRulesBySource(
           CONFIRMATION_FORCING_SOURCE,
         );
-        const agentC = await fromConfig({
-          settingsOwner: ownerCCallerSettingsOwner,
-          settingsService: ownerCCallerSettings,
-          providerManager: ownerCCallerManager,
-          config: ownerCCallerConfig,
-          mcpRuntime: ownerCCallerMcp,
-          mcpOwnership: 'caller',
-          messageBus: ownerCCallerPolicy.session.messageBus,
-        });
+        const agentC = await fromConfig(
+          ownerCCallerConfig,
+          ownerCCallerSettings,
+          { mcpOwnership: 'caller' },
+          ownerCCallerSettingsOwner,
+          ownerCCallerManager,
+          undefined,
+          ownerCCallerPolicy.session.messageBus,
+          ownerCCallerMcp,
+        );
         try {
           agents.push(agentC);
           expect(

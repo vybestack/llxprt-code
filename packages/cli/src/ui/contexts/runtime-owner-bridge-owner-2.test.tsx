@@ -63,7 +63,6 @@ import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
-import { createProviderAliasRefresh } from '../../runtime/createRuntimeOwnerFeatures.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
@@ -486,25 +485,27 @@ describe('interactive runtime owner bridge', () => {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
 
-    const a = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      messageBus: firstCallerPolicy.session.messageBus,
-      mcpRuntime: firstCallerMcp,
-      sessionId: 'alias-owner-shared-label',
-    });
+    const a = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'alias-owner-shared-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
     acquiredCleanup.push(() => a.dispose());
-    const b = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      messageBus: secondCallerPolicy.session.messageBus,
-      mcpRuntime: secondCallerMcp,
-      sessionId: 'alias-owner-shared-label',
-    });
+    const b = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'alias-owner-shared-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     acquiredCleanup.push(() => b.dispose());
     delete process.env.LLXPRT_FAKE_RESPONSES;
     if (
@@ -592,24 +593,23 @@ describe('interactive runtime owner bridge', () => {
     } = {};
     const left = render(
       <ProviderAliasRefreshProvider
-        refresh={createProviderAliasRefresh(a.providerManager)}
+        refresh={() => a.providerReads.refreshAliases()}
       >
         <RuntimeContextProvider
           requestFetch={a.sessionClient.fetch}
           agent={a}
           owner={createRuntimeOwnerFeatures(
-            firstCallerConfig,
-            a.providerManager,
+            a.providerReads.inspection,
             fixturePaths().directories,
             createSessionModelCommand(a),
             firstCallerSettingsOwner,
-            firstCallerSettings,
             a.workspace,
             a.modelParameters,
             a.settings,
             a.toolFormat,
             a.providerReads,
             a.auth.keys,
+            () => a.providerReads.readOpenAIInfo(),
           )}
         >
           <OwnerView label="left" onApi={(api) => (captured.left = api)} />
@@ -621,24 +621,23 @@ describe('interactive runtime owner bridge', () => {
     );
     const right = render(
       <ProviderAliasRefreshProvider
-        refresh={createProviderAliasRefresh(b.providerManager)}
+        refresh={() => b.providerReads.refreshAliases()}
       >
         <RuntimeContextProvider
           requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
-            secondCallerConfig,
-            b.providerManager,
+            b.providerReads.inspection,
             fixturePaths().directories,
             createSessionModelCommand(b),
             secondCallerSettingsOwner,
-            secondCallerSettings,
             b.workspace,
             b.modelParameters,
             b.settings,
             b.toolFormat,
             b.providerReads,
             b.auth.keys,
+            () => b.providerReads.readOpenAIInfo(),
           )}
         >
           <OwnerView label="right" onApi={(api) => (captured.right = api)} />

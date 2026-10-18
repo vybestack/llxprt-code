@@ -264,25 +264,36 @@ describe('activation bootstrap receipts', () => {
         const result = await built_operation.preflight(intent);
         if (!result.token) throw new Error('Missing receipt');
         const invalidToken = mismatch === 'copy' ? { ...result.token } : {};
-        const options = {
-          settingsService: built_builtCallerSettings,
-          config: built_builtCallerConfig,
-          mcpRuntime: built_builtCallerMcp,
-          activation:
-            mismatch === 'intent' ? { ...intent, model: 'other' } : intent,
-          activationPreflight: {
-            operation: built_operation,
-            token:
-              mismatch === 'copy' || mismatch === 'foreign'
-                ? invalidToken
-                : result.token,
-          },
+        const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+          built_builtCallerSettings;
+        const optionsConfig: Parameters<typeof fromConfig>[0] =
+          built_builtCallerConfig;
+        const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+          built_builtCallerMcp;
+        const optionsActivation: NonNullable<
+          Parameters<typeof fromConfig>[2]
+        >['activation'] =
+          mismatch === 'intent' ? { ...intent, model: 'other' } : intent;
+        const optionsActivationPreflight: Parameters<typeof fromConfig>[8] = {
+          operation: built_operation,
+          token:
+            mismatch === 'copy' || mismatch === 'foreign'
+              ? invalidToken
+              : result.token,
         };
-        if (mismatch === 'missing')
-          Reflect.deleteProperty(options, 'activation');
-        await expect(fromConfig(options)).rejects.toThrow(
-          'Activation preflight',
-        );
+        await expect(
+          fromConfig(
+            optionsConfig,
+            optionsSettingsService,
+            mismatch === 'missing' ? {} : { activation: optionsActivation },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            optionsMcpRuntime,
+            optionsActivationPreflight,
+          ),
+        ).rejects.toThrow('Activation preflight');
       } finally {
         await built_operation.dispose();
         await built_builtCallerClose();

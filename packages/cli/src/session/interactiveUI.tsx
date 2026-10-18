@@ -1,6 +1,6 @@
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+
 import {
-  type SessionSettingsOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
@@ -15,7 +15,6 @@ import {
   writeToStdout,
 } from '@vybestack/llxprt-code-core';
 import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 import React, { type ErrorInfo } from 'react';
 import { render as inkRender } from 'ink';
@@ -69,9 +68,7 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { createProviderAliasRefresh } from '../runtime/createRuntimeOwnerFeatures.js';
 import { InteractiveContextHost } from '../runtime/InteractiveContextHost.js';
-import { createOAuthControl } from '../runtime/createOAuthControl.js';
 import {
   buildUiRuntimeFromSource,
   buildSlashCommandRuntime,
@@ -298,11 +295,7 @@ function buildRenderElement(
   uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
   slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
   agent: Agent,
-  runtimeOwner: Config,
-  runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  },
+  runtimeSettings: SessionSettingsOperations,
   settings: LoadedSettings,
   startupWarnings: string[],
   version: string,
@@ -314,13 +307,9 @@ function buildRenderElement(
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
   recordingOwner?: 'agent' | 'raw',
-  oauthManager?: OAuthManager,
 ): React.ReactElement {
-  const contextHost = new InteractiveContextHost(
-    runtimeOwner,
-    agent,
-    runtimeSettings.owner,
-    runtimeSettings.store,
+  const contextHost = new InteractiveContextHost(agent, () =>
+    runtimeSettings.readDefaultProfileName(),
   );
   return renderInteractiveShell(
     <AppWrapper
@@ -343,11 +332,8 @@ function buildRenderElement(
       setActiveToolFormatOverride={contextHost.setActiveToolFormatOverride}
       setEphemeralSetting={contextHost.setEphemeralSetting}
       updateActiveProviderApiKey={contextHost.updateActiveProviderApiKey}
-      providerAliasRefresh={createProviderAliasRefresh(agent.providerManager)}
-      oauthControl={createOAuthControl(
-        () => oauthManager,
-        agent.providerManager,
-      )}
+      providerAliasRefresh={agent.providerReads.refreshAliases}
+      oauthControl={agent.authentication}
       settings={settings}
       runtimeMessageBus={runtimeMessageBus}
       startupWarnings={startupWarnings}
@@ -393,11 +379,7 @@ function setupTerminalExitHandlers(
 }
 
 export interface OwnerInteractiveStartup {
-  readonly oauthManager?: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
@@ -411,11 +393,7 @@ export interface OwnerInteractiveStartup {
 
 export interface RawInteractiveStartup {
   readonly recordingOwner: 'raw';
-  readonly oauthManager: OAuthManager;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly sessionPersistence: CliSessionPersistencePort | undefined;
   readonly runtimeMessageBus?: MessageBus;
   readonly recordingIntegration?: RecordingIntegration;
@@ -539,16 +517,12 @@ interface StartupTransactionState {
  * perf owner successfully starts runs inside this one transaction.
  */
 export type CommitInteractiveStartupArgs = {
-  readonly oauthManager?: OAuthManager;
   readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
   readonly skillOperations?: Pick<
     WorkspaceSkillOperations,
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
-  readonly runtimeSettings: {
-    readonly owner: SessionSettingsOwner;
-    readonly store: SettingsService;
-  };
+  readonly runtimeSettings: SessionSettingsOperations;
   readonly config: Config;
   readonly agent: Agent;
   readonly settings: LoadedSettings;
@@ -593,10 +567,10 @@ export type CommitInteractiveStartupArgs = {
  */
 function composeUiBucketOperations(
   config: Config,
-  oauth: OAuthManager | undefined,
+  oauth: Agent['authentication'],
 ): BucketFailoverRuntime {
   const readProviderName = () => config.getProvider() ?? '';
-  return oauth instanceof OAuthManager
+  return oauth.isAvailable()
     ? {
         resetBuckets: () => oauth.resetBuckets(readProviderName(), false),
         resetBucketSession: () => oauth.resetBuckets(readProviderName(), true),
@@ -610,7 +584,7 @@ function composeUiBucketOperations(
 }
 
 function startupBucketOperations(args: CommitInteractiveStartupArgs) {
-  return composeUiBucketOperations(args.config, args.oauthManager);
+  return composeUiBucketOperations(args.config, args.agent.authentication);
 }
 
 function startupCommandRuntimes(
@@ -622,7 +596,7 @@ function startupCommandRuntimes(
     args.config,
     args.agent,
     operations,
-    args.runtimeSettings.owner,
+    args.runtimeSettings,
   );
   const slashCommandRuntime = ports.buildSlashRuntime(
     args.config,
@@ -632,7 +606,7 @@ function startupCommandRuntimes(
     operations,
     args.skillOperations,
     args.restartExtension,
-    args.runtimeSettings.owner,
+    args.runtimeSettings,
   );
   return { uiRuntime, slashCommandRuntime };
 }
@@ -673,7 +647,6 @@ export async function commitInteractiveStartup(
         uiRuntime,
         slashCommandRuntime,
         args.agent,
-        args.config,
         args.runtimeSettings,
         args.settings,
         args.startupWarnings,
@@ -686,7 +659,6 @@ export async function commitInteractiveStartup(
         args.suppressStartupWelcome,
         args.perfOwner,
         args.recordingOwner,
-        args.oauthManager,
       ),
       renderOptions,
     );

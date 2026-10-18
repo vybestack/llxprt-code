@@ -10,7 +10,7 @@ import type { AdmittedProviderRoute } from '@vybestack/llxprt-code-core/runtime/
 import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { LoopHolder } from './loop/rebuildLoop.js';
+import type { SessionExecution } from '../session/session-execution-owner.js';
 import {
   captureAdmittedCredential,
   assertSupportedReplacementRoute,
@@ -24,7 +24,7 @@ export interface ActiveRun {
   readonly close: () => Promise<void>;
   retirements: ReadonlyArray<() => Promise<void>>;
   modelParameters?: AdmittedModelParameters;
-  loop?: Pick<NonNullable<LoopHolder['current']>, 'run' | 'injectSteer'>;
+  loop?: SessionExecution;
 }
 
 export interface DirectProviderAdmission {

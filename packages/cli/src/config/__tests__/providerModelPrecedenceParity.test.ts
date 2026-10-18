@@ -166,11 +166,11 @@ async function runConfig(settings: Settings, argv?: string[]) {
     'test-session',
     parsedArgv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-      providerContributions: await loadPrecedenceProviderContributions(),
-    },
+    undefined,
+    runtimeSettingsService,
+    undefined,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
   );
 }
 

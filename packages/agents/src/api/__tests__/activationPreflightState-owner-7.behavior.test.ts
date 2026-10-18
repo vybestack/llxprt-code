@@ -455,22 +455,24 @@ describe('activation bootstrap ownership and queued work', () => {
         const otherManager = other_builtCallerManager;
 
         await expect(
-          fromConfig({
-            settingsService:
-              mismatch === 'config'
-                ? other_builtCallerSettings
-                : built_builtCallerSettings,
-            config:
-              mismatch === 'config'
-                ? other_builtCallerConfig
-                : built_builtCallerConfig,
-            providerManager: mismatch === 'manager' ? otherManager : manager,
-            activation: intent,
-            activationPreflight: {
+          fromConfig(
+            mismatch === 'config'
+              ? other_builtCallerConfig
+              : built_builtCallerConfig,
+            mismatch === 'config'
+              ? other_builtCallerSettings
+              : built_builtCallerSettings,
+            { activation: intent },
+            undefined,
+            mismatch === 'manager' ? otherManager : manager,
+            undefined,
+            undefined,
+            undefined,
+            {
               operation: built_operation,
               token: result.token,
             },
-          }),
+          ),
         ).rejects.toThrow('Activation preflight belongs');
       } finally {
         await other_operation.dispose();

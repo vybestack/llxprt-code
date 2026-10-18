@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { ReactNode } from 'react';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  createProviderInspection,
+} from '@vybestack/llxprt-code-agents';
 import { assembleProfileDefinitions } from '@vybestack/llxprt-code-agents';
-import type { Config, SessionSettingsOwner } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import * as Operations from '../ui/contexts/RuntimeContext.js';
-import { createProviderInspection } from './providerInspection.js';
 import { createSessionModelCommand } from './session-model-command.js';
 
 function getLoadBalancerOperations(
@@ -73,21 +72,15 @@ export class InteractiveContextHost {
   readonly renderRuntime = (children: ReactNode): ReactNode =>
     this.render(children);
   constructor(
-    config: Config,
     agent: Agent,
-    selected: SessionSettingsOwner,
-    settings: SettingsService,
+    readDefaultProfile: Operations.GetDefaultProfileNameOperation,
   ) {
-    selected.assertSettingsIdentity(settings);
     const reads = agent.providerReads;
     const state = agent.settings;
     const format = agent.toolFormat;
     const params = agent.modelParameters;
     const keys = agent.auth.keys;
-    const inspection = createProviderInspection(
-      () => selected.readSelectedEndpoint(),
-      agent.providerManager,
-    );
+    const inspection = reads.inspection;
     const definitions = assembleProfileDefinitions(
       agent.workspace.profileDefinitions,
       agent.workspace.profileWrites,
@@ -130,12 +123,8 @@ export class InteractiveContextHost {
     this.#clearActiveModelParam = params.clear.bind(params);
     this.updateActiveProviderApiKey = keys.setRaw.bind(keys);
     this.#getWorkspaceDirectories = () => [...agent.workspace.getDirectories()];
-    this.#getDefaultProfileName = () =>
-      readDefaultProfile(() => settings.get('defaultProfile'));
-    this.#getOpenAIProviderInfo = bindOpenAIInfo(
-      { settingsService: settings, config },
-      agent.providerManager,
-    );
+    this.#getDefaultProfileName = readDefaultProfile;
+    this.#getOpenAIProviderInfo = () => reads.readOpenAIInfo();
     this.#getActiveProfileName = () => agent.getActiveProfileName();
     this.#setDefaultProfileName = (name) => agent.setDefaultProfileName(name);
     this.#getRuntimeDiagnosticsSnapshot = () =>
@@ -371,14 +360,4 @@ function bindBaseUrlUpdate(
         : `Base URL cleared; provider '${providerName}' now uses the default endpoint.`,
     };
   };
-}
-
-function readDefaultProfile(read: () => unknown): string | null {
-  return typeof read() === 'string' ? String(read()) : null;
-}
-function bindOpenAIInfo(
-  runtime: Parameters<typeof getOpenAIProviderInfo>[0],
-  manager: Parameters<typeof getOpenAIProviderInfo>[1],
-) {
-  return () => getOpenAIProviderInfo(runtime, manager);
 }

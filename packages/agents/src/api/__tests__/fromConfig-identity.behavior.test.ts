@@ -308,14 +308,18 @@ describe('fromConfig caller identities', () => {
     await openCaller('plain-text.jsonl');
     try {
       const config = callerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         expect(internalConfig(agent)).toBe(config);
       } finally {
@@ -331,14 +335,18 @@ describe('fromConfig caller identities', () => {
     try {
       const config = callerConfig;
       const expected = callerSettings;
-      const agent: Agent = await fromConfig({
-        settingsService: expected,
-        settingsOwner: callerSettingsOwner,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        expected,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         agent.setEphemeralSetting('streaming', false);
         expect(expected.get('streaming')).toBe('disabled');
@@ -356,15 +364,22 @@ describe('fromConfig caller identities', () => {
   it('T1c fromConfig adopts the provider and model already on the Config (value assertions) @requirement:REQ-001 @scenario:adoption @given:a Config whose active provider=fake and model=fake-model @when:fromConfig({ config }) @then:agent.getProvider() === "fake" and agent.getModel() === "fake-model"', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         expect(agent.getProvider()).toBe('fake');
         expect(agent.getModel()).toBe('fake-model');
@@ -377,22 +392,30 @@ describe('fromConfig caller identities', () => {
   });
 
   it('T1d fromConfig({}) without a config rejects with a clear validation error (NOT NotYetImplemented) @requirement:REQ-001 @scenario:validation @given:an options object missing the required config field @when:fromConfig({} as never) @then:the promise rejects with an Error whose message names the missing config field (never the NotYetImplemented stub string)', async () => {
-    await expect(fromConfig({} as never)).rejects.toThrow(/config|Config/i);
+    await expect(
+      fromConfig(undefined as never, undefined as never),
+    ).rejects.toThrow(/config|Config/i);
   });
 
   it('T1e fromConfig with sessionId sets the runtime id deterministically; without sessionId it derives a non-empty runtime id @requirement:REQ-001 @scenario:runtimeId @given:a caller-supplied sessionId @when:fromConfig({ config, sessionId }) @then:the runtime id observable equals the supplied sessionId; @given:no sessionId @then:the runtime id observable is a non-empty generated string', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agentNamed: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        sessionId: 'deterministic-session-42',
-      });
+      const agentNamed: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        { sessionId: 'deterministic-session-42' },
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         expect(captureRuntimeId(agentNamed)).toBe('deterministic-session-42');
       } finally {
@@ -406,15 +429,22 @@ describe('fromConfig caller identities', () => {
   it('T1e-deriv without sessionId the runtime derives a non-empty generated id @requirement:REQ-001 @scenario:runtimeId @given:no sessionId @when:fromConfig({ config }) @then:the runtime id observable is a non-empty generated string', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         const id = captureRuntimeId(agent);
         expect(typeof id).toBe('string');
@@ -431,14 +461,18 @@ describe('fromConfig caller identities', () => {
     await openCaller('plain-text.jsonl');
     try {
       const config = callerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         expect(captureProviderManager(agent)).toBe(callerManager);
       } finally {
@@ -452,15 +486,22 @@ describe('fromConfig caller identities', () => {
   it('T6-adopted-switch a provider switch through the agent resolves the adopted runtime (value parity, no crash) @requirement:REQ-001 @scenario:provider-switch @given:a fromConfig agent over a Config with one manager @when:setProvider("fake") is invoked @then:the switch completes without throwing and the active provider reflects the adopted runtime', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         await agent.setProvider('fake', 'fake-model');
         expect(agent.getProvider()).toBe('fake');
@@ -476,14 +517,18 @@ describe('fromConfig caller identities', () => {
     await openCaller('plain-text.jsonl');
     try {
       const config = callerConfig;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         expect(captureProviderManager(agent)).toBe(callerManager);
         const events: AgentEvent[] = await drain(agent.stream('hello'));
@@ -501,16 +546,22 @@ describe('fromConfig caller identities', () => {
     await openCaller('plain-text.jsonl');
     try {
       const callerBus: MessageBus = callerPolicy.session.messageBus;
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        messageBus: callerBus,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         expect(captureAgentMessageBus(agent)).toBe(callerBus);
       } finally {
@@ -528,14 +579,18 @@ describe('fromConfig caller identities', () => {
       expect(
         typeof (config as unknown as { getMessageBus?: unknown }).getMessageBus,
       ).toBe('undefined');
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
+      const agent: Agent = await fromConfig(
         config,
-        mcpRuntime: callerMcp,
-      });
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+      );
       try {
         const bus = captureAgentMessageBus(agent);
         expect(bus).toBeDefined();
@@ -553,15 +608,22 @@ describe('fromConfig caller identities', () => {
   it('T7 ownership: agent.dispose() does NOT dispose a fromConfig-supplied Config — the caller Config agentClient is NOT torn down @requirement:REQ-001.3 @scenario:caller-owned-config @given:a fromConfig agent over a caller-supplied Config @when:agent.dispose() runs @then:agentClientDisposed(probe) === false (the caller retains ownership of the Config lifecycle)', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       const probe: DisposalProbe = captureProbe(agent);
       expect(agentClientDisposed(probe)).toBe(false);
       await agent.dispose();
@@ -615,16 +677,22 @@ describe('fromConfig caller identities', () => {
       const before = listenerCountOf(bus as RecordLike);
       expect(before).toBeGreaterThanOrEqual(1);
 
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-        messageBus: callerBus,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        callerBus,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       await agent.dispose();
 
       // The caller bus must still be ALIVE: its observable listener count is
@@ -645,15 +713,22 @@ describe('fromConfig caller identities', () => {
   it('T10 smoke: a single turn via agent.stream() over the FakeProvider fixture yields exactly one done event @requirement:REQ-INT-001 @scenario:turn-drive @given:a fromConfig agent over the plain-text fixture @when:agent.stream("hello") is drained @then:exactly one done event is emitted', async () => {
     await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: callerSettingsOwner,
-        settingsService: callerSettings,
-        agentClient: callerOwner.getAgentClient(),
-        providerManager: callerManager,
-        runtimeFactoryBindings: callerFactories,
-        config: callerConfig,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        callerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        callerFactories,
+      );
       try {
         const events: AgentEvent[] = await drain(agent.stream('hello'));
         expect(countType(events, 'done')).toBe(1);

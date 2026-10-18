@@ -466,15 +466,8 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
   describe('recordOwnership @requirement:REQ-016', () => {
     it('initialises disposal flags false and defaults sessionLocks to [] @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-016', () => {
       const runtimeHandle = { cleanup: (): void => {} };
-      const loopHolder = {};
-      const fakeConfig = {} as never;
-      const fakeRuntimeState = {} as never;
       const record = recordOwnership({
         runtimeHandle,
-        config: fakeConfig,
-        messageBus: 'bus',
-        loopHolder,
-        runtimeState: fakeRuntimeState,
         injectedSchedulerHandles: [],
       });
       expect(record.disposed).toBe(false);
@@ -483,17 +476,12 @@ describe('Agent bootstrap helpers @plan:PLAN-20260617-COREAPI.P15 @requirement:R
       expect(record.sessionLocksReleased).toBe(false);
       expect(record.sessionLocks).toStrictEqual([]);
       expect(record.runtimeHandle).toBe(runtimeHandle);
-      expect(record.messageBus).toBe('bus');
     });
 
     it('retains a provided sessionLocks array verbatim @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-016', () => {
       const locks = [{ release: (): void => {} }];
       const record = recordOwnership({
         runtimeHandle: { cleanup: (): void => {} },
-        config: {} as never,
-        messageBus: undefined,
-        loopHolder: {},
-        runtimeState: {} as never,
         injectedSchedulerHandles: [],
         sessionLocks: locks,
       });

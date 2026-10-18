@@ -538,23 +538,30 @@ describe('enabled extension joint root shutdown', () => {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
 
-    const agent = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      config: firstCallerConfig,
-      providerManager: firstCallerManager,
-      agentClient: firstCallerOwner.getAgentClient(),
-      mcpRuntime: firstCallerMcp,
-      mcpOwnership: 'agent',
-    });
-    const sibling = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      config: secondCallerConfig,
-      providerManager: secondCallerManager,
-      agentClient: secondCallerOwner.getAgentClient(),
-      mcpRuntime: secondCallerMcp,
-    });
+    const agent = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { mcpOwnership: 'agent' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      undefined,
+      firstCallerMcp,
+      undefined,
+      firstCallerOwner.getAgentClient(),
+    );
+    const sibling = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      {},
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      undefined,
+      secondCallerMcp,
+      undefined,
+      secondCallerOwner.getAgentClient(),
+    );
     const loader = firstCallerMcp.extensionOperations;
     const siblingLoader = secondCallerMcp.extensionOperations;
     const extension = {

@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @license
@@ -22,7 +23,7 @@ import { afterEach, beforeEach } from 'bun:test';
 import { useMemo } from 'react';
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
   buildSlashCommandRuntime,
@@ -55,7 +56,7 @@ type FixtureRuntime = ((
         Pick<WorkspaceResourceSelection, 'listResources'>
     >,
   sessionOwner?: UiFixtureOwner | Agent,
-  settingsOwner?: NonNullable<FromConfigOptions['settingsOwner']>,
+  settingsOwner?: SessionSettingsOwner,
 ) => CliUiRuntime) & {
   dispose(): Promise<void>;
 };
@@ -140,7 +141,7 @@ async function closeInstructionFixture(
 function buildSuppliedSessionRuntime(
   source: Parameters<FixtureRuntime>[0],
   owner: UiFixtureOwner | Agent,
-  settingsOwner: NonNullable<FromConfigOptions['settingsOwner']> | undefined,
+  settingsOwner: SessionSettingsOwner | undefined,
 ): CliUiRuntime {
   return buildSlashCommandRuntime(
     source,
@@ -179,7 +180,7 @@ export function installWorkspaceRuntimeFixture(
   const compose = (
     source: Parameters<FixtureRuntime>[0],
     suppliedSessionOwner?: UiFixtureOwner | Agent,
-    settingsOwner?: NonNullable<FromConfigOptions['settingsOwner']>,
+    settingsOwner?: SessionSettingsOwner,
   ): CliUiRuntime => {
     if (suppliedSessionOwner)
       return buildSuppliedSessionRuntime(

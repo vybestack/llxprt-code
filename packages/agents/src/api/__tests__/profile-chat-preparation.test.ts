@@ -490,25 +490,28 @@ describe('profile-chat-preparation', () => {
     async (initialized) => {
       await openbuiltCaller('multi-turn-text.jsonl');
       await openotherCaller('multi-turn-text.jsonl');
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: initialized
-          ? builtCallerOwner.getAgentClient()
-          : undefined,
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
-      const ownerB = await fromConfig({
-        settingsOwner: otherCallerSettingsOwner,
-        settingsService: otherCallerSettings,
-        providerManager: otherCallerManager,
-        config: otherCallerConfig,
-        mcpRuntime: otherCallerMcp,
-        messageBus: otherCallerPolicy.session.messageBus,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        initialized ? builtCallerOwner.getAgentClient() : undefined,
+      );
+      const ownerB = await fromConfig(
+        otherCallerConfig,
+        otherCallerSettings,
+        {},
+        otherCallerSettingsOwner,
+        otherCallerManager,
+        undefined,
+        otherCallerPolicy.session.messageBus,
+        otherCallerMcp,
+      );
       const provider = new FakeProvider(
         fileURLToPath(
           new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
@@ -614,15 +617,18 @@ describe('profile-chat-preparation', () => {
 
   it('disposal after candidate chat creation discards the owned candidate and retains the borrowed client', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     const client = builtCallerOwner.getAgentClient();
     const provider = new FakeProvider(
       fileURLToPath(
@@ -671,15 +677,18 @@ describe('profile-chat-preparation', () => {
           CoreEvent.ModelChanged,
         ),
       ).toStrictEqual(listeners);
-      const nextOwner = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      const nextOwner = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         const events = [];
         for await (const event of nextOwner.stream('continue'))

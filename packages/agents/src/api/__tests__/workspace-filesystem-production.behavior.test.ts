@@ -588,14 +588,18 @@ describe('production filesystem roots', () => {
         roots: { command: process.execPath, args: [script, secondLog] },
       },
     });
-    const agent = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      config: firstCallerConfig,
-      providerManager: firstCallerManager,
-      agentClient: firstCallerOwner.getAgentClient(),
-      mcpRuntime: firstCallerMcp,
-    });
+    const agent = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      {},
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      undefined,
+      firstCallerMcp,
+      undefined,
+      firstCallerOwner.getAgentClient(),
+    );
     try {
       const originalSibling = await waitForRoots(secondLog, (value) =>
         value.includes(pathToFileURL(bDir).href),

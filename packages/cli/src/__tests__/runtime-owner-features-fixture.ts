@@ -3,27 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
-
-import type {
-  Agent,
-  FromConfigOptions,
-  SessionProviderReads,
+import {
+  assembleProfileDefinitions,
+  type Agent,
+  type SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
-
-import type {
-  RuntimeProviderManager,
-  Config,
-} from '@vybestack/llxprt-code-core';
-
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
-
-import { assembleProfileDefinitions } from '@vybestack/llxprt-code-agents';
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
 import type { RuntimeOwnerFeatures } from './runtime-context-fixture.js';
-
-import { createProviderInspection } from '../runtime/providerInspection.js';
-
 function bindProviderMutations(
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
   modelParameters: Agent['modelParameters'],
@@ -42,13 +28,12 @@ function bindProviderMutations(
     updateActiveProviderApiKey: (key) => keys.setRaw(key),
   };
 }
+
 export function createRuntimeOwnerFeatures(
-  owner: Config,
-  manager: RuntimeProviderManager,
+  inspection: SessionProviderReads['inspection'],
   directories: () => readonly string[],
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
-  sessionSettings: SessionSettingsOwner,
-  settingsService: SettingsService,
+  sessionSettings: SessionSettingsOperations,
   definitions: Pick<Agent['workspace'], 'profileDefinitions' | 'profileWrites'>,
   modelParameters: Agent['modelParameters'],
   settings: Agent['settings'],
@@ -66,8 +51,8 @@ export function createRuntimeOwnerFeatures(
     | 'getActiveModelParams'
   >,
   keys: Pick<Agent['auth']['keys'], 'setRaw'>,
+  readOpenAI: RuntimeOwnerFeatures['getOpenAIProviderInfo'],
 ): RuntimeOwnerFeatures {
-  sessionSettings.assertSettingsIdentity(settingsService);
   return {
     listProviders: () => reads.listProviders(),
     getActiveModelParams: () => reads.getActiveModelParams(),
@@ -84,10 +69,7 @@ export function createRuntimeOwnerFeatures(
       definitions.profileDefinitions,
       definitions.profileWrites,
     ),
-    ...createProviderInspection(
-      () => sessionSettings.readSelectedEndpoint(),
-      manager,
-    ),
+    ...inspection,
     getActiveToolFormatState: () => toolFormat.getState(),
     setActiveToolFormatOverride: (format) => toolFormat.setOverride(format),
     getActiveProviderMetrics: () => reads.getActiveProviderMetrics(),
@@ -98,11 +80,7 @@ export function createRuntimeOwnerFeatures(
     clearSessionSetting: (key) => settings.clearSessionSetting(key),
     ...bindProviderMutations(changeModel, modelParameters, keys),
     getWorkspaceDirectories: () => [...directories()],
-    getDefaultProfileName: () =>
-      typeof settingsService.get('defaultProfile') === 'string'
-        ? String(settingsService.get('defaultProfile'))
-        : null,
-    getOpenAIProviderInfo: () =>
-      getOpenAIProviderInfo({ settingsService, config: owner }, manager),
+    getDefaultProfileName: () => sessionSettings.readDefaultProfileName(),
+    getOpenAIProviderInfo: readOpenAI,
   };
 }

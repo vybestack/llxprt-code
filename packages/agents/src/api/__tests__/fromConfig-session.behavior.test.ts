@@ -127,19 +127,27 @@ describe('adopted session explicit collaborators', () => {
       },
     );
     const files = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig({
-      config: fixtureFactorylessConfig,
-      settingsService: fixtureFactorylessSettings,
-      settingsOwner: fixtureFactorylessSettingsOwner,
-      policyOwner: fixtureFactorylessPolicy,
-      messageBus: fixtureFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: fixtureFactorylessFactories,
-      mcpRuntime: mcp,
-      oauthManager: oauth,
-      providerFileLifecycle: files,
-      credentialAuthority: credentials().authority,
-      activation: { provider: 'fake', model: 'fake-model', authMode: 'auto' },
-    });
+    const agent = await fromConfig(
+      fixtureFactorylessConfig,
+      fixtureFactorylessSettings,
+      {
+        activation: { provider: 'fake', model: 'fake-model', authMode: 'auto' },
+      },
+      fixtureFactorylessSettingsOwner,
+      undefined,
+      oauth,
+      fixtureFactorylessPolicy.session.messageBus,
+      mcp,
+      undefined,
+      undefined,
+      files,
+      undefined,
+      undefined,
+      fixtureFactorylessFactories,
+      undefined,
+      credentials().authority,
+      fixtureFactorylessPolicy,
+    );
     await agent.sessionClient.refreshAuth();
     await agent.agentClient.startChat();
     const manager = agent.providerManager;
@@ -180,7 +188,8 @@ describe('adopted session explicit collaborators', () => {
         manager,
         oauth,
         () => 'agent',
-        client,
+        () => client.getAgentClient().isInitialized(),
+        (method) => client.refreshAuth(method),
         activation,
         undefined,
       );

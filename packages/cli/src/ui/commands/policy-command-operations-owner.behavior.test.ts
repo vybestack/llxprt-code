@@ -38,7 +38,7 @@ describe('policy command independent reads', () => {
     });
     const root = new RuntimePolicyOwner(config);
     try {
-      const policy = new PolicyControl({ inspection: root.session.inspection });
+      const policy = new PolicyControl(root.session.inspection);
       const readRules = () =>
         Object.assign([...policy.getRules()], { policy: sibling.policy });
       const command = createPoliciesCommand(

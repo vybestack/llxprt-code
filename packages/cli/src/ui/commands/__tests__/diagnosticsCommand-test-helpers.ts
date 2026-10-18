@@ -5,23 +5,23 @@
  */
 import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
+import {
+  type Agent,
+  discoverProviderBuckets,
+  type OAuthBucketDiscoveryManager,
+} from '@vybestack/llxprt-code-agents';
 import { vi } from 'bun:test';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 // Imported from the MCP package rather than through the core re-export:
 // diagnosticsTokens.ts imports it from '@vybestack/llxprt-code-mcp', and under
 // Bun the two specifiers can resolve to different module instances, so the
 // injected token store would otherwise not be the one the command reads.
-import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
-import type { MCPOAuthCredentials } from '@vybestack/llxprt-code-core';
-import type { OAuthToken } from '@vybestack/llxprt-code-providers/auth.js';
 import type { BucketStats } from '@vybestack/llxprt-code-auth';
+import type { MCPOAuthCredentials } from '@vybestack/llxprt-code-core';
+import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
+import type { OAuthToken } from '@vybestack/llxprt-code-providers/auth.js';
 
-import {
-  discoverProviderBuckets,
-  type OAuthBucketDiscoveryManager,
-} from '../oauthBucketDiscovery.js';
 import type { OAuthControl } from '../../contexts/OAuthControlContext.js';
 
 type DiagnosticsSource = Omit<OAuthBucketDiscoveryManager, 'getTokenStore'> & {

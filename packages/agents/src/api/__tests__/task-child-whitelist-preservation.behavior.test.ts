@@ -154,16 +154,28 @@ async function observeChild(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'task-child-whitelist-session',
     });
-    agent = await fromConfig({
-      settingsService: new SettingsService(),
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      activation: {
-        provider: 'openai',
-        model: 'whitelist-parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      new SettingsService(),
+      {
+        activation: {
+          provider: 'openai',
+          model: 'whitelist-parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+    );
     const registry = agent.agentClient.tools;
     const task = agent.tools.get('task');
     if (!task) throw new Error('Public direct task handle unavailable');

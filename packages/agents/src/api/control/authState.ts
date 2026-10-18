@@ -153,3 +153,12 @@ export function seedAgentAuthState(
 export function authStatusForWinner(winner: AuthWinner): AuthStatus {
   return winner !== 'none' ? 'authenticated' : 'unauthenticated';
 }
+
+export interface AgentProviderState {
+  provider: string;
+  model: string;
+  modelParams: Record<string, unknown>;
+  baseUrl?: string;
+  keyName?: string;
+  isLoadBalancer?: boolean;
+}

@@ -3,8 +3,6 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { SettingsService as HandoffSettingsService } from '@vybestack/llxprt-code-settings';
 
 import {
   describe,
@@ -15,7 +13,6 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { assembleAgentActivationBootstrap } from '@vybestack/llxprt-code-agents';
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 import { main } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
@@ -33,6 +30,7 @@ import { start_sandbox } from './utils/sandbox.js';
 void vi.mock('./config/settings.js', () => ({
   loadSettings: vi.fn().mockReturnValue({
     merged: {
+      extensions: { disabled: [] },
       advanced: {},
       security: { auth: {} },
       ui: { useAlternateBuffer: true },
@@ -191,6 +189,7 @@ describe('cli sandbox integration', () => {
     const customMaxHeap = 4096;
     loadSettingsMock.mockReturnValue({
       merged: {
+        extensions: { disabled: [] },
         ui: {
           autoConfigureMaxOldSpaceSize: true,
           maxHeapSizeMB: customMaxHeap,
@@ -202,50 +201,8 @@ describe('cli sandbox integration', () => {
     } as unknown as LoadedSettings);
 
     const mockConfig = buildSandboxConfig();
-    const providerOwner = sandboxProviderOwner();
     loadCliConfigMock.mockImplementation(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => {
-          const activationOwner = await assembleAgentActivationBootstrap(
-            mockConfig,
-            store,
-            providerOwner,
-            null,
-            () => undefined,
-            'borrowed',
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            owner,
-          );
-          return {
-            providerFileLifecycle: activationOwner.providerFileLifecycle,
-            messageBus: activationOwner.messageBus,
-            workspaceDefinitions: activationOwner.workspaceDefinitions,
-            workspaceTrust: activationOwner.workspaceTrust,
-            trustCleanup: activationOwner.trustCleanup,
-            workspaceMemory: activationOwner.workspaceMemory,
-            workspaceMemoryOwnership: activationOwner.workspaceMemoryOwnership,
-            workspaceFilesystem: activationOwner.workspaceFilesystem,
-            sessionClient: activationOwner.sessionClient,
-            takeMediaOwner:
-              activationOwner.takeMediaOwner.bind(activationOwner),
-            settingsOwnerOwnership: activationOwner.settingsOwnerOwnership,
-            takeSettingsOwner:
-              activationOwner.takeSettingsOwner.bind(activationOwner),
-            takeSessionClient:
-              activationOwner.takeSessionClient.bind(activationOwner),
-            preflight: vi.fn(async () => ({
-              authFailed: false,
-              infoMessages: [],
-            })),
-            dispose: () => activationOwner.dispose(),
-          };
-        },
-        providerOwner,
-      ),
+      handoffCliConfig(mockConfig, undefined, () => true),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
@@ -310,50 +267,8 @@ describe('cli sandbox integration', () => {
     // loadSandboxConfig, so getSandbox() staying defined must start_sandbox.
     process.env.SANDBOX = 'some-ci-value';
     const mockConfig = buildSandboxConfig();
-    const providerOwner = sandboxProviderOwner();
     loadCliConfigMock.mockImplementation(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => {
-          const activationOwner = await assembleAgentActivationBootstrap(
-            mockConfig,
-            store,
-            providerOwner,
-            null,
-            () => undefined,
-            'borrowed',
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            owner,
-          );
-          return {
-            providerFileLifecycle: activationOwner.providerFileLifecycle,
-            messageBus: activationOwner.messageBus,
-            workspaceDefinitions: activationOwner.workspaceDefinitions,
-            workspaceTrust: activationOwner.workspaceTrust,
-            trustCleanup: activationOwner.trustCleanup,
-            workspaceMemory: activationOwner.workspaceMemory,
-            workspaceMemoryOwnership: activationOwner.workspaceMemoryOwnership,
-            workspaceFilesystem: activationOwner.workspaceFilesystem,
-            sessionClient: activationOwner.sessionClient,
-            takeMediaOwner:
-              activationOwner.takeMediaOwner.bind(activationOwner),
-            settingsOwnerOwnership: activationOwner.settingsOwnerOwnership,
-            takeSettingsOwner:
-              activationOwner.takeSettingsOwner.bind(activationOwner),
-            takeSessionClient:
-              activationOwner.takeSessionClient.bind(activationOwner),
-            preflight: vi.fn(async () => ({
-              authFailed: false,
-              infoMessages: [],
-            })),
-            dispose: () => activationOwner.dispose(),
-          };
-        },
-        providerOwner,
-      ),
+      handoffCliConfig(mockConfig, undefined, () => true),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
@@ -395,26 +310,6 @@ describe('cli sandbox integration', () => {
     exitSpy.mockRestore();
   });
 });
-
-function sandboxProviderOwner(): ProviderManager {
-  const manager = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    new HandoffSettingsService(),
-  );
-  manager.registerProvider({
-    name: 'gemini',
-    getDefaultModel: () => 'gemini-model',
-    getModels: async () => [],
-    async *generateChatCompletion() {
-      yield { speaker: 'ai', blocks: [] };
-    },
-  });
-  manager.setActiveProvider('gemini');
-  return manager;
-}
 
 function buildSandboxConfig(): Config {
   const fn = vi.fn;

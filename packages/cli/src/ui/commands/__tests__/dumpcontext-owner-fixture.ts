@@ -6,7 +6,7 @@
 import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { getProviderDumpMetadata } from '../../../runtime/providerInspection.js';
+import { getProviderDumpMetadata } from '@vybestack/llxprt-code-agents';
 export function bindDumpManager(
   context: CommandOwnerFixture,
   runtimeApi: () => Record<string, unknown>,

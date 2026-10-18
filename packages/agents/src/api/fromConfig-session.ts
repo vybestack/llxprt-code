@@ -1,3 +1,4 @@
+import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,13 +33,9 @@ import {
   type ActivationPreflight,
 } from './activationPreflightState.js';
 import type { ProviderActivationIntent } from './config-types.js';
-import {
-  assembleModelSelection,
-  type ModelSelectionOperations,
-} from './model-selection.js';
+import { assembleModelSelection } from './model-selection.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { assembleSessionImages } from './session-image-assembly.js';
 import type { SessionImageSelection } from './session-image-assembly.js';
 
@@ -49,29 +46,49 @@ export async function activateAdoptedSession(
   manager: RuntimeProviderManager,
   oauth: OAuthManager,
   readRuntimeKind: () => RuntimeKind,
-  client: SessionClientOwner,
+  isClientInitialized: () => boolean,
+  refreshAuth: (method?: string) => Promise<void>,
   activation: ProviderActivationIntent | undefined,
   preflight: ActivationPreflight | undefined,
 ): Promise<void> {
-  await resolveActivation(
+  const switchProvider = assembleProviderSwitch(
     config,
-    activation,
-    preflight,
-    assembleProviderSwitch(
-      config,
-      settings,
-      manager,
-      oauth,
-      readRuntimeKind,
-      () => client.refreshAuth(),
-      settingsOwner,
-    ),
     settings,
     manager,
-    () => client.getAgentClient(),
-    (method) => client.refreshAuth(method),
-    assembleModelSelection(settingsOwner),
+    oauth,
+    readRuntimeKind,
+    () => refreshAuth(),
+    settingsOwner,
   );
+  if (activation !== undefined) {
+    const activationResult =
+      preflight !== undefined
+        ? AgentActivationBootstrap.consume(
+            preflight,
+            config,
+            activation,
+            manager,
+            settings,
+          )
+        : await executeProviderActivation(
+            config,
+            activation,
+            switchProvider,
+            settings,
+            manager,
+            refreshAuth,
+            assembleModelSelection(settingsOwner),
+          );
+    if (activationResult.authFailed) {
+      const underlying = activationResult.authError;
+      throw new AgentBootstrapError(
+        `fromConfig activation failed: ${underlying instanceof Error ? underlying.message : String(underlying)}`,
+        { cause: underlying },
+      );
+    }
+  } else if (!isClientInitialized()) {
+    await refreshAuth(undefined);
+  }
 }
 
 export async function initializeAdoptedClient(
@@ -132,7 +149,7 @@ export async function initializeAdoptedClient(
     (scope) =>
       scope === mainScope
         ? Promise.resolve()
-        : SessionClientOwner.cleanupProviderScope(providerFiles, scope),
+        : cleanupProviderScope(providerFiles, scope),
   );
   return client;
 }
@@ -195,46 +212,4 @@ function requireAdoptedStore(
       'Missing explicit session client media store',
     );
   return store;
-}
-
-async function resolveActivation(
-  config: Config,
-  activation: ProviderActivationIntent | undefined,
-  preflight: ActivationPreflight | undefined,
-  switchProvider: ProviderSwitcher,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  readClient: () => AgentClientContract,
-  refreshAuth: (method?: string) => Promise<void>,
-  selection: ModelSelectionOperations,
-): Promise<void> {
-  if (activation !== undefined) {
-    const activationResult =
-      preflight !== undefined
-        ? AgentActivationBootstrap.consume(
-            preflight,
-            config,
-            activation,
-            manager,
-            settings,
-          )
-        : await executeProviderActivation(
-            config,
-            activation,
-            switchProvider,
-            settings,
-            manager,
-            refreshAuth,
-            selection,
-          );
-    if (activationResult.authFailed) {
-      const underlying = activationResult.authError;
-      throw new AgentBootstrapError(
-        `fromConfig activation failed: ${underlying instanceof Error ? underlying.message : String(underlying)}`,
-        { cause: underlying },
-      );
-    }
-  } else if (!readClient().isInitialized()) {
-    await refreshAuth(undefined);
-  }
 }

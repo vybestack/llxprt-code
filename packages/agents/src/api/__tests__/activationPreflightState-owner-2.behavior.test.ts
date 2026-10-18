@@ -263,18 +263,21 @@ describe('activation bootstrap receipts', () => {
       if (!first.token) throw new Error('Missing receipt');
       const retry = built_operation.preflight({ provider: 'not-registered' });
       await expect(
-        fromConfig({
-          settingsService: built_builtCallerSettings,
-          agentClient: built_builtCallerOwner.getAgentClient(),
-          providerManager: built_builtCallerManager,
-          config: built_builtCallerConfig,
-          mcpRuntime: built_builtCallerMcp,
-          activation: intent,
-          activationPreflight: {
+        fromConfig(
+          built_builtCallerConfig,
+          built_builtCallerSettings,
+          { activation: intent },
+          undefined,
+          built_builtCallerManager,
+          undefined,
+          undefined,
+          built_builtCallerMcp,
+          {
             operation: built_operation,
             token: first.token,
           },
-        }),
+          built_builtCallerOwner.getAgentClient(),
+        ),
       ).rejects.toThrow('Activation preflight');
       expect((await retry).token).toBeUndefined();
     } finally {

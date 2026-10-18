@@ -19,6 +19,7 @@ export class SessionHookComposition {
   private root: SessionHookOwner | undefined;
   private releaseReload: (() => void) | undefined;
   private closing: Promise<void> | undefined;
+  private releaseOwner: 'client' | 'facade' = 'client';
 
   constructor(
     private readonly config: Config,
@@ -80,6 +81,17 @@ export class SessionHookComposition {
       failures.push(error);
     }
     this.raiseFailures(failures);
+  }
+
+  transferRelease(): () => Promise<void> {
+    if (this.closing !== undefined || this.releaseOwner !== 'client')
+      throw new Error('Session hook release is already transferred or closed');
+    this.releaseOwner = 'facade';
+    return () => this.dispose();
+  }
+
+  disposeClientOwned(): Promise<void> {
+    return this.releaseOwner === 'client' ? this.dispose() : Promise.resolve();
   }
 
   dispose(): Promise<void> {

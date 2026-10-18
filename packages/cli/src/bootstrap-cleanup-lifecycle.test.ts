@@ -1,3 +1,26 @@
+import {
+  expectInvalidReceipt,
+  expectStartupAdmissionClosed,
+  StartupExit,
+  expectClosed,
+  requireReceipt,
+  type ObservedBootstrap,
+} from './__tests__/startup-activation-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { recordStartupSession } from './__tests__/startup-recording-fixture.js';
+import {
+  SessionSettingsOwner,
+  getProjectHash,
+  ApprovalMode,
+  Config,
+  ExitCodes,
+} from '@vybestack/llxprt-code-core';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
@@ -24,22 +47,13 @@ import {
   createAgent,
 } from '@vybestack/llxprt-code-agents';
 import commandExists from 'command-exists';
-import {
-  ApprovalMode,
-  Config,
-  ExitCodes,
-  SessionRecordingService,
-  getProjectHash,
-} from '@vybestack/llxprt-code-core';
 import * as acp from '@vybestack/llxprt-code-zed-acp';
 import * as sandbox from './utils/sandbox.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   bootstrapRuntimeAndConfig,
   handleSessionListAndDelete,
 } from './cliSessionBootstrap.js';
 import { activateConfiguredProvider } from './cliProviderInit.js';
-import { constructAgentWithSpinner } from './cliTerminalSession.js';
 import { loadCliConfig } from './config/config.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
@@ -47,27 +61,11 @@ import { ExtensionEnablementManager } from './config/extensions/extensionEnablem
 import { main, __resetUnhandledRejectionStateForTesting } from './cli.js';
 import {
   runExitCleanup,
+  registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
-
-type ObservedBootstrap = {
-  config: Config;
-  settingsService: Parameters<
-    typeof agents.assembleAgentActivationBootstrap
-  >[1];
-  providerManager: agents.Agent['providerManager'];
-  operation: agents.AgentActivationOperation;
-  receipt?: agents.ActivationPreflight;
-  intent?: agents.ProviderActivationIntent;
-};
-
-class StartupExit extends Error {
-  constructor(readonly code: string | number | null | undefined) {
-    super(`startup exit ${code}`);
-  }
-}
 
 describe('real startup activation owner cleanup', () => {
   let directory: string;
@@ -142,15 +140,17 @@ describe('real startup activation owner cleanup', () => {
         for (const owner of observed) {
           expectStartupAdmissionClosed(owner);
           if (probeReceipts && owner.receipt) {
-            const check = agents.fromConfig({
-              settingsService: owner.settingsService,
-              providerManager: owner.providerManager,
-              config: owner.config,
-              // Reject an accidentally live receipt before async adoption can
-              // race main's finally after the simulated process exit.
-              sessionId: '',
-              ...requireReceipt(owner),
-            });
+            const check = agents.fromConfig(
+              owner.config,
+              owner.settingsService,
+              { sessionId: '', activation: requireReceipt(owner).activation },
+              undefined,
+              owner.providerManager,
+              undefined,
+              undefined,
+              undefined,
+              requireReceipt(owner).activationPreflight,
+            );
             void check.catch(() => undefined);
             exitReceiptChecks.push(check);
           }
@@ -175,46 +175,10 @@ describe('real startup activation owner cleanup', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  function expectStartupAdmissionClosed(owner: ObservedBootstrap): void {
-    expect(() => owner.operation.sessionClient.getAgentClient()).toThrow(
-      'disposed',
-    );
-  }
-
   function currentRuntimeId(): string {
     const runtimeId = process.env.LLXPRT_RUNTIME_ID;
     if (!runtimeId) throw new Error('Runtime id was not configured');
     return runtimeId;
-  }
-
-  function requireReceipt(owner: ObservedBootstrap): {
-    activation: agents.ProviderActivationIntent;
-    activationPreflight: agents.ActivationPreflight;
-  } {
-    if (!owner.receipt || !owner.intent)
-      throw new Error('Missing preflight receipt');
-    return { activation: owner.intent, activationPreflight: owner.receipt };
-  }
-
-  async function expectInvalidReceipt(owner: ObservedBootstrap): Promise<void> {
-    await expect(
-      agents.fromConfig({
-        settingsService: owner.settingsService,
-        providerManager: owner.providerManager,
-        config: owner.config,
-        ...requireReceipt(owner),
-      }),
-    ).rejects.toThrow('token is invalid or already consumed');
-  }
-
-  async function expectClosed(owner: ObservedBootstrap): Promise<void> {
-    const result = await owner.operation.preflight({ authMode: 'none' });
-    expect(result.authFailed).toBe(true);
-    expect(result.authError).toBeInstanceOf(Error);
-    if (!(result.authError instanceof Error))
-      throw new Error('Missing disposal error');
-    expect(result.authError.message).toContain('disposed');
-    expect(result.token).toBeUndefined();
   }
 
   async function expectClosedAtExit(code: number): Promise<void> {
@@ -241,7 +205,10 @@ describe('real startup activation owner cleanup', () => {
         'standalone',
         argv,
         directory,
-        { credentialAuthority: new CredentialAuthority() },
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
       );
       expect(observed).toHaveLength(1);
       const owner = observed[0];
@@ -266,11 +233,15 @@ describe('real startup activation owner cleanup', () => {
         'finalization-failure',
         argv,
         directory,
-        {
-          credentialAuthority: new CredentialAuthority(),
-          onProviderSwitchReady: () => {
-            throw new Error('finalization interrupted');
-          },
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
+        undefined,
+        undefined,
+        undefined,
+        () => {
+          throw new Error('finalization interrupted');
         },
       ),
     ).rejects.toThrow('finalization interrupted');
@@ -355,6 +326,7 @@ describe('real startup activation owner cleanup', () => {
       restore.push(
         spyOn(sandbox, 'start_sandbox').mockImplementation(async () => {
           expect(observed).toHaveLength(2);
+          expect(observed[1].settingsService).toBe(observed[0].settingsService);
           expect(
             observed[0].operation.sessionClient
               .getAgentClient()
@@ -385,7 +357,10 @@ describe('real startup activation owner cleanup', () => {
         'keyfile-failure',
         argv,
         directory,
-        { credentialAuthority: new CredentialAuthority() },
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
       ),
     ).rejects.toThrow('missing-key');
     expect(observed).toHaveLength(1);
@@ -428,75 +403,105 @@ describe('real startup activation owner cleanup', () => {
   it('keeps the caller Config and manager usable while adopted foreground trust retires', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(
-      settings,
-      argv,
-      directory,
-      new CredentialAuthority(),
-    );
-    const manager = boot.providerManager;
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const callerOwner = new SessionSettingsOwner(callerSettings);
+    let callerPolicy: RuntimePolicyOwner | undefined;
+    try {
+      const parsed = parseBootstrapArgs();
+      const preflight = await prepareRuntimeForProfile(
+        {
+          ...parsed,
+          runtimeMetadata: {
+            ...parsed.runtimeMetadata,
+          },
+        },
+        credentialAuthority,
+        callerSettings,
+        callerOwner,
+        undefined,
+      );
+      registerCleanup(() => preflight.dispose());
+      const config = await loadCliConfig(
+        settings.merged,
+        [],
+        new ExtensionEnablementManager(directory, []),
+        'borrowed-startup',
+        argv,
+        directory,
+        preflight,
+        undefined,
+        callerOwner,
+        credentialAuthority,
+      );
 
-    const activation = await activateConfiguredProvider(
-      boot.config,
-      manager,
-      argv,
-      boot.activationOperation,
-    );
-    const agent = await constructAgentWithSpinner(
-      boot.config,
-      boot.providerManager,
-      boot.runtimeSettingsService,
-      boot.runtimeSettingsOwner,
-      activation.activationPreflight,
-      activation.intent,
-      undefined,
-      undefined,
-      undefined,
-      boot.policyOwner,
-      boot.oauthManager,
-      boot.providerFileLifecycle,
-      undefined,
-      new CredentialAuthority(),
-    );
-    if (boot.policyOwner === undefined)
-      throw new Error('Missing bootstrap policy owner');
-    await boot.policyOwner.trust.setTrustedFolderLive(true);
-    boot.config.setApprovalMode(ApprovalMode.YOLO);
-    await boot.policyOwner.trust.setTrustedFolderLive(false);
-    expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
-    await runExitCleanup();
-    await expectClosed(observed[0]);
-    await expect(
-      boot.policyOwner.trust.setTrustedFolderLive(false),
-    ).rejects.toThrow('disposed');
-    await manager.setActiveProvider('fake');
-    expect(boot.providerManager.getActiveProviderName()).toBe('fake');
-    expect(manager.getActiveProviderName()).toBe('fake');
-    await agent.dispose();
+      let transferredActivation: AgentActivationOperation | undefined;
+      preflight.transferActivation((operation) => {
+        transferredActivation = operation;
+      });
+      if (transferredActivation === undefined)
+        throw new Error('Missing activation operation');
+      const activationOperation = transferredActivation;
+      callerPolicy = new RuntimePolicyOwner(
+        config,
+        activationOperation.workspaceTrust,
+        undefined,
+        activationOperation.messageBus,
+      );
+      const policy = callerPolicy;
+      registerCleanup(() => activationOperation.dispose());
+      const manager = observed[0].providerManager;
+      const activation = await activateConfiguredProvider(
+        config,
+        preflight,
+        argv,
+        activationOperation,
+      );
+      const agent = await agents.fromConfig(
+        config,
+        callerSettings,
+        { activation: activation.intent },
+        callerOwner,
+        manager,
+        activationOperation.oauthManager,
+        undefined,
+        undefined,
+        {
+          operation: activationOperation,
+          token: (() => {
+            if (activation.token === undefined)
+              throw new Error('Missing activation token');
+            return activation.token;
+          })(),
+        },
+        undefined,
+        activationOperation.providerFileLifecycle,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentialAuthority,
+        policy,
+      );
+      registerCleanup(() => agent.dispose());
+      await activationOperation.workspaceTrust.setTrustedFolderLive(true);
+      config.setApprovalMode(ApprovalMode.YOLO);
+      await activationOperation.workspaceTrust.setTrustedFolderLive(false);
+      expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+      await runExitCleanup();
+      await expectClosed(observed[0]);
+      await expect(
+        activationOperation.workspaceTrust.setTrustedFolderLive(false),
+      ).rejects.toThrow('disposed');
+      await manager.setActiveProvider('fake');
+      expect(preflight.getActiveProviderName()).toBe('fake');
+      expect(manager.getActiveProviderName()).toBe('fake');
+      await agent.dispose();
+    } finally {
+      await callerPolicy?.dispose();
+      await callerOwner.dispose();
+    }
   });
-
-  async function recordSession(
-    root = directory,
-  ): Promise<{ path: string; id: string }> {
-    const id = crypto.randomUUID();
-    const recording = new SessionRecordingService({
-      sessionId: id,
-      projectHash: getProjectHash(root),
-      chatsDir: new Storage(root).getProjectChatsDir(),
-      workspaceDirs: [root],
-      provider: 'fake',
-      model: 'fake-model',
-    });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'session seed' }],
-    });
-    await recording.flush();
-    const path = recording.getFilePath();
-    if (!path) throw new Error('Session file was not created');
-    await recording.dispose();
-    return { id, path };
-  }
 
   it.each([
     'empty-list',
@@ -510,7 +515,7 @@ describe('real startup activation owner cleanup', () => {
       const seeded =
         caseName === 'empty-list' || caseName === 'delete-failure'
           ? undefined
-          : await recordSession();
+          : await recordStartupSession(directory);
       process.argv = [
         ...process.argv,
         ...(caseName.endsWith('list')
@@ -583,7 +588,7 @@ describe('real startup activation owner cleanup', () => {
     async (action) => {
       const otherRoot = resolve(directory, 'other-project');
       await mkdir(otherRoot);
-      const unrelated = await recordSession(otherRoot);
+      const unrelated = await recordStartupSession(otherRoot);
       const output: string[] = [];
       restore.push(
         spyOn(stdio, 'writeToStdout').mockImplementation((chunk, ...args) => {
@@ -625,7 +630,7 @@ describe('real startup activation owner cleanup', () => {
   it.each(['list', 'delete'])(
     'handles %s with piped stdin and no prompt',
     async (action) => {
-      const seeded = await recordSession();
+      const seeded = await recordStartupSession(directory);
       process.argv = [
         'bun',
         'llxprt',
@@ -662,20 +667,42 @@ describe('real startup activation owner cleanup', () => {
   it('releases the owner and Config when the session directory cannot be created', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
       settings,
       argv,
       directory,
-      new CredentialAuthority(),
+      credentialAuthority,
+      preflight,
     );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
     const invalidChatsDir = resolve(directory, 'not-a-directory');
     await writeFile(invalidChatsDir, 'a file');
     const disposed = new Set<Config>();
-    const originalDispose = boot.config.dispose.bind(boot.config);
+    const originalDispose = config.dispose.bind(config);
     restore.push(
-      spyOn(boot.config, 'dispose').mockImplementation(async () => {
+      spyOn(config, 'dispose').mockImplementation(async () => {
         await originalDispose();
-        disposed.add(boot.config);
+        disposed.add(config);
       }),
     );
     await expect(
@@ -683,30 +710,52 @@ describe('real startup activation owner cleanup', () => {
         { listSessions: true, deleteSession: undefined },
         invalidChatsDir,
         getProjectHash(directory),
-        boot.config,
+        config,
       ),
     ).rejects.toThrow(/EEXIST|ENOTDIR/);
-    expect(disposed.has(boot.config)).toBe(true);
+    expect(disposed.has(config)).toBe(true);
   });
 
   it('leaves the owner active when the delete selection is empty', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await bootstrapRuntimeAndConfig(
       settings,
       argv,
       directory,
-      new CredentialAuthority(),
+      credentialAuthority,
+      preflight,
     );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
     await handleSessionListAndDelete(
       { listSessions: false, deleteSession: '' },
       new Storage(directory).getProjectChatsDir(),
       getProjectHash(directory),
-      boot.config,
+      config,
     );
-    expect(boot.providerManager).toBeDefined();
+    expect(observed[0].providerManager.getActiveProviderName()).toBe('fake');
     await runExitCleanup();
-    expect(boot.config.getProvider()).toBe('fake');
+    expect(config.getProvider()).toBe('fake');
   });
 
   it('preserves a same-label Agent sibling after an early list exit', async () => {
@@ -748,11 +797,13 @@ describe('real startup activation owner cleanup', () => {
       'standalone-sibling',
       argv,
       directory,
-      {
-        credentialAuthority: new CredentialAuthority(),
-        onActivationBootstrapReady: (operation) => {
-          siblingActivation = operation;
-        },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
+      undefined,
+      (operation) => {
+        siblingActivation = operation;
       },
     );
     const siblingManager = observed[observed.length - 1].providerManager;

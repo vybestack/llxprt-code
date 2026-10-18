@@ -31,39 +31,20 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { AgentWorkspaceControl } from '../agent.js';
 
-/**
- * Deps bundle injected by AgentImpl so WorkspaceControl can read/write the
- * live Config workspace surface.
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04
- */
-export interface WorkspaceControlDeps {
-  readonly profileDefinitions: ProfileDefinitionReads;
-  readonly profileWrites: ProfileDefinitionWrites;
-  readonly subagentDefinitions: SubagentDefinitionReads;
-  readonly subagentWrites: SubagentDefinitionWrites;
-  readonly checkpoints: WorkspaceCheckpointOperations;
-  readonly ignore: WorkspaceIgnoreOperations;
-  readonly search: WorkspaceSearchOperations;
-  readonly files: WorkspaceTextOperations;
-  readonly containsPath: (filePath: string) => boolean;
-  readonly directories: () => readonly string[];
-  readonly addDirectory: (path: string) => void;
-  readonly workingDirectory: string;
-  readonly projectRoot: string;
-}
-
 export class WorkspaceControl implements AgentWorkspaceControl {
   private closed = false;
   private closing: Promise<void> | undefined;
   private readonly acceptedWork = new Set<Promise<void>>();
   readonly checkpoints: WorkspaceCheckpointOperations = {
     getCurrentCommitHash: () =>
-      this.admitWork(() => this.deps.checkpoints.getCurrentCommitHash()),
+      this.admitWork(() => this.checkpointOperations.getCurrentCommitHash()),
     createFileSnapshot: (message) =>
-      this.admitWork(() => this.deps.checkpoints.createFileSnapshot(message)),
+      this.admitWork(() =>
+        this.checkpointOperations.createFileSnapshot(message),
+      ),
     restoreProjectFromSnapshot: (hash) =>
       this.admitWork(() =>
-        this.deps.checkpoints.restoreProjectFromSnapshot(hash),
+        this.checkpointOperations.restoreProjectFromSnapshot(hash),
       ),
   };
 
@@ -72,52 +53,62 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   readonly subagentDefinitions: SubagentDefinitionReads;
   readonly subagentWrites: SubagentDefinitionWrites;
 
-  constructor(private readonly deps: WorkspaceControlDeps) {
+  constructor(
+    private readonly profileReads: ProfileDefinitionReads,
+    private readonly writeProfiles: ProfileDefinitionWrites,
+    private readonly subagentReads: SubagentDefinitionReads,
+    private readonly writeSubagents: SubagentDefinitionWrites,
+    private readonly checkpointOperations: WorkspaceCheckpointOperations,
+    private readonly ignore: WorkspaceIgnoreOperations,
+    private readonly searchOperations: WorkspaceSearchOperations,
+    private readonly files: WorkspaceTextOperations,
+    private readonly includesPath: (filePath: string) => boolean,
+    private readonly directories: () => readonly string[],
+    private readonly addWorkspaceDirectory: (path: string) => void,
+    private readonly workingDirectory: string,
+    private readonly projectRoot: string,
+  ) {
     this.profileDefinitions = {
       loadProfile: (name) =>
-        this.admitWork(() => deps.profileDefinitions.loadProfile(name)),
+        this.admitWork(() => this.profileReads.loadProfile(name)),
       listProfiles: () =>
-        this.admitWork(() => deps.profileDefinitions.listProfiles()),
+        this.admitWork(() => this.profileReads.listProfiles()),
       profileExists: (name) =>
-        this.admitWork(() => deps.profileDefinitions.profileExists(name)),
+        this.admitWork(() => this.profileReads.profileExists(name)),
     };
     this.profileWrites = {
       saveProfile: (name, profile) =>
-        this.admitWork(() => deps.profileWrites.saveProfile(name, profile)),
+        this.admitWork(() => this.writeProfiles.saveProfile(name, profile)),
       deleteProfile: (name) =>
-        this.admitWork(() => deps.profileWrites.deleteProfile(name)),
+        this.admitWork(() => this.writeProfiles.deleteProfile(name)),
     };
     this.subagentDefinitions = {
       loadSubagent: (name) =>
-        this.admitWork(() => deps.subagentDefinitions.loadSubagent(name)),
+        this.admitWork(() => this.subagentReads.loadSubagent(name)),
       listSubagents: () =>
-        this.admitWork(() => deps.subagentDefinitions.listSubagents()),
+        this.admitWork(() => this.subagentReads.listSubagents()),
       subagentExists: (name) =>
-        this.admitWork(() => deps.subagentDefinitions.subagentExists(name)),
+        this.admitWork(() => this.subagentReads.subagentExists(name)),
       subagentExistsOnDisk: (name) =>
-        this.admitWork(() =>
-          deps.subagentDefinitions.subagentExistsOnDisk(name),
-        ),
+        this.admitWork(() => this.subagentReads.subagentExistsOnDisk(name)),
       validateProfileReference: (name) =>
-        this.admitWork(() =>
-          deps.subagentDefinitions.validateProfileReference(name),
-        ),
+        this.admitWork(() => this.subagentReads.validateProfileReference(name)),
       isSettingsSubagent: (name) => {
         this.assertOpen();
-        return deps.subagentDefinitions.isSettingsSubagent(name);
+        return this.subagentReads.isSettingsSubagent(name);
       },
       hasSettingsSubagent: (name) => {
         this.assertOpen();
-        return deps.subagentDefinitions.hasSettingsSubagent(name);
+        return this.subagentReads.hasSettingsSubagent(name);
       },
     };
     this.subagentWrites = {
       saveSubagent: (name, profile, prompt) =>
         this.admitWork(() =>
-          deps.subagentWrites.saveSubagent(name, profile, prompt),
+          this.writeSubagents.saveSubagent(name, profile, prompt),
         ),
       deleteSubagent: (name) =>
-        this.admitWork(() => deps.subagentWrites.deleteSubagent(name)),
+        this.admitWork(() => this.writeSubagents.deleteSubagent(name)),
     };
   }
 
@@ -161,46 +152,46 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   }
 
   getCoreIgnorePatterns(): string[] {
-    return this.deps.ignore.getCoreIgnorePatterns();
+    return this.ignore.getCoreIgnorePatterns();
   }
   getGlobExcludes(additionalExcludes?: string[]): string[] {
-    return this.deps.ignore.getGlobExcludes(additionalExcludes);
+    return this.ignore.getGlobExcludes(additionalExcludes);
   }
   getReadManyFilesExcludes(additionalExcludes?: string[]): string[] {
-    return this.deps.ignore.getReadManyFilesExcludes(additionalExcludes);
+    return this.ignore.getReadManyFilesExcludes(additionalExcludes);
   }
   buildExcludePatterns(
     options: Parameters<WorkspaceIgnoreOperations['buildExcludePatterns']>[0],
   ): string[] {
-    return this.deps.ignore.buildExcludePatterns(options);
+    return this.ignore.buildExcludePatterns(options);
   }
   shouldIgnoreFile(filePath: string, options?: FilterFilesOptions): boolean {
-    return this.deps.ignore.shouldIgnoreFile(filePath, options);
+    return this.ignore.shouldIgnoreFile(filePath, options);
   }
   shouldGitIgnoreFile(filePath: string): boolean {
-    return this.deps.ignore.shouldGitIgnoreFile(filePath);
+    return this.ignore.shouldGitIgnoreFile(filePath);
   }
   shouldLlxprtIgnoreFile(filePath: string): boolean {
-    return this.deps.ignore.shouldLlxprtIgnoreFile(filePath);
+    return this.ignore.shouldLlxprtIgnoreFile(filePath);
   }
   filterFiles(filePaths: string[], options?: FilterFilesOptions): string[] {
-    return this.deps.ignore.filterFiles(filePaths, options);
+    return this.ignore.filterFiles(filePaths, options);
   }
   filterFilesWithReport(
     filePaths: string[],
     options?: FilterFilesOptions,
   ): FilterReport {
-    return this.deps.ignore.filterFilesWithReport(filePaths, options);
+    return this.ignore.filterFilesWithReport(filePaths, options);
   }
   getLlxprtIgnorePatterns(directory?: string): string[] {
-    return this.deps.ignore.getLlxprtIgnorePatterns(directory);
+    return this.ignore.getLlxprtIgnorePatterns(directory);
   }
   initializeSearch(
     directory: string,
     options?: WorkspaceSearchOptions,
   ): Promise<void> {
     return this.admitWork(() =>
-      this.deps.search.initializeSearch(directory, options),
+      this.searchOperations.initializeSearch(directory, options),
     );
   }
 
@@ -210,38 +201,36 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     options?: WorkspaceSearchOptions,
   ): Promise<string[]> {
     return this.admitWork(() =>
-      this.deps.search.search(directory, pattern, options),
+      this.searchOperations.search(directory, pattern, options),
     );
   }
 
   async readTextFile(filePath: string): Promise<string> {
-    return this.admitWork(() => this.deps.files.readTextFile(filePath));
+    return this.admitWork(() => this.files.readTextFile(filePath));
   }
 
   async writeTextFile(filePath: string, content: string): Promise<void> {
-    return this.admitWork(() =>
-      this.deps.files.writeTextFile(filePath, content),
-    );
+    return this.admitWork(() => this.files.writeTextFile(filePath, content));
   }
 
   containsPath(filePath: string): boolean {
-    return this.deps.containsPath(filePath);
+    return this.includesPath(filePath);
   }
 
   getDirectories(): readonly string[] {
-    return this.deps.directories();
+    return this.directories();
   }
 
   addDirectory(path: string): void {
     this.assertOpen();
-    this.deps.addDirectory(path);
+    this.addWorkspaceDirectory(path);
   }
 
   getWorkingDirectory(): string {
-    return this.deps.workingDirectory;
+    return this.workingDirectory;
   }
 
   getProjectRoot(): string {
-    return this.deps.projectRoot;
+    return this.projectRoot;
   }
 }

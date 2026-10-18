@@ -62,7 +62,7 @@ function createMockConfig(engineRules: PolicyRule[] = []): {
   ownedConfigs.push(config);
   return {
     config,
-    policy: new PolicyControl({ inspection: owner.session.inspection }),
+    policy: new PolicyControl(owner.session.inspection),
   };
 }
 

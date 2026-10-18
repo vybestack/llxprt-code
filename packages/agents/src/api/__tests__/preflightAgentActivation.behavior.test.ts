@@ -427,16 +427,18 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
 
       if (!first.token) throw new Error('Missing token');
       const client = builtCallerOwner.getAgentClient();
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-        activationPreflight: { operation, token: first.token },
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        undefined,
+        builtCallerMcp,
+        { operation, token: first.token },
+        builtCallerOwner.getAgentClient(),
+      );
       expect(agent.agentClient).toBe(client);
       expect(configActiveProvider(builtCallerManager)).toBe('fake');
       await agent.dispose();

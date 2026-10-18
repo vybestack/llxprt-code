@@ -1,61 +1,63 @@
-import { FileOAuthSettingsProvider } from '../../../../providers/src/auth/file-oauth-settings.js';
 import {
-  createOwnerOAuthManager,
-  createOwnedTokenStoreClose,
-  createSessionAuthPolicyReader,
-  createOwnerAuthCacheInvalidator,
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+  assembleSessionAuthentication,
+  fromConfig,
+} from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { toConfigParameters } from '../../../../agents/src/api/agentConfig.adapter.js';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createOwnedTokenStoreClose,
+  createOwnerAuthCacheInvalidator,
+  createOwnerOAuthManager,
+  createRuntimeContentGeneratorFactory,
+  createSessionAuthPolicyReader,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  afterAll,
+  afterEach as afterFixtureTest,
+  beforeAll,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import { Text } from 'ink';
+import { render } from 'ink-testing-library';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { useEffect } from 'react';
+import { buildTestMcpRuntime } from '../../../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { releaseAdoptedFileScope } from '../../../../agents/src/api/adoption-release.js';
+import { toConfigParameters } from '../../../../agents/src/api/agentConfig.adapter.js';
+import { AgentConfig } from '../../../../agents/src/api/config-types.js';
+import { injectConfirmationForcingPolicy } from '../../../../agents/src/api/confirmationForcing.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import {
   acquirePreferredProviderManager,
   preparePreferredProviderCompletion,
 } from '../../../../agents/src/api/preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../../../../agents/src/api/adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import {
-  beforeAll,
-  afterAll,
-  describe,
-  expect,
-  it,
-  afterEach as afterFixtureTest,
-} from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from '../../../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
-import { createAgentRuntimeFactoryBindings } from '../../../../agents/src/api/runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../../../../agents/src/api/confirmationForcing.js';
 import { executeProviderActivation } from '../../../../agents/src/api/providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitchAssembly.js';
-import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
-import { AgentConfig } from '../../../../agents/src/api/config-types.js';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { useEffect } from 'react';
-import { Text } from 'ink';
-import { Colors } from '../colors.js';
-import { render } from 'ink-testing-library';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { createAgentRuntimeFactoryBindings } from '../../../../agents/src/api/runtimeFactories.js';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../../../agents/src/core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import { FileOAuthSettingsProvider } from '../../../../providers/src/auth/file-oauth-settings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createOAuthControl } from '../../runtime/createOAuthControl.js';
+import { Colors } from '../colors.js';
 import {
   OAuthControlProvider,
   useOAuthControl,
@@ -472,27 +474,29 @@ describe('interactive runtime owner bridge', () => {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
 
-    const a = await fromConfig({
-      settingsOwner: firstCallerSettingsOwner,
-      settingsService: firstCallerSettings,
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      messageBus: firstCallerPolicy.session.messageBus,
-      mcpRuntime: firstCallerMcp,
-      sessionId: 'shared-oauth-label',
-    });
-    const b = await fromConfig({
-      settingsOwner: secondCallerSettingsOwner,
-      settingsService: secondCallerSettings,
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      messageBus: secondCallerPolicy.session.messageBus,
-      mcpRuntime: secondCallerMcp,
-      sessionId: 'shared-oauth-label',
-    });
+    const a = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'shared-oauth-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
+    const b = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'shared-oauth-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     const captured: {
-      left?: ReturnType<typeof createOAuthControl>;
-      right?: ReturnType<typeof createOAuthControl>;
+      left?: ReturnType<typeof assembleSessionAuthentication>;
+      right?: ReturnType<typeof assembleSessionAuthentication>;
     } = {};
     function OAuthView({
       side,
@@ -507,14 +511,33 @@ describe('interactive runtime owner bridge', () => {
     }
     const left = render(
       <OAuthControlProvider
-        control={createOAuthControl(() => firstCallerOAuth, a.providerManager)}
+        control={assembleSessionAuthentication(firstCallerOAuth, (provider) => {
+          const instance = a.providerManager.getProviderByName(provider);
+          if (
+            instance &&
+            'clearClientCache' in instance &&
+            typeof instance.clearClientCache === 'function'
+          )
+            instance.clearClientCache();
+        })}
       >
         <OAuthView side="left" />
       </OAuthControlProvider>,
     );
     const right = render(
       <OAuthControlProvider
-        control={createOAuthControl(() => secondCallerOAuth, b.providerManager)}
+        control={assembleSessionAuthentication(
+          secondCallerOAuth,
+          (provider) => {
+            const instance = b.providerManager.getProviderByName(provider);
+            if (
+              instance &&
+              'clearClientCache' in instance &&
+              typeof instance.clearClientCache === 'function'
+            )
+              instance.clearClientCache();
+          },
+        )}
       >
         <OAuthView side="right" />
       </OAuthControlProvider>,

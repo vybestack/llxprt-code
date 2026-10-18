@@ -1,3 +1,5 @@
+import * as agents from '@vybestack/llxprt-code-agents';
+import { spyOn, afterEach, describe, expect, it, vi } from 'bun:test';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 /**
@@ -6,7 +8,6 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { Settings } from './settings.js';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
@@ -45,7 +46,10 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       'test-session',
       argv,
       undefined,
-      { credentialAuthority: new CredentialAuthority() },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
     );
 
     expect(config.getProvider()).toBe('kimi');
@@ -66,6 +70,21 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     let secondFiles: object | undefined;
     let firstManager: RuntimeProviderManager | undefined;
     let secondManager: RuntimeProviderManager | undefined;
+    const assemble = agents.assembleAgentActivationBootstrap;
+    const observation = spyOn(
+      agents,
+      'assembleAgentActivationBootstrap',
+    ).mockImplementation(async (...args) => {
+      const operation = await assemble(...args);
+      if (args[1] === firstSettings) {
+        firstManager = args[2];
+        firstFiles = args[16];
+      } else if (args[1] === secondSettings) {
+        secondManager = args[2];
+        secondFiles = args[16];
+      }
+      return operation;
+    });
     const first = await loadCliConfig(
       {},
       [],
@@ -73,17 +92,10 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       'first-session',
       argv,
       process.cwd(),
-      {
-        credentialAuthority: new CredentialAuthority(),
-        settingsService: firstSettings,
-        sessionSettingsOwner: firstOwner,
-        onProviderFilesReady: (files) => {
-          firstFiles = files;
-        },
-        onProviderManagerReady: (manager) => {
-          firstManager = manager;
-        },
-      },
+      undefined,
+      firstSettings,
+      firstOwner,
+      new CredentialAuthority(),
     );
     const second = await loadCliConfig(
       {},
@@ -92,17 +104,10 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       'second-session',
       argv,
       process.cwd(),
-      {
-        credentialAuthority: new CredentialAuthority(),
-        settingsService: secondSettings,
-        sessionSettingsOwner: secondOwner,
-        onProviderFilesReady: (files) => {
-          secondFiles = files;
-        },
-        onProviderManagerReady: (manager) => {
-          secondManager = manager;
-        },
-      },
+      undefined,
+      secondSettings,
+      secondOwner,
+      new CredentialAuthority(),
     );
     try {
       expect(() =>
@@ -127,6 +132,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       expect(secondManager?.getActiveProvider()?.name).toBe('kimi');
       expect(secondOwner.readSelectedModel()).toBe('kimi-second');
     } finally {
+      observation.mockRestore();
       await firstOwner.dispose();
       await secondOwner.dispose();
       await first.dispose();

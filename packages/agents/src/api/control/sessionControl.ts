@@ -36,7 +36,6 @@ import {
   SessionTransitionService,
   deleteSession as deleteRecordedSession,
   importSessionMediaPackage,
-  replaySession,
   resumeSession,
   CONTINUE_LATEST,
   type ContinueTarget,
@@ -49,7 +48,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
+import {
+  createAgentSessionPersistence,
+  type AgentSessionPersistence,
+} from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
@@ -64,6 +66,8 @@ import {
 } from './sessionControlRollback.js';
 import { exportRecordedSession } from './sessionControlExport.js';
 import {
+  checkpointInfoFromReplay,
+  recordingStateFromSnapshot,
   sessionInfoFromReplay,
   readSessionInfo,
 } from './sessionControlInfo.js';
@@ -81,7 +85,6 @@ import {
   restoreOwnerTurns,
 } from './sessionControlHistoryMutation.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
-import { startNewSessionTransition } from './new-session-transition.js';
 import type { PreparedSessionClient } from '../../session/session-new-client.js';
 import type {
   AgentSessionControl,
@@ -108,30 +111,6 @@ const logger = new DebugLogger('llxprt:agents:session-control');
  * @plan:PLAN-20260617-COREAPI.P20
  * @requirement:REQ-010
  */
-export interface SessionControlDeps {
-  readonly readRecordingQueueLimit: () => number;
-  /** The live Config (storage, project root, workspace context). */
-  readonly config: Config;
-  readonly directories: () => readonly string[];
-  readonly mediaStore: LocalMediaStore;
-  readonly persistence: AgentSessionPersistence;
-  readonly sessionIdentityOwnership: 'config' | 'facade';
-  /** The per-agent session id (AgentImpl uses deps.runtimeId). */
-  readonly sessionId: () => string;
-  readonly withSessionTransition: (
-    operation: () => Promise<void>,
-  ) => Promise<void>;
-  readonly closeSessionAdmission: () => void;
-  readonly prepareNewSessionClient: (
-    sessionId: string,
-  ) => Promise<PreparedSessionClient>;
-  /** Resolves the live AgentClient (the same contract restoreHistory uses). */
-  readonly resolveClient: () => AgentClientContract;
-  /** The per-agent active provider name. */
-  readonly getProvider: () => string;
-  /** The per-agent active model name. */
-  readonly getModel: () => string;
-}
 
 export class SessionControl implements AgentSessionControl {
   private recordingSessionId: string;
@@ -195,12 +174,44 @@ export class SessionControl implements AgentSessionControl {
   private checkpointService: CheckpointService | undefined;
   private adoptedPath: string | null = null;
 
-  constructor(private readonly deps: SessionControlDeps) {
-    this.recordingSessionId = deps.sessionId();
+  private readonly mediaStore: LocalMediaStore;
+  private readonly persistence: AgentSessionPersistence;
+  constructor(
+    private readonly config: Config,
+    mediaStore: LocalMediaStore | undefined,
+    private readonly readRecordingQueueLimit: () => number,
+    private readonly directories: () => readonly string[],
+    private readonly sessionIdentityOwnership: 'config' | 'facade',
+    sessionId: () => string,
+    private readonly resolveClient: () => AgentClientContract,
+    private readonly withSessionTransition: (
+      operation: () => Promise<void>,
+    ) => Promise<void>,
+    private readonly closeSessionAdmission: () => void,
+    private readonly prepareNewSessionClient: (
+      sessionId: string,
+    ) => Promise<PreparedSessionClient>,
+    private readonly getProvider: () => string,
+    private readonly getModel: () => string,
+    persistence?: AgentSessionPersistence,
+  ) {
+    const selectedMedia = mediaStore ?? resolveClient().mediaStore;
+    if (selectedMedia === undefined)
+      throw new Error('Agent client requires explicit media store');
+    this.mediaStore = selectedMedia;
+    this.persistence =
+      persistence ??
+      createAgentSessionPersistence(
+        config.storageRoot,
+        config.projectChatsDir,
+        selectedMedia,
+        config.getSessionPersistenceQueueByteLimit(),
+      );
+    this.recordingSessionId = sessionId();
   }
 
   private getCheckpointService(): CheckpointService {
-    this.checkpointService ??= new CheckpointService(this.deps.mediaStore);
+    this.checkpointService ??= new CheckpointService(this.mediaStore);
     return this.checkpointService;
   }
 
@@ -276,7 +287,7 @@ export class SessionControl implements AgentSessionControl {
       }
       if (resolved.target.kind === 'checkpoint') {
         await this.forkTarget(resolved.target);
-        return this.deps.resolveClient().getHistory();
+        return this.resolveClient().getHistory();
       }
       return this.resumeInternal(resolved.target.session.sessionId);
     });
@@ -312,11 +323,11 @@ export class SessionControl implements AgentSessionControl {
       continueRef: target === 'latest' ? CONTINUE_LATEST : target,
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
-      currentProvider: this.deps.getProvider(),
-      currentModel: this.deps.getModel(),
+      currentProvider: this.getProvider(),
+      currentModel: this.getModel(),
       workspaceDirs: this.workspaceDirs(),
-      mediaStore: this.deps.mediaStore,
-      maxQueueBytes: this.deps.readRecordingQueueLimit(),
+      mediaStore: this.mediaStore,
+      maxQueueBytes: this.readRecordingQueueLimit(),
     };
     const result = await resumeSession(request);
     if (!result.ok) {
@@ -345,8 +356,8 @@ export class SessionControl implements AgentSessionControl {
     const { client, priorHistory, integration } = await prepareSessionArtifacts(
       recording,
       lockHandle,
-      this.deps.persistence.forRecording(recording.getSessionId()),
-      this.deps.resolveClient,
+      this.persistence.forRecording(recording.getSessionId()),
+      this.resolveClient,
     );
     let historyReplacementAttempted = false;
     let adoptionAttempted = false;
@@ -361,8 +372,8 @@ export class SessionControl implements AgentSessionControl {
       integration.rememberRecordedHistory(history);
       this.integrationNeedsSubscribe = !this.attachHistory(integration);
       adoptRecordingSessionId(
-        this.deps.config,
-        this.deps.sessionIdentityOwnership,
+        this.config,
+        this.sessionIdentityOwnership,
         priorSessionId,
         recording,
         () => {
@@ -380,8 +391,8 @@ export class SessionControl implements AgentSessionControl {
         lockHandle,
       });
       await restoreConfigSessionId(
-        this.deps.config,
-        this.deps.sessionIdentityOwnership,
+        this.config,
+        this.sessionIdentityOwnership,
         priorSessionId,
         adoptionAttempted,
         rollbackFailures,
@@ -436,7 +447,7 @@ export class SessionControl implements AgentSessionControl {
       this.integrationNeedsSubscribe = false;
       return;
     }
-    const historyService = this.deps.resolveClient().getHistoryService();
+    const historyService = this.resolveClient().getHistoryService();
     if (historyService === null) {
       return;
     }
@@ -499,19 +510,11 @@ export class SessionControl implements AgentSessionControl {
         options?.overwrite === true,
       );
       const replay = await this.replayRecording(recording);
-      const checkpoint = replay.checkpoints?.find(
-        (candidate) => candidate.checkpointId === created.checkpointId,
+      return checkpointInfoFromReplay(
+        replay,
+        created.checkpointId,
+        recording.getSessionId(),
       );
-      if (checkpoint === undefined) {
-        throw new Error('Created checkpoint was not durable');
-      }
-      return {
-        checkpointId: checkpoint.checkpointId,
-        name: checkpoint.name,
-        sessionId: recording.getSessionId(),
-        sequence: checkpoint.sequence,
-        createdAt: checkpoint.createdAt,
-      };
     });
   }
 
@@ -524,38 +527,12 @@ export class SessionControl implements AgentSessionControl {
   }
 
   async listCheckpoints(): Promise<readonly CheckpointInfo[]> {
-    return this.runExclusive(async () => {
-      const targets = await this.continueTargets();
-      const checkpoints: CheckpointInfo[] = [];
-      const replayByFilePath = new Map<string, ReplayResult>();
-      for (const target of targets) {
-        if (target.kind !== 'checkpoint') continue;
-        let replay = replayByFilePath.get(target.source.filePath);
-        if (replay === undefined) {
-          replay = await replaySession(
-            target.source.filePath,
-            this.persistenceProjectHash(),
-            { mediaStore: this.deps.mediaStore },
-          );
-          replayByFilePath.set(target.source.filePath, replay);
-        }
-        const checkpoint = replay.ok
-          ? replay.checkpoints?.find(
-              (candidate) => candidate.checkpointId === target.checkpointId,
-            )
-          : undefined;
-        if (checkpoint !== undefined && !checkpoint.deleted) {
-          checkpoints.push({
-            checkpointId: checkpoint.checkpointId,
-            name: checkpoint.name,
-            sessionId: target.source.sessionId,
-            sequence: checkpoint.sequence,
-            createdAt: checkpoint.createdAt,
-          });
-        }
-      }
-      return checkpoints;
-    });
+    return this.runExclusive(async () =>
+      this.getCheckpointService().listDiscoveredCheckpoints(
+        await this.continueTargets(),
+        this.persistenceProjectHash(),
+      ),
+    );
   }
 
   async renameCheckpoint(
@@ -563,59 +540,27 @@ export class SessionControl implements AgentSessionControl {
     name: string,
     options?: { readonly overwrite?: boolean },
   ): Promise<void> {
-    await this.runExclusive(async () => {
-      const target = await this.resolveCheckpointTarget(ref);
-      const trimmedName = name.trim();
-      if (target.checkpointName === trimmedName) return;
-      if (this.recording?.getSessionId() === target.source.sessionId) {
-        await this.getCheckpointService().renameCheckpoint(
-          this.recording,
-          this.persistenceProjectHash(),
-          target.checkpointId,
-          trimmedName,
-          options?.overwrite === true,
-        );
-        return;
-      }
-      const validatedName =
-        options?.overwrite === true
-          ? trimmedName
-          : await SessionDiscovery.validateAvailableName(
-              trimmedName,
-              this.chatsDir(),
-              this.persistenceProjectHash(),
-            );
-      await this.getCheckpointService().renameCheckpointClosed(
-        target.source.filePath,
+    await this.runExclusive(async () =>
+      this.getCheckpointService().renameCheckpointTarget(
+        await this.resolveCheckpointTarget(ref),
+        this.recording,
         this.persistenceProjectHash(),
         this.chatsDir(),
-        target.source.sessionId,
-        target.checkpointId,
-        validatedName,
-        options?.overwrite === true,
-      );
-    });
+        name,
+        options,
+      ),
+    );
   }
 
   async deleteCheckpoint(ref: string): Promise<void> {
-    await this.runExclusive(async () => {
-      const target = await this.resolveCheckpointTarget(ref);
-      if (this.recording?.getSessionId() === target.source.sessionId) {
-        await this.getCheckpointService().deleteCheckpoint(
-          this.recording,
-          this.persistenceProjectHash(),
-          target.checkpointId,
-        );
-        return;
-      }
-      await this.getCheckpointService().deleteCheckpointClosed(
-        target.source.filePath,
+    await this.runExclusive(async () =>
+      this.getCheckpointService().deleteCheckpointTarget(
+        await this.resolveCheckpointTarget(ref),
+        this.recording,
         this.persistenceProjectHash(),
         this.chatsDir(),
-        target.source.sessionId,
-        target.checkpointId,
-      );
-    });
+      ),
+    );
   }
 
   async nameCurrentSession(
@@ -696,7 +641,7 @@ export class SessionControl implements AgentSessionControl {
         destination,
         await this.discoverContinueTargets(),
         this.persistenceProjectHash(),
-        this.deps.mediaStore,
+        this.mediaStore,
         this.recording,
         this.integration,
       ),
@@ -709,7 +654,7 @@ export class SessionControl implements AgentSessionControl {
         packageDirectory,
         this.chatsDir(),
         this.persistenceProjectHash(),
-        this.deps.mediaStore,
+        this.mediaStore,
         async (imported) => {
           await this.resumeInternal(imported.sessionId);
           return this.currentSessionInfo();
@@ -726,7 +671,7 @@ export class SessionControl implements AgentSessionControl {
       await this.ensureSubscribed();
       return restoreOwnerTurns(
         turns,
-        this.deps.resolveClient(),
+        this.resolveClient(),
         this.requireRecording(),
         this.integration,
         this,
@@ -735,34 +680,83 @@ export class SessionControl implements AgentSessionControl {
     });
   }
   getHistory = (): Promise<readonly IContent[]> =>
-    this.runExclusive(() => this.deps.resolveClient().getHistory());
+    this.runExclusive(() => this.resolveClient().getHistory());
 
   getSessionId = (): string => this.recordingSessionId;
 
   startNewSession = (): Promise<void> =>
-    this.deps.withSessionTransition(() =>
-      this.runExclusive(() =>
-        startNewSessionTransition(this.deps, {
-          owner: this,
-          retire: () => this.teardownActiveSession(),
-          publish: (id, recording, integration) => {
-            this.recordingSessionId = id;
-            this.adoptedPath = null;
-            this.recording = recording;
-            this.integration = integration;
-          },
-        }),
-      ),
+    this.withSessionTransition(() =>
+      this.runExclusive(() => this.startNewSessionTransition()),
     );
+  private async startNewSessionTransition(): Promise<void> {
+    const ownsConfig = this.sessionIdentityOwnership === 'config';
+    if (ownsConfig && this.config.getSessionId() !== this.getSessionId()) {
+      throw new Error('Cannot replace a session owned by another facade');
+    }
+    const nextSessionId = crypto.randomUUID();
+    const candidate = await this.prepareNewSessionClient(nextSessionId);
+    let recording: SessionRecordingService | null = null;
+    let integration: RecordingIntegration | null = null;
+    let retirementStarted = false;
+    try {
+      if (this.getRecording().enabled) {
+        recording = await SessionRecordingService.createLocked({
+          sessionId: nextSessionId,
+          projectHash: basename(this.config.projectTempDir),
+          chatsDir: this.config.projectChatsDir,
+          workspaceDirs: [...this.directories()],
+          cwd: this.config.getProjectRoot(),
+          provider: this.getProvider(),
+          model: this.getModel(),
+          mediaStore: this.mediaStore,
+          maxQueueBytes: this.readRecordingQueueLimit(),
+        });
+        integration = new RecordingIntegration(
+          recording,
+          this.persistence.forRecording(nextSessionId),
+        );
+        const history = candidate.client.getHistoryService();
+        if (history === null)
+          throw new Error('New session client has no history service');
+        integration.subscribeToHistory(history, this);
+      }
+      retirementStarted = true;
+      await this.teardownActiveSession();
+      await candidate.retire();
+      candidate.publish();
+      if (ownsConfig) this.config.adoptSessionId(nextSessionId);
+      this.recordingSessionId = nextSessionId;
+      this.adoptedPath = null;
+      this.recording = recording;
+      this.integration = integration;
+    } catch (error) {
+      if (retirementStarted) {
+        this.closeAdmission();
+        this.closeSessionAdmission();
+      }
+      const failures = await cleanupSessionResources(
+        integration,
+        recording,
+        null,
+      );
+      await captureRollbackFailure(failures, () => candidate.discard());
+      if (failures.length > 0)
+        throw new AggregateError(
+          [error, ...failures],
+          'New session transition and cleanup failed',
+        );
+      throw error;
+    }
+  }
 
   async clearHistory(): Promise<void> {
     await this.runExclusive(() =>
       clearOwnerHistory(
-        this.deps.resolveClient(),
+        this.resolveClient(),
         this.requireRecording(),
         this.integration,
         this,
-        this.deps.mediaStore,
+        this.mediaStore,
         () => this.resubscribeIntegration(),
       ),
     );
@@ -797,12 +791,11 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   getRecording(): SessionRecordingState {
-    const path = this.recording?.getFilePath() ?? null;
-    return {
-      enabled: this.recording?.isActive() ?? false,
-      format: RECORDING_FORMAT,
-      ...(path !== null ? { path } : {}),
-    };
+    return recordingStateFromSnapshot(
+      this.recording?.isActive() ?? false,
+      this.recording?.getFilePath() ?? null,
+      RECORDING_FORMAT,
+    );
   }
 
   getRecordingTitle(): string | null | undefined {
@@ -827,7 +820,7 @@ export class SessionControl implements AgentSessionControl {
     return replayOwnerRecording(
       recording.getFilePath(),
       this.persistenceProjectHash(),
-      this.deps.mediaStore,
+      this.mediaStore,
     );
   }
 
@@ -840,7 +833,7 @@ export class SessionControl implements AgentSessionControl {
     const listing = await SessionDiscovery.listContinueTargetsDetailed(
       this.chatsDir(),
       this.persistenceProjectHash(),
-      this.deps.mediaStore,
+      this.mediaStore,
     );
     warnSkippedRecordings(logger, listing.unreadableRecordings);
     return listing;
@@ -872,14 +865,14 @@ export class SessionControl implements AgentSessionControl {
         ? this.recording
         : undefined;
     const result = await new SessionTransitionService({
-      mediaStore: this.deps.mediaStore,
-      maxQueueBytes: this.deps.readRecordingQueueLimit(),
+      mediaStore: this.mediaStore,
+      maxQueueBytes: this.readRecordingQueueLimit(),
     }).forkFromCheckpoint(
       target,
       this.chatsDir(),
       this.persistenceProjectHash(),
-      this.deps.getProvider(),
-      this.deps.getModel(),
+      this.getProvider(),
+      this.getModel(),
       this.workspaceDirs(),
       activeSource,
     );
@@ -910,11 +903,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   private sessionInfoFor = (summary: SessionSummary): Promise<SessionInfo> =>
-    readSessionInfo(
-      summary,
-      this.persistenceProjectHash(),
-      this.deps.mediaStore,
-    );
+    readSessionInfo(summary, this.persistenceProjectHash(), this.mediaStore);
 
   // ─── Recording helpers ───────────────────────────────────────────────────
 
@@ -954,22 +943,22 @@ export class SessionControl implements AgentSessionControl {
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
       workspaceDirs: this.workspaceDirs(),
-      cwd: this.deps.config.getProjectRoot(),
-      provider: this.deps.getProvider(),
-      model: this.deps.getModel(),
-      mediaStore: this.deps.mediaStore,
-      maxQueueBytes: this.deps.readRecordingQueueLimit(),
+      cwd: this.config.getProjectRoot(),
+      provider: this.getProvider(),
+      model: this.getModel(),
+      mediaStore: this.mediaStore,
+      maxQueueBytes: this.readRecordingQueueLimit(),
     });
     let integration: RecordingIntegration | null = null;
     try {
-      const client = this.deps.resolveClient();
+      const client = this.resolveClient();
       const history = await client.getHistory();
-      await restartRecording(service, this.adoptedPath, this.deps.mediaStore);
+      await restartRecording(service, this.adoptedPath, this.mediaStore);
       seedOwnerRecording(service, history, client.getHistoryService(), this);
       await service.flush();
       integration = new RecordingIntegration(
         service,
-        this.deps.persistence.forRecording(service.getSessionId()),
+        this.persistence.forRecording(service.getSessionId()),
       );
       const subscribed = this.attachHistory(integration);
       this.recording = service;
@@ -1024,7 +1013,7 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private attachHistory(integration: RecordingIntegration): boolean {
-    const historyService = this.deps.resolveClient().getHistoryService();
+    const historyService = this.resolveClient().getHistoryService();
     if (historyService !== null) {
       integration.subscribeToHistory(historyService, this);
       return true;
@@ -1099,7 +1088,7 @@ export class SessionControl implements AgentSessionControl {
     // releasing (double-dispose / released-then-adopted lock).
     return (this.disposalPromise ??= this.opChain
       .then(() => this.teardownActiveSession())
-      .finally(() => this.deps.persistence.close()));
+      .finally(() => this.persistence.close()));
   }
 
   /**
@@ -1121,7 +1110,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   private persistenceProjectHash(): string {
-    return basename(this.deps.config.projectTempDir);
+    return basename(this.config.projectTempDir);
   }
 
   // ─── Path derivation ─────────────────────────────────────────────────────
@@ -1135,7 +1124,7 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private chatsDir(): string {
-    return this.deps.config.projectChatsDir;
+    return this.config.projectChatsDir;
   }
 
   /**
@@ -1144,6 +1133,6 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private workspaceDirs(): string[] {
-    return [...this.deps.directories()];
+    return [...this.directories()];
   }
 }

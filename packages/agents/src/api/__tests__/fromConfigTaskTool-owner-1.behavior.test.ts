@@ -451,18 +451,25 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       await callerMcp.initialize();
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtFactorylessSettingsOwner,
-        settingsService: builtFactorylessSettings,
-        agentClient: builtFactorylessNoClient,
-        providerManager: builtFactorylessNoManager,
-        runtimeFactoryBindings: builtFactorylessFactories,
-        config: builtFactorylessConfig,
-        sessionId: runtimeId,
-        messageBus: builtFactorylessPolicy.session.messageBus,
-        policyOwner: builtFactorylessPolicy,
-        mcpRuntime: callerMcp,
-      });
+      const agent: Agent = await fromConfig(
+        builtFactorylessConfig,
+        builtFactorylessSettings,
+        { sessionId: runtimeId },
+        builtFactorylessSettingsOwner,
+        builtFactorylessNoManager,
+        undefined,
+        builtFactorylessPolicy.session.messageBus,
+        callerMcp,
+        undefined,
+        builtFactorylessNoClient,
+        undefined,
+        undefined,
+        undefined,
+        builtFactorylessFactories,
+        undefined,
+        undefined,
+        builtFactorylessPolicy,
+      );
       try {
         expect(agent.tools.get('task')).toBeUndefined();
         expect(agentToolNames(agent)).not.toContain('task');
@@ -522,20 +529,25 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
 
       // Adoption with the preflight token (the CLI flow: preflight, then
       // fromConfig consuming the completed activation instead of re-running).
-      const agent: Agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        runtimeFactoryBindings: builtCallerFactories,
-        config: builtCallerConfig,
-        sessionId: runtimeId,
-        messageBus: builtCallerPolicy.session.messageBus,
-        policyOwner: builtCallerPolicy,
-        mcpRuntime: builtCallerMcp,
-        activation: intent,
-        activationPreflight: { operation, token },
-      });
+      const agent: Agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { sessionId: runtimeId, activation: intent },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        { operation, token },
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        builtCallerFactories,
+        undefined,
+        undefined,
+        builtCallerPolicy,
+      );
       try {
         // The default registration preflight installed must reach the LIVE
         // registry: "a registration exists" is not "the caller supplied it".

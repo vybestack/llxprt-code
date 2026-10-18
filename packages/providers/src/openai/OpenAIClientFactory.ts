@@ -331,10 +331,15 @@ function fetchUntilHeaders(
       () => controller.abort(new Error('Headers timeout')),
       timeoutMs,
     );
-    const request = new Request(input, init);
-    const signal = AbortSignal.any([request.signal, controller.signal]);
+    const inheritedSignal = input instanceof Request ? input.signal : undefined;
+    const requestSignal =
+      init?.signal === undefined ? inheritedSignal : init.signal;
+    const signal =
+      requestSignal === undefined || requestSignal === null
+        ? controller.signal
+        : AbortSignal.any([requestSignal, controller.signal]);
     try {
-      return await requestFetch(request, { signal });
+      return await requestFetch(input, { ...init, signal });
     } finally {
       clearTimeout(timeout);
     }

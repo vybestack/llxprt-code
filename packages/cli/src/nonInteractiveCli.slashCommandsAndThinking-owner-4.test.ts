@@ -88,9 +88,12 @@ function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
 ): Promise<void> {
   return runHeadlessPolicyFixture(
-    { ...params, credentialAuthority: mockCredentialAuthority },
-    mockRuntimeSettings,
+    params,
+    mockRuntimeSettings.owner,
     mockProviderManager,
+    mockRuntimeSettings.store,
+    mockRuntimeSettings.owner,
+    mockCredentialAuthority,
   );
 }
 

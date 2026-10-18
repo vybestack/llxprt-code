@@ -197,14 +197,18 @@ describe('Explicit session client lifetime', () => {
     );
     provider.name = 'engine-profile-provider';
     builtManager.registerProvider(provider);
-    const agent = await fromConfig({
-      settingsService: builtSettings,
-      config: builtConfig,
-      providerManager: builtManager,
-      messageBus: builtMessageBus,
-      mcpRuntime: builtMcp,
-      agentClient: client,
-    });
+    const agent = await fromConfig(
+      builtConfig,
+      builtSettings,
+      {},
+      undefined,
+      builtManager,
+      undefined,
+      builtMessageBus,
+      builtMcp,
+      undefined,
+      client,
+    );
     try {
       await agent.setHistory([
         {
@@ -374,15 +378,18 @@ describe('Explicit session client lifetime', () => {
     const client = builtOwner.getAgentClient();
     try {
       await expect(
-        fromConfig({
-          settingsService: builtSettings,
-          config: builtConfig,
-          providerManager: builtManager,
-          messageBus: builtMessageBus,
-          mcpRuntime: builtMcp,
-          agentClient: client,
-          activation: { provider: 'missing-engine-provider' },
-        }),
+        fromConfig(
+          builtConfig,
+          builtSettings,
+          { activation: { provider: 'missing-engine-provider' } },
+          undefined,
+          builtManager,
+          undefined,
+          builtMessageBus,
+          builtMcp,
+          undefined,
+          client,
+        ),
       ).rejects.toThrow(/activation failed/i);
       await builtMcp.refreshContext();
       await client.addHistory({
@@ -526,15 +533,17 @@ describe('Explicit session client lifetime', () => {
       const client = owner.getAgentClient();
       const store = client.mediaStore;
       if (store === undefined) throw new Error('Missing preflight media store');
-      const agent = await fromConfig({
-        settingsService: builtSettings,
-        config: builtConfig,
-        providerManager: builtManager,
-        messageBus: builtMessageBus,
-        mcpRuntime: builtMcp,
-        activation: intent,
-        activationPreflight: { operation, token: result.token },
-      });
+      const agent = await fromConfig(
+        builtConfig,
+        builtSettings,
+        { activation: intent },
+        undefined,
+        builtManager,
+        undefined,
+        builtMessageBus,
+        builtMcp,
+        { operation, token: result.token },
+      );
       try {
         expect(agent.agentClient).toBe(client);
         await agent.setHistory([

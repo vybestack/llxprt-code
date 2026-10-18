@@ -1,4 +1,3 @@
-import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -59,7 +58,6 @@ import {
   MemoryTokenStore,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
-import { createLoopHolder, rebuildLoop } from '../loop/rebuildLoop.js';
 
 /**
  * @license
@@ -303,16 +301,19 @@ describe('profile-commit-publication', () => {
       const ownerProfiles = builtCallerSettingsOwner[
         'modelNotifications'
       ].listeners(CoreEvent.ModelProfileChanged);
-      const agent = await fromConfig({
-        oauthManager: builtCallerOAuth,
-        providerFileLifecycle: builtCallerFiles,
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        undefined,
+        builtCallerFiles,
+      );
       const manager = builtCallerManager;
 
       const alternative = new FakeProvider(
@@ -466,15 +467,18 @@ describe('profile-commit-publication', () => {
 
   it('rolls back supported active-provider loss after model selection', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     const settings = builtCallerSettings;
     const manager = builtCallerManager;
     if (!(manager instanceof ProviderManager))
@@ -508,16 +512,13 @@ describe('profile-commit-publication', () => {
   it('keeps the previous real loop runnable after replacement construction fails', async () => {
     await openbuiltCaller('plain-text.jsonl');
     try {
-      const holder = createLoopHolder();
-      const construct = (
-        client: ReturnType<typeof builtCallerOwner.getAgentClient>,
-      ): AgenticLoop =>
-        builtCallerOwner.createLoop(client, undefined, undefined, undefined);
-      const rebuild = (): AgenticLoop =>
-        rebuildLoop(holder, () => builtCallerOwner.getAgentClient(), construct);
-      const previous = rebuild();
-      const controller = holder.activeRunController;
-      if (!controller) throw new Error('Initial loop controller missing');
+      const previous = builtCallerOwner.initializeExecution(
+        undefined,
+        undefined,
+        undefined,
+      );
+      const rebuild = (): void => builtCallerOwner.rebuildExecution();
+      const controller = new AbortController();
       const failure = new Error('replacement loop configuration failed');
       const interactive = vi
         .spyOn(builtCallerConfig, 'isInteractive')
@@ -561,15 +562,18 @@ describe('profile-commit-publication', () => {
       }),
     });
     await oauth.toggleOAuthEnabled('fake');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     const models: string[] = [];
     const profiles: unknown[] = [];
     const onModel = (model: string): void => {

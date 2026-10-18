@@ -419,14 +419,6 @@ export interface OwnershipRecord {
   runtimeHandle: {
     cleanup: () => Promise<void> | void;
   };
-  config: Config;
-  messageBus: unknown;
-  loopHolder: {
-    current?: unknown;
-    activeRunController?: AbortController;
-    subscriptions?: ReadonlyArray<() => void>;
-  };
-  runtimeState: AgentRuntimeState;
   /**
    * Scheduler handles created through a caller-injected
    * {@link AgentSchedulerFactory} and retained by the facade. Agent.dispose()
@@ -486,10 +478,6 @@ export interface OwnershipRecord {
 export function recordOwnership(deps: {
   readonly disposeMcpRuntime?: () => Promise<void> | undefined;
   runtimeHandle: OwnershipRecord['runtimeHandle'];
-  config: Config;
-  messageBus: unknown;
-  loopHolder: OwnershipRecord['loopHolder'];
-  runtimeState: AgentRuntimeState;
   injectedSchedulerHandles: AgentSchedulerHandle[];
   sessionLocks?: SessionLock[];
   // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
@@ -501,10 +489,6 @@ export function recordOwnership(deps: {
     disposed: false,
     disposeMcpRuntime: deps.disposeMcpRuntime,
     runtimeHandle: deps.runtimeHandle,
-    config: deps.config,
-    messageBus: deps.messageBus,
-    loopHolder: deps.loopHolder,
-    runtimeState: deps.runtimeState,
     injectedSchedulerHandles: deps.injectedSchedulerHandles,
     // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
     // Headless agents acquire no session locks; the release loop is a vacuous

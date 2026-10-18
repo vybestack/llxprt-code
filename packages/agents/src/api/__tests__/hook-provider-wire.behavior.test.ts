@@ -143,17 +143,24 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
         },
       });
       mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-      agent = await fromConfig({
-        ...createSessionSettingsFixture(config),
+      const adoptedSettings1 = createSessionSettingsFixture(config);
+      agent = await fromConfig(
         config,
-        mcpRuntime: mcp,
-        mcpOwnership: 'caller',
-        activation: {
-          provider: 'openai',
-          model: 'wire-model',
-          cliOverrides: { key: 'local-test-key', baseUrl },
+        adoptedSettings1.settingsService,
+        {
+          activation: {
+            provider: 'openai',
+            model: 'wire-model',
+            cliOverrides: { key: 'local-test-key', baseUrl },
+          },
+          mcpOwnership: 'caller',
         },
-      });
+        adoptedSettings1.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        mcp,
+      );
       const runtimeId = agent.getRuntimeId();
       const text: string[] = [];
       for await (const event of agent.stream('initial caller input')) {

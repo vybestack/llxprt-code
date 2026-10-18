@@ -493,14 +493,11 @@ describe('startInteractiveUI', () => {
   });
 });
 
-function startupSettings(): {
-  owner: SessionSettingsOwner;
-  store: SettingsService;
-} {
+function startupSettings(): SessionSettingsOwner {
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
   startupOwners.push(owner);
-  return { owner, store };
+  return owner;
 }
 
 function rawPersistence(): CliSessionPersistence {

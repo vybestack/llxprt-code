@@ -1,3 +1,4 @@
+import { fromConfig } from '@vybestack/llxprt-code-agents';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -57,7 +58,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { MemoryTokenStore } from '../../../../agents/src/api/__tests__/helpers/provider-auth-fixtures.js';
 import { fixturesDir } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { runNonInteractive } from '../../__tests__/noninteractive-run-fixture.js';
+import {
+  runNonInteractive,
+  buildNonInteractiveActivationIntent,
+} from '../../__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from '../../config/settings.js';
 
 /**
@@ -311,6 +315,17 @@ class TelemetryCleanup {
     await this.#owner.initializeTools();
     await this.#owner.getAgentClient().startChat();
   }
+  private prepareCleanupFailure(directory: string, outfile: string): void {
+    this.#manager.registerProvider(
+      new FailingLocalProvider(
+        join(fixturesDir, 'plain-text.jsonl'),
+        directory,
+      ),
+    );
+    this.#manager.setActiveProvider('fake');
+    unlinkSync(outfile);
+    mkdirSync(outfile);
+  }
   private async exerciseCleanup(
     primary: boolean,
     directory: string,
@@ -327,49 +342,52 @@ class TelemetryCleanup {
       settingFile,
       true,
     );
-    if (primary) {
-      this.#manager.registerProvider(
-        new FailingLocalProvider(
-          join(fixturesDir, 'plain-text.jsonl'),
-          directory,
-        ),
-      );
-      this.#manager.setActiveProvider('fake');
-      unlinkSync(outfile);
-      mkdirSync(outfile);
-    }
+    if (primary) this.prepareCleanupFailure(directory, outfile);
     const directPolicy = new RuntimePolicyOwner(this.#config);
     let failure: unknown;
     try {
       await runNonInteractive({
-        credentialAuthority: this.credentials.authority,
         config: this.#config,
         settings,
         input: 'exercise public CLI cleanup',
         prompt_id: 'cleanup-proof',
-        providerManager: this.#manager,
-        runtimeSettings: { owner: this.#settingsOwner, store: this.#settings },
-        runtimeMessageBus: directPolicy.session.messageBus,
-        policyOwner: directPolicy,
-        oauthManager: new FailingOAuthRelease(new MemoryTokenStore()),
+        runtimeSettings: this.#settingsOwner,
+        hasActiveProvider: () => this.#manager.hasActiveProvider(),
+        isTrustedFolder: () => directPolicy.trust.isTrustedFolder(),
+        acquireAgent: () =>
+          fromConfig(
+            this.#config,
+            this.#settings,
+            {
+              sessionId: this.#config.getSessionId(),
+              sessionIdentityOwnership: 'config',
+              activation: buildNonInteractiveActivationIntent(
+                this.#config,
+                settings,
+              ),
+              mcpOwnership: 'agent',
+            },
+            this.#settingsOwner,
+            this.#manager,
+            new FailingOAuthRelease(new MemoryTokenStore()),
+            directPolicy.session.messageBus,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            this.credentials.authority,
+            directPolicy,
+          ),
       });
     } catch (error) {
       failure = error;
     }
     try {
-      if (primary) rmSync(outfile, { recursive: true });
-      this.#settingsOwner.telemetry.events.record(() => ({
-        body: 'caller root survives facade release',
-      }));
-      await this.#settingsOwner.telemetry.flush();
-      if (
-        !readFileSync(outfile, 'utf8').includes(
-          'caller root survives facade release',
-        )
-      )
-        throw new Error(
-          'Caller-owned telemetry retired during direct Agent disposal',
-        );
+      await this.verifyBorrowedTelemetry(primary, outfile);
     } finally {
       try {
         await runCleanupSteps([() => directPolicy.dispose(), this.#close]);
@@ -378,6 +396,24 @@ class TelemetryCleanup {
       }
     }
     if (failure !== undefined) throw failure;
+  }
+  private async verifyBorrowedTelemetry(
+    primary: boolean,
+    outfile: string,
+  ): Promise<void> {
+    if (primary) rmSync(outfile, { recursive: true });
+    this.#settingsOwner.telemetry.events.record(() => ({
+      body: 'caller root survives facade release',
+    }));
+    await this.#settingsOwner.telemetry.flush();
+    if (
+      !readFileSync(outfile, 'utf8').includes(
+        'caller root survives facade release',
+      )
+    )
+      throw new Error(
+        'Caller-owned telemetry retired during direct Agent disposal',
+      );
   }
   async run(primary: boolean): Promise<void> {
     const directory = mkdtempSync(join(tmpdir(), 'public-cli-cleanup-'));

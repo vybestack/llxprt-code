@@ -162,15 +162,25 @@ describe('supplied workspace memory lifetime through public adoption', () => {
           { owner: memory },
         );
         cleanups.push(() => mcp.dispose());
-        const facade = await fromConfig({
-          config: built_builtFactorylessConfig,
-          settingsService: built_builtFactorylessSettings,
-          settingsOwner: built_builtFactorylessSettingsOwner,
-          messageBus: built_builtFactorylessPolicy.session.messageBus,
-          policyOwner: built_builtFactorylessPolicy,
-          mcpRuntime: mcp,
-          mcpOwnership: 'agent',
-        });
+        const facade = await fromConfig(
+          built_builtFactorylessConfig,
+          built_builtFactorylessSettings,
+          { mcpOwnership: 'agent' },
+          built_builtFactorylessSettingsOwner,
+          undefined,
+          undefined,
+          built_builtFactorylessPolicy.session.messageBus,
+          mcp,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          built_builtFactorylessPolicy,
+        );
         cleanups.push(() => facade.dispose());
         facade.memory.setMemory(`Private facade ${index}`);
         facades.push(facade);

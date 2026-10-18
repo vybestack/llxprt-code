@@ -12,12 +12,11 @@ import {
 
 import dns from 'node:dns';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   type AgentProfileApplication,
   type AgentActivationOperation,
   type ProviderActivationIntent,
-  type ActivationPreflight,
+  type ActivationPreflightToken,
 } from '@vybestack/llxprt-code-agents';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { validateDnsResolutionOrder } from './cliBootstrap.js';
@@ -133,15 +132,15 @@ function buildActivationCliOverrides(
  */
 export interface ConfiguredProviderActivationResult {
   readonly authFailed: boolean;
-  readonly activationPreflight?: ActivationPreflight;
+  readonly token?: ActivationPreflightToken;
   readonly intent?: ProviderActivationIntent;
 }
 
 export async function activateConfiguredProvider(
   config: Config,
-  providerManager: CliProviderManager,
+  providerManager: Pick<CliProviderManager, 'getActiveProviderName'>,
   argv: ParsedCliArgs,
-  operation: AgentActivationOperation,
+  operation: Pick<AgentActivationOperation, 'preflight'>,
 ): Promise<ConfiguredProviderActivationResult> {
   const configProvider = config.getProvider();
   const cliModelOverride = (config as Config & { _cliModelOverride?: string })
@@ -178,9 +177,7 @@ export async function activateConfiguredProvider(
   }
   return {
     authFailed: result.authFailed,
-    ...(result.token !== undefined
-      ? { activationPreflight: { operation, token: result.token }, intent }
-      : {}),
+    ...(result.token !== undefined ? { token: result.token, intent } : {}),
   };
 }
 
@@ -191,14 +188,14 @@ export async function activateConfiguredProvider(
  */
 export async function reapplyBootstrapProfile(
   argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-  profileApplication: AgentProfileApplication,
+  readCurrentProfileName: () => string | null,
+  loadProfile: AgentProfileApplication['load'],
 ): Promise<void> {
   const envProfile = process.env.LLXPRT_BOOTSTRAP_PROFILE;
   const bootstrapProfileName =
     argv.profileLoad?.trim() ??
     (typeof envProfile === 'string' ? envProfile.trim() : '');
-  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
+  const currentProfileName = readCurrentProfileName();
   if (
     argv.provider ||
     bootstrapProfileName === '' ||
@@ -207,7 +204,7 @@ export async function reapplyBootstrapProfile(
     return;
   }
   try {
-    await profileApplication.load(bootstrapProfileName);
+    await loadProfile(bootstrapProfileName);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     debugLogger.warn(
@@ -225,15 +222,10 @@ export async function configureProvidersAndServices(
   config: Config,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
-  runtimeSettingsService: SettingsService,
-  profileApplication: AgentProfileApplication,
-  providerManager: RuntimeProviderManager,
-): Promise<CliProviderManager> {
-  await reapplyBootstrapProfile(
-    argv,
-    runtimeSettingsService,
-    profileApplication,
-  );
+  readCurrentProfileName: () => string | null,
+  loadProfile: AgentProfileApplication['load'],
+): Promise<void> {
+  await reapplyBootstrapProfile(argv, readCurrentProfileName, loadProfile);
 
   if (config.getConversationLoggingEnabled()) {
     const gitStatsService = new GitStatsServiceImpl(config);
@@ -243,8 +235,6 @@ export async function configureProvidersAndServices(
   dns.setDefaultResultOrder(
     validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
   );
-
-  return providerManager;
 }
 
 /** Connect the IDE companion client when IDE mode is enabled. */

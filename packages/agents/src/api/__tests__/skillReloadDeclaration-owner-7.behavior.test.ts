@@ -360,14 +360,18 @@ describe('workspace skill publication compensation', () => {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
 
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      config: builtCallerConfig,
-      providerManager: builtCallerManager,
-      agentClient: builtCallerOwner.getAgentClient(),
-      mcpRuntime: builtCallerMcp,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     const entered = publicationGate();
     const released = publicationGate();
     const owner = builtCallerMcp.workspaceSkills;

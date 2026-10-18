@@ -119,17 +119,27 @@ async function adoptForBudget(
   const settingsService = new SettingsService();
   settingsService.set('context-limit', 100000);
   settingsService.set('maxOutputTokens', 128);
-  return fromConfig({
+  return fromConfig(
     config,
     settingsService,
-    tokenizerFactory: tokenizerForBudget(scale),
-    sessionId: 'same-factory-label',
-    activation: {
-      provider,
-      model,
-      cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+    {
+      sessionId: 'same-factory-label',
+      activation: {
+        provider,
+        model,
+        cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+      },
     },
-  });
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    tokenizerForBudget(scale),
+  );
 }
 
 async function withConfig(
@@ -179,17 +189,31 @@ describe('public provider factory authority', () => {
       const wire = await budgetWire();
       let agent: Agent | undefined;
       try {
-        agent = await fromConfig({
+        agent = await fromConfig(
           config,
-          settingsService: new SettingsService(),
-          policyOwner: policy,
-          messageBus: policy.session.messageBus,
-          activation: {
-            provider: 'openai',
-            model: 'gpt-5.6',
-            cliOverrides: { key: 'local-only', baseUrl: wire.endpoint },
+          new SettingsService(),
+          {
+            activation: {
+              provider: 'openai',
+              model: 'gpt-5.6',
+              cliOverrides: { key: 'local-only', baseUrl: wire.endpoint },
+            },
           },
-        });
+          undefined,
+          undefined,
+          undefined,
+          policy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          policy,
+        );
         expect(agent.getMessageBus()).toBe(policy.session.messageBus);
         successful(await collect(agent.stream('Return one sentence.')));
         let confirmation: ToolConfirmationRequest | undefined;
@@ -350,23 +374,33 @@ describe('public provider factory authority', () => {
       try {
         for (const scale of [2, 7]) {
           owners.push(
-            await fromConfig({
+            await fromConfig(
               config,
-              settingsService: new SettingsService(),
-              sessionId: 'same-factory-label',
-              tokenizerFactory: tokenizerForBudget(1),
-              contentGeneratorFactory: {
-                createContentGenerator: () => new SelectedGenerator(scale),
-              },
-              activation: {
-                provider: 'openai',
-                model: 'gpt-5.6',
-                cliOverrides: {
-                  key: 'content-owner-local',
-                  baseUrl: wire.endpoint,
+              new SettingsService(),
+              {
+                sessionId: 'same-factory-label',
+                activation: {
+                  provider: 'openai',
+                  model: 'gpt-5.6',
+                  cliOverrides: {
+                    key: 'content-owner-local',
+                    baseUrl: wire.endpoint,
+                  },
                 },
               },
-            }),
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              tokenizerForBudget(1),
+              {
+                createContentGenerator: () => new SelectedGenerator(scale),
+              },
+            ),
           );
         }
         const request = {
@@ -434,17 +468,30 @@ describe('public provider factory authority', () => {
         },
       };
       try {
-        owner = await fromConfig({
+        owner = await fromConfig(
           config,
-          settingsService: new SettingsService(),
-          sessionId: 'same-factory-label',
-          tokenizerFactory,
-          activation: {
-            provider: 'openai',
-            model: 'gpt-5.6',
-            cliOverrides: { key: 'replacement-local', baseUrl: wire.endpoint },
+          new SettingsService(),
+          {
+            sessionId: 'same-factory-label',
+            activation: {
+              provider: 'openai',
+              model: 'gpt-5.6',
+              cliOverrides: {
+                key: 'replacement-local',
+                baseUrl: wire.endpoint,
+              },
+            },
           },
-        });
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          tokenizerFactory,
+        );
         successful(
           await collect(owner.stream({ text: 'Initial prepared model' })),
         );
@@ -476,15 +523,30 @@ describe('public provider factory authority', () => {
           throw new Error('Owner tokenizer asset unavailable');
         },
       };
-      const options = {
-        config,
-        settingsService: new SettingsService(),
-        sessionId: 'same-factory-label',
-        tokenizerFactory,
-      };
+      const optionsConfig: Parameters<typeof fromConfig>[0] = config;
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        new SettingsService();
+      const optionsSessionId: NonNullable<
+        Parameters<typeof fromConfig>[2]
+      >['sessionId'] = 'same-factory-label';
+      const optionsTokenizerFactory: Parameters<typeof fromConfig>[11] =
+        tokenizerFactory;
       try {
         await expect(
-          fromConfig(options).then((agent) => {
+          fromConfig(
+            optionsConfig,
+            optionsSettingsService,
+            { sessionId: optionsSessionId },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            optionsTokenizerFactory,
+          ).then((agent) => {
             admitted = agent;
           }),
         ).rejects.toThrow('Owner tokenizer asset unavailable');

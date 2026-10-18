@@ -164,10 +164,10 @@ async function getApprovalMode(
     'test-session',
     argv,
     undefined,
-    {
-      credentialAuthority: new CredentialAuthority(),
-      settingsService: runtimeSettingsService,
-    },
+    undefined,
+    runtimeSettingsService,
+    undefined,
+    new CredentialAuthority(),
   );
   return config.getApprovalMode();
 }

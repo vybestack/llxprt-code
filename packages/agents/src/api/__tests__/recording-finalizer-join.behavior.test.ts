@@ -300,17 +300,22 @@ describe('public Agent recording finalizer join', () => {
   ): Promise<void> {
     await openCaller('multi-turn-text.jsonl');
     const sessionId = 'recording-finalizer-' + randomUUID();
-    const agent = await fromConfig({
-      settingsOwner: callerSettingsOwner,
-      settingsService: callerSettings,
-      agentClient: callerOwner.getAgentClient(),
-      providerManager: callerManager,
-      runtimeFactoryBindings: callerFactories,
-      config: callerConfig,
-      messageBus: callerPolicy.session.messageBus,
-      mcpRuntime: callerMcp,
-      sessionId,
-    });
+    const agent = await fromConfig(
+      callerConfig,
+      callerSettings,
+      { sessionId },
+      callerSettingsOwner,
+      callerManager,
+      undefined,
+      callerPolicy.session.messageBus,
+      callerMcp,
+      undefined,
+      callerOwner.getAgentClient(),
+      undefined,
+      undefined,
+      undefined,
+      callerFactories,
+    );
     try {
       await scenario(agent, callerConfig.projectChatsDir, sessionId);
     } finally {

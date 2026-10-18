@@ -20,12 +20,15 @@ import type {
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
-import type { AliasResolveResult } from '../../runtime/providerInspection.js';
 import type {
+  SessionProviderReads,
   AgentOAuthUIEvent,
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
 } from '@vybestack/llxprt-code-agents';
+type AliasResolveResult = ReturnType<
+  SessionProviderReads['inspection']['getActiveProviderAliasConfig']
+>;
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
 
 /**

@@ -338,14 +338,27 @@ describe('explicit provider owner construction', () => {
       },
     });
     try {
-      const options = {
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        mcpRuntime: builtCallerMcp,
-      };
-      const agent = await fromConfig(options);
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtCallerSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtCallerConfig;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
+        builtCallerOwner.getAgentClient();
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtCallerManager;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        builtCallerMcp;
+      const agent = await fromConfig(
+        optionsConfig,
+        optionsSettingsService,
+        {},
+        undefined,
+        optionsProviderManager,
+        undefined,
+        undefined,
+        optionsMcpRuntime,
+        undefined,
+        optionsAgentClient,
+      );
       try {
         expect(internalConfig(agent)).toBe(builtCallerConfig);
         expect(agent.providerManager).toBe(builtCallerManager);
@@ -376,19 +389,31 @@ describe('explicit provider owner construction', () => {
       },
     });
     try {
-      const options = {
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        mcpRuntime: builtCallerMcp,
-        activation: { provider: 'missing-provider', authMode: 'auto' },
-      };
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        builtCallerSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] = builtCallerConfig;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
+        builtCallerOwner.getAgentClient();
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        builtCallerManager;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        builtCallerMcp;
+      const optionsActivation: NonNullable<
+        Parameters<typeof fromConfig>[2]
+      >['activation'] = { provider: 'missing-provider', authMode: 'auto' };
       await expect(
-        fromConfig({
-          ...options,
-          activation: { ...options.activation, authMode: 'auto' },
-        }),
+        fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          { activation: { ...optionsActivation, authMode: 'auto' } },
+          undefined,
+          optionsProviderManager,
+          undefined,
+          undefined,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
       ).rejects.toThrow('activation failed');
       expect(client.isInitialized()).toBe(true);
       expect(builtCallerManager.getActiveProviderName()).toBe('fake');
@@ -428,17 +453,24 @@ describe('explicit provider owner construction', () => {
     callerOAuth.registerProvider(createTestProvider('fake'));
     await callerOAuth.toggleOAuthEnabled('fake');
     try {
-      const agent = await fromConfig({
-        credentialAuthority: credentials().authority,
-        oauthManager: callerOAuth,
-        providerFileLifecycle: builtCallerFiles,
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        config: builtCallerConfig,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        mcpRuntime: builtCallerMcp,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        callerOAuth,
+        undefined,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        builtCallerFiles,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
+      );
       try {
         expect((await agent.auth.detailedStatus('fake')).authenticated).toBe(
           false,

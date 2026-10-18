@@ -7,13 +7,83 @@ import { describe, expect, it } from 'bun:test';
 import { createAgent } from '../index.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { mkdtemp, writeFile, unlink, readFile, rm } from 'node:fs/promises';
+import {
+  access,
+  mkdtemp,
+  writeFile,
+  unlink,
+  readFile,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveProviderFilePolicy } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 
 describe('preferred Agent acquisition release', () => {
   const credentials = useOwnedCredentials();
+
+  it.each(['fulfilled', 'undefined', 'error'])(
+    'releases the actual acquired image prefix when preferred broker selection rejects with %s cleanup',
+    async (mode) => {
+      const directory = await mkdtemp(
+        join(tmpdir(), 'preferred-broker-prefix-'),
+      );
+      const file = join(directory, 'owned-image');
+      await writeFile(file, 'owned image resource');
+      let releases = 0;
+      const cleanupFailure =
+        mode === 'undefined'
+          ? undefined
+          : new Error('preferred image cleanup failed');
+      try {
+        const [outcome] = await Promise.allSettled([
+          createAgent({
+            credentialAuthority: credentials().authority,
+            provider: 'openai',
+            model: 'unacquired-model',
+            workingDir: directory,
+            disposeGitHubBroker: async () => {
+              throw new Error('No broker acquired');
+            },
+            imageOperation: {
+              ownership: 'agent',
+              run: async () => {
+                throw new Error('No image generation');
+              },
+              dispose: async () => {
+                releases++;
+                await unlink(file);
+                if (mode !== 'fulfilled') throw cleanupFailure;
+              },
+            },
+          }),
+        ]);
+        expect(outcome.status).toBe('rejected');
+        if (outcome.status !== 'rejected')
+          throw new Error('Unexpected preferred acquisition');
+        const error: unknown = outcome.reason;
+        expect(error instanceof AggregateError).toBe(mode !== 'fulfilled');
+        const causes: unknown[] =
+          error instanceof AggregateError ? error.errors : [error];
+        const primary = causes[0];
+        expect(primary).toBeInstanceOf(Error);
+        if (!(primary instanceof Error))
+          throw new Error('Missing preferred broker primary');
+        expect(primary.message).toBe(
+          'GitHub transport disposal requires an explicit broker',
+        );
+        expect(causes.slice(1)).toStrictEqual(
+          mode === 'fulfilled' ? [] : [cleanupFailure],
+        );
+        await expect(access(file)).rejects.toMatchObject({ code: 'ENOENT' });
+        expect(releases).toBe(1);
+        expect(credentials().keySnapshot()).toStrictEqual([]);
+        expect(credentials().snapshot()).toStrictEqual([]);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('releases acquired key transport before rejecting token acquisition', async () => {
     const primary = new Error('token transport unavailable');

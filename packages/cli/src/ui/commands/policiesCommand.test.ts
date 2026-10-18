@@ -42,7 +42,7 @@ function makePolicy(): PolicyControl {
   });
   const owner = new RuntimePolicyOwner(config);
   ownedPolicies.push(owner);
-  return new PolicyControl({ inspection: owner.session.inspection });
+  return new PolicyControl(owner.session.inspection);
 }
 
 describe('policiesCommand', () => {

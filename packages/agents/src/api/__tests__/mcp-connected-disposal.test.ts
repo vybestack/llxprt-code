@@ -405,15 +405,18 @@ describe('connected MCP disposal', () => {
     const catalog = builtCallerMcp.toolSelection;
     const prompt = builtCallerMcp.listPrompts('local')[0];
     const before = await readFile(join(evidence(), 'requests'), 'utf8');
-    const agent = await fromConfig({
-      settingsOwner: builtCallerSettingsOwner,
-      settingsService: builtCallerSettings,
-      agentClient: builtCallerOwner.getAgentClient(),
-      providerManager: builtCallerManager,
-      config: builtCallerConfig,
-      mcpRuntime: builtCallerMcp,
-      messageBus: builtCallerPolicy.session.messageBus,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      builtCallerOwner.getAgentClient(),
+    );
     try {
       expect(agent.getMessageBus()).toBe(builtCallerPolicy.session.messageBus);
       expect(new Set([builtCallerMcp.toolSelection, catalog]).size).toBe(1);

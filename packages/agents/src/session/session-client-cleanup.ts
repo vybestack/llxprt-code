@@ -76,8 +76,10 @@ export class OwnedClientLedger {
     this.scopes.delete(client);
   }
 
-  clients(): AgentClientContract[] {
-    return [...this.scopes.keys()];
+  settleOwnedClients(): Promise<Array<PromiseSettledResult<void>>> {
+    return Promise.allSettled(
+      [...this.scopes.keys()].map((client) => this.dispose(client)),
+    );
   }
 
   async dispose(client: AgentClientContract): Promise<void> {

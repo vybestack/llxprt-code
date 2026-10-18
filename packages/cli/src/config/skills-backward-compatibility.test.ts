@@ -50,7 +50,10 @@ async function buildConfig(
     'test-session',
     argv,
     undefined,
-    { credentialAuthority: new CredentialAuthority() },
+    undefined,
+    undefined,
+    undefined,
+    new CredentialAuthority(),
   );
 }
 

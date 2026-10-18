@@ -201,16 +201,25 @@ describe('fromConfig acquired-prefix rollback', () => {
       await retained.lease.release();
       await rm(join(directory, stage));
       await expect(
-        fromConfig({
-          config: builtFactorylessConfig,
-          settingsService: builtFactorylessSettings,
-          policyOwner: builtFactorylessPolicy,
-          messageBus: builtFactorylessPolicy.session.messageBus,
-          runtimeFactoryBindings: builtFactorylessFactories,
-          settingsOwner: undefined,
-          credentialAuthority: authority,
-          providerFileLifecycle: files,
-        }),
+        fromConfig(
+          builtFactorylessConfig,
+          builtFactorylessSettings,
+          {},
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessPolicy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          files,
+          undefined,
+          undefined,
+          builtFactorylessFactories,
+          undefined,
+          authority,
+          builtFactorylessPolicy,
+        ),
       ).rejects.toMatchObject({ code: 'ENOENT' });
       expect(files.snapshot().retainedFiles).toBe(0);
       expect(listeners() - before).toBe(0);
@@ -247,15 +256,25 @@ describe('fromConfig acquired-prefix rollback', () => {
         );
       }
     })();
-    const error: unknown = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      settingsOwner: undefined,
-      credentialAuthority: external,
-    }).catch((failure: unknown) => failure);
+    const error: unknown = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      external,
+      builtFactorylessPolicy,
+    ).catch((failure: unknown) => failure);
     if (!(error instanceof AggregateError))
       throw new Error('Expected external credential acquisition failure');
     expect(error.errors).toHaveLength(2);
@@ -278,15 +297,25 @@ describe('fromConfig acquired-prefix rollback', () => {
     await writeFile(join(directory, 'config-home'), 'relative-config-home');
     try {
       await expect(
-        fromConfig({
-          config: builtFactorylessConfig,
-          settingsService: builtFactorylessSettings,
-          policyOwner: builtFactorylessPolicy,
-          messageBus: builtFactorylessPolicy.session.messageBus,
-          runtimeFactoryBindings: builtFactorylessFactories,
-          settingsOwner: undefined,
-          credentialAuthority: authority,
-        }),
+        fromConfig(
+          builtFactorylessConfig,
+          builtFactorylessSettings,
+          {},
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessPolicy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessFactories,
+          undefined,
+          authority,
+          builtFactorylessPolicy,
+        ),
       ).rejects.toThrow('LLXPRT_CONFIG_HOME');
     } finally {
       if (home === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -303,15 +332,25 @@ describe('fromConfig acquired-prefix rollback', () => {
     const before = listeners();
     await rm(join(directory, 'tokens'));
     await rm(join(directory, 'key-close'));
-    const error = await fromConfig({
-      config: builtFactorylessConfig,
-      settingsService: builtFactorylessSettings,
-      policyOwner: builtFactorylessPolicy,
-      messageBus: builtFactorylessPolicy.session.messageBus,
-      runtimeFactoryBindings: builtFactorylessFactories,
-      settingsOwner: undefined,
-      credentialAuthority: authority,
-    }).catch((failure: unknown) => failure);
+    const error = await fromConfig(
+      builtFactorylessConfig,
+      builtFactorylessSettings,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessPolicy.session.messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      builtFactorylessFactories,
+      undefined,
+      authority,
+      builtFactorylessPolicy,
+    ).catch((failure: unknown) => failure);
     expect(error).toBeInstanceOf(AggregateError);
     if (!(error instanceof AggregateError))
       throw new Error('Missing joined acquisition failure');
@@ -339,15 +378,25 @@ describe('fromConfig acquired-prefix rollback', () => {
     );
     try {
       await expect(
-        fromConfig({
-          config: builtFactorylessConfig,
-          settingsService: builtFactorylessSettings,
-          policyOwner: builtFactorylessPolicy,
-          messageBus: builtFactorylessPolicy.session.messageBus,
-          runtimeFactoryBindings: builtFactorylessFactories,
-          settingsOwner: undefined,
-          credentialAuthority: authority,
-        }),
+        fromConfig(
+          builtFactorylessConfig,
+          builtFactorylessSettings,
+          {},
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessPolicy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtFactorylessFactories,
+          undefined,
+          authority,
+          builtFactorylessPolicy,
+        ),
       ).rejects.toThrow('missing-responses');
     } finally {
       if (previous === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;

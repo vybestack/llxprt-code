@@ -434,24 +434,26 @@ describe('CLI retained session model commands', () => {
   it('keeps retained model and credential operations bound to their Agent owners', async () => {
     await openfirstCaller('multi-turn-text.jsonl');
     await opensecondCaller('multi-turn-text.jsonl');
-    const agentA = await fromConfig({
-      settingsService: firstCallerSettings,
-      settingsOwner: firstCallerSettingsOwner,
-      providerManager: firstCallerManager,
-      config: firstCallerConfig,
-      messageBus: firstCallerPolicy.session.messageBus,
-      mcpRuntime: firstCallerMcp,
-      sessionId: 'shared-isolation-label',
-    });
-    const agentB = await fromConfig({
-      settingsService: secondCallerSettings,
-      settingsOwner: secondCallerSettingsOwner,
-      providerManager: secondCallerManager,
-      config: secondCallerConfig,
-      messageBus: secondCallerPolicy.session.messageBus,
-      mcpRuntime: secondCallerMcp,
-      sessionId: 'shared-isolation-label',
-    });
+    const agentA = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'shared-isolation-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
+    const agentB = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'shared-isolation-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     try {
       expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
         'Provider reads require an explicit session owner',
@@ -460,36 +462,34 @@ describe('CLI retained session model commands', () => {
       const firstApi = createRuntimeApi(
         agentA,
         createRuntimeOwnerFeatures(
-          firstCallerConfig,
-          agentA.providerManager,
+          agentA.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(agentA),
           firstCallerSettingsOwner,
-          firstCallerSettings,
           agentA.workspace,
           agentA.modelParameters,
           agentA.settings,
           agentA.toolFormat,
           agentA.providerReads,
           agentA.auth.keys,
+          () => agentA.providerReads.readOpenAIInfo(),
         ),
         agentA.sessionClient.fetch,
       );
       const secondApi = createRuntimeApi(
         agentB,
         createRuntimeOwnerFeatures(
-          secondCallerConfig,
-          agentB.providerManager,
+          agentB.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(agentB),
           secondCallerSettingsOwner,
-          secondCallerSettings,
           agentB.workspace,
           agentB.modelParameters,
           agentB.settings,
           agentB.toolFormat,
           agentB.providerReads,
           agentB.auth.keys,
+          () => agentB.providerReads.readOpenAIInfo(),
         ),
         agentB.sessionClient.fetch,
       );

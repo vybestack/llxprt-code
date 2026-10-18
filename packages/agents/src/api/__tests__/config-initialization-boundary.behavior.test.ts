@@ -146,13 +146,22 @@ describe('explicit workspace startup ownership boundary', () => {
     cleanup.push(() => settingsOwner.dispose());
     await expect(
       Reflect.apply(fromConfig, undefined, [
-        {
-          config,
-          settingsService: settings,
-          settingsOwner,
-          mcpOwnership: 'caller',
-          credentialAuthority: credentials().authority,
-        },
+        config,
+        settings,
+        { mcpOwnership: 'caller' },
+        settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        credentials().authority,
       ]),
     ).rejects.toThrow('Caller-owned MCP requires an explicit runtime handoff');
     expect(credentials().snapshot()).toStrictEqual([]);
@@ -266,8 +275,13 @@ describe('explicit workspace startup ownership boundary', () => {
   });
   it('releases the first trust subscription when later subscription acquisition fails and preserves borrowed authority', async () => {
     const primary = new Error('second trust subscription failed');
+    let disposal: Promise<unknown> | undefined;
     class FailingTrust extends WorkspaceTrustLifecycle {
       override subscribeTrustTransition(): () => void {
+        disposal = owner.dispose().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
         throw primary;
       }
     }
@@ -284,15 +298,8 @@ describe('explicit workspace startup ownership boundary', () => {
       undefined,
       borrowedPolicy,
     );
-    let failed: unknown;
-    try {
-      await expect(owner.initialize()).rejects.toBe(primary);
-    } finally {
-      failed = await owner.dispose().then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-    }
+    await expect(owner.initialize()).rejects.toBe(primary);
+    const failed = await disposal;
     expect(failed).toBeInstanceOf(AggregateError);
     vi.spyOn(
       McpClientManager.prototype,

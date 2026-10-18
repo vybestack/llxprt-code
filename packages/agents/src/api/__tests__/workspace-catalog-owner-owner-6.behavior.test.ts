@@ -345,14 +345,42 @@ describe('workspace catalog ownership through public Agent operations', () => {
     'retains caller catalogs after borrowed facade disposal order %i',
     async (first) => {
       await openfixture();
-      const options = {
-        settingsService: fixtureCallerSettings,
-        config: fixtureCallerConfig,
-        agentClient: fixtureCallerOwner.getAgentClient(),
-        providerManager: fixtureCallerManager,
-        mcpRuntime: fixtureCallerMcp,
-      };
-      const facades = [await fromConfig(options), await fromConfig(options)];
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        fixtureCallerSettings;
+      const optionsConfig: Parameters<typeof fromConfig>[0] =
+        fixtureCallerConfig;
+      const optionsAgentClient: Parameters<typeof fromConfig>[9] =
+        fixtureCallerOwner.getAgentClient();
+      const optionsProviderManager: Parameters<typeof fromConfig>[4] =
+        fixtureCallerManager;
+      const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
+        fixtureCallerMcp;
+      const facades = [
+        await fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          {},
+          undefined,
+          optionsProviderManager,
+          undefined,
+          undefined,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
+        await fromConfig(
+          optionsConfig,
+          optionsSettingsService,
+          {},
+          undefined,
+          optionsProviderManager,
+          undefined,
+          undefined,
+          optionsMcpRuntime,
+          undefined,
+          optionsAgentClient,
+        ),
+      ];
       try {
         const prompt = fixtureCallerMcp
           .listPrompts('physical')

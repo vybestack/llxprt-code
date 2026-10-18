@@ -44,17 +44,11 @@ describe('interactive context acquisition host', () => {
       debugMode: false,
       model: 'unused-host-config-model',
     });
-    const primary = new InteractiveContextHost(
-      config,
-      owner,
-      selected,
-      settings,
+    const primary = new InteractiveContextHost(owner, () =>
+      selected.readDefaultProfileName(),
     );
-    const secondary = new InteractiveContextHost(
-      config,
-      peer,
-      selected,
-      settings,
+    const secondary = new InteractiveContextHost(peer, () =>
+      selected.readDefaultProfileName(),
     );
     const capture: {
       primary?: ReturnType<typeof useSelected>;

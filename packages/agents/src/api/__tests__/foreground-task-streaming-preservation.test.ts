@@ -223,18 +223,30 @@ writeFileSync('task-hook-late', 'privileged');
         : undefined,
     });
     mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    agent = await fromConfig({
-      ...createSessionSettingsFixture(config),
-      runtimeFactoryBindings: factories,
+    const adoptedSettings1 = createSessionSettingsFixture(config);
+    agent = await fromConfig(
       config,
-      mcpRuntime: mcp,
-      mcpOwnership: 'caller',
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      adoptedSettings1.settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
+        mcpOwnership: 'caller',
       },
-    });
+      adoptedSettings1.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      mcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+    );
     const completed = gate();
     let completedCalls: Parameters<
       NonNullable<Parameters<Agent['tools']['openClientChannel']>[0]>

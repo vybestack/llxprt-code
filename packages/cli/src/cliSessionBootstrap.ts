@@ -1,15 +1,6 @@
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { loadInstalledRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+
 import {
-  SessionSettingsOwner,
-  type RuntimePolicyOwner,
-  type RuntimeProviderManager,
-  type ProviderSwitcher,
   type Config,
   type AgentClientContract,
   SessionRecordingService,
@@ -36,14 +27,10 @@ import {
 
 import type {
   Agent,
-  AgentActivationOperation,
-  AgentProfileApplication,
+  AgentProfilePreflight,
 } from '@vybestack/llxprt-code-agents';
 
-import {
-  buildMcpAuthFactoryRegistry,
-  type McpAuthProviderFactory,
-} from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
@@ -55,7 +42,7 @@ import {
   recordStartupWarning,
   warnSkippedRecordings,
 } from './startupResumeWarnings.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 import { promises as fsPromises } from 'fs';
@@ -144,26 +131,6 @@ export interface SessionRecordingSetup extends ResolvedRecording {
   sessionPersistence: CliSessionPersistence;
 }
 
-export interface RuntimeConfigBootstrap {
-  readonly credentialAuthority: CredentialAuthority;
-  readonly oauthManager?: OAuthManager;
-  readonly providerFileLifecycle: ProviderFileLifecycle;
-  readonly policyOwner?: RuntimePolicyOwner;
-  readonly providerManager: RuntimeProviderManager;
-  /** The installed provider contributions loaded once for this CLI process. */
-  readonly providerContributions: ProviderContributionRegistry;
-  getMcpAuthProviderFactory: (
-    type: string,
-  ) => McpAuthProviderFactory | undefined;
-  activationOperation: AgentActivationOperation;
-  switchProvider: ProviderSwitcher;
-  profileApplication: AgentProfileApplication;
-  config: Config;
-  extensions: ReturnType<typeof loadExtensions>;
-  runtimeSettingsService: SettingsService;
-  runtimeSettingsOwner: SessionSettingsOwner;
-}
-
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
  * @requirement:REQ-SP-005
@@ -177,14 +144,6 @@ export interface RuntimeConfigBootstrap {
  * agent.getMessageBus(); Config.initialize() likewise runs behind agent
  * construction rather than here.
  */
-function requireCliProviderFiles(
-  files: ProviderFileLifecycle | undefined,
-): ProviderFileLifecycle {
-  if (files === undefined)
-    throw new Error('CLI provider files were not assembled');
-  return files;
-}
-
 function loadBootstrapExtensions(
   selected: ConstructorParameters<typeof ExtensionEnablementManager>[1],
   workspaceRoot: string,
@@ -199,102 +158,41 @@ function loadBootstrapExtensions(
   };
 }
 
-function requireAssembled<T>(value: T | undefined, what: string): T {
-  if (value === undefined) throw new Error(`CLI ${what} was not assembled.`);
-  return value;
-}
-
-function requireProfileApplication(
-  value: AgentProfileApplication | undefined,
-): AgentProfileApplication {
-  return requireAssembled(value, 'profile application');
-}
-
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
   credentialAuthority: CredentialAuthority,
-): Promise<RuntimeConfigBootstrap> {
-  const runtimeSettingsService = new SettingsService();
-  const runtimeSettingsOwner = new SessionSettingsOwner(runtimeSettingsService);
-
-  const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
-    argv.extensions,
-    workspaceRoot,
-  );
-
-  // Discover installed provider plugins once, before any provider manager is
-  // constructed, so alias construction can dispatch through the resulting
-  // registry (issue #2758). Installing a package is what makes a provider
-  // available; there is nothing to configure. A broken plugin fails startup
-  // here rather than being skipped.
-  const { providerContributions, authFactories } =
-    await discoverCliProviderContributions();
-
-  let oauthManager: OAuthManager | undefined;
-  let providerFileLifecycle: ProviderFileLifecycle | undefined;
-  let policyOwner: RuntimePolicyOwner | undefined;
-  let providerManager: RuntimeProviderManager | undefined;
-  let activationOperation: AgentActivationOperation | undefined;
-  let profileApplication: AgentProfileApplication | undefined;
-  let switchProvider: ProviderSwitcher | undefined;
+  preflight: AgentProfilePreflight,
+): Promise<Config> {
+  registerCleanup(() => preflight.dispose());
   try {
-    const config = await loadCliConfig(
+    const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
+      settings.merged.extensions.disabled,
+      workspaceRoot,
+    );
+    return await loadCliConfig(
       settings.merged,
       extensions,
       extensionEnablementManager,
       sessionId,
       argv,
       workspaceRoot,
-      {
-        credentialAuthority,
-        settingsService: runtimeSettingsService,
-        sessionSettingsOwner: runtimeSettingsOwner,
-        providerContributions,
-        onPreflightReady: (operation) => {
-          registerCleanup(() => operation.dispose());
-        },
-        onPolicyOwnerReady: (owner) => (policyOwner = ownCliPolicy(owner)),
-        onOAuthManagerReady: (manager) => (oauthManager = manager),
-        onProviderFilesReady: (lifecycle) =>
-          (providerFileLifecycle = lifecycle),
-        onProviderManagerReady: (manager) => (providerManager = manager),
-        onActivationBootstrapReady: (operation) => {
-          activationOperation = operation;
-          registerCleanup(() => operation.dispose());
-        },
-        onProfileApplicationReady: (operation) => {
-          profileApplication = operation;
-        },
-        onProviderSwitchReady: (operation) => {
-          switchProvider = operation;
-        },
-      },
-    );
-    return {
+      preflight,
+      undefined,
+      undefined,
       credentialAuthority,
-      oauthManager,
-      providerFileLifecycle: requireCliProviderFiles(providerFileLifecycle),
-      providerManager: requireAssembled(providerManager, 'provider manager'),
-      providerContributions,
-      policyOwner,
-      getMcpAuthProviderFactory: (type) =>
-        authFactories.getAuthProviderFactory(type),
-      config,
-      extensions,
-      runtimeSettingsService,
-      runtimeSettingsOwner,
-      switchProvider: requireAssembled(switchProvider, 'provider switch'),
-      profileApplication: requireProfileApplication(profileApplication),
-      activationOperation: requireAssembled(
-        activationOperation,
-        'activation bootstrap',
-      ),
-    };
-  } catch (error) {
-    await activationOperation?.dispose();
-    throw error;
+    );
+  } catch (primary) {
+    try {
+      await preflight.dispose();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [primary, cleanup],
+        'CLI bootstrap cleanup failed',
+      );
+    }
+    throw primary;
   }
 }
 
@@ -815,12 +713,10 @@ async function buildFallbackRecording(
   }
 }
 
-function ownCliPolicy(owner: RuntimePolicyOwner): RuntimePolicyOwner {
-  registerCleanup(() => owner.dispose());
-  return owner;
-}
-
-async function discoverCliProviderContributions() {
+export async function discoverCliProviderContributions() {
+  const { loadInstalledRuntimePlugins } = await import(
+    '@vybestack/llxprt-code-providers/composition.js'
+  );
   const providerContributions = await loadInstalledRuntimePlugins();
   const authFactories = buildMcpAuthFactoryRegistry(
     providerContributions

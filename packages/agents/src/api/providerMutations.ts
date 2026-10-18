@@ -200,3 +200,23 @@ export async function setActiveModel(
     authRefreshed,
   };
 }
+
+export async function applyFacadeAuthBaseUrl(
+  baseUrl: string | null,
+  state: { baseUrl?: string },
+  writeSetting: (key: string, value: unknown) => void,
+  settings: SettingsService,
+  provider: string,
+): Promise<void> {
+  state.baseUrl = baseUrl ?? undefined;
+  try {
+    await updateActiveProviderBaseUrl(
+      baseUrl ?? '',
+      { setEphemeralSetting: writeSetting },
+      settings,
+      provider,
+    );
+  } catch {
+    // No-op under the fake seam.
+  }
+}

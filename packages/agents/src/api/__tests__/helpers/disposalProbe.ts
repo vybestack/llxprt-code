@@ -467,15 +467,18 @@ class ExtensionDisposalOwner {
       this.acquireProviders();
       await this.bindClient();
       await this.activate();
-      return await fromConfig({
-        settingsOwner: this.settingsOwner,
-        settingsService: this.settings,
-        config: this.config,
-        providerManager: this.manager,
-        agentClient: this.owner.getAgentClient(),
-        mcpRuntime: this.mcp,
-        mcpOwnership: 'agent',
-      });
+      return await fromConfig(
+        this.config,
+        this.settings,
+        { mcpOwnership: 'agent' },
+        this.settingsOwner,
+        this.manager,
+        undefined,
+        undefined,
+        this.mcp,
+        undefined,
+        this.owner.getAgentClient(),
+      );
     } catch (primary) {
       await cleanupAfterFailure(primary, () =>
         settleEngineRelease(

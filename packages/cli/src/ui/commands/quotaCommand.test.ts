@@ -1,4 +1,4 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import { detectFromProviderConfig } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

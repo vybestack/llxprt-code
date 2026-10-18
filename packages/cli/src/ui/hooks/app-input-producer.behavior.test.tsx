@@ -8,12 +8,8 @@ import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { MemoryTokenStore } from '../../../../providers/src/auth/__tests__/behavioral/test-utils.js';
-import { createOAuthControl } from '../../runtime/createOAuthControl.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockSettings, render, waitFor } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -111,15 +107,7 @@ function renderApplication(
   config: Config,
   runtimeApi: ReturnType<typeof createMockCommandContext>['runtimeApi'],
 ) {
-  const oauthManager = new OAuthManager(new MemoryTokenStore());
-  const providers = new ProviderManager(
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    new SettingsService(),
-  );
-  const oauthControl = createOAuthControl(() => oauthManager, providers);
+  const oauthControl = owner.authentication;
   const selectedSettings = new SessionSettingsOwner(new SettingsService());
   selectedSettings.bindTelemetry(config);
   const uiRuntime = buildUiRuntimeFromSource(

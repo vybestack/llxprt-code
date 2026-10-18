@@ -24,6 +24,8 @@ export async function createMockAgent(config: Config): Promise<Agent> {
   );
   return {
     workspace: owner.workspace,
+    providerReads: owner.providerReads,
+    authentication: owner.authentication,
     dispose: vi.fn().mockResolvedValue(undefined),
     hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
     getProviderContextLimit: () =>

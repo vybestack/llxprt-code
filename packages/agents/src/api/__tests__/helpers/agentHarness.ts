@@ -79,26 +79,21 @@ export type {
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
 export function internalConfig(agent: object): Config {
-  if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.config instanceof Config)
-  ) {
+  if (!('config' in agent) || !(agent.config instanceof Config)) {
     throw new Error('Expected an AgentImpl with its owned Config dependency');
   }
-  return agent.deps.config;
+  return agent.config;
 }
 
 export function internalSettingsOwner(agent: Agent): SessionSettingsOwner {
   if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.settingsOwner instanceof SessionSettingsOwner)
+    !('settingsOwner' in agent) ||
+    !(agent.settingsOwner instanceof SessionSettingsOwner)
   )
     throw new Error(
       'Expected an Agent with its selected session settings owner',
     );
-  return agent.deps.settingsOwner;
+  return agent.settingsOwner;
 }
 
 // ─── Agent construction via the production env seam ─────────────────────────
@@ -561,11 +556,10 @@ export { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core';
 
 export function internalWorkspace(agent: Agent): McpRuntimeOwner {
   if (
-    !('deps' in agent) ||
-    !isRecord(agent.deps) ||
-    !(agent.deps.mcpOperations instanceof McpRuntimeOwner)
+    !('mcpOperations' in agent) ||
+    !(agent.mcpOperations instanceof McpRuntimeOwner)
   ) {
     throw new Error('Expected retained Agent workspace root');
   }
-  return agent.deps.mcpOperations;
+  return agent.mcpOperations;
 }

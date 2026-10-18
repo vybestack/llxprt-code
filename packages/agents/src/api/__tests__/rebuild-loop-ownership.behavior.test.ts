@@ -31,10 +31,18 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createAgent } from '../createAgent.js';
 import type { Agent } from '../agent.js';
-import { createLoopHolder, rebuildLoop } from '../loop/rebuildLoop.js';
-import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
+import {
+  SessionExecutionOwner,
+  type SessionExecution,
+} from '../../session/session-execution-owner.js';
+import {
+  MessageBus,
+  MessageBusType,
+  type MessageBusMessage,
+} from '@vybestack/llxprt-code-policy';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
+import { AgentEventType } from '../../core/turn.js';
 import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
-import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 class WriteModeInvocation extends BaseToolInvocation<
@@ -88,15 +96,34 @@ class WriteModeTool extends BaseDeclarativeTool<
   }
 }
 
-describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requirement:REQ-007', () => {
+class GenerationBus extends MessageBus {
+  readonly released: number[] = [];
+  private next = 0;
+  releaseFailure: 'none' | 'error' = 'none';
+  readonly failure = new Error('actual approval subscription release failed');
+  override subscribe<T extends MessageBusMessage>(
+    type: MessageBusType,
+    listener: (event: T) => void,
+  ): () => void {
+    const release = super.subscribe(type, listener);
+    if (type !== MessageBusType.TOOL_CONFIRMATION_REQUEST) return release;
+    const id = this.next++;
+    return () => {
+      release();
+      this.released.push(id);
+      if (this.releaseFailure === 'error') throw this.failure;
+    };
+  }
+}
+
+describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requirement:REQ-007', () => {
   const credentials = useOwnedCredentials();
   const cleanup: Array<() => void | Promise<void>> = [];
   let directory: string;
   let config: Config;
-  let policy: RuntimePolicyOwner;
-  let settingsOwner: SessionSettingsOwner;
   let tools: ToolRegistry;
-  let holder: ReturnType<typeof createLoopHolder>;
+  let execution: SessionExecutionOwner;
+  let bus: GenerationBus;
   let selectedClient: AgentClientContract;
   beforeEach(async () => {
     directory = await realpath(
@@ -148,7 +175,6 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
       'Exercise real loop binding.',
     );
     configureWorkspace(false);
-    holder = createLoopHolder();
     selectedClient = (await acquireAgent()).agentClient;
   });
   afterEach(async () => {
@@ -178,23 +204,28 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
     config = selected;
     const selectedPolicy = new RuntimePolicyOwner(selected);
     cleanup.push(() => selectedPolicy.dispose());
-    policy = selectedPolicy;
     const store = new SettingsService();
     const owner = new SessionSettingsOwner(store);
     cleanup.push(() => owner.dispose());
-    settingsOwner = owner;
     owner.bindTelemetry(selected);
-    tools = new ToolRegistry(
-      {},
-      selectedPolicy.session.messageBus,
-      assembleTaskSchemaPolicy(store),
-    );
+    bus = new GenerationBus();
+    tools = new ToolRegistry({}, bus, assembleTaskSchemaPolicy(store));
     tools.registerTool(
-      new WriteModeTool(
-        join(directory, 'actual-mode.json'),
-        selectedPolicy.session.messageBus,
-      ),
+      new WriteModeTool(join(directory, 'actual-mode.json'), bus),
     );
+    execution = new SessionExecutionOwner(
+      config,
+      owner,
+      bus,
+      tools,
+      () => owner.readToolGovernance([]),
+      selectedPolicy.trust,
+      (options) => new CoreToolScheduler(options),
+      async () => ({ outcome: ToolConfirmationOutcome.Cancel }),
+      undefined,
+    );
+    const acquired = execution;
+    cleanup.push(() => acquired.dispose());
   }
   async function acquireAgent(): Promise<Agent> {
     const agent = await createAgent({
@@ -208,166 +239,222 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
     cleanup.push(() => agent.dispose());
     return agent;
   }
-  function construct(client: AgentClientContract): AgenticLoop {
-    const interactiveMode = config.isInteractive();
-    return new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus: policy.session.messageBus,
-      interactiveMode,
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        policy.session.messageBus,
-        interactiveMode,
-        tools,
-        (options) => new CoreToolScheduler(options),
-        () => settingsOwner.readToolExecutionPolicy(),
-        () => settingsOwner.readToolGovernance([]),
-        () => config.getApprovalMode(),
-        settingsOwner.telemetry,
-      ),
+  function rebuild(): SessionExecution {
+    return execution.rebuild(selectedClient);
+  }
+  async function pause(
+    actual: SessionExecution,
+  ): Promise<ReturnType<SessionExecution['run']>> {
+    const iterator = actual.run(
+      'Observe actual generation',
+      new AbortController().signal,
+    );
+    cleanup.push(async () => {
+      await iterator.return(undefined);
     });
-  }
-  function rebuild(): AgenticLoop {
-    return rebuildLoop(holder, () => selectedClient, construct);
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done === true)
+        throw new Error('Generation ended before real content');
+      if (next.value.kind === 'stream' && next.value.event.type === 'content')
+        return iterator;
+    }
   }
 
-  it('initial build constructs a loop bound to the current client and arms a fresh run controller @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001', async () => {
+  it('initial build binds the actual current client and admits real execution without premature subscription release @requirement:REQ-001', async () => {
     const client = selectedClient;
-    const loop = rebuild();
-    expect(loop).toBeInstanceOf(AgenticLoop);
-    expect(holder.boundClient).toBe(client);
-    expect(holder.current).toBe(loop);
-    expect(holder.activeRunController).toBeDefined();
-    expect(holder.activeRunController?.signal.aborted).toBe(false);
-    expect(holder.subscriptions).toBeUndefined();
+    const actual = rebuild();
+    expect(execution.isCurrent(actual)).toBe(true);
+    expect(execution.resolve(client)).toStrictEqual({ execution: actual });
+    expect(bus.released).toStrictEqual([]);
+    expect((await client.getHistory()).length).toBe(0);
+    await runMode(actual);
+    expect((await client.getHistory()).length).toBeGreaterThan(0);
+    expect(bus.released).toStrictEqual([0]);
   });
 
-  it('rebuild aborts the prior run controller and rebinds to the NEW client @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
+  it('rebuild retires the prior actual generation and binds the new client while leaving borrowed clients live @requirement:REQ-007', async () => {
+    const firstClient = selectedClient;
     const first = rebuild();
-    const priorController = new AbortController();
-    holder.activeRunController = priorController;
-    expect(priorController).toBeDefined();
-    expect(priorController.signal.aborted).toBe(false);
-    const secondClient = (await acquireAgent()).agentClient;
-    selectedClient = secondClient;
-    const secondLoop = rebuild();
-    expect(priorController.signal.aborted).toBe(true);
-    expect(holder.activeRunController).not.toBe(priorController);
-    expect(holder.activeRunController.signal.aborted).toBe(false);
-    expect(secondLoop).not.toBe(first);
-    expect(holder.boundClient).toBe(secondClient);
-    expect(holder.current).toBe(secondLoop);
-  });
-
-  it('rebuild unsubscribes every prior recorded subscription exactly once @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
-    rebuild();
-    const order: string[] = [];
-    holder.subscriptions = [() => order.push('a'), () => order.push('b')];
+    const paused = await pause(first);
     selectedClient = (await acquireAgent()).agentClient;
-    rebuild();
-    expect(order).toStrictEqual(['a', 'b']);
-    expect(holder.subscriptions).toBeUndefined();
-    rebuild();
-    expect(order).toStrictEqual(['a', 'b']);
+    const second = rebuild();
+    expect(execution.isCurrent(first)).toBe(false);
+    expect(execution.isCurrent(second)).toBe(true);
+    expect(second).not.toBe(first);
+    expect(() => first.injectSteer('retired input')).toThrow(
+      'Agent loop is retired',
+    );
+    expect(bus.released).toStrictEqual([0]);
+    await paused.return(undefined);
+    expect(bus.released).toStrictEqual([0]);
+    const before = (await firstClient.getHistory()).length;
+    await runMode(second);
+    const historyDelta = (await firstClient.getHistory()).length - before;
+    expect(historyDelta).toBe(0);
+    expect((await selectedClient.getHistory()).length).toBeGreaterThan(0);
   });
 
-  it('a throwing unsubscribe reports cleanup failure after publishing the replacement @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
-    const priorLoop = rebuild();
-    const order: string[] = [];
-    const primary = new Error('boom');
-    holder.subscriptions = [
-      () => {
-        throw primary;
-      },
-      () => order.push('after-throw'),
-    ];
+  it('releases every actual prior generation subscription exactly once, including deferred prior retirement @requirement:REQ-007', async () => {
+    const first = rebuild();
+    const firstPaused = await pause(first);
+    const replacement = execution.prepare((await acquireAgent()).agentClient);
+    const second = replacement.publish();
+    const secondPaused = await pause(second);
+    const final = execution.prepare((await acquireAgent()).agentClient);
+    const current = final.publish();
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(2);
+    replacement.retire();
+    final.retire();
+    expect(bus.released).toStrictEqual([0, 1]);
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(0);
+    replacement.retire();
+    final.retire();
+    await firstPaused.return(undefined);
+    await secondPaused.return(undefined);
+    expect(bus.released).toStrictEqual([0, 1]);
+    expect(execution.isCurrent(current)).toBe(true);
+  });
+
+  it('throwing real unsubscribers do not prevent other generation release and replacement is already published @requirement:REQ-007', async () => {
+    const first = rebuild();
+    await pause(first);
+    const one = execution.prepare((await acquireAgent()).agentClient);
+    await pause(one.publish());
+    const two = execution.prepare((await acquireAgent()).agentClient);
+    const current = two.publish();
+    bus.releaseFailure = 'error';
+    const failures: unknown[] = [];
+    for (const prior of [one, two]) {
+      try {
+        prior.retire();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    expect(failures).toHaveLength(2);
+    expect(
+      failures.every(
+        (error) =>
+          error instanceof AggregateError &&
+          error.errors.length === 1 &&
+          error.errors[0] === bus.failure,
+      ),
+    ).toBe(true);
+    expect(bus.released).toStrictEqual([0, 1]);
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(0);
+    expect(execution.isCurrent(current)).toBe(true);
+    expect(execution.isCurrent(first)).toBe(false);
+    one.retire();
+    two.retire();
+    expect(bus.released).toStrictEqual([0, 1]);
+    bus.releaseFailure = 'none';
+  });
+
+  it('initial construction does not retire an unrelated existing real subscription @requirement:REQ-007', async () => {
+    const unrelated = bus.subscribe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      () => {},
+    );
+    const actual = rebuild();
+    expect(bus.released).toStrictEqual([]);
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(1);
+    expect(execution.isCurrent(actual)).toBe(true);
+    await execution.dispose();
+    expect(bus.released).toStrictEqual([]);
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(1);
+    unrelated();
+    expect(bus.released).toStrictEqual([0]);
+  });
+
+  it('rebuild without an accepted old run closes old admission and admits the replacement without a run-controller injection @requirement:REQ-007', async () => {
+    const first = rebuild();
     selectedClient = (await acquireAgent()).agentClient;
-    expect(() => rebuild()).toThrow(AggregateError);
-    expect(order).toStrictEqual(['after-throw']);
-    expect(holder.current).not.toBe(priorLoop);
-    expect(holder.boundClient).toBe(selectedClient);
-    expect(holder.current).toBeInstanceOf(AgenticLoop);
-    expect(holder.subscriptions).toBeUndefined();
+    const second = rebuild();
+    expect(execution.isCurrent(first)).toBe(false);
+    expect(execution.isCurrent(second)).toBe(true);
+    expect(second).not.toBe(first);
+    expect(bus.released).toStrictEqual([]);
+    await expect(
+      first.run('late old run', new AbortController().signal).next(),
+    ).rejects.toThrow('Agent loop is retired');
+    await runMode(second);
+    expect(bus.released).toStrictEqual([0]);
   });
 
-  it('initial build (no prior loop) SKIPS teardown \u2014 does not touch pre-seeded subscriptions @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
-    const order: string[] = [];
-    holder.subscriptions = [() => order.push('should-not-run')];
-    const loop = rebuild();
-    expect(order).toStrictEqual([]);
-    expect(loop).toBeInstanceOf(AgenticLoop);
-    expect(holder.activeRunController?.signal.aborted).toBe(false);
-  });
-
-  it('rebuild with a prior loop but no armed controller tears down safely (optional abort) @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
-    const previous = rebuild();
-    Object.assign(holder, { activeRunController: undefined });
-    expect(holder.activeRunController).toBeUndefined();
-    expect(holder.current).toBeDefined();
+  it('rebuild without recorded actual subscriptions leaves borrowed bus and new generation usable @requirement:REQ-007', async () => {
+    const first = rebuild();
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(0);
     selectedClient = (await acquireAgent()).agentClient;
-    const secondLoop = rebuild();
-    expect(holder.current).toBe(secondLoop);
-    expect(secondLoop).not.toBe(previous);
-    expect(holder.activeRunController).toBeDefined();
-    expect(holder.activeRunController?.signal.aborted).toBe(false);
+    const second = rebuild();
+    expect(second).not.toBe(first);
+    expect(execution.resolve(selectedClient)).toStrictEqual({
+      execution: second,
+    });
+    expect(bus.released).toStrictEqual([]);
+    await runMode(second);
+    expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(0);
   });
 
-  it('rebuild with no recorded subscriptions tears down cleanly (no-op unsubscribe path) @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', async () => {
-    const previous = rebuild();
-    expect(holder.subscriptions).toBeUndefined();
-    selectedClient = (await acquireAgent()).agentClient;
-    const secondLoop = rebuild();
-    expect(secondLoop).not.toBe(previous);
-    expect(holder.current).toBe(secondLoop);
-  });
-
-  it('threads interactiveMode from config.isInteractive() into the constructed loop (true) @requirement:REQ-007', async () => {
+  it('captures interactive=true in the actual loop and physical tool write @requirement:REQ-007', async () => {
     configureWorkspace(true);
-    const loop = rebuild();
-    expect(loop).toBeInstanceOf(AgenticLoop);
-    await runMode(loop);
+    const actual = rebuild();
+    expect(execution.isCurrent(actual)).toBe(true);
+    await runMode(actual);
     expect(
       JSON.parse(await readFile(join(directory, 'actual-mode.json'), 'utf8')),
     ).toStrictEqual({ interactive: true });
   });
 
-  it('threads interactiveMode from config.isInteractive() into the constructed loop (false when non-interactive) @requirement:REQ-007', async () => {
+  it('captures interactive=false in the actual loop and physical tool write @requirement:REQ-007', async () => {
     configureWorkspace(false);
-    const loop = rebuild();
-    expect(loop).toBeInstanceOf(AgenticLoop);
-    await runMode(loop);
+    const actual = rebuild();
+    expect(execution.isCurrent(actual)).toBe(true);
+    await runMode(actual);
     expect(
       JSON.parse(await readFile(join(directory, 'actual-mode.json'), 'utf8')),
     ).toStrictEqual({ interactive: false });
   });
 
-  it('records the bound client in holder.boundClient on initial build @requirement:REQ-007', async () => {
+  it('initial binding actually executes through the supplied client rather than a second client @requirement:REQ-007', async () => {
     const client = selectedClient;
-    rebuild();
-    expect(holder.boundClient).toBe(client);
+    const peer = (await acquireAgent()).agentClient;
+    const actual = rebuild();
+    expect(execution.resolve(client)).toStrictEqual({ execution: actual });
+    await runMode(actual);
+    expect((await client.getHistory()).length).toBeGreaterThan(0);
+    expect((await peer.getHistory()).length).toBe(0);
+    expect(execution.isCurrent(actual)).toBe(true);
   });
 
-  it('updates holder.boundClient to the NEW client on rebuild @requirement:REQ-007', async () => {
+  it('new binding sends actual work to the newly supplied client without mutating the old client history @requirement:REQ-007', async () => {
     const first = selectedClient;
-    rebuild();
-    expect(holder.boundClient).toBe(first);
-    const second = (await acquireAgent()).agentClient;
-    selectedClient = second;
-    rebuild();
-    expect(holder.boundClient).toBe(second);
+    const previous = rebuild();
+    selectedClient = (await acquireAgent()).agentClient;
+    const current = rebuild();
+    expect(execution.isCurrent(previous)).toBe(false);
+    expect(execution.resolve(selectedClient)).toStrictEqual({
+      execution: current,
+    });
+    expect((await first.getHistory()).length).toBe(0);
+    await runMode(current);
+    expect((await first.getHistory()).length).toBe(0);
+    expect((await selectedClient.getHistory()).length).toBeGreaterThan(0);
   });
 
-  async function runMode(loop: AgenticLoop): Promise<void> {
-    const controller = holder.activeRunController;
-    if (controller === undefined)
-      throw new Error('Missing real run controller');
+  async function runMode(actual: SessionExecution): Promise<void> {
     const events = [];
-    for await (const event of loop.run(
+    for await (const event of actual.run(
       'Record physical tool mode',
-      controller.signal,
+      new AbortController().signal,
     ))
       events.push(event);
     expect(events.some((event) => event.kind === 'stream')).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.kind === 'stream' && event.event.type === AgentEventType.Error,
+      ),
+    ).toBe(false);
   }
 });

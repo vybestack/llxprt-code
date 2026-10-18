@@ -1,3 +1,4 @@
+import { SessionClientOwner } from '../../session/session-client-owner.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -161,6 +162,69 @@ describe('public Agent hook shutdown', () => {
                   {
                     type: HookType.Command,
                     command: `cat > ${escapeShellArg(input, 'bash')}`,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('retains the physical final hook in its facade when the client owner closes first, once and without retiring its peer', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'owner-first-hook-'));
+    const output = join(directory, 'events.jsonl');
+    try {
+      await withRecordingLifetimeFixture(
+        async (agent, _config, _settingsOwner, _settings, _oauth, borrow) => {
+          const peer = await borrow();
+          if (
+            !('ownerClient' in agent) ||
+            !(agent.ownerClient instanceof SessionClientOwner)
+          )
+            throw new Error('Missing real session client owner');
+          const observed: string[] = [];
+          const unsubscribe = agent.hooks.onHookExecution((request) => {
+            if (request.event === HookEventName.SessionEnd)
+              observed.push(request.event);
+          });
+          try {
+            await agent.ownerClient.dispose();
+            await agent.dispose();
+            await agent.dispose();
+            const first: unknown[] = (await readFile(output, 'utf8'))
+              .trim()
+              .split('\n')
+              .map((line) => JSON.parse(line));
+            expect(first).toHaveLength(1);
+            expect(first[0]).toMatchObject({
+              hook_event_name: 'SessionEnd',
+              session_id: agent.getRuntimeId(),
+            });
+            expect(observed).toStrictEqual([HookEventName.SessionEnd]);
+            await peer.hooks.triggerSessionEnd();
+            const both: unknown[] = (await readFile(output, 'utf8'))
+              .trim()
+              .split('\n')
+              .map((line) => JSON.parse(line));
+            expect(both).toHaveLength(2);
+            expect(both[1]).toMatchObject({ session_id: peer.getRuntimeId() });
+          } finally {
+            unsubscribe();
+          }
+        },
+        undefined,
+        {
+          hooks: {
+            SessionEnd: [
+              {
+                hooks: [
+                  {
+                    type: HookType.Command,
+                    command: `cat >> ${escapeShellArg(output, 'bash')}; printf '\\n' >> ${escapeShellArg(output, 'bash')}`,
                   },
                 ],
               },

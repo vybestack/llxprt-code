@@ -154,11 +154,13 @@ describe('loadCliConfig memory discovery', () => {
       'test-session',
       argv,
       workspaceDir,
-      {
-        credentialAuthority: new CredentialAuthority(),
-        onActivationBootstrapReady: (owner) => {
-          operation = owner;
-        },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
+      undefined,
+      (owner) => {
+        operation = owner;
       },
     );
 
@@ -189,11 +191,13 @@ describe('loadCliConfig memory discovery', () => {
       'test-session',
       createArgv(),
       workspaceDir,
-      {
-        credentialAuthority: new CredentialAuthority(),
-        onActivationBootstrapReady: (owner) => {
-          operation = owner;
-        },
+      undefined,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
+      undefined,
+      (owner) => {
+        operation = owner;
       },
     );
     if (operation === undefined)

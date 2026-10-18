@@ -10,7 +10,11 @@ import {
   type SessionSummary,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
-import type { SessionInfo } from '../agent.js';
+import type {
+  CheckpointInfo,
+  SessionInfo,
+  SessionRecordingState,
+} from '../agent.js';
 
 export function sessionInfoFromReplay(
   id: string,
@@ -48,4 +52,31 @@ export async function readSessionInfo(
     replay,
     summary.lastModified.toISOString(),
   );
+}
+
+export function checkpointInfoFromReplay(
+  replay: Extract<ReplayResult, { ok: true }>,
+  checkpointId: string,
+  sessionId: string,
+): CheckpointInfo {
+  const checkpoint = replay.checkpoints?.find(
+    (candidate) => candidate.checkpointId === checkpointId,
+  );
+  if (checkpoint === undefined)
+    throw new Error('Created checkpoint was not durable');
+  return {
+    checkpointId: checkpoint.checkpointId,
+    name: checkpoint.name,
+    sessionId,
+    sequence: checkpoint.sequence,
+    createdAt: checkpoint.createdAt,
+  };
+}
+
+export function recordingStateFromSnapshot(
+  enabled: boolean,
+  path: string | null,
+  format: string,
+): SessionRecordingState {
+  return { enabled, format, ...(path !== null ? { path } : {}) };
 }

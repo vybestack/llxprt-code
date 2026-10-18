@@ -294,15 +294,21 @@ describe('Independent IDE transport lifetime', () => {
         }),
       );
       cleanup.push(() => config.dispose());
-      const first = await fromConfig({
+      const adoptedSettings1 = createSessionSettingsFixture(config);
+      const first = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-      });
+        adoptedSettings1.settingsService,
+        {},
+        adoptedSettings1.settingsOwner,
+      );
       cleanup.push(() => first.dispose());
-      const second = await fromConfig({
+      const adoptedSettings2 = createSessionSettingsFixture(config);
+      const second = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-      });
+        adoptedSettings2.settingsService,
+        {},
+        adoptedSettings2.settingsOwner,
+      );
       cleanup.push(() => second.dispose());
       await first.ide.setIdeClientConnected();
       await second.ide.setIdeClientConnected();
@@ -363,18 +369,50 @@ describe('Independent IDE transport lifetime', () => {
         () => trust.dispose(),
         () => ide.dispose(),
       );
-      const first = await fromConfig({
+      const adoptedSettings3 = createSessionSettingsFixture(config);
+      const first = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-        trustPort: trust,
-        idePort: ide,
-      });
-      const second = await fromConfig({
+        adoptedSettings3.settingsService,
+        {},
+        adoptedSettings3.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        trust,
+        ide,
+      );
+      const adoptedSettings4 = createSessionSettingsFixture(config);
+      const second = await fromConfig(
         config,
-        ...createSessionSettingsFixture(config),
-        trustPort: trust,
-        idePort: ide,
-      });
+        adoptedSettings4.settingsService,
+        {},
+        adoptedSettings4.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        trust,
+        ide,
+      );
       cleanup.push(
         () => first.dispose(),
         () => second.dispose(),
@@ -417,14 +455,46 @@ describe('Independent IDE transport lifetime', () => {
       .mockImplementationOnce(async () => lease);
     const failure = new Error('public adoption interrupted');
     try {
+      const adoptedSettings5 = createSessionSettingsFixture(config);
       await expect(
-        fromConfig({
+        fromConfig(
           config,
-          ...createSessionSettingsFixture(config),
-          prepareSessionTools: () => {
+          adoptedSettings5.settingsService,
+          {},
+          adoptedSettings5.settingsOwner,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          () => {
             throw failure;
           },
-        }),
+        ),
       ).rejects.toThrow('public adoption interrupted');
       await host.sessions[0].streamClosed.promise;
       expect(lease.getConnectionStatus().status).toBe(
@@ -556,13 +626,27 @@ describe('Independent IDE transport lifetime', () => {
       () => trust.dispose(),
     );
     const workspace = await createWorkspace(config, trust);
-    const agent = await fromConfig({
-      mcpRuntime: workspace,
-      mcpOwnership: 'agent',
+    const adoptedSettings6 = createSessionSettingsFixture(config);
+    const agent = await fromConfig(
       config,
-      ...createSessionSettingsFixture(config),
-      trustPort: trust,
-    });
+      adoptedSettings6.settingsService,
+      { mcpOwnership: 'agent' },
+      adoptedSettings6.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      workspace,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      trust,
+    );
     cleanup.push(async () => {
       await agent.dispose().catch(() => undefined);
     });

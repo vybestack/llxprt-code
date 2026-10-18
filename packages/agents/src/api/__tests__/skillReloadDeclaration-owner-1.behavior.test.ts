@@ -368,14 +368,18 @@ describe('skill reload reaches the model @issue:3379', () => {
         await cleanupAfterFailure(primary, callerCallerClose);
       }
 
-      agent = await fromConfig({
-        config: callerCallerConfig,
-        settingsOwner: callerCallerSettingsOwner,
-        settingsService: callerCallerSettings,
-        providerManager: callerCallerManager,
-        agentClient: callerCallerOwner.getAgentClient(),
-        mcpRuntime: callerCallerMcp,
-      });
+      agent = await fromConfig(
+        callerCallerConfig,
+        callerCallerSettings,
+        {},
+        callerCallerSettingsOwner,
+        callerCallerManager,
+        undefined,
+        undefined,
+        callerCallerMcp,
+        undefined,
+        callerCallerOwner.getAgentClient(),
+      );
       cleanup = callerCallerClose;
     }
     try {

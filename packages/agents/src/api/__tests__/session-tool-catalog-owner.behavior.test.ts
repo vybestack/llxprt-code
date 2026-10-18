@@ -294,13 +294,16 @@ describe('session executable tool ownership', () => {
     ]);
   }
   function adopt() {
-    return fromConfig({
-      settingsOwner: callerSettingsOwner,
-      settingsService: callerSettings,
-      config: callerConfig,
-      providerManager: callerManager,
-      mcpRuntime: callerMcp,
-    });
+    return fromConfig(
+      callerConfig,
+      callerSettings,
+      {},
+      callerSettingsOwner,
+      callerManager,
+      undefined,
+      undefined,
+      callerMcp,
+    );
   }
 
   it('publishes executable tooling from independent workspace ports', async () => {

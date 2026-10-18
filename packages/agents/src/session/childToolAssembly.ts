@@ -14,7 +14,7 @@ import { CoreAsyncTaskServiceAdapter } from '@vybestack/llxprt-code-core/tools-a
 import type { TaskLaunchOwner } from './task-launch-owner.js';
 import type { ShellJobOwner } from './shell-job-owner.js';
 import { TaskTool } from '../tools/task.js';
-import { ChildToolDisplay } from './childToolDisplay.js';
+import type { ChildToolDisplay } from './childToolDisplay.js';
 import type { SchedulerConstruction } from './assembleSchedulerOwner.js';
 
 export function bindChildToolRegistry(
@@ -76,21 +76,4 @@ export function withChildToolDisplay(
         shellOwner,
       ),
     });
-}
-
-export function createChildToolAssembly(
-  construct: SchedulerConstruction,
-  taskLaunchOwner: TaskLaunchOwner,
-  shellOwner: ShellJobOwner,
-) {
-  const childDisplay = new ChildToolDisplay();
-  return {
-    childDisplay,
-    schedulerFactory: withChildToolDisplay(
-      construct,
-      childDisplay,
-      taskLaunchOwner,
-      shellOwner,
-    ),
-  };
 }

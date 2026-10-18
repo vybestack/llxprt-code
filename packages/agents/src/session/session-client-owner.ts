@@ -1,3 +1,10 @@
+import { recordToolCompletions } from './record-tool-completions.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
+import {
+  SessionProviderFileBinding,
+  type AgentProviderFileOperations,
+} from '../api/provider-file-domain.js';
+import { bindTelemetry } from '../api/agentBootstrap.js';
 import { ProviderLifetimeOwnership } from './provider-lifetime-ownership.js';
 import { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
@@ -5,7 +12,6 @@ import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   OwnedClientLedger,
   SessionClientWorkQueue,
-  cleanupProviderScope,
   finishCleanup,
   rethrowAfterClientCleanup,
 } from './session-client-cleanup.js';
@@ -18,7 +24,10 @@ import { SessionImageAdmission } from './session-image-admission.js';
 import {
   bindClientTokenization,
   requireSessionPolicy,
-  bindFactoryClient,
+  bindClientSettings,
+  bindClientModels,
+  bindClientDefinitions,
+  assertClientOwnership,
   captureSessionRuntimeState,
   type SessionClientFactory,
 } from './session-client-binding.js';
@@ -31,14 +40,13 @@ import {
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
-import type { AgenticLoopOptions } from '../core/agenticLoop/types.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import {
-  bindSchedulerOwner,
-  type SchedulerConstruction,
-} from './assembleSchedulerOwner.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+  SessionExecutionOwner,
+  type SessionExecution,
+} from './session-execution-owner.js';
+import type { PreparedProfileFacade } from '../api/profileApplicationAssembly.js';
+import type { AgenticLoopOptions } from '../core/agenticLoop/types.js';
+import { type SchedulerConstruction } from './assembleSchedulerOwner.js';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { HostGitHubBrokerOwner } from '../api/host-github-broker-owner.js';
@@ -53,7 +61,9 @@ import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
-import { SessionInstructionOwner } from './session-instruction-owner.js';
+import { AuxiliaryWork } from '../core/auxiliary-work.js';
+import type { AgentMessage } from '../api/agent.js';
+import { SessionInstructionBinding } from './session-instruction-binding.js';
 import type {
   ProfileDefinitionReads,
   SubagentDefinitionReads,
@@ -62,14 +72,12 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { SessionToolCatalogOwner } from './session-tool-catalog-owner.js';
-import { buildToolDeclarationsFromView } from '../core/clientToolGovernance.js';
+import { prepareClientToolPublication } from '../core/clientToolGovernance.js';
 import { createTaskRegistration } from '../api/runtimeFactories.js';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { bindToolOutputSummary } from './session-tool-catalog-owner.js';
 import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
-import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-policy';
+import { SessionMcpApproval } from './session-mcp-approval.js';
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../api/agent.js';
 import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
@@ -90,30 +98,21 @@ import {
 import { SessionHookComposition } from './session-hook-composition.js';
 
 export class SessionClientOwner {
-  static readonly cleanupProviderScope = cleanupProviderScope;
-  private providerFileLifecycle: object | undefined;
-  private cleanupProviderFiles?: (scopeId: string) => Promise<void>;
-  get providerFiles(): object | undefined {
-    return this.providerFileLifecycle;
+  private readonly fileBinding = new SessionProviderFileBinding();
+  createProviderFileOperations(
+    assertAdmission: () => void,
+  ): AgentProviderFileOperations {
+    return this.fileBinding.operations(
+      this.config.getSessionId(),
+      assertAdmission,
+    );
   }
-  private composeRetryOperations?: (
-    provider: string,
-  ) => ProviderRetryOperations;
   bindProviderFiles(
     lifecycle: object,
-    composeRetryOperations: (provider: string) => ProviderRetryOperations,
-    cleanupProviderFiles?: (scopeId: string) => Promise<void>,
+    retry: (provider: string) => ProviderRetryOperations,
+    cleanup?: (scopeId: string) => Promise<void>,
   ): void {
-    if (
-      this.providerFileLifecycle !== undefined &&
-      this.providerFileLifecycle !== lifecycle
-    )
-      throw new Error('Session provider files cannot change owner');
-    this.providerFileLifecycle = lifecycle;
-    this.composeRetryOperations = composeRetryOperations;
-    this.cleanupProviderFiles =
-      cleanupProviderFiles ?? this.cleanupProviderFiles;
-    this.client.bindProviderFiles?.(lifecycle, composeRetryOperations);
+    this.fileBinding.bind(this.client, lifecycle, retry, cleanup);
   }
 
   private readonly hookComposition: SessionHookComposition;
@@ -124,35 +123,17 @@ export class SessionClientOwner {
   readonly bindHooks = (...args: Parameters<SessionHookComposition['bind']>) =>
     this.hookComposition.bind(...args);
   readonly closeHookAdmission = () => this.hookComposition.closeAdmission();
-  readonly disposeHooks = () => this.hookComposition.dispose();
+  readonly disposeHooks = () => this.hookComposition.disposeClientOwned();
+  readonly transferHookRelease = () => this.hookComposition.transferRelease();
 
-  private instructionOwner: SessionInstructionOwner | undefined;
-  private inheritedInstructions: InstructionReadOperations | undefined;
-  readonly instructionReads: InstructionReadOperations = {
-    snapshot: () => this.readInstructions().snapshot(),
-    jit: (targetPath) => this.readInstructions().jit(targetPath),
-  };
-  private readInstructions(): InstructionReadOperations {
-    const reads = this.instructionOwner?.reads ?? this.inheritedInstructions;
-    if (reads === undefined)
-      throw new Error(
-        'Session instructions require explicit workspace composition',
-      );
-    return reads;
-  }
+  private readonly instructions = new SessionInstructionBinding();
+  readonly instructionReads = this.instructions.reads;
   get memoryOperations(): Agent['memory'] {
-    if (this.instructionOwner === undefined)
-      throw new Error('Session memory requires workspace composition');
-    return this.instructionOwner.memory;
+    return this.instructions.memory;
   }
-  bindInheritedInstructions(reads: InstructionReadOperations): void {
-    if (
-      this.instructionOwner !== undefined ||
-      this.inheritedInstructions !== undefined
-    )
-      throw new Error('Session instructions are already composed');
-    this.inheritedInstructions = reads;
-  }
+  readonly bindInheritedInstructions = this.instructions.bindInherited.bind(
+    this.instructions,
+  );
   private githubOwner: HostGitHubBrokerOwner | undefined;
   bindHostGitHub(owner: HostGitHubBrokerOwner | undefined): void {
     if (owner === undefined) return;
@@ -168,46 +149,87 @@ export class SessionClientOwner {
   private boundWorkspace: McpRuntimeOwner | undefined;
   private sessionPolicy: SessionPolicyOwner | undefined;
   private ownsSessionPolicy = false;
-  private readonly policyWrites = new Set<Promise<void>>();
+  private readonly policyWrites = new SessionMcpApproval();
   get messageBus() {
     return requireSessionPolicy(this.sessionPolicy).messageBus;
   }
-  createLoop(
-    client: AgentClientContract,
+  private execution: SessionExecutionOwner | undefined;
+
+  initializeExecution(
     scheduler: SchedulerConstruction | undefined,
-    approvalHandler: AgenticLoopOptions['approvalHandler'],
-    displayCallbacks: AgenticLoopOptions['displayCallbacks'],
-  ): AgenticLoop {
+    approval: AgenticLoopOptions['approvalHandler'],
+    display: AgenticLoopOptions['displayCallbacks'],
+  ): SessionExecution {
     this.getAgentClient();
     const workspace = this.boundWorkspace;
     if (workspace === undefined)
       throw new AgentBootstrapError(
         'Loop construction requires workspace policy composition',
       );
-    const interactiveMode = this.config.isInteractive();
-    const messageBus = this.messageBus;
-    return new AgenticLoop({
-      agentClient: client,
-      config: this.config,
-      messageBus,
-      createSchedulerOwner: bindSchedulerOwner(
-        this.config,
-        messageBus,
-        interactiveMode,
-        this.toolCatalog.selection,
-        scheduler ?? ((options) => new CoreToolScheduler(options)),
-        () => this.settingsOwner.readToolExecutionPolicy(),
-        () => this.toolCatalog.readGovernance(),
-        () =>
-          workspace.trust.isTrustedFolder()
-            ? this.config.getApprovalMode()
-            : ApprovalMode.DEFAULT,
-        this.settingsOwner.telemetry,
-      ),
-      approvalHandler,
-      displayCallbacks,
-      interactiveMode,
-    });
+    if (this.execution !== undefined)
+      throw new Error('Session execution is already initialized');
+    const execution = new SessionExecutionOwner(
+      this.config,
+      this.settingsOwner,
+      this.messageBus,
+      this.toolCatalog.selection,
+      () => this.toolCatalog.readGovernance(),
+      workspace.trust,
+      scheduler,
+      approval,
+      display,
+    );
+    const captured = execution.initialize(this.client);
+    this.execution = execution;
+    return captured;
+  }
+
+  rebuildExecution(): void {
+    this.requireExecution().rebuild(this.getAgentClient());
+  }
+
+  resolveExecution():
+    | { loop: SessionExecution; error?: undefined }
+    | { loop?: undefined; error: { message: string } } {
+    const execution = this.execution;
+    if (execution === undefined)
+      return { error: { message: 'Agent loop is not initialized' } };
+    const result = execution.resolve(this.getAgentClient());
+    return result.error !== undefined ? result : { loop: result.execution };
+  }
+
+  isCurrentExecution(execution: SessionExecution | undefined): boolean {
+    return this.execution?.isCurrent(execution) ?? false;
+  }
+
+  abortExecution(): void {
+    this.execution?.abort();
+  }
+
+  private requireExecution(): SessionExecutionOwner {
+    if (this.execution === undefined)
+      throw new Error('Agent loop is not initialized');
+    return this.execution;
+  }
+
+  async prepareProfileExecution(
+    changed: boolean,
+    signal: AbortSignal,
+    retirePrior: (release: () => Promise<void>) => Promise<void>,
+  ): Promise<PreparedProfileFacade> {
+    const replacement = changed
+      ? await this.prepareProfileClientReplacement()
+      : undefined;
+    return this.requireExecution().prepareProfile(
+      replacement?.client ?? this.getAgentClient(),
+      changed,
+      signal,
+      replacement?.prepareHistoryCommit,
+      replacement?.publish,
+      replacement?.retire,
+      replacement?.discard,
+      retirePrior,
+    );
   }
   addSessionPolicyRule(
     rule: Parameters<SessionPolicyOwner['confirmation']['addRule']>[0],
@@ -221,9 +243,7 @@ export class SessionClientOwner {
   private readonly mcpBindingToken = Symbol('MCP session client');
   private readonly images = new SessionImageAdmission();
 
-  hasImageComposition(): boolean {
-    return this.images.isComposed();
-  }
+  readonly hasImageComposition = this.images.isComposed.bind(this.images);
 
   bindImageOperation(
     runner: ImageOperationRunner,
@@ -238,9 +258,7 @@ export class SessionClientOwner {
     return this.images.run(input);
   };
 
-  closeImageAdmission(): Promise<void> {
-    return this.images.close();
-  }
+  readonly closeImageAdmission = this.images.close.bind(this.images);
 
   readonly operations: Agent['sessionClient'] = {
     fetch: (input, init) => this.network.fetch(input, init),
@@ -249,6 +267,32 @@ export class SessionClientOwner {
     createDetachedAgentClient: (id) => this.createDetachedAgentClient(id),
     runImageOperation: (input) => this.runImageOperation(input),
   };
+  private readonly auxiliary = new AuxiliaryWork();
+
+  generateJson(
+    contents: readonly AgentMessage[],
+    schema: Readonly<Record<string, unknown>>,
+    model: string,
+    signal: AbortSignal | undefined,
+  ): Promise<Record<string, unknown>> {
+    const client = this.getAgentClient();
+    const input = [...contents];
+    return this.auxiliary.run(
+      (acceptedSignal) =>
+        client.generateJson(input, { ...schema }, acceptedSignal, model),
+      signal,
+    );
+  }
+
+  generateEmbedding(texts: readonly string[]): Promise<number[][]> {
+    const client = this.getAgentClient();
+    return this.auxiliary.run((signal) =>
+      client.generateEmbedding([...texts], signal),
+    );
+  }
+
+  readonly closeAuxiliaryAdmission = this.auxiliary.close.bind(this.auxiliary);
+
   private client: AgentClientContract;
   private runtimeState: AgentRuntimeState;
   private closing: Promise<void> | undefined;
@@ -262,7 +306,7 @@ export class SessionClientOwner {
     this.getAgentClient(),
   );
   private readonly ownedClients = new OwnedClientLedger(async (scope) => {
-    await this.cleanupProviderFiles?.(scope);
+    await this.fileBinding.cleanupScope(scope);
   });
 
   workspaceDirectories(): readonly string[] {
@@ -365,22 +409,10 @@ export class SessionClientOwner {
   bindWorkspaceInstructions(
     workspace: McpRuntimeOwner['workspaceMemory'],
   ): void {
-    if (this.inheritedInstructions !== undefined)
-      throw new Error('Inherited session instructions cannot be rebound');
-    if (this.instructionOwner !== undefined) {
-      if (this.instructionWorkspace !== workspace)
-        throw new Error('Session instruction workspace must retain its owner');
-      return;
-    }
-    this.instructionWorkspace = workspace;
-    this.instructionOwner = new SessionInstructionOwner(
-      workspace.operations,
-      this.config.getProvidedInstructions(),
-      this.config.isJitContextEnabled(),
-      (instructions) => this.publishInstructions(instructions),
+    this.instructions.bindWorkspace(workspace, this.config, (instructions) =>
+      this.publishInstructions(instructions),
     );
   }
-  private instructionWorkspace: McpRuntimeOwner['workspaceMemory'] | undefined;
 
   bindMcpRuntime(
     workspace: McpRuntimeOwner,
@@ -398,7 +430,8 @@ export class SessionClientOwner {
     );
     this.bindDefinitionReads(profiles, subagents);
     this.bindWorkspaceInstructions(workspace.workspaceMemory);
-    const { policy, sessionApproval } = this.bindSessionApproval(workspace);
+    const sessionApproval = this.bindSessionApproval(workspace);
+    const policy = requireSessionPolicy(this.sessionPolicy);
     this.prepareTools = () =>
       this.toolCatalog.initialize(
         () => workspace.isStopped(),
@@ -450,33 +483,13 @@ export class SessionClientOwner {
     this.ownsSessionPolicy =
       this.borrowedClient === undefined && this.borrowedBus === undefined;
     this.sessionPolicy = policy;
-    const approval = createMcpApprovalPolicy(
-      { ...policy.decisions, ...policy.confirmation },
-      (message) => {
-        const write = persistPolicyToToml(message);
-        this.policyWrites.add(write);
-        void write.then(
-          () => this.policyWrites.delete(write),
-          () => this.policyWrites.delete(write),
-        );
-        return write;
+    return this.policyWrites.bind(
+      policy,
+      (...args) => workspace.policyOwner.session.decisions.evaluate(...args),
+      () => {
+        this.getAgentClient();
       },
-      () => this.getAgentClient(),
     );
-    const sessionApproval = {
-      ...approval,
-      evaluate: (...args: Parameters<typeof approval.evaluate>) => {
-        const upstream = workspace.policyOwner.session.decisions.evaluate(
-          args[0].serverName + '__' + args[0].toolName,
-          args[1],
-          args[0].serverName,
-        );
-        return upstream === PolicyDecision.DENY
-          ? upstream
-          : approval.evaluate(...args);
-      },
-    };
-    return { policy, sessionApproval };
   }
 
   bindInheritedTools(
@@ -570,36 +583,28 @@ export class SessionClientOwner {
     client: AgentClientContract,
     state: typeof this.runtimeState,
   ): void {
-    bindFactoryClient(client, {
-      config: this.config,
-      mediaStore: this.mediaStore,
-      settingsOwner: this.settingsOwner,
-      fetch: this.network.fetch,
-      manager: this.manager,
-      tokenizerFactory: this.tokenizerFactory,
-      runtimeId: state.runtimeId,
-      sessionId: state.sessionId,
-      toolSelection: this.toolCatalog.selection,
-      definitions:
-        this.profileDefinitions !== undefined &&
-        this.subagentDefinitions !== undefined
-          ? {
-              profiles: this.profileDefinitions,
-              subagents: this.subagentDefinitions,
-            }
-          : undefined,
-      readIdeContext: () =>
-        this.boundWorkspace?.ide.getClient()?.getIdeContext(),
-      isIdeEnabled: () => this.boundWorkspace?.ide.isEnabled() ?? false,
-      providerFiles:
-        this.providerFileLifecycle !== undefined &&
-        this.composeRetryOperations !== undefined
-          ? {
-              lifecycle: this.providerFileLifecycle,
-              composeRetryOperations: this.composeRetryOperations,
-            }
-          : undefined,
-    });
+    assertClientOwnership(client, this.config, this.mediaStore);
+    bindClientDefinitions(
+      client,
+      this.profileDefinitions,
+      this.subagentDefinitions,
+    );
+    client.bindIdeContext?.(
+      () => this.boundWorkspace?.ide.getClient()?.getIdeContext(),
+      () => this.boundWorkspace?.ide.isEnabled() ?? false,
+    );
+    client.bindToolSelection(this.toolCatalog.selection);
+    bindTelemetry(client, this.config, this.settingsOwner, this.manager);
+    bindClientSettings(
+      client,
+      this.config,
+      this.settingsOwner,
+      state.runtimeId,
+      state.sessionId,
+      this.network.fetch,
+    );
+    this.fileBinding.bindClient(client);
+    bindClientModels(client, this.manager, this.tokenizerFactory);
   }
 
   refreshAuth(_authMethod?: string): Promise<void> {
@@ -685,6 +690,20 @@ export class SessionClientOwner {
         tokenizer.getTokenizer(provider, model),
     });
     this.config.setFallbackMode(false);
+  }
+
+  openClientToolChannel(
+    ...args: Parameters<SessionExecutionOwner['openClientToolChannel']>
+  ): ReturnType<SessionExecutionOwner['openClientToolChannel']> {
+    return this.requireExecution().openClientToolChannel(...args);
+  }
+
+  recordCompletedToolCalls(completed: readonly CompletedToolCall[]): void {
+    recordToolCompletions(
+      this.getAgentClient(),
+      () => this.config.getModel(),
+      completed,
+    );
   }
 
   prepareProfileClientReplacement(): Promise<{
@@ -784,71 +803,66 @@ export class SessionClientOwner {
   }
 
   publishTools(): Promise<void> {
-    const selection = this.getAgentClient().tools;
-    const declarations = this.client.isInitialized()
-      ? buildToolDeclarationsFromView(selection, {
-          listToolNames: () => selection.getAllToolNames(),
-        })
-      : undefined;
-    return this.work.enqueue(async () => {
-      const client = this.client;
-      if (client.isInitialized()) await client.setTools(declarations);
-    });
+    const publish = prepareClientToolPublication(this.getAgentClient());
+    return this.work.enqueue(() => publish(this.client));
   }
 
   closeAdmission(): void {
     this.admissionClosed = true;
+    this.execution?.closeAdmission();
     this.providerLife.closeAdmission();
   }
 
   dispose(): Promise<void> {
     this.closeAdmission();
+    const executionClosing = this.execution?.dispose();
+    void executionClosing?.catch(() => undefined);
     this.closeHookAdmission();
     this.githubOwner?.closeAdmission();
     const imagesClosing = this.closeImageAdmission();
     void imagesClosing.catch(() => undefined);
     const toolsClosing = this.toolCatalog.closeAdmission();
     void toolsClosing.catch(() => undefined);
+    const auxiliaryClosing = this.closeAuxiliaryAdmission();
+    void auxiliaryClosing.catch(() => undefined);
     if (this.closing !== undefined) return this.closing;
     const bindingClosing = Promise.resolve().then(() =>
       this.releaseMcpBinding?.(),
     );
-    this.closing = Promise.allSettled([bindingClosing]).then(
-      async (binding) => {
-        const hooks = await Promise.allSettled([this.disposeHooks()]);
-        await this.work.join();
-        const instructions = await Promise.allSettled([
-          this.instructionOwner?.dispose(),
-        ]);
-        const services = await Promise.allSettled([
-          this.toolCatalog.dispose(),
-          this.githubOwner?.dispose(),
-          imagesClosing,
-        ]);
-        const clients = await Promise.allSettled(
-          this.ownedClients
-            .clients()
-            .map((client) => this.ownedClients.dispose(client)),
-        );
-        this.modelRegistry.dispose();
-        const network = await Promise.allSettled([this.network.dispose()]);
-        const writes = await Promise.allSettled([...this.policyWrites]);
-        const policy = await Promise.allSettled([
-          this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
-        ]);
-        finishCleanup(
-          await Promise.allSettled([this.providerLife.close()]),
-          hooks,
-          instructions,
-          services,
-          binding,
-          clients,
-          network,
-          writes,
-          policy,
-        );
-      },
-    );
+    this.closing = Promise.allSettled([
+      bindingClosing,
+      auxiliaryClosing,
+      executionClosing,
+    ]).then(async (binding) => {
+      const hooks = await Promise.allSettled([this.disposeHooks()]);
+      await this.work.join();
+      const instructions = await Promise.allSettled([
+        this.instructions.dispose(),
+      ]);
+      const services = await Promise.allSettled([
+        this.toolCatalog.dispose(),
+        this.githubOwner?.dispose(),
+        imagesClosing,
+      ]);
+      const clients = await this.ownedClients.settleOwnedClients();
+      this.modelRegistry.dispose();
+      const network = await Promise.allSettled([this.network.dispose()]);
+      const writes = await this.policyWrites.settleWrites();
+      const policy = await Promise.allSettled([
+        this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
+      ]);
+      finishCleanup(
+        await Promise.allSettled([this.providerLife.close()]),
+        hooks,
+        instructions,
+        services,
+        binding,
+        clients,
+        network,
+        writes,
+        policy,
+      );
+    });
     return this.closing;
   }
 }

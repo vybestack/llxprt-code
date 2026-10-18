@@ -221,6 +221,7 @@ export class McpRuntimeOwner implements AgentMcpOperations {
   private readonly initialTrust: boolean;
   private releaseMcpPublication: (() => void) | undefined;
   private initialization: Promise<void> | undefined;
+  private pendingInitialization: Promise<void> | undefined;
   private discovery: Promise<void> | undefined;
   private skillsClosing: Promise<void> | undefined;
   private lspClosing: Promise<void> | undefined;
@@ -490,6 +491,11 @@ export class McpRuntimeOwner implements AgentMcpOperations {
       throw new Error('Cannot initialize a stopped MCP runtime');
     if (this.initialization !== undefined) return this.initialization;
     this.initialization = this.initializeWorkspace();
+    this.pendingInitialization = this.initialization;
+    const settled = (): void => {
+      this.pendingInitialization = undefined;
+    };
+    void this.initialization.then(settled, settled);
     return this.initialization;
   }
 
@@ -738,7 +744,10 @@ export class McpRuntimeOwner implements AgentMcpOperations {
 
   dispose(): Promise<void> {
     if (this.disposal !== undefined) return this.disposal;
-    this.disposal = Promise.resolve().then(() => this.disposeResources());
+    const initialization = this.pendingInitialization;
+    this.disposal = Promise.resolve().then(() =>
+      this.disposeResources(initialization),
+    );
     this.closingOperations = settleMcpClosures([
       () => this.closeAdmission(),
       () => this.discoveryClosing,
@@ -797,12 +806,14 @@ export class McpRuntimeOwner implements AgentMcpOperations {
     ]);
   }
 
-  private async disposeResources(): Promise<void> {
+  private async disposeResources(
+    initialization: Promise<void> | undefined,
+  ): Promise<void> {
     const failures: unknown[] = [];
     const publicationClosures = await this.closePublicationResources();
     failures.push(
       ...(await joinMcpRetirementOperations([
-        this.initialization,
+        initialization,
         this.discovery,
         ...this.trustOperations,
         ...this.approvalWrites,

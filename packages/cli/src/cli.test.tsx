@@ -6,7 +6,10 @@
 import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
 const makeForegroundAgent = installCommandOwners();
 
-import { createProviderSessionCapabilities as preflightCapabilities } from './integration-tests/__tests__/session-client-owner-fixture.js';
+import {
+  AgentProfilePreflight,
+  type Agent,
+} from '@vybestack/llxprt-code-agents';
 import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
 import {
@@ -155,25 +158,17 @@ void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
-// Mock the Agent composition root so interactive-path tests do not construct a
-// real Agent via fromConfig (which would require a fully wired Config). The
-// fake exposes getMessageBus() because dispatch reads the session bus from the
-// Agent (#2378).
+const actualCreateForegroundAgent = createForegroundAgent;
+const foregroundAgents: Agent[] = [];
 void vi.mock('./cliAgentBootstrap.js', () => ({
-  createForegroundAgent: vi.fn(async () =>
-    makeForegroundAgent(crypto.randomUUID()),
+  createForegroundAgent: vi.fn(
+    async (...args: Parameters<typeof createForegroundAgent>) => {
+      const agent = await actualCreateForegroundAgent(...args);
+      foregroundAgents.push(agent);
+      return agent;
+    },
   ),
 }));
-
-// Mock the public activation preflight so main() does not invoke real provider
-// runtime mutators. These tests verify surrounding CLI orchestration.
-const { preflightMock } = {
-  preflightMock: vi.fn().mockResolvedValue({
-    authFailed: false,
-    activeProvider: 'gemini',
-    infoMessages: [],
-  }),
-};
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -237,14 +232,6 @@ describe('cli.tsx main function', () => {
     loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     projectTempDir = await mkdtemp(join(tmpdir(), 'cli-main-'));
     dynamicSettingsRegistry.reset();
-    // Re-establish the default resolved value after afterEach's
-    // vi.restoreAllMocks() clears mock implementations.
-    preflightMock.mockResolvedValue({
-      authFailed: false,
-      activeProvider: 'gemini',
-      infoMessages: [],
-    });
-
     // Store and clear sandbox-related env variables to ensure a consistent test environment
     originalEnvLlxprtSandbox = process.env.LLXPRT_SANDBOX;
     originalEnvSandbox = process.env.SANDBOX;
@@ -256,6 +243,7 @@ describe('cli.tsx main function', () => {
   });
 
   afterEach(async () => {
+    for (const agent of foregroundAgents.splice(0)) await agent.dispose();
     for (const config of interactiveConfigs.splice(0)) {
       await config.dispose();
     }
@@ -287,7 +275,7 @@ describe('cli.tsx main function', () => {
   it('runs a headless request through the actual foreground owner after a sibling retires', async () => {
     const owner = await makeForegroundAgent('root-headless-owner');
     const peer = await makeForegroundAgent('root-headless-peer');
-    const { config, manager } = makeInteractiveConfig(
+    const { config } = makeInteractiveConfig(
       projectTempDir,
       owner.getRuntimeId(),
     );
@@ -302,16 +290,7 @@ describe('cli.tsx main function', () => {
       createLoadedSettings({ ui: { autoConfigureMaxOldSpaceSize: false } }),
     );
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        config,
-        async (store, selected) => ({
-          ...(await preflightCapabilities(config, manager, store, selected)),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(config),
     );
     const originalIsTTY = process.stdin.isTTY;
     const originalSetRawMode = process.stdin.setRawMode;
@@ -561,8 +540,12 @@ describe('cli.tsx main function', () => {
   });
 
   it('initializes content generator config before interactive provider usage', async () => {
+    const configuredWorkspace = vi.spyOn(
+      AgentProfilePreflight.prototype,
+      'prepareConfiguredWorkspace',
+    );
     const freshSessionId = randomUUID();
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
@@ -575,16 +558,7 @@ describe('cli.tsx main function', () => {
     );
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => ({
-          ...(await preflightCapabilities(mockConfig, manager, store, owner)),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -610,7 +584,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,
@@ -665,6 +639,11 @@ describe('cli.tsx main function', () => {
     }
 
     expect(renderMock).toHaveBeenCalledTimes(1);
+    const selected = configuredWorkspace.mock.contexts[0];
+    if (!(selected instanceof AgentProfilePreflight))
+      throw new Error('Configured workspace must retain its actual preflight');
+    await selected.updateTelemetrySettings({ logPrompts: true });
+    expect(selected.readTelemetrySettings().logPrompts).toBe(true);
 
     // The interactive path creates exactly one Agent at the composition root,
     // adopting the existing Config.
@@ -673,7 +652,18 @@ describe('cli.tsx main function', () => {
     ).toHaveBeenCalledTimes(1);
     expect(
       createForegroundAgent as Mock<typeof createForegroundAgent>,
-    ).toHaveBeenCalledWith(expect.objectContaining({ config: mockConfig }));
+    ).toHaveBeenCalledWith(
+      configuredWorkspace.mock.contexts[0],
+      expect.any(Object),
+      expect.objectContaining({ provider: mockConfig.getProvider() }),
+      expect.any(Object),
+      expect.any(Object),
+    );
+
+    expect(configuredWorkspace).toHaveBeenCalledWith(
+      mockConfig,
+      expect.any(Function),
+    );
 
     // Avoid the process.exit error from being thrown in later tests.
     processExitSpy.mockRestore();
@@ -693,7 +683,7 @@ describe('cli.tsx main function', () => {
   it('should call setupTerminalAndTheme when isInteractive is true', async () => {
     const freshSessionId = randomUUID();
     const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
-    const { config: mockConfig, manager } = makeInteractiveConfig(
+    const { config: mockConfig } = makeInteractiveConfig(
       projectTempDir,
       freshSessionId,
     );
@@ -706,16 +696,7 @@ describe('cli.tsx main function', () => {
     );
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        async (store, owner) => ({
-          ...(await preflightCapabilities(mockConfig, manager, store, owner)),
-          workspaceMemoryOwnership: 'transferred',
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -741,7 +722,7 @@ describe('cli.tsx main function', () => {
       extensions: undefined,
       listExtensions: undefined,
       provider: undefined,
-      key: undefined,
+      key: 'synthetic-cli-main-key',
       keyfile: undefined,
       baseurl: undefined,
       proxy: undefined,

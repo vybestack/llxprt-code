@@ -77,14 +77,25 @@ describe('explicit MCP construction ownership', () => {
       debugMode: false,
       model: 'test-model',
     });
+    const callerSettings = createSessionSettingsFixture(config);
     await expect(
       Reflect.apply(fromConfig, undefined, [
-        {
-          ...createSessionSettingsFixture(config),
-          config,
-          mcpOwnership: 'caller',
-          credentialAuthority: builtCredentials().authority,
-        },
+        config,
+        callerSettings.settingsService,
+        { mcpOwnership: 'caller' },
+        callerSettings.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        builtCredentials().authority,
       ]),
     ).rejects.toThrow('Caller-owned MCP requires an explicit runtime handoff');
     expect(builtCredentials().keySnapshot()).toStrictEqual([]);
@@ -134,13 +145,18 @@ describe('explicit MCP construction ownership', () => {
     expect(await first.initialize().catch((error: unknown) => error)).toBe(
       failure,
     );
+    const adoptedSettings1 = createSessionSettingsFixture(config);
     await expect(
-      fromConfig({
-        ...createSessionSettingsFixture(config),
+      fromConfig(
         config,
-        mcpRuntime: first,
-        messageBus: new MessageBus(),
-      }),
+        adoptedSettings1.settingsService,
+        {},
+        adoptedSettings1.settingsOwner,
+        undefined,
+        undefined,
+        new MessageBus(),
+        first,
+      ),
     ).rejects.toThrow(
       'MCP runtime handoff must retain its Config and MessageBus',
     );
@@ -334,37 +350,53 @@ describe('explicit MCP construction ownership', () => {
       expect(builtCallerMcp).toBeInstanceOf(McpRuntimeOwner);
       expect(builtCallerMcp.initialize()).toBe(builtCallerMcp.initialize());
       await expect(
-        fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          config: builtCallerConfig,
-        }),
+        fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          {},
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+        ),
       ).rejects.toThrow('MCP runtime handoff');
       await expect(
         Reflect.apply(fromConfig, undefined, [
-          {
-            settingsOwner: builtCallerSettingsOwner,
-            settingsService: builtCallerSettings,
-            agentClient: builtCallerOwner.getAgentClient(),
-            providerManager: builtCallerManager,
-            config: builtCallerConfig,
-            mcpOwnership: 'caller',
-          },
+          builtCallerConfig,
+          builtCallerSettings,
+          { mcpOwnership: 'caller' },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
         ]),
       ).rejects.toThrow(
         'Caller-owned MCP requires an explicit runtime handoff',
       );
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       await agent.dispose();
       expect(builtCallerMcp.isStopped()).toBe(false);
     } finally {
@@ -573,15 +605,18 @@ describe('explicit MCP construction ownership', () => {
 
       builtReleases.push(builtCallerClose);
       await builtCallerMcp.awaitDiscovery();
-      const agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+      );
       try {
         expect(browsers).toHaveLength(0);
         await agent.mcp.authenticate('same');

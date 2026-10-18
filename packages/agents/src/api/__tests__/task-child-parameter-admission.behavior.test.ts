@@ -227,21 +227,37 @@ async function exercise(
     workspace = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
     const settingsService = new SettingsService();
     const settingsOwner = new SessionSettingsOwner(settingsService);
-    agent = await fromConfig({
-      settingsService,
-      settingsOwner,
-      mcpRuntime: workspace,
-      mcpOwnership: 'caller',
-      definitionOwner: definitions,
-      definitionOwnership: 'caller',
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'test-key', baseUrl: parent.url },
+      settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'test-key', baseUrl: parent.url },
+        },
+        definitionOwnership: 'caller',
+        mcpOwnership: 'caller',
       },
-    });
+      settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      workspace,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      definitions,
+    );
     agent.setModelParam('temperature', 0.2);
     const parentAgent = agent;
     const parentRun = (async () => {

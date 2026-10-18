@@ -312,16 +312,22 @@ describe('fromConfig caller properties', () => {
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
           await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              runtimeFactoryBindings: callerFactories,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-              sessionId,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              { sessionId },
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+              undefined,
+              undefined,
+              undefined,
+              callerFactories,
+            );
             try {
               return internalConfig(agent) === callerConfig;
             } finally {
@@ -343,16 +349,22 @@ describe('fromConfig caller properties', () => {
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
           await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              runtimeFactoryBindings: callerFactories,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-              sessionId,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              { sessionId },
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+              undefined,
+              undefined,
+              undefined,
+              callerFactories,
+            );
             try {
               return captureRuntimeId(agent) === sessionId;
             } finally {
@@ -380,26 +392,42 @@ describe('fromConfig caller properties', () => {
           async (subset) => {
             await openCaller('plain-text.jsonl');
             try {
-              const opts: Record<string, unknown> = {
-                settingsService: callerSettings,
-                config: callerConfig,
-                agentClient: callerOwner.getAgentClient(),
-                providerManager: callerManager,
-                mcpRuntime: callerMcp,
-              };
-              if (subset.withApproval) {
-                opts['onApproval'] = () => ({
-                  outcome: ToolConfirmationOutcome.ProceedOnce,
-                });
-              }
-              if (subset.withOauth) {
-                opts['onOAuthPrompt'] = () => true;
-              }
-              if (subset.withEditor) {
-                opts['editorCallbacks'] = {};
-              }
               const agent: Agent = await fromConfig(
-                opts as unknown as Parameters<typeof fromConfig>[0],
+                callerConfig,
+                callerSettings,
+                {},
+                undefined,
+                callerManager,
+                undefined,
+                undefined,
+                callerMcp,
+                undefined,
+                callerOwner.getAgentClient(),
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                subset.withApproval
+                  ? () => ToolConfirmationOutcome.ProceedOnce
+                  : undefined,
+                subset.withOauth ? () => true : undefined,
+                subset.withEditor ? {} : undefined,
               );
               try {
                 return internalConfig(agent) === callerConfig;
@@ -428,23 +456,41 @@ describe('fromConfig caller properties', () => {
           async (subset) => {
             await openCaller('plain-text.jsonl');
             try {
-              const opts: Record<string, unknown> = {
-                settingsService: callerSettings,
-                config: callerConfig,
-                agentClient: callerOwner.getAgentClient(),
-                providerManager: callerManager,
-                mcpRuntime: callerMcp,
-              };
-              if (subset.withApproval) {
-                opts['onApproval'] = () => ({
-                  outcome: ToolConfirmationOutcome.ProceedOnce,
-                });
-              }
-              if (subset.withOauth) {
-                opts['onOAuthPrompt'] = () => true;
-              }
               const agent: Agent = await fromConfig(
-                opts as unknown as Parameters<typeof fromConfig>[0],
+                callerConfig,
+                callerSettings,
+                {},
+                undefined,
+                callerManager,
+                undefined,
+                undefined,
+                callerMcp,
+                undefined,
+                callerOwner.getAgentClient(),
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                subset.withApproval
+                  ? () => ToolConfirmationOutcome.ProceedOnce
+                  : undefined,
+                subset.withOauth ? () => true : undefined,
               );
               try {
                 return captureProviderManager(agent) === callerManager;
@@ -469,17 +515,22 @@ describe('fromConfig caller properties', () => {
           await openCaller('plain-text.jsonl');
           try {
             const callerBus: MessageBus = callerPolicy.session.messageBus;
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              runtimeFactoryBindings: callerFactories,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-              messageBus: callerBus,
-              sessionId,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              { sessionId },
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              callerBus,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+              undefined,
+              undefined,
+              undefined,
+              callerFactories,
+            );
             try {
               return captureAgentMessageBus(agent) === callerBus;
             } finally {
@@ -501,16 +552,22 @@ describe('fromConfig caller properties', () => {
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
           await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              runtimeFactoryBindings: callerFactories,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-              sessionId,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              { sessionId },
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+              undefined,
+              undefined,
+              undefined,
+              callerFactories,
+            );
             try {
               const events: AgentEvent[] = await drain(agent.stream('hello'));
               return countType(events, 'done') === 1;
@@ -534,17 +591,22 @@ describe('fromConfig caller properties', () => {
           await openCaller('plain-text.jsonl');
           try {
             const callerBus: MessageBus = callerPolicy.session.messageBus;
-            const agent: Agent = await fromConfig({
-              settingsOwner: callerSettingsOwner,
-              settingsService: callerSettings,
-              agentClient: callerOwner.getAgentClient(),
-              providerManager: callerManager,
-              runtimeFactoryBindings: callerFactories,
-              config: callerConfig,
-              mcpRuntime: callerMcp,
-              messageBus: callerBus,
-              sessionId,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              { sessionId },
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              callerBus,
+              callerMcp,
+              undefined,
+              callerOwner.getAgentClient(),
+              undefined,
+              undefined,
+              undefined,
+              callerFactories,
+            );
             try {
               return (
                 internalConfig(agent) === callerConfig &&

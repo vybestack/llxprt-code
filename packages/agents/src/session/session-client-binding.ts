@@ -1,23 +1,19 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type {
-  RuntimeProviderManager,
-  RuntimeTokenizerFactory,
-} from '@vybestack/llxprt-code-core';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   AgentClientFactory,
   AgentClientContract,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
-import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { bindTelemetry } from '../api/agentBootstrap.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -54,6 +50,45 @@ export function bindClientTokenization(
   );
 }
 
+export function assertClientOwnership(
+  client: AgentClientContract,
+  config: Config,
+  media: LocalMediaStore,
+): void {
+  client.assertConfig(config);
+  if (client.mediaStore !== media)
+    throw new Error('Session client must retain its explicit media store');
+}
+
+export function bindClientModels(
+  client: AgentClientContract,
+  manager: RuntimeProviderManager,
+  tokenizer: RuntimeTokenizerFactory,
+): void {
+  bindClientTokenization(client, tokenizer);
+  client.bindProviderSelection?.(
+    createProviderAdapterFromManager(manager),
+    manager,
+  );
+}
+
+export function bindClientDefinitions(
+  client: AgentClientContract,
+  profiles:
+    | Parameters<
+        NonNullable<AgentClientContract['bindWorkspaceDefinitions']>
+      >[0]
+    | undefined,
+  subagents:
+    | Parameters<
+        NonNullable<AgentClientContract['bindWorkspaceDefinitions']>
+      >[1]
+    | undefined,
+): void {
+  if (profiles !== undefined && subagents !== undefined)
+    client.bindWorkspaceDefinitions?.(profiles, subagents);
+}
+
 export function bindClientSettings(
   client: AgentClientContract,
   config: Config,
@@ -81,86 +116,6 @@ export function bindClientSettings(
       sessionId,
       requestFetch,
     ),
-  );
-}
-
-type DefinitionReaders = Parameters<
-  NonNullable<AgentClientContract['bindWorkspaceDefinitions']>
->;
-
-/** What a factory-created client is bound to; owned by the session client owner. */
-export interface FactoryClientBindings {
-  readonly fetch?: (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => Promise<Response>;
-  readonly config: Config;
-  readonly mediaStore: LocalMediaStore;
-  readonly settingsOwner: SessionSettingsOwner;
-  readonly manager: RuntimeProviderManager;
-  readonly tokenizerFactory: RuntimeTokenizerFactory;
-  readonly runtimeId: string;
-  readonly sessionId: string;
-  readonly toolSelection: Parameters<
-    AgentClientContract['bindToolSelection']
-  >[0];
-  readonly definitions:
-    | {
-        readonly profiles: DefinitionReaders[0];
-        readonly subagents: DefinitionReaders[1];
-      }
-    | undefined;
-  readonly readIdeContext: Parameters<
-    NonNullable<AgentClientContract['bindIdeContext']>
-  >[0];
-  readonly isIdeEnabled: () => boolean;
-  readonly providerFiles:
-    | {
-        readonly lifecycle: object;
-        readonly composeRetryOperations: (
-          provider: string,
-        ) => ProviderRetryOperations;
-      }
-    | undefined;
-}
-
-export function bindFactoryClient(
-  client: AgentClientContract,
-  bindings: FactoryClientBindings,
-): void {
-  client.assertConfig(bindings.config);
-  if (client.mediaStore !== bindings.mediaStore)
-    throw new Error('Session client must retain its explicit media store');
-  if (bindings.definitions !== undefined)
-    client.bindWorkspaceDefinitions?.(
-      bindings.definitions.profiles,
-      bindings.definitions.subagents,
-    );
-  client.bindIdeContext?.(bindings.readIdeContext, bindings.isIdeEnabled);
-  client.bindToolSelection(bindings.toolSelection);
-  bindTelemetry(
-    client,
-    bindings.config,
-    bindings.settingsOwner,
-    bindings.manager,
-  );
-  bindClientSettings(
-    client,
-    bindings.config,
-    bindings.settingsOwner,
-    bindings.runtimeId,
-    bindings.sessionId,
-    bindings.fetch,
-  );
-  if (bindings.providerFiles !== undefined)
-    client.bindProviderFiles?.(
-      bindings.providerFiles.lifecycle,
-      bindings.providerFiles.composeRetryOperations,
-    );
-  bindClientTokenization(client, bindings.tokenizerFactory);
-  client.bindProviderSelection?.(
-    createProviderAdapterFromManager(bindings.manager),
-    bindings.manager,
   );
 }
 

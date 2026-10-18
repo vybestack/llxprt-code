@@ -16,7 +16,7 @@
 // delegation, not spies/stubs.
 //
 // `AuthControlDeps` carries `getOAuthManager` (see `makeDeps`), and `makeControl`
-// instantiates `new AuthControl(deps)` directly with no cast — the masked
+// instantiates `new AuthControl(...)` directly with no cast — the masked
 // detail methods delegate live to the real manager.
 
 import { describe, it, expect } from 'bun:test';
@@ -133,41 +133,25 @@ async function makeManager(): Promise<{
   return { mgr, store };
 }
 
-/** Builds a real AuthControlDeps over the live manager. */
-function makeDeps(mgr: OAuthManager) {
-  const authState = createAgentAuthState();
-  return {
-    authState,
-    getCurrentProvider: () => PROVIDER,
-    getKeyName: () => undefined,
-    getStatus: (): AuthStatus => 'unauthenticated',
-    onOAuthPrompt: undefined,
-    setBaseUrl: async () => {},
-    keysDeps: {
-      authState,
-      getKeyName: () => undefined,
-      setKeyName: () => {},
-      updateProviderApiKey: async () => ({
-        changed: false,
-        providerName: PROVIDER,
-        message: 'No credential mutation',
-      }),
-    },
-    getOAuthManager: () => mgr,
-  };
-}
-
-/** Builds the control directly over the real manager (direct-construction seam). */
 function makeControl(mgr: OAuthManager): AuthControl {
-  const deps = makeDeps(mgr);
   return new AuthControl(
-    deps.authState,
-    deps.getCurrentProvider,
-    deps.getStatus,
-    deps.onOAuthPrompt,
-    deps.setBaseUrl,
-    deps.keysDeps,
-    deps.getOAuthManager,
+    createAgentAuthState(),
+    () => PROVIDER,
+    (): AuthStatus => 'unauthenticated',
+    undefined,
+    async () => {},
+    () => undefined,
+    () => {},
+    async () => ({
+      changed: false,
+      providerName: PROVIDER,
+      message: 'No credential mutation',
+    }),
+    (provider) => mgr.isOAuthEnabled(provider),
+    (provider) => mgr.isAuthenticated(provider),
+    async (provider) => (await mgr.peekStoredToken(provider))?.expiry,
+    (provider) => mgr.getHigherPriorityAuth(provider),
+    (provider) => mgr.getAuthStatusWithBuckets(provider),
   );
 }
 

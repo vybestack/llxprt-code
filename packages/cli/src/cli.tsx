@@ -1,3 +1,13 @@
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import { resolveProxy } from './config/configBuilder.js';
+import type {
+  AgentForegroundHost,
+  AgentProfilePreflight,
+  Agent,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,21 +15,15 @@
  */
 
 import {
-  type OAuthManager,
   HostCredentialOwner,
   type CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from './auth/oauth-settings-adapter.js';
 import {
   type ImageOperationRunner,
-  type WorkspaceTrustControlPort,
   patchStdio,
   ExitCodes,
-  type ProfileDefinitionReads,
-  type SessionSettingsOwner,
-  type RuntimePolicyOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type RuntimeProviderManager,
@@ -28,11 +32,6 @@ import {
   type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-
-import type {
-  Agent,
-  AgentProfileApplication,
-} from '@vybestack/llxprt-code-agents';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -89,6 +88,7 @@ import {
   cleanupCheckpoints,
   runExitCleanup,
   registerSyncCleanup,
+  registerCleanup,
 } from './utils/cleanup.js';
 import {
   runZedIntegration,
@@ -130,7 +130,7 @@ import {
   hasSessionManagementFlag,
 } from './cliSessionListAndDelete.js';
 import {
-  type RuntimeConfigBootstrap,
+  discoverCliProviderContributions,
   bootstrapRuntimeAndConfig as bootstrap,
   setupOwnerSessionRecording,
 } from './cliSessionBootstrap.js';
@@ -233,40 +233,6 @@ function setupProcessLifecycle(): () => void {
  * internally, so the foreground Agent is NOT built in the main flow. Returns
  * true when the Zed/ACP path was taken (main should return immediately).
  */
-async function handleZedAcpIntegration(
-  config: Config,
-  cleanupStdio: () => void,
-  profileApplication: AgentProfileApplication,
-  providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
-  profileDefinitions: Pick<ProfileDefinitionReads, 'listProfiles'>,
-  trustPort: WorkspaceTrustControlPort,
-  providerContributions: ProviderContributionRegistry,
-  credentialAuthority: CredentialAuthority,
-): Promise<boolean> {
-  if (!config.getExperimentalZedIntegration()) {
-    return false;
-  }
-  cleanupStdio();
-  ensureAcpProviderActivated(config, providerManager);
-  await runZedIntegration(config, profileApplication, {
-    trustPort,
-    profileDefinitions,
-    onExitCleanup: runExitCleanup,
-    providerInputs: createZedProviderInputs(
-      providerContributions,
-      credentialAuthority,
-    ),
-    createSessionSettings: () => {
-      const session = new SettingsService();
-      session.restoreFromStateSnapshot(
-        settingsService.exportForStateSnapshot(),
-      );
-      return session;
-    },
-  });
-  return true;
-}
 
 /**
  * Hands the ACP client the contributions this process already loaded and the
@@ -316,26 +282,25 @@ class ForegroundSessionHost {
     private readonly argv: ParsedCliArgs,
     private readonly workspaceRoot: string,
     providerActivation: ConfiguredProviderActivationResult,
+    private readonly preflight: AgentProfilePreflight,
     private readonly hasPipedInput: boolean,
     private readonly readStdinData: () => Promise<string>,
     private readonly bootstrapSelection: BootstrapSelection | null,
-    getMcpAuthProviderFactory: RuntimeConfigBootstrap['getMcpAuthProviderFactory'],
-    providerManager: RuntimeProviderManager,
-    settingsService: SettingsService,
-    private readonly settingsOwner: SessionSettingsOwner,
-    policyOwner?: RuntimePolicyOwner,
-    private readonly oauthManager?: OAuthManager,
-    providerFileLifecycle?: ProviderFileLifecycle,
-    credentialAuthority?: CredentialAuthority,
+    getMcpAuthProviderFactory: NonNullable<
+      AgentForegroundHost['mcpHost']
+    >['getAuthProviderFactory'],
+    credentialAuthority: CredentialAuthority,
   ) {
     configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
+    const receipt = providerActivation.token;
+    if (receipt === undefined)
+      throw new Error('Missing foreground activation receipt');
     this.#foreground = constructAgentWithSpinner(
       config,
-      providerManager,
-      settingsService,
-      settingsOwner,
-      providerActivation.activationPreflight,
-      providerActivation.intent,
+      preflight,
+      receipt,
+      providerActivation.intent ?? {},
+      credentialAuthority,
       getMcpAuthProviderFactory,
       (skills) => {
         this.#skillOperations = skills;
@@ -343,15 +308,9 @@ class ForegroundSessionHost {
       (restart) => {
         this.#restartExtension = restart;
       },
-      policyOwner,
-      oauthManager,
-      providerFileLifecycle,
       argv,
-      credentialAuthority,
     );
-    this.settingsService = settingsService;
   }
-  private readonly settingsService: SettingsService;
   async run(): Promise<void> {
     const agent = await this.#foreground;
     await connectIdeClientIfEnabled(
@@ -393,9 +352,10 @@ class ForegroundSessionHost {
           () => agent.hooks.triggerSessionStart(),
           (reason) => agent.hooks.triggerSessionEnd(reason),
           (error) => reportNonInteractiveError(this.config, error),
-          () => this.settingsOwner.telemetry.flush(),
+          () => this.preflight.flushTelemetry(),
         ),
     );
+    registerCleanup(() => this.preflight.dispose());
   }
   private async validateRun(): Promise<ValidatedNonInteractiveRun> {
     const agent = await this.#foreground;
@@ -451,7 +411,7 @@ class ForegroundSessionHost {
           () => getActiveProviderNameForApiError(validated),
           (provider) => getErrorFallbackModel(validated, provider),
         ),
-        () => this.settingsOwner.telemetry.flush(),
+        () => this.preflight.flushTelemetry(),
       ),
       report: (error) => reportNonInteractiveError(validated, error),
     };
@@ -513,11 +473,7 @@ class ForegroundSessionHost {
       this.workspaceRoot,
       {
         recordingOwner: 'agent',
-        oauthManager: this.oauthManager,
-        runtimeSettings: {
-          owner: this.settingsOwner,
-          store: this.settingsService,
-        },
+        runtimeSettings: this.preflight,
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
         runtimeMessageBus: bus,
@@ -664,18 +620,94 @@ async function exitIfAuthenticationFailed(authFailed: boolean): Promise<void> {
 
 async function stopIfUnconfigured(
   config: Config,
-  manager: RuntimeProviderManager,
+  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'>,
 ): Promise<void> {
   await guardUnconfiguredProvider(config, runExitCleanup, manager);
 }
 
+async function prepareForegroundPreflight(
+  argv: ParsedCliArgs,
+  authority: CredentialAuthority,
+  providerContributions: Awaited<
+    ReturnType<typeof discoverCliProviderContributions>
+  >['providerContributions'],
+): Promise<AgentProfilePreflight> {
+  const parsed = parseBootstrapArgs();
+  const preflight = await prepareRuntimeForProfile(
+    {
+      ...parsed,
+      runtimeMetadata: {
+        ...parsed.runtimeMetadata,
+        proxy: resolveProxy(argv.proxy),
+      },
+    },
+    authority,
+    undefined,
+    undefined,
+    providerContributions,
+  );
+  return preflight;
+}
+
+async function handleSandboxHop(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  workspaceRoot: string,
+  preflight: AgentProfilePreflight,
+  authority: CredentialAuthority,
+  authFailed: boolean,
+  readStdinOnce: () => Promise<string>,
+  hasPipedInput: boolean,
+  bootstrapSelection: Parameters<
+    typeof maybeHopIntoSandbox
+  >[0]['bootstrapSelection'],
+): Promise<void> {
+  await maybeHopIntoSandbox({
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    prepareSandboxPreflight: () => preflight.forkSandboxPreflight(),
+    credentialAuthority: authority,
+    initialAuthFailed: authFailed,
+    readStdin: readStdinOnce,
+    hasPipedInput,
+    bootstrapSelection,
+  });
+}
+
+async function activateForegroundProvider(
+  config: Config,
+  argv: ParsedCliArgs,
+  preflight: AgentProfilePreflight,
+): Promise<ConfiguredProviderActivationResult> {
+  await stopIfUnconfigured(config, preflight);
+  return activateConfiguredProvider(config, preflight, argv, preflight);
+}
+
+async function prepareConfiguredTerminalSession(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  readProfile: () => string | null,
+  loadProfile: AgentProfilePreflight['load'],
+): Promise<void> {
+  await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
+  await rejectPromptInteractiveWithPipedStdin(argv);
+  await prepareTerminalSession(config, settings, argv);
+  await configureProvidersAndServices(
+    config,
+    settings,
+    argv,
+    readProfile,
+    loadProfile,
+  );
+}
+
 export async function main() {
-  // Capture and scrub LLXPRT_JSP_BOOTSTRAP_FILE before any child-capable
-  // startup. No file I/O; resolved later, validated at observation setup.
   const capturedEnvPath = captureBootstrapEnvPath();
-
   configureEarlyDebugLogging();
-
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
   const { cleanupStdio, workspaceRoot, settings, argv, credentialOwner } =
@@ -685,26 +717,32 @@ export async function main() {
     await prepareValidatedStartup(argv, capturedEnvPath, settings);
 
   const authority = credentialOwner.authority;
-  const boot = await bootstrap(settings, argv, workspaceRoot, authority);
-  const { config, activationOperation } = boot;
+  const { providerContributions, authFactories } =
+    await discoverCliProviderContributions();
+  const preflight = await prepareForegroundPreflight(
+    argv,
+    authority,
+    providerContributions,
+  );
+  const config = await bootstrap(
+    settings,
+    argv,
+    workspaceRoot,
+    authority,
+    preflight,
+  );
+  let preflightHandedOff = false;
 
   try {
-    await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
-    await rejectPromptInteractiveWithPipedStdin(argv);
-
-    await prepareTerminalSession(config, settings, argv);
-
-    const providerManager = await configureProvidersAndServices(
+    await prepareConfiguredTerminalSession(
       config,
       settings,
       argv,
-      boot.runtimeSettingsService,
-      boot.profileApplication,
-      boot.providerManager,
+      () => preflight.getCurrentProfileName(),
+      (name) => preflight.load(name),
     );
 
-    const listing = config.getListExtensions();
-    await exitAfterExtensionList(listing, activationOperation);
+    await exitAfterExtensionList(config.getListExtensions(), preflight);
 
     // ACP/Zed runs its own runtime and constructs per-session Agents via
     // fromConfig internally; it must be handled BEFORE the general
@@ -713,8 +751,9 @@ export async function main() {
       await handleActivatedZedIntegration(
         config,
         cleanupStdio,
-        boot,
-        providerManager,
+        preflight,
+        providerContributions,
+        authority,
       )
     )
       return;
@@ -723,39 +762,29 @@ export async function main() {
     // BEFORE any provider activation or Agent construction when no provider is
     // active and we are NOT in interactive mode. Uses the shared
     // guardUnconfiguredProvider helper (single message, single exit code).
-    await stopIfUnconfigured(config, providerManager);
-
-    // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378).
-    const providerActivation = await activateConfiguredProvider(
+    const providerActivation = await activateForegroundProvider(
       config,
-      providerManager,
       argv,
-      activationOperation,
+      preflight,
     );
     // hop into sandbox if outside and sandboxing is enabled
-    await maybeHopIntoSandbox({
+    await handleSandboxHop(
       config,
       settings,
       argv,
       workspaceRoot,
-      runtimeSettingsService: boot.runtimeSettingsService,
-      credentialAuthority: boot.credentialAuthority,
-      initialAuthFailed: providerActivation.authFailed,
-      readStdin: readStdinOnce,
+      preflight,
+      authority,
+      providerActivation.authFailed,
+      readStdinOnce,
       hasPipedInput,
       bootstrapSelection,
-    });
+    );
 
-    await exitIfAuthenticationFailed(providerActivation.authFailed);
-
-    // Direct image mode: detect after config/auth but BEFORE conversational
-    // dispatch. Image mode runs the image-operation service directly and exits.
-    await exitIfDirectImage(argv, activationOperation.sessionClient);
+    await exitBeforeAgent(providerActivation.authFailed, argv, preflight);
 
     // Cleanup sessions before agent construction.
-    await cleanupExpiredSessions(config, settings.merged, undefined, () =>
-      activationOperation.sessionClient.getAgentClient().getHistory(),
-    );
+    await cleanupForegroundSessions(config, settings, preflight);
 
     await new ForegroundSessionHost(
       config,
@@ -763,21 +792,27 @@ export async function main() {
       argv,
       workspaceRoot,
       providerActivation,
+      preflight,
       hasPipedInput,
       readStdinOnce,
       bootstrapSelection,
-      boot.getMcpAuthProviderFactory,
-      boot.providerManager,
-      boot.runtimeSettingsService,
-      boot.runtimeSettingsOwner,
-      boot.policyOwner,
-      boot.oauthManager,
-      boot.providerFileLifecycle,
-      boot.credentialAuthority,
+      (type) => authFactories.getAuthProviderFactory(type),
+      authority,
     ).run();
+    preflightHandedOff = true;
   } finally {
-    await activationOperation.dispose();
+    if (!preflightHandedOff) await preflight.dispose();
   }
+}
+
+function cleanupForegroundSessions(
+  config: Config,
+  settings: LoadedSettings,
+  preflight: AgentProfilePreflight,
+): ReturnType<typeof cleanupExpiredSessions> {
+  return cleanupExpiredSessions(config, settings.merged, undefined, () =>
+    preflight.captureHistory(),
+  );
 }
 
 async function exitAfterExtensionList(
@@ -805,21 +840,28 @@ async function prepareValidatedStartup(
 async function handleActivatedZedIntegration(
   config: Config,
   cleanupStdio: () => void,
-  boot: RuntimeConfigBootstrap,
-  providerManager: RuntimeProviderManager,
+  preflight: AgentProfilePreflight,
+  providerContributions: ProviderContributionRegistry,
+  credentialAuthority: CredentialAuthority,
 ): Promise<boolean> {
-  const { activationOperation } = boot;
-  return handleZedAcpIntegration(
-    config,
-    cleanupStdio,
-    boot.profileApplication,
-    providerManager,
-    boot.runtimeSettingsService,
-    activationOperation.workspaceDefinitions.profileReads,
-    activationOperation.workspaceTrust,
-    boot.providerContributions,
-    boot.credentialAuthority,
-  );
+  if (!config.getExperimentalZedIntegration()) return false;
+  cleanupStdio();
+  ensureAcpProviderActivated(config, preflight);
+  await runZedIntegration(config, preflight, {
+    profileDefinitions: { listProfiles: () => preflight.listProfiles() },
+    trustPort: preflight,
+    onExitCleanup: runExitCleanup,
+    providerInputs: createZedProviderInputs(
+      providerContributions,
+      credentialAuthority,
+    ),
+    createSessionSettings: () => {
+      const session = new SettingsService();
+      session.restoreFromStateSnapshot(preflight.captureSettingsSnapshot());
+      return session;
+    },
+  });
+  return true;
 }
 
 async function prepareCliStartupInput(capturedEnvPath: string | undefined) {
@@ -830,4 +872,13 @@ async function prepareCliStartupInput(capturedEnvPath: string | undefined) {
   await maybeRelaunchForMemory(settings, capturedEnvPath);
   const argv = await parseArguments(settings.merged);
   return { cleanupStdio, workspaceRoot, settings, argv, credentialOwner };
+}
+
+async function exitBeforeAgent(
+  authFailed: boolean,
+  argv: Parameters<typeof exitIfDirectImage>[0],
+  preflight: Parameters<typeof exitIfDirectImage>[1],
+): Promise<void> {
+  await exitIfAuthenticationFailed(authFailed);
+  await exitIfDirectImage(argv, preflight);
 }

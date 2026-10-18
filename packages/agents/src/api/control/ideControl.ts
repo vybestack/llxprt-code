@@ -18,21 +18,12 @@ import {
   type FakeIdeFixtureEntry,
 } from '@vybestack/llxprt-code-ide-integration';
 
-/**
- * Callback bundle injected by AgentImpl so IdeControl can read the live IDE
- * mode flag and fire the SHARED editor callbacks (the same holder
- * `tools.setEditorCallbacks` writes).
- *
- * @plan:PLAN-20260617-COREAPI.P22
- * @requirement:REQ-014
- */
-export interface IdeControlDeps {
-  readonly trust: WorkspaceTrustControlPort;
-  readonly ide: WorkspaceIdePort;
-  /** True when IDE mode is enabled in the agent's Config. */
-  readonly ideModeEnabled: () => boolean;
-  /** Reads the current shared editor-callbacks bundle (live, not snapshotted). */
-  readonly getEditorCallbacks: () => EditorCallbacks;
+export function assembleIdeControl(
+  trust: WorkspaceTrustControlPort,
+  ide: WorkspaceIdePort,
+  getEditorCallbacks: () => EditorCallbacks,
+): IdeControl {
+  return new IdeControl(trust, ide, () => ide.isEnabled(), getEditorCallbacks);
 }
 
 /** Maps a fake-fixture entry onto the public IdeInfo shape. */
@@ -45,34 +36,39 @@ function toIdeInfo(entry: FakeIdeFixtureEntry): IdeInfo {
 }
 
 export class IdeControl implements AgentIdeControl {
-  constructor(private readonly deps: IdeControlDeps) {}
+  constructor(
+    private readonly trustOwner: WorkspaceTrustControlPort,
+    private readonly ideOwner: WorkspaceIdePort,
+    private readonly readModeEnabled: () => boolean,
+    private readonly readEditorCallbacks: () => EditorCallbacks,
+  ) {}
 
   isTrustedFolder(): boolean {
-    return this.deps.trust.isTrustedFolder();
+    return this.trustOwner.isTrustedFolder();
   }
   getIdeTrust(): boolean | undefined {
-    return this.deps.trust.getIdeTrust();
+    return this.trustOwner.getIdeTrust();
   }
   setTrustedFolderLive(trusted: boolean): Promise<void> {
-    return this.deps.trust.setTrustedFolderLive(trusted);
+    return this.trustOwner.setTrustedFolderLive(trusted);
   }
   whenTrustTransitionSettled(): Promise<void> {
-    return this.deps.trust.whenSettled();
+    return this.trustOwner.whenSettled();
   }
   getIdeClient() {
-    return this.deps.ide.getClient();
+    return this.ideOwner.getClient();
   }
   getIdeMode(): boolean {
-    return this.deps.ide.isEnabled();
+    return this.ideOwner.isEnabled();
   }
   setIdeMode(enabled: boolean): void {
-    this.deps.ide.setEnabled(enabled);
+    this.ideOwner.setEnabled(enabled);
   }
   async setIdeClientConnected(): Promise<void> {
-    await this.deps.ide.getClient()?.connect();
+    await this.ideOwner.getClient()?.connect();
   }
   async setIdeClientDisconnected(): Promise<void> {
-    await this.deps.ide.getClient()?.disconnect();
+    await this.ideOwner.getClient()?.disconnect();
   }
 
   /**
@@ -131,17 +127,17 @@ export class IdeControl implements AgentIdeControl {
     return {
       current: this.current(),
       detected: this.detected(),
-      modeEnabled: this.deps.ideModeEnabled(),
+      modeEnabled: this.readModeEnabled(),
     };
   }
 
   async openEditor(): Promise<void> {
-    const callbacks = this.deps.getEditorCallbacks();
+    const callbacks = this.readEditorCallbacks();
     callbacks.onEditorOpen?.();
   }
 
   async closeEditor(): Promise<void> {
-    const callbacks = this.deps.getEditorCallbacks();
+    const callbacks = this.readEditorCallbacks();
     callbacks.onEditorClose?.();
   }
 }

@@ -202,18 +202,24 @@ describe('MCP scheduler approval isolation', () => {
         config,
       );
       runtimes.push(runtime);
-      const agent = await fromConfig({
-        ...createSessionSettingsFixture(config),
+      const adoptedSettings1 = createSessionSettingsFixture(config);
+      const agent = await fromConfig(
         config,
-        mcpRuntime: runtime,
-        mcpOwnership: 'caller',
-        messageBus: runtime.messageBus,
-        activation: {
-          provider: 'openai',
-          model: 'scheduler-fixture',
-          cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
+        adoptedSettings1.settingsService,
+        {
+          activation: {
+            provider: 'openai',
+            model: 'scheduler-fixture',
+            cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
+          },
+          mcpOwnership: 'caller',
         },
-      });
+        adoptedSettings1.settingsOwner,
+        undefined,
+        undefined,
+        runtime.messageBus,
+        runtime,
+      );
 
       agents.push(agent);
       expect(Array.from(await runtime.awaitDiscovery())).toStrictEqual([]);

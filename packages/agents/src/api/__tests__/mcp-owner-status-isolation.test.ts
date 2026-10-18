@@ -279,17 +279,22 @@ describe('MCP public owner status isolation', () => {
         const resources = builtCallerMcp.findResource(
           'same:fixture:///counter',
         );
-        const agent = await fromConfig({
-          settingsOwner: builtCallerSettingsOwner,
-          settingsService: builtCallerSettings,
-          agentClient: builtCallerOwner.getAgentClient(),
-          providerManager: builtCallerManager,
-          runtimeFactoryBindings: builtCallerFactories,
-          config: builtCallerConfig,
-          mcpRuntime: builtCallerMcp,
-          mcpOwnership: 'caller',
-          messageBus: builtCallerPolicy.session.messageBus,
-        });
+        const agent = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { mcpOwnership: 'caller' },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          builtCallerOwner.getAgentClient(),
+          undefined,
+          undefined,
+          undefined,
+          builtCallerFactories,
+        );
 
         agents.push(agent);
         expect(agent.getMessageBus()).toBe(

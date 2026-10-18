@@ -166,23 +166,31 @@ describe('MCP instruction ownership', () => {
       );
       const settingsRoot = createSessionSettingsFixture(config);
       const tokenizerFactory = createRuntimeTokenizerFactory();
-      const agent = await fromConfig({
+      const agent = await fromConfig(
+        config,
+        settingsRoot.settingsService,
+        {
+          sessionId: 'same-instruction-session',
+          activation: {
+            provider: 'openai',
+            model: 'instruction-model',
+            cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
+          },
+        },
+        settingsRoot.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        mcp,
+        undefined,
+        undefined,
+        undefined,
         tokenizerFactory,
-        contentGeneratorFactory: {
+        {
           createContentGenerator: () =>
             auxiliaryTransport ?? new ProviderContentGenerator(),
         },
-        settingsOwner: settingsRoot.settingsOwner,
-        settingsService: settingsRoot.settingsService,
-        config,
-        mcpRuntime: mcp,
-        sessionId: 'same-instruction-session',
-        activation: {
-          provider: 'openai',
-          model: 'instruction-model',
-          cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
-        },
-      });
+      );
 
       Object.defineProperty(config, 'getMcpInstructions', {
         value: () => {

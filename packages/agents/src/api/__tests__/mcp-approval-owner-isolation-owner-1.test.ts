@@ -333,17 +333,22 @@ describe('MCP saved approval lifetime', () => {
       builtCallerMcp.policyOwner.session.confirmation.removeRulesBySource(
         CONFIRMATION_FORCING_SOURCE,
       );
-      agent = await fromConfig({
-        settingsOwner: builtCallerSettingsOwner,
-        settingsService: builtCallerSettings,
-        agentClient: builtCallerOwner.getAgentClient(),
-        providerManager: builtCallerManager,
-        runtimeFactoryBindings: builtCallerFactories,
-        config: builtCallerConfig,
-        mcpRuntime: builtCallerMcp,
-        mcpOwnership: 'caller',
-        messageBus: builtCallerPolicy.session.messageBus,
-      });
+      agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        { mcpOwnership: 'caller' },
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        undefined,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        builtCallerOwner.getAgentClient(),
+        undefined,
+        undefined,
+        undefined,
+        builtCallerFactories,
+      );
       const details = await tool(agent, server, 'increment')
         .build({})
         .shouldConfirmExecute(new AbortController().signal);

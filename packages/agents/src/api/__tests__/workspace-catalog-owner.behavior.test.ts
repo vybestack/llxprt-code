@@ -343,14 +343,18 @@ describe('workspace catalog ownership through public Agent operations', () => {
 
   it('withdraws physical prompt and resource declarations while trust is revoked', async () => {
     await openfixture();
-    const agent = await fromConfig({
-      settingsOwner: fixtureCallerSettingsOwner,
-      settingsService: fixtureCallerSettings,
-      config: fixtureCallerConfig,
-      agentClient: fixtureCallerOwner.getAgentClient(),
-      providerManager: fixtureCallerManager,
-      mcpRuntime: fixtureCallerMcp,
-    });
+    const agent = await fromConfig(
+      fixtureCallerConfig,
+      fixtureCallerSettings,
+      {},
+      fixtureCallerSettingsOwner,
+      fixtureCallerManager,
+      undefined,
+      undefined,
+      fixtureCallerMcp,
+      undefined,
+      fixtureCallerOwner.getAgentClient(),
+    );
     try {
       const visible = await agent.mcp.details({
         includePrompts: true,

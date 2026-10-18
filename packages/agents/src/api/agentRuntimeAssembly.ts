@@ -1,51 +1,72 @@
-import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
-import { runCleanupSteps } from '../core/subagent-cleanup.js';
+import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
 import {
-  ChildAgentAssembly,
-  type ChildAgentLaunch,
-} from './child-agent-assembly.js';
-import type {
-  ProfileDefinitionReads,
-  SubagentDefinitionReads,
-  WorkspaceTrustControlPort,
-} from '@vybestack/llxprt-code-core';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { SubAgentScope } from '../core/subagent.js';
-import type { SubagentLaunchResult } from '../core/subagentOrchestrator.js';
+  createAgentAuthState,
+  type AgentAuthState,
+} from './control/authState.js';
+import type { McpControl } from './control/mcpControl.js';
+import { WorkspaceControl } from './control/workspaceControl.js';
+import { assembleIdeControl } from './control/ideControl.js';
+import { LspControl } from './control/lspControl.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import { runCleanupSteps } from '../core/subagent-cleanup.js';
+import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import { withChildToolDisplay } from '../session/childToolAssembly.js';
+import { ChildToolDisplay } from '../session/childToolDisplay.js';
+import { cleanupProviderScope } from '../session/session-client-cleanup.js';
+import { ShellJobOwner } from '../session/shell-job-owner.js';
+import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
+import {
+  assembleTaskOwner,
+  cleanupFailedShellBootstrap,
+} from './agent-shell-assembly.js';
+import {
+  buildFacadeState,
+  createStableDisplayCallbacks,
+  recordOwnership,
+  wrapApprovalHandler,
+  type StableDisplayCallbacksHolder,
+  type StableEditorCallbacksHolder,
+} from './agentBootstrap.js';
+import { AgentImpl } from './agentImpl.js';
+import type { AgentAuth } from './config-types.js';
+import {
+  assembleSessionAuthentication,
+  clearProviderAuthenticationCache,
+} from './control/session-authentication.js';
+import { assembleModelSelection } from './model-selection.js';
+import { setActiveModel } from './providerMutations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { TokenStore } from '@vybestack/llxprt-code-auth';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  acquirePreferredSettings,
-  acquirePreferredFiles,
-  preparePreferredProviderCompletion,
-} from './preferred-provider-acquisition.js';
 import type { ParsedAgentConfig } from './config-schema.js';
 import type { AgentConfig } from './config-types.js';
+import {
+  acquirePreferredFiles,
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  acquirePreferredSettings,
+  preparePreferredProviderCompletion,
+} from './preferred-provider-acquisition.js';
 import type { AgentRetainedProviderFile } from './provider-file-domain.js';
 
+import type { MessageBus } from '@vybestack/llxprt-code-core';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import {
   assembleSessionImages,
   type SessionImageSelection,
 } from './session-image-assembly.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 import { SessionClientOwner } from '../session/session-client-owner.js';
 
@@ -61,71 +82,59 @@ import { SessionClientOwner } from '../session/session-client-owner.js';
  * module-global state.
  */
 
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type {
+  AgentRuntimeFactoryBindings,
+  ContentGenerator,
+  RuntimeContentGeneratorFactory,
+  RuntimeProviderManager,
+  RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { buildAgentClientFactory } from './agentBootstrap.js';
-import type { resolveAuthType } from './agentBootstrap.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  agentMcpAssemblyOptions,
+  parseAgentConstruction,
+} from './agent-construction-input.js';
 import type { Agent } from './agent.js';
+import type { resolveAuthType } from './agentBootstrap.js';
+import { buildAgentClientFactory } from './agentBootstrap.js';
+import type { AgentSchedulerHandle, EditorCallbacks } from './config-types.js';
+import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
+import type { CreatedAgentMcpOptions } from './createAgent.js';
 import {
   activateCreatedSession,
   cleanupFailedCreatedAgent,
-  finalizeAgent,
   initializeCreatedClient,
   prepareAgentConfig,
   resolveSchedulerFactory,
   startAgentSession,
 } from './createAgent.js';
-import type { CreatedAgentMcpOptions } from './createAgent.js';
-import { createTaskRegistration } from './runtimeFactories.js';
+import {
+  assembleHostGitHubBroker,
+  type HostGitHubBrokerOwner,
+} from './host-github-broker-owner.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import {
   assembleOwnedMcpRuntime,
   bindCreatedSessionClient,
 } from './policyComposition.js';
-import type {
-  AgentRuntimeFactoryBindings,
-  RuntimeProviderManager,
-  RuntimeContentGeneratorFactory,
-  RuntimeTokenizerFactory,
-  ContentGenerator,
-} from '@vybestack/llxprt-code-core';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { EditorCallbacks, AgentSchedulerHandle } from './config-types.js';
-import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
-import type {
-  OAuthManager,
-  CredentialAuthority,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { releaseAdoptedFileScope } from './adoption-release.js';
-import {
-  acquireAdoptedProviderManager,
-  acquireAdoptedOAuth,
-  activateAdoptedProviders,
-} from './adopted-provider-assembly.js';
-import { completeAdoptedAgent } from './adopted-agent-completion.js';
-import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
-import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
-import type { FromConfigOptions } from './config-types.js';
-import {
-  assembleHostGitHubBroker,
-  type HostGitHubBrokerOwner,
-} from './host-github-broker-owner.js';
-import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import { createTaskRegistration } from './runtimeFactories.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
-import {
-  parseAgentConstruction,
-  agentMcpAssemblyOptions,
-} from './agent-construction-input.js';
-import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
 
 /**
  * Extra teardown context for {@link cleanupFailedRuntimeBootstrap} beyond the
@@ -257,7 +266,7 @@ export async function createIsolatedSessionClient(
     (scope) =>
       scope === mainScope
         ? Promise.resolve()
-        : SessionClientOwner.cleanupProviderScope(providerFileLifecycle, scope),
+        : cleanupProviderScope(providerFileLifecycle, scope),
   );
   return client;
 }
@@ -273,146 +282,6 @@ export function closeIsolatedSessionRuntime(
     closeConfig,
     closeMedia,
     closeClient,
-  );
-}
-
-export function assembleAdoptedAgent(
-  options: FromConfigOptions,
-  github: HostGitHubBrokerOwner | undefined,
-  runtimeId: string,
-  mcp: McpRuntimeOwner,
-  media: SessionMediaOwner | undefined,
-): Promise<Agent> {
-  const release = new AcquisitionRelease();
-  const preflight = options.activationPreflight?.operation;
-  try {
-    const authority = options.credentialAuthority;
-    if (authority === undefined)
-      throw new Error('Adoption requires captured credential authority');
-    const transferred = preflight?.takeSettingsOwner(options.settingsService);
-    const settingsOwner =
-      transferred ??
-      options.settingsOwner ??
-      new SessionSettingsOwner(options.settingsService);
-    if (
-      (transferred !== undefined &&
-        preflight?.settingsOwnerOwnership === 'transferred') ||
-      (transferred === undefined && options.settingsOwner === undefined)
-    )
-      release.acquire('settings', () => settingsOwner.dispose());
-    settingsOwner.bindTelemetry(options.config);
-    const files =
-      options.providerFileLifecycle ??
-      preflight?.providerFileLifecycle ??
-      new ProviderFileLifecycle({ maxFiles: 100, maxBytes: 512 * 1024 * 1024 });
-    const clientScope = options.config.getSessionId();
-    for (const scope of runtimeId === clientScope
-      ? [clientScope]
-      : [runtimeId, clientScope])
-      release.acquire('files', () => releaseAdoptedFileScope(files, scope));
-    const manager = acquireAdoptedProviderManager(
-      options.providerManager,
-      options.config,
-      options.settingsService,
-      settingsOwner,
-      files,
-      runtimeId,
-      authority,
-      release,
-    );
-    return finishAdoptionAssembly(
-      options,
-      github,
-      runtimeId,
-      mcp,
-      media,
-      settingsOwner,
-      files,
-      manager,
-      release,
-      authority,
-    );
-  } catch (primary) {
-    return cleanupFailedAdoption(
-      primary,
-      () => release.rollback(),
-      adoptedDefinitionCleanup(
-        mcp,
-        options.definitionOwner,
-        options.definitionOwnership,
-        (options.mcpOwnership ??
-          (options.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent',
-      ),
-      media === undefined ? undefined : () => media.dispose(),
-      undefined,
-    );
-  }
-}
-
-function finishAdoptionAssembly(
-  options: FromConfigOptions,
-  github: HostGitHubBrokerOwner | undefined,
-  runtimeId: string,
-  mcp: McpRuntimeOwner,
-  media: SessionMediaOwner | undefined,
-  settingsOwner: SessionSettingsOwner,
-  files: ProviderFileLifecycle,
-  manager: RuntimeProviderManager,
-  release: AcquisitionRelease,
-  authority: CredentialAuthority,
-): Promise<Agent> {
-  const preflight = options.activationPreflight?.operation;
-  const tokenizerFactory = configureProviderTokenizer(
-    manager,
-    options.tokenizerFactory ?? preflight?.tokenizerFactory,
-  );
-  const contentGeneratorFactory =
-    options.contentGeneratorFactory ??
-    preflight?.contentGeneratorFactory ??
-    createRuntimeContentGeneratorFactory();
-  const oauth = acquireAdoptedOAuth(
-    options.oauthManager ?? preflight?.oauthManager,
-    options.tokenStore,
-    mcp.messageBus,
-    options.config,
-    options.settingsService,
-    manager,
-    runtimeId,
-    options.definitionOwner?.profileReads ??
-      preflight?.workspaceDefinitions.profileReads ??
-      options.mcpRuntime?.profileDefinitions,
-    authority,
-    release,
-  );
-  return completeAdoptedAgent(
-    options,
-    github,
-    runtimeId,
-    mcp,
-    media,
-    settingsOwner,
-    manager,
-    oauth,
-    files,
-    tokenizerFactory,
-    contentGeneratorFactory,
-    () =>
-      activateAdoptedProviders(
-        options.config,
-        options.settingsService,
-        settingsOwner,
-        manager,
-        oauth,
-        runtimeId,
-        options.providerManager === undefined,
-        tokenizerFactory,
-      ),
-    () => release.close(),
-    options.policyOwner === undefined && options.mcpRuntime !== undefined
-      ? undefined
-      : options.messageBus,
-    (options.mcpOwnership ??
-      (options.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent',
   );
 }
 
@@ -473,8 +342,8 @@ export class PreferredAgentAssembly {
       this.rawConfig.credentialAuthority ??
       new HostCredentialOwner(process.env).authority;
     const images = prepareImageConstruction(this.rawConfig.imageOperation);
-    this.github = assembleHostGitHubBroker(this.rawConfig);
     try {
+      this.github = assembleHostGitHubBroker(this.rawConfig);
       const input = {
         ...this.rawConfig,
         credentialAuthority: authority,
@@ -755,32 +624,181 @@ export class PreferredAgentAssembly {
       mcpRuntime,
       ownedSessionClient,
     );
-    const agent = await finalizeAgent(
+    const agent = await this.#acquireFacade(
       { ...this.parsed, ...activationOutcome },
-      this.resolvedAuth,
-      this.config,
-      manager,
-      oauth,
-      settings,
-      this.runtimeId,
-      settingsOwner,
-      (): RuntimeKind => 'agent',
-      () => this.releaseProviders(),
-      this.onApproval,
-      this.onOAuthPrompt,
-      this.editorCallbacks,
+      this.resolvedAuth.baseUrl,
       this.schedulerHandles,
-      'agent',
-      () => mcpRuntime.dispose(),
-      mcpRuntime,
       this.schedulerFactory,
-      undefined,
-      'config',
-      this.mediaOwner,
-      ownedSessionClient,
-      mcpRuntime.workspaceSkills.operations,
     );
     this.agent = await startAgentSession(agent);
+  }
+
+  async #acquireFacade(
+    parsed: Parameters<typeof buildFacadeState>[0] & {
+      readonly auth?: AgentAuth;
+    },
+    baseUrl: string | undefined,
+    handles: AgentSchedulerHandle[],
+    scheduler: SchedulerConstruction | undefined,
+  ): Promise<Agent> {
+    if (this.sessionClient === undefined)
+      throw new Error('Preferred Agent client was not acquired');
+    const tasks = assembleTaskOwner(this.settings, undefined);
+    const shell = new ShellJobOwner(() =>
+      resolveShellJobSettings(this.settings),
+    );
+    const child = new ChildToolDisplay();
+    const display: StableDisplayCallbacksHolder = {};
+    try {
+      const editors = { editorCallbacks: this.editorCallbacks ?? {} };
+      this.sessionClient.initializeExecution(
+        withChildToolDisplay(
+          scheduler ?? ((options) => new CoreToolScheduler(options)),
+          child,
+          tasks,
+          shell,
+        ),
+        this.onApproval ? wrapApprovalHandler(this.onApproval) : undefined,
+        createStableDisplayCallbacks(editors, display),
+      );
+      return this.#constructFacade(
+        parsed,
+        baseUrl,
+        handles,
+        tasks,
+        shell,
+        child,
+        editors,
+        display,
+      );
+    } catch (primary) {
+      return cleanupFailedShellBootstrap(primary, tasks, shell);
+    }
+  }
+  #constructMcpControl(auth: AgentAuthState): McpControl {
+    if (this.sessionClient === undefined)
+      throw new Error('Preferred Agent client was not acquired');
+    return buildOwnedMcpControl(
+      (...args) => this.mcpRuntime.readServerSettings(...args),
+      this.sessionClient.toolCatalog.selection,
+      (...args) => this.mcpRuntime.listPrompts(...args),
+      (...args) => this.mcpRuntime.listResources(...args),
+      (...args) => this.mcpRuntime.readOAuthCredentials(...args),
+      (...args) => this.mcpRuntime.performOAuth(...args),
+      (...args) => this.mcpRuntime.status(...args),
+      (...args) => this.mcpRuntime.refresh(...args),
+      (...args) => this.mcpRuntime.reload(...args),
+      (server) => auth.mcpAuth.has(server),
+      (server) => auth.mcpAuth.add(server),
+      () => this.#refreshClientTools(),
+      (...args) => this.mcpRuntime.subscribeStatus(...args),
+      (...args) => this.mcpRuntime.findResource(...args),
+      (...args) => this.mcpRuntime.readResource(...args),
+    );
+  }
+  #refreshClientTools(): Promise<void> {
+    if (this.sessionClient === undefined)
+      throw new Error('Preferred Agent client was not acquired');
+    return this.sessionClient.getAgentClient().setTools();
+  }
+  async #selectModel(model: string): Promise<void> {
+    await setActiveModel(
+      model,
+      assembleModelSelection(this.settingsOwner),
+      this.settings,
+      this.manager.getActiveProvider(),
+    );
+  }
+  #authentication(): Agent['authentication'] {
+    return assembleSessionAuthentication(this.oauth, (provider) =>
+      clearProviderAuthenticationCache(
+        this.manager.getProviderByName(provider),
+      ),
+    );
+  }
+  #constructWorkspace(): WorkspaceControl {
+    return new WorkspaceControl(
+      this.mcpRuntime.profileDefinitions,
+      this.mcpRuntime.profileWrites,
+      this.mcpRuntime.subagentDefinitions,
+      this.mcpRuntime.subagentWrites,
+      this.mcpRuntime.checkpointOperations,
+      this.mcpRuntime.workspaceIgnore,
+      this.mcpRuntime.workspaceSearch,
+      this.mcpRuntime.workspaceFiles,
+      this.mcpRuntime.workspacePaths.contains,
+      this.mcpRuntime.workspacePaths.directories,
+      this.mcpRuntime.addWorkspaceDirectory,
+      this.config.getTargetDir(),
+      this.config.getProjectRoot(),
+    );
+  }
+  #constructFacade(
+    parsed: Parameters<typeof buildFacadeState>[0] & {
+      readonly auth?: AgentAuth;
+    },
+    baseUrl: string | undefined,
+    handles: AgentSchedulerHandle[],
+    tasks: TaskLaunchOwner,
+    shell: ShellJobOwner,
+    child: ChildToolDisplay,
+    editors: StableEditorCallbacksHolder,
+    display: StableDisplayCallbacksHolder,
+  ): Agent {
+    if (this.sessionClient === undefined)
+      throw new Error('Preferred Agent client was not acquired');
+    const runtimeState = buildFacadeState(parsed, baseUrl, this.runtimeId);
+    const ownership = recordOwnership({
+      runtimeHandle: { cleanup: () => this.releaseProviders() },
+      injectedSchedulerHandles: handles,
+      configOwnership: 'agent',
+      disposeMcpRuntime: () => this.mcpRuntime.dispose(),
+    });
+    const history =
+      this.sessionClient.getAgentClient().getHistoryService() ??
+      new HistoryService();
+    this.sessionClient.getAgentClient().storeHistoryServiceForReuse(history);
+    const auth = createAgentAuthState();
+    return new AgentImpl(
+      this.settingsOwner,
+      this.sessionClient,
+      this.mcpRuntime.workspaceSkills.operations,
+      undefined,
+      this.mediaOwner,
+      tasks,
+      shell,
+      this.#constructWorkspace(),
+      assembleIdeControl(
+        this.mcpRuntime.trust,
+        this.mcpRuntime.ide,
+        () => editors.editorCallbacks,
+      ),
+      new LspControl(this.mcpRuntime.lspInspection),
+      (...args) => this.mcpRuntime.awaitDiscovery(...args),
+      (...args) => this.mcpRuntime.closeAdmission(...args),
+      this.#constructMcpControl(auth),
+      auth,
+      this.config,
+      this.manager,
+      this.oauth,
+      () => 'agent',
+      this.settings,
+      this.runtimeId,
+      () => this.releaseProviders(),
+      this.sessionClient.messageBus,
+      runtimeState,
+      ownership,
+      'config',
+      this.sessionClient.getAgentClient.bind(this.sessionClient),
+      history,
+      editors,
+      display,
+      this.onOAuthPrompt,
+      parsed.auth,
+      child,
+      (model) => this.#selectModel(model),
+      this.#authentication(),
+    );
   }
 }
 
@@ -802,49 +820,4 @@ async function rejectPreferredAcquisition(
       'Preferred Agent acquisition cleanup failed',
     );
   throw primary;
-}
-
-export function assembleChildAgent(
-  data: ChildAgentLaunch,
-  authority: CredentialAuthority,
-  messageBus: MessageBus,
-  requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
-  profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
-  subagentReads: Pick<
-    SubagentDefinitionReads,
-    'loadSubagent' | 'listSubagents'
-  >,
-  telemetry: RootTelemetry | undefined,
-  createChildSettings: () => SettingsService,
-  foregroundConfig: Config,
-  instructions: InstructionReadOperations,
-  workspacePaths: WorkspacePathOperations,
-  readMcpInstructions: () => string | undefined,
-  trust: WorkspaceTrustControlPort | undefined,
-  tools: ToolSelection | undefined,
-  hooks: SessionHookOwner | undefined,
-  clientFactory: AgentClientFactory | undefined,
-  runtimeLoader: typeof loadAgentRuntime,
-  scopeFactory: typeof SubAgentScope.create,
-): Promise<SubagentLaunchResult> {
-  return new ChildAgentAssembly(
-    data,
-    authority,
-    messageBus,
-    requestInteractiveAuth,
-    profileReads,
-    subagentReads,
-    telemetry,
-    createChildSettings,
-    foregroundConfig,
-    instructions,
-    workspacePaths,
-    readMcpInstructions,
-    trust,
-    tools,
-    hooks,
-    clientFactory,
-    runtimeLoader,
-    scopeFactory,
-  ).assemble();
 }

@@ -1,3 +1,4 @@
+import { recordToolCompletions } from '../../session/record-tool-completions.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,13 +28,10 @@ import {
   type AgentEvent,
 } from './helpers/agentHarness.js';
 import { ToolControl } from '../control/toolControl.js';
-import type { ToolControlDeps } from '../control/toolControl.js';
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
-/** Builds a ToolControl with a mock resolveClient returning a recording client. */
+/** Builds a ToolControl using the real session persistence operation. */
 function createToolControlWithRecordingClient(options: {
   sequenceModel: string | null;
   configModel: string;
@@ -66,23 +64,12 @@ function createToolControlWithRecordingClient(options: {
     options.sequenceModel,
   );
 
-  const config = {
-    getModel: () => options.configModel,
-  } as unknown as ToolControlDeps['config'];
-
-  const deps: ToolControlDeps = {
-    ...createToolControlDeps().deps,
-    describeConfiguration: () => ({ registered: [], unregistered: [] }),
-    messageBus: new MessageBus(),
-    config,
-    editorCallbacksHolder: { editorCallbacks: {} },
-    displayCallbacksHolder: {},
-    resolveClient: () => currentClient,
-    keysDeps: { getStorage: () => getToolKeyStorage() },
-  };
+  const toolControl = createToolControlDeps([], (calls) =>
+    recordToolCompletions(currentClient, () => options.configModel, calls),
+  ).control;
 
   return {
-    toolControl: new ToolControl(deps),
+    toolControl,
     recordedCalls,
     setClient: (client: AgentClientContract) => {
       currentClient = client;
@@ -121,6 +108,38 @@ const SAMPLE_COMPLETED: CompletedToolCall[] = [
 ];
 
 describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Phase A changes 4 + 5)', () => {
+  it('persists tool completions through a public model replacement without exposing either client', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      await drain(agent.stream('initialize history'));
+      agent.tools.recordCompletedToolCalls(SAMPLE_COMPLETED);
+      expect(JSON.stringify(await agent.getHistory())).toContain(
+        'caller-call-1',
+      );
+      await agent.setModel('replacement-recording-model');
+      const next: CompletedToolCall[] = SAMPLE_COMPLETED.map((call) => ({
+        ...call,
+        request: { ...call.request, callId: 'replacement-call-2' },
+        response: {
+          ...call.response,
+          callId: 'replacement-call-2',
+          responseParts: call.response.responseParts.map((part) =>
+            part.type === 'tool_response'
+              ? { ...part, callId: 'replacement-call-2' }
+              : part,
+          ),
+        },
+      }));
+      agent.tools.recordCompletedToolCalls(next);
+      const history = JSON.stringify(await agent.getHistory());
+      expect(history).toContain('caller-call-1');
+      expect(history).toContain('replacement-call-2');
+      expect(agent.getModel()).toBe('replacement-recording-model');
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('agent.stream() rebuilds the loop when the config agent client has changed (stale-client guard)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
@@ -256,27 +275,12 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
     expect(newRecordedCalls[0].batch).toStrictEqual(SAMPLE_COMPLETED);
   });
 
-  it('recordCompletedToolCalls is best-effort: does not throw when resolveClient throws', () => {
-    // Construct a ToolControl directly with a resolveClient that throws,
+  it('recordCompletedToolCalls is best-effort: does not throw when session history is unavailable', () => {
+    // Construct a ToolControl directly with a history operation that throws,
     // proving the catch path does not propagate the error.
-    const config = {
-      getModel: () => 'fallback-model',
-    } as unknown as ToolControlDeps['config'];
-
-    const deps: ToolControlDeps = {
-      ...createToolControlDeps().deps,
-      describeConfiguration: () => ({ registered: [], unregistered: [] }),
-      messageBus: new MessageBus(),
-      config,
-      editorCallbacksHolder: { editorCallbacks: {} },
-      displayCallbacksHolder: {},
-      resolveClient: () => {
-        throw new Error('chat unavailable');
-      },
-      keysDeps: { getStorage: () => getToolKeyStorage() },
-    };
-
-    const toolControl = new ToolControl(deps);
+    const toolControl = createToolControlDeps([], () => {
+      throw new Error('chat unavailable');
+    }).control;
 
     // Must not throw even though resolveClient throws.
     expect(() => {

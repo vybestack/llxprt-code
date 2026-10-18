@@ -15,7 +15,7 @@ import {
   type ProfileSnapshotData,
 } from './profileSnapshot.js';
 import type { Agent, ProviderStatus } from './agent.js';
-import type { AgentProviderState } from './agentImpl.js';
+import type { AgentProviderState } from './control/authState.js';
 import type { AuthWinner } from './control/authState.js';
 import { UNCONFIGURED_PROVIDER } from './constants.js';
 
