@@ -54,7 +54,7 @@ async function withClearFixture(
       },
     },
   });
-  const history = new HistoryService({ recording: recorder });
+  const history = new HistoryService({ recording: recorder, backend: 'old' });
   history.setTokenizerFactory(exactTokenizer());
   try {
     await action({
@@ -99,7 +99,7 @@ async function withClearMediaFixture(
   }
 }
 
-describe('compression rebuild clear observer failure', () => {
+describe('old JSONL same-turn compression rebuild clear observer failure', () => {
   for (const durability of ['pending', 'mixed', 'durable']) {
     it(`keeps one replacement and the streaming row across ${durability} durability`, async () => {
       await withClearFixture(async (fixture) => {
