@@ -3,6 +3,7 @@ import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
 import { scanResumeMetadata } from './resumeMetadata.js';
 import { copyCheckpointRange } from './checkpointJournalTransfer.js';
@@ -199,7 +200,7 @@ export class SessionTransitionService {
     currentProvider: string,
     currentModel: string,
     workspaceDirs: string[],
-    activeSource?: SessionRecordingService | null,
+    activeSource?: SessionRecordingPort | null,
   ): Promise<ForkResult | ForkError> {
     let sourceLock: LockHandle | undefined;
     if (

@@ -59,6 +59,8 @@ export {
   SessionRecordingService,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';
+export type { SessionRecordingPort } from './recordingPort.js';
+export { requireJsonlRecorder } from '../services/history/recorderBackend.js';
 export { allocateChildSessionId } from './childSessionIds.js';
 export {
   createChildSessionJournal,

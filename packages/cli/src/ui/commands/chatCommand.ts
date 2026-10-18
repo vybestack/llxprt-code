@@ -20,7 +20,7 @@ import {
   SessionDiscovery,
   getProjectHash,
   type ContinueTarget,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { mutateChatHistory } from './chatHistoryMutation.js';
 import type { ChatDetail, HistoryItemChatList } from '../types.js';
@@ -36,7 +36,7 @@ function getProjectHashForContext(context: CommandContext): string | null {
   const config = context.services.config;
   return config ? getProjectHash(config.getProjectRoot()) : null;
 }
-function getRecording(context: CommandContext): SessionRecordingService | null {
+function getRecording(context: CommandContext): SessionRecordingPort | null {
   return (
     context.recordingSwapCallbacks?.getCurrentRecording() ??
     context.recordingIntegration?.getRecordingService() ??

@@ -42,9 +42,11 @@ import {
   SessionDiscovery,
   SessionRecordingService,
   SessionTransitionService,
+  requireJsonlRecorder,
   deleteSession as deleteRecordedSession,
   importSessionMediaPackage,
   scanResumeMetadata,
+  type SessionRecordingPort,
   type ResumeCursorBoot,
   type ResumeResult,
   type ContinueTarget,
@@ -57,6 +59,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
@@ -138,7 +141,7 @@ export class SessionControl implements AgentSessionControl {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  private recording: SessionRecordingService | null = null;
+  private recording: SessionRecordingPort | null = null;
 
   /**
    * The live RecordingIntegration bridging the client's HistoryService
@@ -726,12 +729,12 @@ export class SessionControl implements AgentSessionControl {
     });
   }
 
-  private requireRecording(): SessionRecordingService {
+  private requireRecording(): SessionRecordingPort {
     return requireActiveRecording(this.recording);
   }
 
   private async replayRecording(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
   ): Promise<Extract<ReplayResult, { ok: true }>> {
     const filePath = recording.getFilePath();
     if (filePath === null) throw new Error('Recording is not materialized');
@@ -918,7 +921,7 @@ export class SessionControl implements AgentSessionControl {
    * header and a monotonic sequence.
    */
   private async continueAdoptedRecording(
-    service: SessionRecordingService,
+    service: RecordingPort,
   ): Promise<void> {
     const filePath = this.adoptedPath;
     if (filePath === null) return;
@@ -942,7 +945,11 @@ export class SessionControl implements AgentSessionControl {
     candidate: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ): Promise<void> {
-    return persistPurge(this.requireRecording(), candidate, frontier);
+    return persistPurge(
+      requireJsonlRecorder(this.requireRecording()),
+      candidate,
+      frontier,
+    );
   }
 
   /**

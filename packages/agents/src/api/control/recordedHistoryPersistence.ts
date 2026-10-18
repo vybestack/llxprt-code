@@ -10,12 +10,13 @@ import {
   type ReplayResult,
   type LocalMediaStore,
   type SessionPersistenceServiceOptions,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 
 export function requireActiveRecording(
-  recording: SessionRecordingService | null,
-): SessionRecordingService {
+  recording: SessionRecordingPort | null,
+): SessionRecordingPort {
   if (recording?.isActive() !== true) throw new Error('No active recording');
   return recording;
 }
@@ -68,7 +69,7 @@ import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/service
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 export async function persistSemanticMediaPurge(
-  recording: SessionRecordingService,
+  recording: RecordingPort,
   candidate: SemanticPurgeRowSource,
   frontier: SemanticMediaPurgeFrontier,
 ): Promise<void> {
@@ -84,7 +85,7 @@ export async function persistSemanticMediaPurge(
 }
 
 export async function restoreRecordedHistory(
-  recording: SessionRecordingService,
+  recording: RecordingPort,
   removedHistory: readonly IContent[],
 ): Promise<void> {
   for (const content of removedHistory) recording.recordContent(content);
@@ -106,7 +107,7 @@ export async function replayOwnerRecording(
 }
 
 export async function restartRecording(
-  recording: SessionRecordingService,
+  recording: RecordingPort,
   filePath: string | null,
   mediaStore: LocalMediaStore,
 ): Promise<void> {

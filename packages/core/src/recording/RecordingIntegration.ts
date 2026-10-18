@@ -15,7 +15,7 @@
  */
 
 import type { HistoryService } from '../services/history/HistoryService.js';
-import type { SessionRecordingService } from './SessionRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import type { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import {
   RecordingFailureStore,
@@ -35,7 +35,7 @@ interface PersistenceOutcome {
  * @pseudocode recording-integration.md lines 30-104
  */
 export class RecordingIntegration {
-  private readonly recording: SessionRecordingService;
+  private readonly recording: SessionRecordingPort;
   private historySubscription: (() => void) | null = null;
   private disposed = false;
   private readonly persistence: SessionPersistenceService | undefined;
@@ -96,7 +96,7 @@ export class RecordingIntegration {
   }
 
   constructor(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     persistence?: SessionPersistenceService,
     failureReportDirectory?: string,
   ) {
@@ -324,7 +324,7 @@ export class RecordingIntegration {
     this.throwFailures(failures, 'Recording and persistence flush failed');
   }
 
-  getRecordingService(): SessionRecordingService {
+  getRecordingService(): SessionRecordingPort {
     return this.recording;
   }
 

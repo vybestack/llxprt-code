@@ -14,12 +14,15 @@ import { join } from 'node:path';
 import {
   Config,
   SessionRecordingService,
+  type SessionRecordingPort,
+  requireJsonlRecorder,
   getProjectHash,
   type AgentClientContract,
   type ResumeCursorBoot,
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
 import {
@@ -247,7 +250,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
    */
   function loadProfile(
     live: LiveProviderConfig,
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     provider: string,
     model: string,
   ): void {
@@ -256,9 +259,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     recording.recordProviderSwitch(provider, model);
   }
 
-  async function recordFirstMessage(
-    recording: SessionRecordingService,
-  ): Promise<string> {
+  async function recordFirstMessage(recording: RecordingPort): Promise<string> {
     recording.recordContent({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'first message' }],
@@ -278,7 +279,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     let header: Awaited<ReturnType<typeof readSessionHeader>>;
     try {
       loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
-      header = await readSessionHeader(await recordFirstMessage(first));
+      header = await readSessionHeader(
+        await recordFirstMessage(requireJsonlRecorder(first)),
+      );
     } finally {
       await first.dispose();
     }
@@ -310,7 +313,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
       const header = await readSessionHeader(
-        await recordFirstMessage(recording),
+        await recordFirstMessage(requireJsonlRecorder(recording)),
       );
 
       expect({

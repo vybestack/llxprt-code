@@ -8,7 +8,7 @@ import { useMemo, useReducer } from 'react';
 import type {
   ResumeCursorBoot,
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
   LockHandle,
   MessageBus,
 } from '@vybestack/llxprt-code-core';
@@ -64,7 +64,7 @@ interface AppProps {
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
+  initialRecordingService?: SessionRecordingPort;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
   suppressStartupWelcome?: boolean;

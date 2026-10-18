@@ -2,7 +2,7 @@
 import type {
   AgentClientContract,
   ResumeCursorBoot,
-  SessionRecordingService,
+  SessionRecordingPort,
   HistoryService,
 } from '@vybestack/llxprt-code-core';
 
@@ -13,7 +13,7 @@ type ResumeSourceClient = Pick<
 
 export async function restoreResumeBoot(
   client: ResumeSourceClient,
-  recording: SessionRecordingService,
+  recording: SessionRecordingPort,
   boot: ResumeCursorBoot,
   publish: () => void,
 ): Promise<void> {

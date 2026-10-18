@@ -29,7 +29,7 @@ import {
   type IdeInfo,
   type MessageBus,
   type RecordingIntegration,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../../../contexts/SessionContext.js';
@@ -72,7 +72,7 @@ export interface AppBootstrapProps {
   appDispatch: React.Dispatch<AppAction>;
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
-  initialRecordingService?: SessionRecordingService;
+  initialRecordingService?: SessionRecordingPort;
   initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
   memoryController?: MemoryTelemetryController;

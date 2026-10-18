@@ -21,7 +21,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   performResume,
-  SessionRecordingService,
+  type SessionRecordingPort,
   SessionLockManager,
   type LockHandle,
   type IContent,
@@ -38,10 +38,11 @@ import {
   expectResultDiscriminated,
   ResumeTestSetup,
 } from './performResume-test-helpers.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
 
 let chatsDir: string;
 let lockHandles: LockHandle[];
-let recordingsToDispose: SessionRecordingService[];
+let recordingsToDispose: SessionRecordingPort[];
 describe('performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
   const setup = new ResumeTestSetup();
 
@@ -298,7 +299,9 @@ async function testValidationNewRecording(): Promise<void> {
   expect(newRecording).not.toBeNull();
   recordingsToDispose.push(newRecording!);
 
-  newRecording!.recordContent(makeContent('new content via result'));
+  requireJsonlRecorder(newRecording!).recordContent(
+    makeContent('new content via result'),
+  );
   await newRecording!.flush();
 
   const events = await readJsonlFile(targetFilePath);

@@ -4,7 +4,7 @@ import {
   type LlxprtExtension,
   type WorkspaceSkillOperations,
   type Config,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type RecordingIntegration,
   type ResumeCursorBoot,
   type LockHandle,
@@ -312,7 +312,7 @@ function buildRenderElement(
   runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
   resumedBoot: Pick<ResumeCursorBoot, 'streamRows'> | undefined,
-  initialRecordingService: SessionRecordingService | undefined,
+  initialRecordingService: SessionRecordingPort | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
@@ -425,7 +425,7 @@ export function startInteractiveUI(
   runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
   resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
-  initialRecordingService?: SessionRecordingService,
+  initialRecordingService?: SessionRecordingPort,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
@@ -444,7 +444,7 @@ export async function startInteractiveUI(
   startup?: OwnerInteractiveStartup | MessageBus,
   recordingIntegration?: RecordingIntegration,
   resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
-  initialRecordingService?: SessionRecordingService,
+  initialRecordingService?: SessionRecordingPort,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
   recordingOwner?: 'raw',
@@ -618,7 +618,7 @@ export type CommitInteractiveStartupArgs = {
   | {
       readonly recordingOwner?: 'raw';
       readonly recordingIntegration?: RecordingIntegration;
-      readonly initialRecordingService?: SessionRecordingService;
+      readonly initialRecordingService?: SessionRecordingPort;
       readonly initialLockHandle?: LockHandle | null;
       readonly sessionPersistence?: CliSessionPersistencePort;
     }

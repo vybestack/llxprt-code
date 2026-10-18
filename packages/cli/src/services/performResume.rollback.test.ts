@@ -15,6 +15,8 @@ import {
   RecordingIntegration,
   SessionLockManager,
   SessionRecordingService,
+  requireJsonlRecorder,
+  type SessionRecordingPort,
   type IContent,
   type LockHandle,
   type ResumeCursorBoot,
@@ -28,7 +30,7 @@ const TARGET_SESSION = 'target-session-0001';
 
 class PublishThenFailHistory extends HistoryService {
   override adoptResumeBoot(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     boot: ResumeCursorBoot,
     afterPublication?: () => void | Promise<void>,
   ): Promise<string[]> {
@@ -40,7 +42,7 @@ class PublishThenFailHistory extends HistoryService {
 }
 
 interface CliRecordingState {
-  recording: SessionRecordingService | null;
+  recording: SessionRecordingPort | null;
   integration: RecordingIntegration | null;
   lock: LockHandle | null;
   metadata: SessionMetadata | null;
@@ -66,7 +68,7 @@ describe('performResume rollback after the new recording was published', () => {
   let chatsDir: string;
   let previous: CliRecordingState;
   let state: CliRecordingState;
-  let published: SessionRecordingService[];
+  let published: SessionRecordingPort[];
   let history: PublishThenFailHistory;
   let restoreFailure: Error | undefined;
 
@@ -153,7 +155,11 @@ describe('performResume rollback after the new recording was published', () => {
     expect(state.metadata).toBe(previous.metadata);
     // The previous recording still accepts durable writes.
     await expect(
-      previous.recording?.commit('content', { content: text('after') }),
+      previous.recording === null
+        ? undefined
+        : requireJsonlRecorder(previous.recording).commit('content', {
+            content: text('after'),
+          }),
     ).resolves.toBeDefined();
   });
 

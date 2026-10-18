@@ -22,9 +22,10 @@ import { join } from 'node:path';
 import {
   RecordingIntegration,
   isSessionStartHeader,
+  requireJsonlRecorder,
   type AgentClientContract,
   type HydratedModel,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
@@ -149,7 +150,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
   let root: string;
   let chatsDir: string;
   let config: LiveProviderConfig;
-  let recording: SessionRecordingService;
+  let recording: SessionRecordingPort;
   let integration: RecordingIntegration;
   let addedMessages: string[];
 
@@ -180,7 +181,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     header: { provider: string; model: string };
     switches: Array<{ provider: unknown; model: unknown }>;
   }> {
-    recording.recordContent({
+    requireJsonlRecorder(recording).recordContent({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'first message' }],
     });

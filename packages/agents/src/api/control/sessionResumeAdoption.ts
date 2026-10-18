@@ -6,7 +6,7 @@ import {
   CONTINUE_LATEST,
   type ResumeResult,
   type LockHandle,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SessionControlDeps } from './sessionControl.js';
@@ -23,7 +23,7 @@ export async function adoptSessionResume(
   result: ResumeResult,
   prior: {
     integration: RecordingIntegration | null;
-    recording: SessionRecordingService | null;
+    recording: SessionRecordingPort | null;
     lock: LockHandle | null;
     sessionId: string;
   },

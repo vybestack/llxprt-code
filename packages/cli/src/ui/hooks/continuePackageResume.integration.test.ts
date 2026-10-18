@@ -47,6 +47,7 @@ import {
   PerformCompressionResult,
   SessionDiscovery,
   SessionRecordingService,
+  type SessionRecordingPort,
   emptyModelOutput,
   exportSessionMediaPackage,
   getProjectHash,
@@ -58,6 +59,7 @@ import {
   type MediaReferenceBlock,
   type RecordingIntegration,
   type SessionMetadata,
+  requireJsonlRecorder,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
@@ -78,7 +80,7 @@ import {
 } from '../../utils/cleanup.js';
 
 interface ActiveRecordingState {
-  recording: SessionRecordingService | null;
+  recording: SessionRecordingPort | null;
   integration: RecordingIntegration | null;
   lock: LockHandle | null;
   metadata: SessionMetadata | null;
@@ -639,7 +641,7 @@ describe('continue package perform_resume integration', () => {
         first.sessionClient,
       );
       const sessionId = started.recordingService.getSessionId();
-      started.recordingService.recordContent({
+      requireJsonlRecorder(started.recordingService).recordContent({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'legacy early resume' }],
       });

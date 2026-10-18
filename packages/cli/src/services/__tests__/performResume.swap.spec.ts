@@ -18,10 +18,14 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { RecordingIntegration } from '@vybestack/llxprt-code-core';
+import {
+  RecordingIntegration,
+  requireJsonlRecorder,
+} from '@vybestack/llxprt-code-core';
 import {
   performResume,
   SessionRecordingService,
+  type SessionRecordingPort,
   SessionLockManager,
   type LockHandle,
   type IContent,
@@ -40,7 +44,7 @@ import {
 
 let chatsDir: string;
 let lockHandles: LockHandle[];
-let recordingsToDispose: SessionRecordingService[];
+let recordingsToDispose: SessionRecordingPort[];
 describe('performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10', () => {
   const setup = new ResumeTestSetup();
 
@@ -212,7 +216,9 @@ async function testSwapNewFileEvents(): Promise<void> {
 
   const eventCountBefore = await countFileEvents(targetFilePath);
 
-  newRecording!.recordContent(makeContent('new event after resume'));
+  requireJsonlRecorder(newRecording!).recordContent(
+    makeContent('new event after resume'),
+  );
   await newRecording!.flush();
 
   const eventCountAfter = await countFileEvents(targetFilePath);

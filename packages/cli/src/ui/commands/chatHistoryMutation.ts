@@ -8,7 +8,7 @@ import {
   collectMediaReferences,
   clientMediaStore,
   type IContent,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type AgentClientContract,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
@@ -117,7 +117,7 @@ async function displayPrefix(
  * only proves the recorder is healthy before live history is touched.
  */
 async function assertRecordingWritable(
-  recording: SessionRecordingService,
+  recording: SessionRecordingPort,
 ): Promise<void> {
   if (!recording.isActive()) throw new Error('Recording is not active');
   await recording.flush();
@@ -190,7 +190,7 @@ export async function mutateChatHistory(
   ui: CommandContext['ui'],
   emojiSettings: EmojiFilterSettingsSource | null,
   signal: AbortSignal,
-  recording: SessionRecordingService,
+  recording: SessionRecordingPort,
   turns?: number,
 ): Promise<MessageActionReturn | void> {
   const media: SnapshotMedia = {

@@ -30,7 +30,7 @@ import {
   targetSessionId,
   type NamedOperation,
 } from './checkpointNaming.js';
-import { type SessionRecordingService } from './SessionRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   type CheckpointMetadataView,
@@ -158,7 +158,7 @@ export class CheckpointService {
   }
 
   async createCheckpoint(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     name: string,
     overwrite = false,
@@ -173,7 +173,7 @@ export class CheckpointService {
   }
 
   async renameCheckpoint(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     checkpointId: string,
     name: string,
@@ -190,7 +190,7 @@ export class CheckpointService {
   }
 
   async deleteCheckpoint(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     checkpointId: string,
   ): Promise<void> {
@@ -199,7 +199,7 @@ export class CheckpointService {
   }
 
   async setSessionName(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     name: string,
     overwrite = false,
@@ -405,7 +405,7 @@ export class CheckpointService {
   }
 
   private async runNamedOperation<T>(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     operation: NamedOperation,
     overwrite: boolean,
@@ -496,7 +496,7 @@ export class CheckpointService {
 
   private async acquireCollisionLocks(
     collisions: readonly ContinueTarget[],
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     chatsDir: string,
   ): Promise<LockHandle[]> {
     const sessionIds = [...new Set(collisions.map(targetSessionId))]
@@ -507,7 +507,7 @@ export class CheckpointService {
 
   private async refreshLockedCollisions(
     lockedCollisions: readonly ContinueTarget[],
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     chatsDir: string,
     projectHash: string,
     operation: NamedOperation,
@@ -535,7 +535,7 @@ export class CheckpointService {
 
   private async tombstoneCollision(
     collision: ContinueTarget,
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
   ): Promise<void> {
     if (collision.kind === 'checkpoint') {
@@ -562,7 +562,7 @@ export class CheckpointService {
 
   private async clearSessionName(
     collision: SessionTarget,
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
   ): Promise<void> {
     if (recording.ownsLockFor(collision.session.sessionId)) {
@@ -582,7 +582,7 @@ export class CheckpointService {
     return SessionDiscovery.validateName(name);
   }
 
-  private requireActiveRecording(recording: SessionRecordingService): void {
+  private requireActiveRecording(recording: SessionRecordingPort): void {
     if (
       !recording.isActive() ||
       !recording.ownsLockFor(recording.getSessionId())
@@ -592,7 +592,7 @@ export class CheckpointService {
   }
 
   private async requireActiveCheckpoint(
-    recording: SessionRecordingService,
+    recording: SessionRecordingPort,
     projectHash: string,
     checkpointId: string,
   ): Promise<CheckpointMetadataView> {

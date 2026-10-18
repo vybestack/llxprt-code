@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   SessionRecordingService,
+  type SessionRecordingPort,
   type LockHandle,
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
@@ -76,7 +77,7 @@ async function writeCorruptSession(
 describe('performResume with an unreadable recording present (issue #3732)', () => {
   let root: string;
   let chatsDir: string;
-  let committed: SessionRecordingService | null;
+  let committed: SessionRecordingPort | null;
   let committedLock: LockHandle | null;
   let committedMetadata: SessionMetadata | null;
 

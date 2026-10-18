@@ -29,7 +29,7 @@ export type {
 } from './historyDumpSnapshot.js';
 import { publishResumeRestoration } from './historyResumeProjection.js';
 import type { ResumeBoot } from './historyStorePort.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
@@ -94,7 +94,7 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   async adoptResumeBoot(
-    recording: RecordingPort,
+    recording: SessionRecordingPort,
     boot: ResumeBoot,
     afterPublication: () => void | Promise<void> = () => {},
   ): Promise<string[]> {
@@ -120,7 +120,7 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   private async adoptResumeBootInternal(
-    recording: RecordingPort,
+    recording: SessionRecordingPort,
     boot: ResumeBoot,
     afterPublication: () => void | Promise<void>,
   ): Promise<string[]> {

@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   SessionRecordingService,
+  type SessionRecordingPort,
   type RecordingIntegration,
   type SessionRecordingServiceConfig,
   type IContent,
@@ -38,7 +39,7 @@ export interface SessionBrowserTestState {
   tempDir: string;
   chatsDir: string;
   lockHandles: LockHandle[];
-  recordingsToDispose: SessionRecordingService[];
+  recordingsToDispose: SessionRecordingPort[];
 }
 
 export async function createSessionBrowserTestState(): Promise<SessionBrowserTestState> {
@@ -198,7 +199,7 @@ export function makeResumeContext(
     currentSessionId?: string;
     provider?: string;
     model?: string;
-    currentRecording?: SessionRecordingService | null;
+    currentRecording?: SessionRecordingPort | null;
     currentIntegration?: RecordingIntegration | null;
     currentLockHandle?: LockHandle | null;
   } = {},

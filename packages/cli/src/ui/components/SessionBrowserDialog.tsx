@@ -14,7 +14,7 @@ import { useCallback } from 'react';
 import type {
   ContinueTarget,
   LocalMediaStore,
-  SessionRecordingService,
+  SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 
 import { SemanticColors } from '../colors.js';
@@ -37,7 +37,7 @@ export interface SessionBrowserDialogProps {
   projectHash: string;
   currentSessionId: string;
   hasActiveConversation: boolean;
-  activeRecording?: SessionRecordingService | null;
+  activeRecording?: SessionRecordingPort | null;
   ownerAgent?: Agent;
   mediaStore?: LocalMediaStore;
   onSelect: (

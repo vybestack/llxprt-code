@@ -12,7 +12,7 @@ import {
   type ContinueTarget,
   type UnreadableRecording,
   type RecordingIntegration,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 
@@ -25,7 +25,7 @@ export async function exportRecordedSession(
   },
   projectHash: string,
   mediaStore: LocalMediaStore,
-  recording: SessionRecordingService | null,
+  recording: SessionRecordingPort | null,
   integration: RecordingIntegration | null,
 ): Promise<void> {
   const resolved = SessionDiscovery.resolveContinueRef(ref, listing.targets);

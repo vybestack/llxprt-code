@@ -6,6 +6,7 @@
 import {
   RecordingIntegration,
   SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { basename } from 'node:path';
 import type { SessionControl, SessionControlDeps } from './sessionControl.js';
@@ -24,7 +25,7 @@ export async function startNewSessionTransition(
     retire: () => Promise<void>;
     publish: (
       id: string,
-      recording: SessionRecordingService | null,
+      recording: SessionRecordingPort | null,
       integration: RecordingIntegration | null,
     ) => void;
   },
@@ -35,7 +36,7 @@ export async function startNewSessionTransition(
   }
   const nextSessionId = crypto.randomUUID();
   const candidate = await deps.prepareNewSessionClient(nextSessionId);
-  let recording: SessionRecordingService | null = null;
+  let recording: SessionRecordingPort | null = null;
   let integration: RecordingIntegration | null = null;
   let retirementStarted = false;
   try {

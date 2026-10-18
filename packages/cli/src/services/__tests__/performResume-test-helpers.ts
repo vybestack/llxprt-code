@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   SessionRecordingService,
+  type SessionRecordingPort,
   SessionLockManager,
   type RecordingIntegration,
   type LockHandle,
@@ -29,6 +30,7 @@ export type {
   RecordingSwapCallbacks,
   PerformResumeResult,
   RecordingIntegration,
+  SessionRecordingPort,
   LockHandle,
   SessionRecordingServiceConfig,
   SessionRecordLine,
@@ -130,7 +132,7 @@ export function makeResumeContext(
     currentSessionId?: string;
     provider?: string;
     model?: string;
-    currentRecording?: SessionRecordingService | null;
+    currentRecording?: SessionRecordingPort | null;
     currentIntegration?: RecordingIntegration | null;
     currentLockHandle?: LockHandle | null;
   } = {},
@@ -275,7 +277,7 @@ export class ResumeTestSetup {
   tempDir = '';
   chatsDir = '';
   lockHandles: LockHandle[] = [];
-  recordingsToDispose: SessionRecordingService[] = [];
+  recordingsToDispose: SessionRecordingPort[] = [];
 
   async beforeEach(): Promise<void> {
     this.tempDir = await fs.mkdtemp(

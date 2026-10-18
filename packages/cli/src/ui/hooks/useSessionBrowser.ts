@@ -16,7 +16,7 @@
 import type {
   ContinueTarget,
   LocalMediaStore,
-  SessionRecordingService,
+  SessionRecordingPort,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
@@ -66,7 +66,7 @@ export interface UseSessionBrowserProps {
   /** Explicit owner branch. The raw recording remains attached unless selected. */
   ownerAgent?: Agent;
   /** Active recording, used to tombstone checkpoints in the current session. */
-  activeRecording?: SessionRecordingService | null;
+  activeRecording?: SessionRecordingPort | null;
   /** Project store used to validate references during discovery. */
   mediaStore?: LocalMediaStore;
   /** Callback to close the browser */

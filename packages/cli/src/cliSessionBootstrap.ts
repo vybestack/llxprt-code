@@ -8,6 +8,7 @@ import {
   type Config,
   type AgentClientContract,
   SessionRecordingService,
+  type SessionRecordingPort,
   RecordingIntegration,
   SessionDiscovery,
   SessionTransitionService,
@@ -128,7 +129,7 @@ type RecordingClientOwner = {
 export type OwnerResumedRows = Pick<ResumeCursorBoot, 'streamRows'>;
 
 export interface ResolvedRecording {
-  recordingService: SessionRecordingService;
+  recordingService: SessionRecordingPort;
   resumedBoot: ResumeCursorBoot | null;
   resumedLockHandle: LockHandle | null;
   /** The resumed session's ID, or null for new/fallback sessions. */
@@ -300,7 +301,7 @@ export async function bootstrapRuntimeAndConfig(
  * fresh-session fallback (issue #1873).
  */
 async function releaseResumedResources(
-  recordingService: SessionRecordingService,
+  recordingService: SessionRecordingPort,
   lockHandle: LockHandle | null,
 ): Promise<void> {
   try {
@@ -361,7 +362,7 @@ export function setupObservation(
 
 function registerRecordingCleanup(
   recordingIntegration: RecordingIntegration,
-  recordingService: SessionRecordingService,
+  recordingService: SessionRecordingPort,
   lockHandle: LockHandle | null,
   sessionPersistence: CliSessionPersistence,
 ): void {
@@ -389,7 +390,7 @@ function registerRecordingCleanup(
 
 function activateRecording(
   config: Config,
-  recordingService: SessionRecordingService,
+  recordingService: SessionRecordingPort,
   lockHandle: LockHandle | null,
   bootstrapSelection: BootstrapSelection | null,
   sessionPersistence: CliSessionPersistence,
@@ -669,7 +670,7 @@ export function buildNewRecordingService(
   projectHash: string,
   chatsDir: string,
   sessionClient: RecordingClientOwner,
-): Promise<SessionRecordingService> {
+): Promise<SessionRecordingPort> {
   return SessionRecordingService.createLocked({
     sessionId: config.getSessionId(),
     projectHash,
@@ -810,7 +811,7 @@ async function buildFallbackRecording(
   projectHash: string,
   chatsDir: string,
   sessionClient: RecordingClientOwner,
-): Promise<SessionRecordingService> {
+): Promise<SessionRecordingPort> {
   try {
     return await buildNewRecordingService(
       config,

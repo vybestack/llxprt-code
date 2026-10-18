@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type {
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
   LockHandle,
   SessionMetadata,
 } from '@vybestack/llxprt-code-core';
@@ -19,7 +19,7 @@ export interface UseRecordingInfrastructureResult {
 }
 
 function createRawResources(
-  initialRecordingService?: SessionRecordingService,
+  initialRecordingService?: SessionRecordingPort,
   recordingIntegration?: RecordingIntegration,
   initialLockHandle?: LockHandle | null,
   onRecordingSwapped?: () => void,
@@ -50,7 +50,7 @@ function createRawResources(
 }
 
 export function useRecordingInfrastructure(
-  initialRecordingService?: SessionRecordingService,
+  initialRecordingService?: SessionRecordingPort,
   recordingIntegration?: RecordingIntegration,
   initialLockHandle?: LockHandle | null,
   recordingOwner?: 'agent' | 'raw',

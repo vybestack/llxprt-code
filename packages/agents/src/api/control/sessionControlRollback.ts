@@ -8,7 +8,7 @@ import {
   withRecordingFailureReport,
   type LockHandle,
   type RecordingIntegration,
-  type SessionRecordingService,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
@@ -25,7 +25,7 @@ export async function captureRollbackFailure(
 
 export async function cleanupSessionResources(
   integration: RecordingIntegration | null,
-  recording: SessionRecordingService | null,
+  recording: SessionRecordingPort | null,
   lockHandle: LockHandle | null,
 ): Promise<unknown[]> {
   const failures: unknown[] = [];
@@ -45,7 +45,7 @@ export async function cleanupSessionResources(
 
 export function rollbackPreparedSessionArtifacts(input: {
   readonly integration: RecordingIntegration;
-  readonly recording: SessionRecordingService;
+  readonly recording: SessionRecordingPort;
   readonly lockHandle: LockHandle;
 }): Promise<unknown[]> {
   return cleanupSessionResources(
@@ -59,7 +59,7 @@ export function adoptRecordingSessionId(
   config: Config,
   sessionIdentityOwnership: 'config' | 'facade',
   priorSessionId: string,
-  recording: SessionRecordingService,
+  recording: SessionRecordingPort,
   beforeAdoption: () => void,
 ): void {
   if (sessionIdentityOwnership === 'facade') return;

@@ -38,7 +38,7 @@ import {
   type ContinueTarget,
   type UnreadableRecording,
   type IContent,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type SessionPersistenceService,
   type LockHandle,
   type SessionMetadata,
@@ -53,12 +53,12 @@ import { type DebugLogger } from '@vybestack/llxprt-code-telemetry';
  * Uses callback pattern instead of mutable fields for thread safety.
  */
 export interface RecordingSwapCallbacks {
-  getCurrentRecording: () => SessionRecordingService | null;
+  getCurrentRecording: () => SessionRecordingPort | null;
   getCurrentIntegration: () => RecordingIntegration | null;
   getCurrentLockHandle: () => LockHandle | null;
   getCurrentMetadata: () => SessionMetadata | null;
   setRecording: (
-    recording: SessionRecordingService | null,
+    recording: SessionRecordingPort | null,
     integration: RecordingIntegration | null,
     lock: LockHandle | null,
     metadata: SessionMetadata | null,
@@ -429,7 +429,7 @@ async function runRollbackStep(
 
 async function disposeInfrastructure(
   oldIntegration: RecordingIntegration | null,
-  oldRecording: SessionRecordingService | null,
+  oldRecording: SessionRecordingPort | null,
   oldLock: LockHandle | null,
 ): Promise<void> {
   const failures: unknown[] = [];

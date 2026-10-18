@@ -15,6 +15,7 @@ import {
   LocalMediaStore,
   DebugLogger,
   SessionRecordingService,
+  type SessionRecordingPort,
   getProjectHash,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
@@ -79,7 +80,7 @@ async function writeCorruptSession(
 
 describe('processSlashCommand /continue <id> with an unreadable recording present (issue #3732)', () => {
   let root: string;
-  let committed: SessionRecordingService | null;
+  let committed: SessionRecordingPort | null;
   let committedLock: LockHandle | null;
 
   beforeEach(async () => {

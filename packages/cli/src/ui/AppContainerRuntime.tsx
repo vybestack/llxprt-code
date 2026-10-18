@@ -8,7 +8,7 @@ import type React from 'react';
 import type {
   MessageBus,
   RecordingIntegration,
-  SessionRecordingService,
+  SessionRecordingPort,
   LockHandle,
   ResumeCursorBoot,
 } from '@vybestack/llxprt-code-core';
@@ -82,7 +82,7 @@ export interface AppContainerRuntimeProps {
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialRecordingService?: SessionRecordingService;
+  initialRecordingService?: SessionRecordingPort;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialLockHandle?: LockHandle | null;
   suppressStartupWelcome?: boolean;

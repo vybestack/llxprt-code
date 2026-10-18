@@ -36,6 +36,7 @@ import {
   runExitCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
 
 describe('CLI session client bootstrap ownership', () => {
   let suiteDirectory: string;
@@ -155,7 +156,7 @@ describe('CLI session client bootstrap ownership', () => {
         null,
         boot.activationOperation.sessionClient,
       );
-      recording.recordingService.recordContent({
+      requireJsonlRecorder(recording.recordingService).recordContent({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pre-agent content' }],
       });

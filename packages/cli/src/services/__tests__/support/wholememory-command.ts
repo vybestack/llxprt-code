@@ -11,7 +11,7 @@ import {
   withRecordingFailureReport,
   type IContent,
   type RecordingIntegration,
-  type SessionRecordingService,
+  type SessionRecordingPort,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { performResume } from '../../performResume.js';
@@ -52,7 +52,7 @@ export class MemoryCommand {
   mediaStore: LocalMediaStore | undefined;
   readonly history = new HistoryService();
   readonly counters = createRowCounters();
-  recording: SessionRecordingService | null = null;
+  recording: SessionRecordingPort | null = null;
   integration: RecordingIntegration | null = null;
   lock: LockHandle | null = null;
   pager: ScrollbackPagerStore | undefined;

@@ -274,6 +274,10 @@
       "bun": "./src/llm-types/finishReasons.ts",
       "import": "./dist/src/llm-types/finishReasons.js"
     },
+    "./recording/journalRecordingService.js": {
+      "bun": "./src/recording/journalRecordingService.ts",
+      "import": "./dist/src/recording/journalRecordingService.js"
+    },
     "./recording/SessionRecordingService.js": {
       "bun": "./src/recording/SessionRecordingService.ts",
       "import": "./dist/src/recording/SessionRecordingService.js"
