@@ -95,12 +95,30 @@ describe('RecordingIntegration over a journal recorder', () => {
     integration = new RecordingIntegration(recorder, saving);
     await integration.subscribeToJournal(history);
 
-    history.add(textRow('human', 'question'));
-    await integration.flushAtTurnBoundary();
-
-    const siblings = await fsp.readdir(chatsDir);
-    expect(siblings.filter((name) => name.endsWith('.json'))).toStrictEqual([]);
-    expect(await recorderRows()).toStrictEqual(['question']);
+    for (let turn = 0; turn < 4; turn++) {
+      history.add(textRow('human', `question ${turn}`));
+      history.add(textRow('ai', `answer ${turn}`));
+      await integration.flushAtTurnBoundary();
+      await integration.flushAtTurnBoundary();
+      await expect(fsp.stat(saving.getSessionFilePath())).rejects.toMatchObject(
+        {
+          code: 'ENOENT',
+        },
+      );
+      expect(
+        (await fsp.readdir(chatsDir)).filter((name) => name.endsWith('.json')),
+      ).toStrictEqual([]);
+    }
+    expect(await recorderRows()).toStrictEqual([
+      'question 0',
+      'answer 0',
+      'question 1',
+      'answer 1',
+      'question 2',
+      'answer 2',
+      'question 3',
+      'answer 3',
+    ]);
   });
 
   it('leaves no lock behind after detaching, then closing the recorder', async () => {

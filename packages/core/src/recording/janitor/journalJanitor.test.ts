@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { metricReference } from '../../storage/media-metrics-test-helpers.js';
+import type { MediaReferenceBlock } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { useBackendEnv } from '../__tests__/support/backendEnv.js';
 import {
@@ -146,9 +146,11 @@ describe('media reclamation over journal files', () => {
   const root = useTempDir('media-journal-');
   const chatsDir = () => path.join(root(), PROJECT_DIR, 'chats');
 
-  async function storeWithOrphan(
-    index: number,
-  ): Promise<{ store: LocalMediaStore; contentId: string }> {
+  async function storeWithOrphan(index: number): Promise<{
+    store: LocalMediaStore;
+    contentId: string;
+    reference: MediaReferenceBlock;
+  }> {
     const store = new LocalMediaStore({
       rootDirectory: path.join(root(), PROJECT_DIR, 'media'),
       quotaBytes: 1024 * 1024,
@@ -158,7 +160,7 @@ describe('media reclamation over journal files', () => {
       mimeType: 'application/octet-stream',
       semanticMetadata: {},
     });
-    return { store, contentId: reference.contentId };
+    return { store, contentId: reference.contentId, reference };
   }
 
   function objectPath(store: LocalMediaStore, contentId: string): string {
@@ -177,14 +179,7 @@ describe('media reclamation over journal files', () => {
       rows: [
         {
           speaker: 'human',
-          blocks: [
-            {
-              ...metricReference(1),
-              contentId: kept.contentId,
-              originalContentId: kept.contentId,
-              selectedContentId: kept.contentId,
-            },
-          ],
+          blocks: [kept.reference],
         },
       ],
     });
@@ -208,14 +203,7 @@ describe('media reclamation over journal files', () => {
         userRow('x'.repeat(200 * 1024)),
         {
           speaker: 'human',
-          blocks: [
-            {
-              ...metricReference(1),
-              contentId: kept.contentId,
-              originalContentId: kept.contentId,
-              selectedContentId: kept.contentId,
-            },
-          ],
+          blocks: [kept.reference],
         },
       ],
     });

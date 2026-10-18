@@ -14,6 +14,7 @@ import type { IContent } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
 import { isJournalFileName } from '../sessionFileExtension.js';
+import { scanJournalRecording } from '../journal-recording-scan.js';
 
 const PROJECT_HASH_PATTERN = /^[0-9a-f]{64}$/;
 const CONTENT_ID_PATTERN = /"contentId"\s*:\s*"(sha256:[0-9a-f]{64})"/g;
@@ -129,14 +130,7 @@ function isOwnershipFile(filePath: string): boolean {
   );
 }
 
-/**
- * Whether a file counts against the byte limits. Those limits stop a text
- * scan from reading an unbounded file, and they leave a project unreclaimed
- * when they trip. A journal is streamed in 64 KiB chunks whatever its size,
- * and it grows with its history (old versions stay until compaction), so
- * refusing a large one would leak every blob of its project for good. A
- * journal file or archive counts toward the file limit only.
- */
+/** Text tuning is separate from the journal's fixed risk-12 scan ceiling. */
 function isByteLimited(filePath: string): boolean {
   return !isJournalFileName(filePath);
 }
@@ -151,16 +145,31 @@ async function collectFileContentIds(
   const fileStat = await lstat(filePath);
   if (!fileStat.isFile() || fileStat.isSymbolicLink()) return;
   const byteLimited = isByteLimited(filePath);
+  const maximumFileBytes = byteLimited
+    ? limits.maxBytesPerFile
+    : DEFAULT_LIMITS.maxBytesPerFile;
   if (
     budget.files >= limits.maxFilesPerProject ||
-    (byteLimited &&
-      (fileStat.size > limits.maxBytesPerFile ||
-        fileStat.size > limits.maxBytesPerProject - budget.bytes))
+    fileStat.size > maximumFileBytes ||
+    (byteLimited && fileStat.size > limits.maxBytesPerProject - budget.bytes)
   ) {
     throw new Error('Ownership data exceeds media reclamation scan limits');
   }
   budget.files += 1;
   if (byteLimited) budget.bytes += fileStat.size;
+  if (isJournalFileName(filePath)) {
+    if (filePath.endsWith('.gz'))
+      throw new Error(
+        'Archived journal ownership scan requires a binary reader',
+      );
+    await scanJournalRecording(filePath, (contents) => {
+      for (const reference of collectMediaReferences(contents)) {
+        contentIds.add(reference.originalContentId);
+        contentIds.add(reference.selectedContentId);
+      }
+    });
+    return;
+  }
   const source = createReadStream(filePath, {
     highWaterMark: SCAN_CHUNK_BYTES,
   });
