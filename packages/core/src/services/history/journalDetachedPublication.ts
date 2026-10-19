@@ -50,6 +50,7 @@ export class JournalDetachedPublication {
   private readonly mark: JournalCompensationMark;
   private released = false;
   private pendingAppends: RowDraft[] = [];
+  private pendingAppendOwners: Array<number | undefined> = [];
   private pendingAppendBytes = 0;
   private appendOrigin: string | undefined;
   /** The failure this publication's own groups reported; compensation resolves exactly that one. */
@@ -144,10 +145,15 @@ export class JournalDetachedPublication {
    * held reach {@link APPEND_GROUP_BYTES} or {@link flushAppends} is called, so
    * no more than that much of a long append is held at once.
    */
-  async appendOne(content: IContent, origin?: string): Promise<void> {
+  async appendOne(
+    content: IContent,
+    origin?: string,
+    inheritedOwner?: number,
+  ): Promise<void> {
     try {
       const draft = encodeAppended(this.store.writes, content, origin);
       this.pendingAppends.push(draft);
+      this.pendingAppendOwners.push(inheritedOwner);
       this.pendingAppendBytes += encodedBytes(draft);
       this.appendOrigin = origin;
       if (this.pendingAppendBytes >= APPEND_GROUP_BYTES)
@@ -171,10 +177,12 @@ export class JournalDetachedPublication {
   private async writePendingAppends(): Promise<void> {
     if (this.pendingAppends.length === 0) return;
     const drafts = this.pendingAppends;
+    const owners = this.pendingAppendOwners;
     this.pendingAppends = [];
+    this.pendingAppendOwners = [];
     this.pendingAppendBytes = 0;
     this.admittedCount++;
-    applyAppendDrafts(this.store.writes, drafts, this.appendOrigin);
+    applyAppendDrafts(this.store.writes, drafts, this.appendOrigin, owners);
     await this.store.waitForDurable();
     this.lastAck = this.store.lastAck;
   }

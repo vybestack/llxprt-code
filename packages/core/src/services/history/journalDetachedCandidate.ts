@@ -97,7 +97,8 @@ export class JournalCandidate {
       appendDerived: async (ordinal, row) => {
         assertActive();
         // A row carried over from the source keeps the owner of the entry it comes from (design 5.1).
-        await this.accept(row, (await snapshot.entryAt(ordinal)).owner);
+        const owner = (await snapshot.entryAt(ordinal)).owner;
+        await this.accept(row, owner, this.ctx.appendOnly ? owner : undefined);
       },
       appendReplacement: async (ordinal, row) => {
         assertActive();
@@ -165,20 +166,28 @@ export class JournalCandidate {
     return { start: newLastSeq + 1, end: previousLastSeq, reason: 'rewound' };
   }
 
-  private async accept(source: IContent, owner: number): Promise<void> {
+  private async accept(
+    source: IContent,
+    owner: number,
+    inheritedOwner?: number,
+  ): Promise<void> {
     const marker = source.metadata?.chronology;
     const release = trackMutationOwners(
       marker === undefined ? [source] : [source, marker],
       this.ctx.host.ownership,
     );
     try {
-      await this.acceptOwned(source, owner);
+      await this.acceptOwned(source, owner, inheritedOwner);
     } finally {
       release();
     }
   }
 
-  private async acceptOwned(source: IContent, owner: number): Promise<void> {
+  private async acceptOwned(
+    source: IContent,
+    owner: number,
+    inheritedOwner?: number,
+  ): Promise<void> {
     const { host, modelName, signal, appendOnly } = this.ctx;
     validateHistoryEntry(source, this.count);
     // The stamper writes the marker in place; the caller's row stays as it was handed in.
@@ -190,7 +199,12 @@ export class JournalCandidate {
     this.tokens += await host.estimate([row], modelName, signal);
     this.range.add(row);
     this.lastSeq = row.metadata?.chronology?.seq ?? 0;
-    if (appendOnly) await this.ctx.publication.appendOne(row, this.ctx.origin);
+    if (appendOnly)
+      await this.ctx.publication.appendOne(
+        row,
+        this.ctx.origin,
+        inheritedOwner,
+      );
     else await this.place(encodeContentRow(row, { owner }));
     for (const reference of collectMediaReferences([row]))
       await this.ctx.media?.put(reference);

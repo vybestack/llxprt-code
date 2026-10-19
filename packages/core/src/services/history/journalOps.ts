@@ -104,6 +104,7 @@ export function applyAppendDrafts(
   host: JournalWriteHost,
   drafts: readonly RowDraft[],
   origin: string | undefined,
+  inheritedOwners?: ReadonlyArray<number | undefined>,
 ): void {
   host.enqueue(host.rows() + drafts.length, async () => {
     const owner = await host.owners().resolve(origin);
@@ -111,7 +112,10 @@ export function applyAppendDrafts(
       ...owner.edits,
       {
         kind: 'append',
-        rows: drafts.map((draft) => ({ ...draft, owner: owner.id })),
+        rows: drafts.map((draft, index) => ({
+          ...draft,
+          owner: inheritedOwners?.[index] ?? owner.id,
+        })),
       },
     ];
   });
