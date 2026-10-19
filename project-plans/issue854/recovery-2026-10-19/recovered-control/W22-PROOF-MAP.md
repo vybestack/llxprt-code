@@ -1,5 +1,13 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Adopted-instance native proof and 100-file collect-failures chunk, 2026-10-19
+
+`bc46927e653921afcb5d4b6a9fb2d22e55ecba28` preserves the original complete adopted-instance `it` call, assertions and 30000 ms bound, explicitly old. One native case adds three real public agents: source recording, public adoption, stopped history replacement at a later creation-clock timestamp, same-path restart, provider continuation, independent resume and another durable turn. Exact committed row trees, original session facts/identity, original creation time and a single listing are observed independently. No whole-binary read or JSONL replay supplies native proof. Four related files pass 43 cases under each outer backend; all eight scoped gates pass.
+
+The pending-only driver then completed two 50-file serial batches without stopping on ordinary red files: 94 green/six red, 713 passes/13 failures/zero skips, no retry. A recorded batch-boundary stop allowed one shared product repair. Node agents imported seven existing core runtime files missing from the package export map. `75fe4c8a4402e37d415c121c6eac14a6593c326b` adds only those mappings. The unchanged three-case shell-owner contract changes from zero pass/three fail to three passes; six related files pass 47 cases per outer backend after the manifest change. Nine scoped gates pass, including core types. Related prior publication results are superseded; other cumulative results retain their original source boundaries.
+
+The repaired checkpoint is 256 executed files, 251 green/five red, 1970 passes/ten failures/zero skips, 550 unexecuted. Classification is 88 native history, 258 shared/public, 28 explicit old and 1596 pending. Final driver controls prove pass/red/pass continuation and loader-failure termination, with atomic live-state publication and inherited timeouts. `W22-STATUS.md` is the concise current report; `W22-INSTANCE-PROOF.json` holds exact evidence and handoff paths. The remaining compression/rollback clusters are still red. W22 remains partial.
+
 ## Native public finalizer proof, 2026-10-19
 
 Commit `ac0fa98d08591c9482c3f4b1bb02e4bbf8868a55` changes tests/fixtures only. All three original finalizer cases remain explicitly old; AST comparison preserves both complete `it` calls, the two-value failure domain and their 30000 ms limits. Eight native cases run in the same inventory file under both outer environments. Neither the original JSONL append barrier nor the `.json` rename barrier is used as native evidence.
