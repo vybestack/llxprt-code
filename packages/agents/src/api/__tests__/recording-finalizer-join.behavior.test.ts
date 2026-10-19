@@ -12,8 +12,18 @@ import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/Sessio
 import { drain } from './helpers/agentHarness.js';
 import {
   gate,
-  withRecordingFinalizerFixture,
+  withRecordingFinalizerFixture as withSelectedFinalizerFixture,
 } from './helpers/recording-finalizer-join-fixture.js';
+import { withHistoryBackend } from './helpers/native-session-fixture.js';
+import {
+  joinNativePublicTurn,
+  joinNativePersistence,
+  disposeLazyNativeRecording,
+} from './helpers/native-finalizer-contracts.js';
+
+const withRecordingFinalizerFixture: typeof withSelectedFinalizerFixture = (
+  scenario,
+) => withHistoryBackend('old', () => withSelectedFinalizerFixture(scenario));
 
 function containsCause(error: unknown, cause: Error): boolean {
   if (error === cause) return true;
@@ -249,4 +259,24 @@ describe('public Agent recording finalizer join', () => {
       );
     }, 30000);
   }
+});
+
+describe('native public Agent recording finalizer join', () => {
+  it('joins the final public-turn positional write and mirror acknowledgement before shutdown completes', async () => {
+    await expect(joinNativePublicTurn()).resolves.toBeUndefined();
+  }, 30000);
+
+  for (const terminal of ['stop', 'dispose'] as const) {
+    for (const fault of ['none', 'trailer', 'flush'] as const) {
+      it(`joins accepted native persistence before ${terminal} completes with ${fault} fault`, async () => {
+        await expect(
+          joinNativePersistence(terminal, fault),
+        ).resolves.toBeUndefined();
+      }, 30000);
+    }
+  }
+
+  it('releases an empty recording lock without allocating a native file during shutdown', async () => {
+    await expect(disposeLazyNativeRecording()).resolves.toBeUndefined();
+  }, 30000);
 });
