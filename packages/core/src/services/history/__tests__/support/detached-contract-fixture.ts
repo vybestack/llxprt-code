@@ -24,6 +24,7 @@ import { batchGate, BatchOwnerCensus } from './addbatch-stream-test-helpers.js';
 import { createCoreSuffixFixtureGraph } from './core-suffix-fixture-test-helpers.js';
 import type { RowOwnership } from '../../../../recording/rowOwnership.js';
 import type { IContent } from '../../IContent.js';
+import { DetachedIOFaults } from './detached-io-faults.js';
 
 export interface DetachedContractFixture {
   readonly history: HistoryService;
@@ -34,6 +35,10 @@ export interface DetachedContractFixture {
 export interface NativeDetachedFixture extends DetachedContractFixture {
   readonly owners: BatchOwnerCensus;
   readonly writerPaused: Promise<void>;
+  readonly io: DetachedIOFaults;
+  readonly session: JournalSession;
+  primaryRows(): AsyncIterable<IContent>;
+  bindOrigin(origin: object): Promise<void>;
   persistedRows(): AsyncIterable<IContent>;
   pauseWriter(): void;
   releaseWriter(): void;
@@ -57,7 +62,10 @@ function fileDigest(path: string): ReturnType<typeof detachedDigest> {
   return detachedDigest(fileRows(path));
 }
 
-async function heldSession(root: string): Promise<{
+async function heldSession(
+  root: string,
+  io: DetachedIOFaults,
+): Promise<{
   session: JournalSession;
   paused: Promise<void>;
   arm(): void;
@@ -77,17 +85,22 @@ async function heldSession(root: string): Promise<{
         const handle = await open(path, flags);
         return {
           fd: handle.fd,
-          read: (...args) => handle.read(...args),
+          read: async (...args) =>
+            io.read() ? { bytesRead: 0 } : handle.read(...args),
           stat: () => handle.stat(),
           truncate: (length) => handle.truncate(length),
           close: () => handle.close(),
           write: async (...args) => {
             await wait();
-            return handle.write(...args);
+            return io.write('trailer')
+              ? { bytesWritten: 0 }
+              : handle.write(...args);
           },
           writev: async (...args) => {
             await wait();
-            return handle.writev(...args);
+            return io.write('records')
+              ? { bytesWritten: 0 }
+              : handle.writev(...args);
           },
         };
       },
@@ -137,7 +150,8 @@ export async function withNativeDetachedFixture(
   action: (fixture: NativeDetachedFixture) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-detached-contract-'));
-  const writer = await heldSession(root);
+  const io = new DetachedIOFaults();
+  const writer = await heldSession(root, io);
   const owners = new BatchOwnerCensus();
   const { service: history, recording } = nativeGraph(
     root,
@@ -151,6 +165,13 @@ export async function withNativeDetachedFixture(
       history,
       owners,
       writerPaused: writer.paused,
+      io,
+      session: writer.session,
+      primaryRows: () => fileRows(writer.session.path),
+      bindOrigin: async (origin) => {
+        await history.detachJournal(recording);
+        await history.attachJournal(recording, true, undefined, origin);
+      },
       async *persistedRows(): AsyncGenerator<IContent, void, unknown> {
         await history.waitForCommit();
         const path = recording.getFilePath();
