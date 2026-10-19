@@ -27,7 +27,7 @@ interface MirrorLink extends MirrorTarget {
   /** The primary version the mirror's newest group recorded. */
   recorded: PrimaryIdentity;
   /** Once a mirror has failed it applies nothing more: its file has a gap that only a resync closes. */
-  failure: { readonly error: unknown } | undefined;
+  failure: { readonly error: unknown; reported: boolean } | undefined;
 }
 
 /** More than one failure is reported together, as `HistoryRecorderFanout.flush` does. */
@@ -100,8 +100,11 @@ export class MirrorFanout {
     return this.serial(async () => {
       const at = this.links.findIndex((link) => link.store === store);
       if (at < 0) return false;
-      await this.links[at].queue;
+      const link = this.links[at];
+      await link.queue;
       this.links.splice(at, 1);
+      if (link.failure !== undefined && !link.failure.reported)
+        throw link.failure.error;
       return true;
     });
   }
@@ -157,9 +160,11 @@ export class MirrorFanout {
     await this.fifo;
     await Promise.all(this.links.map((link) => link.queue));
     rethrowAll(
-      this.links.flatMap((link) =>
-        link.failure === undefined ? [] : [link.failure.error],
-      ),
+      this.links.flatMap((link) => {
+        if (link.failure === undefined) return [];
+        link.failure.reported = true;
+        return [link.failure.error];
+      }),
       'Mirror fan-out flush failed',
     );
   }
@@ -207,7 +212,7 @@ export class MirrorFanout {
         await link.store.commit([...edits, identityEdit(delta.identity)]);
         link.recorded = delta.identity;
       } catch (error) {
-        link.failure = { error };
+        link.failure = { error, reported: false };
       }
     });
     return link.queue;

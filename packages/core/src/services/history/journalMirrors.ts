@@ -143,9 +143,12 @@ export class JournalMirrors {
     await this.queue.exclusive(async () => {
       const bound = this.recorders.get(recorder);
       if (bound === undefined) return;
-      if (bound.session !== undefined)
-        await this.fanout.detach(bound.session.store);
-      this.recorders.delete(recorder);
+      try {
+        if (bound.session !== undefined)
+          await this.fanout.detach(bound.session.store);
+      } finally {
+        this.recorders.delete(recorder);
+      }
     });
   }
 
