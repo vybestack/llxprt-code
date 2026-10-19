@@ -26,7 +26,12 @@ describe('release consumer invocation', () => {
   it.each(['', 'without trailing newline', 'first line\n雪\nlast line\n'])(
     'delivers stdin through EOF and captures real probe argv, stderr and status: %j',
     async (input) => {
-      const args = [probeRequest(), 'space value', 'amp&pipe|caret^bang!', '雪'];
+      const args = [
+        probeRequest(),
+        'space value',
+        'amp&pipe|caret^bang!',
+        '雪',
+      ];
       const result = await invokeConsumer(process.execPath, [probe, ...args], {
         env: process.env,
         input,
@@ -52,11 +57,15 @@ describe('release consumer invocation', () => {
     // Bun 1.3.14 on Windows caches spawnSync's loop clock; only the main loop
     // runs during this gap, which deliberately exceeds the next child's budget.
     await Bun.sleep(1500);
-    const result = await invokeConsumer(process.execPath, [probe, probeRequest()], {
-      env: process.env,
-      input: 'after idle',
-      timeout: 1000,
-    });
+    const result = await invokeConsumer(
+      process.execPath,
+      [probe, probeRequest()],
+      {
+        env: process.env,
+        input: 'after idle',
+        timeout: 1000,
+      },
+    );
     expect(result.status).toBe(17);
     expect(result.stdout).toContain('"stdin":"after idle"');
   }, 10_000);
@@ -68,7 +77,7 @@ describe('release consumer invocation', () => {
         input: '',
         timeout: 1000,
       }),
-    ).rejects.toThrow(/ENOENT/);
+    ).rejects.toThrow(/llxprt-missing-consumer-executable/);
   });
 
   it('terminates a consumer that never exits instead of reporting success', async () => {
