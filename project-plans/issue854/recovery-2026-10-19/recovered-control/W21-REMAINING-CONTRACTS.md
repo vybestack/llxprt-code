@@ -1,6 +1,6 @@
 # W21 current remaining contracts, 2026-10-19
 
-This status map follows the next-request caller increment from verified base `5465856fe4dbceda6d0f4b54b227cd779ef869e4`. It supersedes earlier queue entries only where the contract below is explicitly accounted for. Historical deleted evidence remains missing.
+This status map includes the exact-replay increment from verified base `529a4abf59a4e72cde1cecbf7164949f94591208`, implemented at `88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3`. It supersedes earlier queue entries only where the contract below is explicitly accounted for. Historical deleted evidence remains missing.
 
 ## Accounted contracts
 
@@ -23,9 +23,17 @@ Each variant exercises a failed and a cancelled next request. Parent-owned indep
 
 The final-source inventory, rejecting join-removal control and exact process/gate results are appended to `W21-SERVICE-CRASH-PROOF.md`. Raw new evidence is retained under `tmp/854-notes/p4/w21/next-request-variants/run-20261019-a/` and unique sibling fixture directories. The original old ChatSession recording and pending-input suites remain separate regression proof, not native counterparts.
 
+## Accounted exact replay contracts
+
+`88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3` fixes stale detached chronology after native resume and adds three public exact-replay suites plus one fixture. Actual production RED produced chronology 1/2/1 after an unstamped disk rebuild and equal-text append; detached mutations now obtain the service's current stamper. The separate marked-resume rollback case verifies restored allocation and continued 43/44/45 chronology.
+
+The original 25 replay cases and assertions remain unchanged. Their exact map is `W21-EXACT-REPLAY-PROOF.md`. Newly accounted contracts are eight generated provider/directory/two-flush-segment samples, eight pre/post compression samples, eight 1..500 compression-size samples, six 1000..5000-character text samples, repeated public resume/adoption with no row duplication, genuinely unstamped distinct equal-text rows, selected-origin filtering with actual numeric mirror owner remapping, complete metadata key order and JSON bytes, and real LocalMediaStore reference verification/reservation transfer. Pending read, partial reservation failure, publication-listener failure and after-publication failure preserve prior service/recorder/accounting/media state and permit later continuation. JSONL event-count/sequence/compressed-payload cases retain their old-layout scope.
+
+Final matrix: 48 serial isolated processes across 24 files, 492 passes, zero failures/skips, both outer backend settings; 76 new case executions and 416 reused regressions. All eight final gates pass, 1848 captured core source hashes and six committed source blobs match tested bytes. All 30 fixed input vectors match byte-for-byte across both backends. Four full-file deliberate regressions reject and restore exactly. All 113 recorded run PIDs are absent. Raw evidence remains under `tmp/854-notes/p4/w21/exact-replay/run-20261019-a/`; fixtures remain in its sibling directory. No historical raw recovery is claimed.
+
 ## Other W21 remainder
 
-The wider unreadable-session/directory-scan/resume-identity/extension/checkpoint/fork/janitor inventory remains open beyond the previously delivered bounded cases. The exact reference-media resume, generated metadata/compression-size/flush-segmentation/minimum-large-text matrices and unstamped disk-row rebuild followed by equal-text append remain open. Do not infer closure from deterministic replay, service-scale, native owner, crash or caller cases.
+The wider unreadable-session/directory-scan/resume-identity/extension/checkpoint/fork/janitor inventory remains open beyond the previously delivered bounded cases. W21 remains partial until that inventory is mapped and verified; exact-replay completion does not imply broader discovery closure.
 
 W23's send/planning-envelope refusal and 40 MiB send are separate from W21's 17/40/200 MiB service persistence and resume proof. W24 still owns whole-product proof and primary-plus-mirror write-amplification measurement, including a measurement-based decision on adopting the attached recorder as primary. The correctness fixtures supply neither a write-budget measurement nor that topology decision. W22-W26 and later phase requirements remain; W25's default flip is not authorized by these results.
 
