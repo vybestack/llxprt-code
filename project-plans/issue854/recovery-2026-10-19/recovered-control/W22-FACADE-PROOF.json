@@ -1,0 +1,1712 @@
+{
+  "timestamp": "2026-10-19T20:34:03.613Z",
+  "startingBranch": "issue854",
+  "startingHead": "00dc37802",
+  "implementation": {
+    "sha": "70fdd3e2110fec4466ae47a9ae835b1afb1431c1",
+    "rows": [
+      {
+        "path": "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+        "tested": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+        "committed": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1"
+      },
+      {
+        "path": "packages/agents/src/api/agentImpl.ts",
+        "tested": "721b7c099ff0616ddb9cb236dd4ab397a09f5549c50af1a4cea6a416c8e4046c",
+        "committed": "721b7c099ff0616ddb9cb236dd4ab397a09f5549c50af1a4cea6a416c8e4046c"
+      },
+      {
+        "path": "packages/agents/src/api/control/sessionControl.ts",
+        "tested": "4eb8c65b2a793efb59c35e51328300e652df98a5a25cc709fcec6dd50c26e807",
+        "committed": "4eb8c65b2a793efb59c35e51328300e652df98a5a25cc709fcec6dd50c26e807"
+      },
+      {
+        "path": "packages/agents/src/api/profileReplacement.ts",
+        "tested": "6b9734eab02f0d9d2864d45eccd4f5113cc9aebed3d566d26191a9e1e3a0e568",
+        "committed": "6b9734eab02f0d9d2864d45eccd4f5113cc9aebed3d566d26191a9e1e3a0e568"
+      }
+    ]
+  },
+  "originalContracts": {
+    "timestamp": "2026-10-19T20:29:34.994Z",
+    "originalCases": 4,
+    "currentCases": 8,
+    "originalFourCompleteBodiesIdentical": true,
+    "hashes": {
+      "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+      "packages/agents/src/api/control/sessionControl.ts": "4eb8c65b2a793efb59c35e51328300e652df98a5a25cc709fcec6dd50c26e807",
+      "packages/agents/src/api/profileReplacement.ts": "6b9734eab02f0d9d2864d45eccd4f5113cc9aebed3d566d26191a9e1e3a0e568",
+      "packages/agents/src/api/agentImpl.ts": "721b7c099ff0616ddb9cb236dd4ab397a09f5549c50af1a4cea6a416c8e4046c"
+    }
+  },
+  "rejectingControl": {
+    "before": "4eb8c65b2a793efb59c35e51328300e652df98a5a25cc709fcec6dd50c26e807",
+    "after": "4eb8c65b2a793efb59c35e51328300e652df98a5a25cc709fcec6dd50c26e807",
+    "restoredByteIdentically": true,
+    "observation": {
+      "code": 0,
+      "results": [
+        {
+          "path": "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+          "pid": 62521,
+          "driverPid": 62518,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62518-mvfphpxy-fc9195fed783",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-rebind-control-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-rebind-control-b/0149-recording-facade-chat-channel.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-rebind-control-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+          "sourceHash": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+          "started": "2026-10-19T20:27:52.344Z",
+          "code": 1,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:27:59.247Z",
+          "pass": 7,
+          "fail": 1,
+          "skip": 0
+        }
+      ]
+    }
+  },
+  "sourceBoundary": {
+    "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/full-final-source-hashes.json",
+    "sha256": "02f31466f5e42909b8fce6a915b16bcb1336e8e16ea92aba600de79c8923727c",
+    "paths": 3318,
+    "mismatches": []
+  },
+  "gates": [
+    {
+      "name": "api-surface",
+      "command": [
+        "bun",
+        "scripts/check-agents-api-surface.ts"
+      ],
+      "pid": 57366,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/api-surface.log",
+      "started": "2026-10-19T20:26:17.760Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:26:32.081Z"
+    },
+    {
+      "name": "build-types",
+      "command": [
+        "bun",
+        "run",
+        "build:types"
+      ],
+      "pid": 57756,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/build-types.log",
+      "started": "2026-10-19T20:26:32.084Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:04.599Z"
+    },
+    {
+      "name": "agents-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "pid": 59965,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/agents-tsc.log",
+      "started": "2026-10-19T20:27:04.600Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:14.730Z"
+    },
+    {
+      "name": "agents-bun-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun-types/test,bun-types/test-globals,bun-types"
+      ],
+      "pid": 60362,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/agents-bun-tsc.log",
+      "started": "2026-10-19T20:27:14.730Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:20.334Z"
+    },
+    {
+      "name": "eslint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+        "packages/agents/src/api/agentImpl.ts",
+        "packages/agents/src/api/profileReplacement.ts",
+        "packages/agents/src/api/control/sessionControl.ts"
+      ],
+      "pid": 60702,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/eslint.log",
+      "started": "2026-10-19T20:27:20.339Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:26.823Z"
+    },
+    {
+      "name": "prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+        "packages/agents/src/api/agentImpl.ts",
+        "packages/agents/src/api/profileReplacement.ts",
+        "packages/agents/src/api/control/sessionControl.ts"
+      ],
+      "pid": 60981,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/prettier.log",
+      "started": "2026-10-19T20:27:26.824Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:27.089Z"
+    },
+    {
+      "name": "affected-graph",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "pid": 60989,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/affected-graph.log",
+      "started": "2026-10-19T20:27:27.090Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:30.368Z"
+    },
+    {
+      "name": "audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/audit"
+      ],
+      "pid": 61116,
+      "driverPid": 57365,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/audit.log",
+      "started": "2026-10-19T20:27:30.368Z",
+      "exitCode": 0,
+      "ended": "2026-10-19T20:27:33.610Z"
+    }
+  ],
+  "matrix": [
+    {
+      "batch": "facade-run-final-journal-b",
+      "results": [
+        {
+          "path": "packages/agents/src/api/__tests__/boundary.adequacy.test.ts",
+          "pid": 62903,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphvgx-7916d8ed4995",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/boundary.adequacy.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.xml",
+          "sourceHash": "7fe7df8c82f4f2e7fe27e814ce24dd441a708332eb952be3accbdcca56bcc22e",
+          "started": "2026-10-19T20:27:59.507Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:27:59.918Z",
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts",
+          "pid": 62923,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphvsf-352631d661b3",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.xml",
+          "sourceHash": "c219c66619201501571f01753e15c23c8b1dfa0202b96c2055dfafacddcc0789",
+          "started": "2026-10-19T20:27:59.920Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:01.510Z",
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recorded-history-persistence.test.ts",
+          "pid": 63003,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphx0n-9093c6fdc263",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recorded-history-persistence.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.xml",
+          "sourceHash": "5dedb2bc9e29d5d74285cfc5de7bffe585f6ebc550754439c1174d3a7836dd41",
+          "started": "2026-10-19T20:28:01.512Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:02.390Z",
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+          "pid": 63040,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphxp2-4b4f13c48e9b",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+          "sourceHash": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+          "started": "2026-10-19T20:28:02.391Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:08.607Z",
+          "pass": 8,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts",
+          "pid": 63374,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfpi2hs-bb1efcd73201",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+          "sourceHash": "801722e0835b9cae61522f6b744ac8787977de461a153b841e3a8f995fdc97c1",
+          "started": "2026-10-19T20:28:08.609Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:11.482Z",
+          "pass": 18,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts",
+          "pid": 63574,
+          "driverPid": 62901,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfpi4pm-271c8693a2b2",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+          "sourceHash": "aa6bb19b70bc7e851d8dc4e839d27173d61cd3b4a5deaccf5b3ce6574f450539",
+          "started": "2026-10-19T20:28:11.484Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:15.195Z",
+          "pass": 18,
+          "fail": 0,
+          "skip": 0
+        }
+      ]
+    },
+    {
+      "batch": "facade-run-final-old-b",
+      "results": [
+        {
+          "path": "packages/agents/src/api/__tests__/boundary.adequacy.test.ts",
+          "pid": 63835,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpi7lb-e0a8fa72af4d",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0035-boundary.adequacy.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/boundary.adequacy.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0035-boundary.adequacy.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0035-boundary.adequacy.test.ts.xml",
+          "sourceHash": "7fe7df8c82f4f2e7fe27e814ce24dd441a708332eb952be3accbdcca56bcc22e",
+          "started": "2026-10-19T20:28:15.218Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:15.579Z",
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts",
+          "pid": 63847,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpi7vg-34faca5d47b9",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0123-profile-session-admission.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0123-profile-session-admission.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0123-profile-session-admission.behavior.test.ts.xml",
+          "sourceHash": "c219c66619201501571f01753e15c23c8b1dfa0202b96c2055dfafacddcc0789",
+          "started": "2026-10-19T20:28:15.581Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:17.183Z",
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recorded-history-persistence.test.ts",
+          "pid": 63914,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpi93z-8846a09938dd",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0147-recorded-history-persistence.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recorded-history-persistence.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0147-recorded-history-persistence.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0147-recorded-history-persistence.test.ts.xml",
+          "sourceHash": "5dedb2bc9e29d5d74285cfc5de7bffe585f6ebc550754439c1174d3a7836dd41",
+          "started": "2026-10-19T20:28:17.184Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:18.122Z",
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+          "pid": 63945,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpi9u3-9fccef4de069",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0149-recording-facade-chat-channel.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+          "sourceHash": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+          "started": "2026-10-19T20:28:18.124Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:24.417Z",
+          "pass": 8,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts",
+          "pid": 64256,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpieoy-407f7e990da4",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0154-recording-owner-lifetime.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+          "sourceHash": "801722e0835b9cae61522f6b744ac8787977de461a153b841e3a8f995fdc97c1",
+          "started": "2026-10-19T20:28:24.419Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:27.504Z",
+          "pass": 18,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts",
+          "pid": 64634,
+          "driverPid": 63834,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p63834-mvfpih2p-e8418865bca9",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0177-session-owner-restore-checkpoint.behavior.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-old-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+          "sourceHash": "aa6bb19b70bc7e851d8dc4e839d27173d61cd3b4a5deaccf5b3ce6574f450539",
+          "started": "2026-10-19T20:28:27.506Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:31.493Z",
+          "pass": 18,
+          "fail": 0,
+          "skip": 0
+        }
+      ]
+    },
+    {
+      "batch": "facade-run-profiles-journal-b",
+      "results": [
+        {
+          "path": "packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts",
+          "pid": 65125,
+          "driverPid": 65124,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpik65-7cf1f7ddfefa",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.xml",
+          "sourceHash": "ff84ff5d328895c4ff5cb13f518f7ef1846af72c6feca2bbad3f1c2dd1b7b84d",
+          "started": "2026-10-19T20:28:31.521Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:32.841Z",
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts",
+          "pid": 65269,
+          "driverPid": 65124,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpil6y-206fd7ff2923",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.xml",
+          "sourceHash": "591db7c32ce381d94dd634acc3ae320ea8860b2b003e44615f8cf80442e00eae",
+          "started": "2026-10-19T20:28:32.843Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:34.864Z",
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts",
+          "pid": 65492,
+          "driverPid": 65124,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpimr4-bc5e48d82b48",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.xml",
+          "sourceHash": "25da0a18eee276fc0941253cfad813d7c3572c1409c73fad5866f50ee810a3f6",
+          "started": "2026-10-19T20:28:34.866Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:36.347Z",
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts",
+          "pid": 65589,
+          "driverPid": 65124,
+          "backend": "journal",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpinwb-c41506bbdf05",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.xml",
+          "sourceHash": "48b969e107821bda47858c306fc587e8a8f8734288f6009e475c038f14e12813",
+          "started": "2026-10-19T20:28:36.352Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:38.109Z",
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        }
+      ]
+    },
+    {
+      "batch": "facade-run-profiles-old-b",
+      "results": [
+        {
+          "path": "packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts",
+          "pid": 65749,
+          "driverPid": 65747,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65747-mvfpipa3-2336a8ddd034",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0108-profile-atomicity-owner.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0108-profile-atomicity-owner.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0108-profile-atomicity-owner.test.ts.xml",
+          "sourceHash": "ff84ff5d328895c4ff5cb13f518f7ef1846af72c6feca2bbad3f1c2dd1b7b84d",
+          "started": "2026-10-19T20:28:38.141Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:39.587Z",
+          "pass": 3,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts",
+          "pid": 65888,
+          "driverPid": 65747,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65747-mvfpiqec-3adab85e71ce",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0120-profile-postcommit-lifetime.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0120-profile-postcommit-lifetime.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0120-profile-postcommit-lifetime.test.ts.xml",
+          "sourceHash": "591db7c32ce381d94dd634acc3ae320ea8860b2b003e44615f8cf80442e00eae",
+          "started": "2026-10-19T20:28:39.589Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:41.716Z",
+          "pass": 5,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts",
+          "pid": 66098,
+          "driverPid": 65747,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65747-mvfpis1g-ca7fbeda8628",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0121-profile-postcommit-siblings.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0121-profile-postcommit-siblings.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0121-profile-postcommit-siblings.test.ts.xml",
+          "sourceHash": "25da0a18eee276fc0941253cfad813d7c3572c1409c73fad5866f50ee810a3f6",
+          "started": "2026-10-19T20:28:41.717Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:43.214Z",
+          "pass": 1,
+          "fail": 0,
+          "skip": 0
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts",
+          "pid": 66206,
+          "driverPid": 65747,
+          "backend": "old",
+          "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65747-mvfpit72-05cb5ea147e5",
+          "args": [
+            "test",
+            "--timeout",
+            "180000",
+            "--reporter=junit",
+            "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0122-profile-preparation-cancellation.test.ts.xml",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0122-profile-preparation-cancellation.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-old-b/0122-profile-preparation-cancellation.test.ts.xml",
+          "sourceHash": "48b969e107821bda47858c306fc587e8a8f8734288f6009e475c038f14e12813",
+          "started": "2026-10-19T20:28:43.215Z",
+          "code": 0,
+          "signal": null,
+          "timedOut": false,
+          "ended": "2026-10-19T20:28:44.939Z",
+          "pass": 2,
+          "fail": 0,
+          "skip": 0
+        }
+      ]
+    }
+  ],
+  "classifications": {
+    "timestamp": "2026-10-19T20:32:03.336Z",
+    "rows": [
+      {
+        "path": "packages/agents/src/api/__tests__/boundary.adequacy.test.ts",
+        "pid": 62903,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphvgx-7916d8ed4995",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/boundary.adequacy.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0035-boundary.adequacy.test.ts.xml",
+        "sourceHash": "7fe7df8c82f4f2e7fe27e814ce24dd441a708332eb952be3accbdcca56bcc22e",
+        "started": "2026-10-19T20:27:59.507Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:27:59.918Z",
+        "pass": 5,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set",
+            "name": "Test A: NO file deep-imports /src/, core/src, or providers/src",
+            "time": "0.000726",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set",
+            "name": "Test B (CRIT-6, absolute — issue #3222): NO file imports a non-public agents subpath (the retired internals escape hatch is forbidden everywhere, with no exemptions)",
+            "time": "0.000228",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set",
+            "name": "Test C: at least one file imports the public root @vybestack/llxprt-code-agents",
+            "time": "0.000066",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set",
+            "name": "PROP: no discovered file contains a deep-import specifier (REQ-INT-004 a)",
+            "time": "0.00209",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set",
+            "name": "PROP: no discovered file contains a non-public agents-subpath import specifier (issue #3222 absolute rule)",
+            "time": "0.000422",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts",
+        "pid": 62923,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphvsf-352631d661b3",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-session-admission.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0123-profile-session-admission.behavior.test.ts.xml",
+        "sourceHash": "c219c66619201501571f01753e15c23c8b1dfa0202b96c2055dfafacddcc0789",
+        "started": "2026-10-19T20:27:59.920Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:01.510Z",
+        "pass": 3,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "profile admission during a session switch",
+            "name": "rejects load while the old recording retires",
+            "time": "0.307347",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "profile admission during a session switch",
+            "name": "rejects applySnapshot while the old recording retires",
+            "time": "0.09732",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "profile admission during a session switch",
+            "name": "rejects apply while the old recording retires",
+            "time": "0.096977",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/recorded-history-persistence.test.ts",
+        "pid": 63003,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphx0n-9093c6fdc263",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recorded-history-persistence.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0147-recorded-history-persistence.test.ts.xml",
+        "sourceHash": "5dedb2bc9e29d5d74285cfc5de7bffe585f6ebc550754439c1174d3a7836dd41",
+        "started": "2026-10-19T20:28:01.512Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:02.390Z",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "journal history persistence",
+            "name": "persists semantic purge without recording a second history mutation",
+            "time": "0.075078",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "journal history persistence",
+            "name": "persists rollback after a durable purge without recording a second history mutation",
+            "time": "0.036224",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts",
+        "pid": 63040,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfphxp2-4b4f13c48e9b",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0149-recording-facade-chat-channel.behavior.test.ts.xml",
+        "sourceHash": "517e123704104207acb8f21969363569c53b482c2de7d9abbaf209afff7abca1",
+        "started": "2026-10-19T20:28:02.391Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:08.607Z",
+        "pass": 8,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "old-format facade recording chat execution on a borrowed client",
+            "name": "routes manual compression through the executing facade across stop and resume",
+            "time": "1.449169",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "old-format facade recording chat execution on a borrowed client",
+            "name": "records a purge only for the executing facade on the same client and history",
+            "time": "1.39898",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "old-format facade recording chat execution on a borrowed client",
+            "name": "does not persist a non-recording facade purge into the sibling recorder",
+            "time": "0.090961",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "old-format facade recording chat execution on a borrowed client",
+            "name": "uses the executing facade recorder after a profile candidate adopts live history",
+            "time": "1.287656",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "native facade recording chat execution on a borrowed client",
+            "name": "commits compression to its executing recorder across stop and resume",
+            "time": "0.335148",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native facade recording chat execution on a borrowed client",
+            "name": "commits shared unowned media changes while keeping each facade turn in its own file",
+            "time": "0.236254",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native facade recording chat execution on a borrowed client",
+            "name": "rejects an unrecorded facade purge without changing live media or its sibling file",
+            "time": "0.123807",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native facade recording chat execution on a borrowed client",
+            "name": "moves the executing recorder to its profile client without purging or appending to its borrowed sibling",
+            "time": "0.179834",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts",
+        "pid": 63374,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfpi2hs-bb1efcd73201",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-owner-lifetime.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0154-recording-owner-lifetime.behavior.test.ts.xml",
+        "sourceHash": "801722e0835b9cae61522f6b744ac8787977de461a153b841e3a8f995fdc97c1",
+        "started": "2026-10-19T20:28:08.609Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:11.482Z",
+        "pass": 18,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "recording owner lifetime",
+            "name": "releases startup ownership after queue failure before subscription",
+            "time": "0.291894",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "releases startup ownership after append failure before subscription",
+            "time": "0.078215",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "closes admission synchronously and joins an admitted external append before disposing",
+            "time": "0.047597",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "control: records and flushes a subsequent public turn on a borrowed Config",
+            "time": "0.075705",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "disposing a non-recording borrowed facade preserves the other recorder and its subsequent turn",
+            "time": "0.090281",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "stopping and disposing a recording sibling leaves the first owner recording later turns",
+            "time": "0.09951",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "releases the lock after a subscription rejected registering the retirement listener and lets the replacement recorder record another turn",
+            "time": "0.074415",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "releases the lock after a subscription rejected after the attachment and lets the replacement recorder record another turn",
+            "time": "0.077388",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "rejects recording admission while public disposal joins a pending provider body before session shutdown",
+            "time": "0.05875",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "recording owner lifetime",
+            "name": "rejects recording admission after public disposal without creating a journal or lock",
+            "time": "0.03771",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "releases startup lock after write failure and records a later public turn",
+            "time": "0.138856",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "releases startup lock after flush failure and records a later public turn",
+            "time": "0.100557",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "closes admission synchronously and joins an admitted positional write before disposal",
+            "time": "0.058329",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "keeps an owner recording after a non-recording borrowed facade disposes",
+            "time": "0.110297",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "keeps both borrowed recorder identities isolated after sibling stop and disposal",
+            "time": "0.149074",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "releases failed subscription ownership at retirement listener and records with its replacement",
+            "time": "0.107556",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "releases failed subscription ownership at after attachment and records with its replacement",
+            "time": "0.120785",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native recording owner lifetime",
+            "name": "rejects recording admission while public disposal joins a provider body and after shutdown",
+            "time": "0.032691",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts",
+        "pid": 63574,
+        "driverPid": 62901,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p62901-mvfpi4pm-271c8693a2b2",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-final-journal-b/0177-session-owner-restore-checkpoint.behavior.test.ts.xml",
+        "sourceHash": "aa6bb19b70bc7e851d8dc4e839d27173d61cd3b4a5deaccf5b3ce6574f450539",
+        "started": "2026-10-19T20:28:11.484Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:15.195Z",
+        "pass": 18,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "uses the agent-captured media store for recording and checkpoint replay after Config media access is disabled",
+            "time": "0.200309",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "hands back the remaining history as a stream over the journal, not an array",
+            "time": "0.072531",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "restores recorded human turns, persists the rewind and continues recording on the same lock",
+            "time": "0.082668",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "serializes restore before a queued checkpoint and rejects mutations after disposal",
+            "time": "0.080588",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "rejects invalid turns and restores live and durable history if client restoration fails",
+            "time": "0.086308",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "denies collisions without UI confirmation and atomically overwrites on create, rename and session naming",
+            "time": "0.092145",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "preserves the colliding name when a confirmed checkpoint write fails",
+            "time": "0.086662",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "Agent session owner history restore and checkpoint names",
+            "name": "keeps a borrowed sibling recording and its lock isolated while restoring and renaming a closed checkpoint",
+            "time": "0.100694",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "uses captured media for durable recording, checkpoint fork and resume without Config media access",
+            "time": "0.262307",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "streams restored rows, durably cuts human turns and continues on the same recording lock",
+            "time": "0.184228",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "serializes restore before checkpoint, forks the restored version and rejects mutation after disposal",
+            "time": "0.176957",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "rejects invalid turns and restores live and durable owners when client restoration fails",
+            "time": "0.151764",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "denies collisions and atomically overwrites create, rename and session names",
+            "time": "0.168399",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "preserves colliding checkpoint names after a native write failure and actual reopen",
+            "time": "0.200247",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "preserves colliding checkpoint names after a native flush failure and actual reopen",
+            "time": "0.177507",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "native agent owner restore and checkpoint names",
+            "name": "isolates two borrowed owners while restoring and renaming a closed checkpoint",
+            "time": "0.153051",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          },
+          {
+            "classname": "public restore media reservation failure",
+            "name": "keeps live and durable rows atomic when the second media reservation fails (withOldRecordingFixture)",
+            "time": "0.183071",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old"
+          },
+          {
+            "classname": "public restore media reservation failure",
+            "name": "keeps live and durable rows atomic when the second media reservation fails (withNativeRecordingFixture)",
+            "time": "0.15783",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts",
+        "pid": 65125,
+        "driverPid": 65124,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpik65-7cf1f7ddfefa",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-atomicity-owner.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0108-profile-atomicity-owner.test.ts.xml",
+        "sourceHash": "ff84ff5d328895c4ff5cb13f518f7ef1846af72c6feca2bbad3f1c2dd1b7b84d",
+        "started": "2026-10-19T20:28:31.521Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:32.841Z",
+        "pass": 3,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "Profile settings rollback at the owner",
+            "name": "restores pre-application settings state when a mid-cascade step fails and rethrows the original error",
+            "time": "0.116321",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "Profile settings rollback at the owner",
+            "name": "rolls back profile tool policy imported mid-cascade when a later step fails",
+            "time": "0.030246",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "Profile settings rollback at the owner",
+            "name": "keeps applied state on the success path (no spurious rollback)",
+            "time": "0.028453",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts",
+        "pid": 65269,
+        "driverPid": 65124,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpil6y-206fd7ff2923",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-lifetime.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0120-profile-postcommit-lifetime.test.ts.xml",
+        "sourceHash": "591db7c32ce381d94dd634acc3ae320ea8860b2b003e44615f8cf80442e00eae",
+        "started": "2026-10-19T20:28:32.843Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:34.864Z",
+        "pass": 5,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "public profile postcommit OAuth lifetime (#2616)",
+            "name": "joins native refresh and token persistence before completing apply",
+            "time": "0.354308",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "public profile postcommit OAuth lifetime (#2616)",
+            "name": "shares pending disposal until committed token persistence finishes",
+            "time": "0.116511",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "public profile postcommit OAuth lifetime (#2616)",
+            "name": "aborts the native HTTP refresh immediately on public disposal",
+            "time": "0.088741",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "public profile postcommit OAuth lifetime (#2616)",
+            "name": "joins a fired renewal during replacement and prevents old rescheduling",
+            "time": "0.136678",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "public profile postcommit OAuth lifetime (#2616)",
+            "name": "joins a fired installed renewal on disposal after apply has completed",
+            "time": "0.123268",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts",
+        "pid": 65492,
+        "driverPid": 65124,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpimr4-bc5e48d82b48",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-postcommit-siblings.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0121-profile-postcommit-siblings.test.ts.xml",
+        "sourceHash": "25da0a18eee276fc0941253cfad813d7c3572c1409c73fad5866f50ee810a3f6",
+        "started": "2026-10-19T20:28:34.866Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:36.347Z",
+        "pass": 1,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "profile postcommit sibling lifetime",
+            "name": "joins a paused LB member after another fails and uses captured member buckets",
+            "time": "0.324064",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts",
+        "pid": 65589,
+        "driverPid": 65124,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p65124-mvfpinwb-c41506bbdf05",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/profile-preparation-cancellation.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/facade-run-profiles-journal-b/0122-profile-preparation-cancellation.test.ts.xml",
+        "sourceHash": "48b969e107821bda47858c306fc587e8a8f8734288f6009e475c038f14e12813",
+        "started": "2026-10-19T20:28:36.352Z",
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:28:38.109Z",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "cases": [
+          {
+            "classname": "profile-preparation-cancellation",
+            "name": "disposal joins all profile token reads without late publication (sibling fails: %s)",
+            "time": "0.40031",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "profile-preparation-cancellation",
+            "name": "disposal joins all profile token reads without late publication (sibling fails: %s)",
+            "time": "0.201806",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      }
+    ]
+  },
+  "audit": {
+    "before": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/audit-before/findings.tsv",
+    "final": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a/gates-c/audit/findings.tsv",
+    "touchedFinal": [
+      "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts\t302\tnative facade recording chat execution on a borrowed client > commits compression to its executing recorder across stop and resume\tDUP_ASSERT\t2x identical assertion: expect(rowTexts(await nativeRows(pathA))).toContain( `summary-path:${pathA}`, )\tagents",
+      "packages/agents/src/api/__tests__/recording-facade-chat-channel.behavior.test.ts\t302\tnative facade recording chat execution on a borrowed client > commits compression to its executing recorder across stop and resume\tDUP_ASSERT\t2x identical assertion: expect(rowTexts(await nativeRows(pathB))).not.toContain( `summary-path:${pathA}`, )\tagents"
+    ],
+    "newHighRisk": [],
+    "suppressions": []
+  },
+  "census": {
+    "timestamp": "2026-10-19T20:32:03.416Z",
+    "inventory": 806,
+    "executedFiles": 154,
+    "greenFiles": 153,
+    "redFiles": 1,
+    "pass": 1237,
+    "fail": 3,
+    "skip": 0,
+    "unexecutedFiles": 652,
+    "classifications": {
+      "native-history": 79,
+      "journal-selected-shared-public": 251,
+      "explicit-old": 24,
+      "classification-pending": 883
+    }
+  },
+  "nextFailure": {
+    "results": [
+      {
+        "path": "packages/agents/src/api/__tests__/recording-finalizer-join.behavior.test.ts",
+        "pid": 70469,
+        "driverPid": 70464,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p70464-mvfpk3n9-9d64b361e048",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-finalizer-join.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.xml",
+        "sourceHash": "9da9ac58cd8ee87976dba25e78e7fd37e67ea4b43fa920f1b7fb83f3494bbbdc",
+        "started": "2026-10-19T20:29:43.415Z",
+        "code": 1,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:31:14.693Z",
+        "pass": 0,
+        "fail": 3,
+        "skip": 0
+      }
+    ],
+    "cases": [
+      {
+        "classname": "public Agent recording finalizer join",
+        "name": "joins the final public-turn journal append before releasing its real lock",
+        "time": "30.000003",
+        "status": "failed",
+        "failureMessage": null
+      },
+      {
+        "classname": "public Agent recording finalizer join",
+        "name": "joins accepted persistence before releasing recording ownership",
+        "time": "30.000003",
+        "status": "failed",
+        "failureMessage": null
+      },
+      {
+        "classname": "public Agent recording finalizer join",
+        "name": "joins accepted persistence before releasing recording ownership and retains its original failure",
+        "time": "30.000003",
+        "status": "failed",
+        "failureMessage": null
+      }
+    ],
+    "mechanism": "Old appendFile and .json snapshot-rename barriers do not observe native positional writes; no finalizer repair or product-defect claim in this increment.",
+    "repaired": false
+  },
+  "supervisor": {
+    "supervisorPid": 70448,
+    "timestamp": "2026-10-19T20:31:14.696Z",
+    "nextRun": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/facade-run-20261019-a",
+    "status": "stopped-after-failure",
+    "batch": "package-resume-d-0000",
+    "driverPid": 70464,
+    "exitCode": 0,
+    "completed": 1,
+    "failures": [
+      {
+        "path": "packages/agents/src/api/__tests__/recording-finalizer-join.behavior.test.ts",
+        "pid": 70469,
+        "driverPid": 70464,
+        "backend": "journal",
+        "sessionRoot": "/private/tmp/llxprt-w22-branch3-facade-20261019-a/llxprt-tests/p70464-mvfpk3n9-9d64b361e048",
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "--reporter=junit",
+          "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.xml",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/api/__tests__/recording-finalizer-join.behavior.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/0150-recording-finalizer-join.behavior.test.ts.xml",
+        "sourceHash": "9da9ac58cd8ee87976dba25e78e7fd37e67ea4b43fa920f1b7fb83f3494bbbdc",
+        "started": "2026-10-19T20:29:43.415Z",
+        "code": 1,
+        "signal": null,
+        "timedOut": false,
+        "ended": "2026-10-19T20:31:14.693Z",
+        "pass": 0,
+        "fail": 3,
+        "skip": 0
+      }
+    ],
+    "currentFilePath": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-d-0000/current.json"
+  },
+  "recordedSweepPids": [
+    70448,
+    70464,
+    70469
+  ],
+  "liveSweepPids": [],
+  "pending": {
+    "list": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/current-not-run.txt",
+    "nextFive": [
+      "packages/agents/src/api/__tests__/recording-hook-routing.behavior.test.ts",
+      "packages/agents/src/api/__tests__/recording-instance-resume.behavior.test.ts",
+      "packages/agents/src/api/__tests__/recording-nonstream-413-hooks.behavior.test.ts",
+      "packages/agents/src/api/__tests__/recording-remaining-hooks.behavior.test.ts",
+      "packages/agents/src/api/__tests__/recording-shared-history-origin.behavior.test.ts"
+    ],
+    "repairRedFirst": "packages/agents/src/api/__tests__/recording-finalizer-join.behavior.test.ts"
+  },
+  "preservedFixtureReceipt": "project-plans/issue854/recovery-2026-10-19/recovered-control/W22-FIXTURE-RELOCATIONS.json",
+  "preservedFixtureDestination": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/",
+  "cleanupPerformed": false,
+  "diskFreeGiB": {
+    "workspace": 44,
+    "system": 119
+  },
+  "review": "review skipped per Andrew 2026-10-09",
+  "limits": [
+    "W22 incomplete",
+    "883 passing cases remain classification-pending",
+    "652 inventory files unexecuted",
+    "Cumulative per-file source boundaries, not one final-source full-package run",
+    "Affected graph validation is not affected-shard execution",
+    "W23-W26 remain separate"
+  ]
+}

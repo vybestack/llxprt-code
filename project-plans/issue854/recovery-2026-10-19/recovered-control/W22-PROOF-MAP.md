@@ -1,5 +1,41 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Facade native proof and profile attachment fix, 2026-10-19
+
+Commit `70fdd3e2110fec4466ae47a9ae835b1afb1431c1` adds four native cases alongside four explicit-old cases. `facade-run-20261019-a/old-contract-proof.json` proves all four original complete `it` calls AST-identical, including their 30000 ms bounds. Original JSONL marker checks remain in those old bodies. The native cases use real public Agents, session controls, HistoryService, recorder integration, and independently opened committed row trees through `nativeRows`. Compression's provider summary is injected at the existing strategy seam; persistence and ownership remain real.
+
+| Original contract | Native counterpart and durable observation |
+| --- | --- |
+| Manual compression routes through each executing facade across stop/resume | Native compression rows appear only in the executing recording; stopped compression sees no transcript path; the closed file is byte-identical after sibling work; explicit original session resume writes its summary into the same path |
+| Purge event belongs to the executing facade | The initial media row is unowned and shared, so its media mutation reaches both native mirrors; only the executing facade's turn appears in its own file; B reseeding/purge and stopped-file reopening establish both directions |
+| Non-recording facade does not write a sibling purge | The public stream reports `No active recording`; initial live media remains identical, the recording sibling's complete committed rows remain identical, and B's turn is absent |
+| Profile candidate uses the executing recorder | Borrowed-client profile replacement creates separate candidate history; A's committed file and live stream contain the purged row and A's new turn, while B's complete committed rows remain identical to its pre-profile state |
+
+The last case was product RED after adding real mirror flush boundaries: candidate live history changed, but independently reopened A still held the pre-purge media. `SessionClientOwner` intentionally does not adopt the borrowed client's shared history into the candidate. RecordingIntegration was left subscribed to that prior history. The three-file fix runs `SessionControl.rebindRecording` after profile publication/retirement and uses the integration's existing detach/attach path. It does not add a history array, operation spool, repeated whole-file read, fallback or default change. Attaching from inside purge was rejected because it waits on the mutation queue holding that purge; its timeout attempts remain separate evidence.
+
+Final source matrix uses `facade-run-final-{journal,old}-b` and `facade-run-profiles-{journal,old}-b`, 20 serial single-file Bun processes, **130 passes/zero failures/zero skips**. Each outer environment has 54 main plus eleven profile cases. Final facade PIDs: journal **63040**, old **63945**, eight passes each. The full-file missing-rebind control (62521) has seven passes/one native-profile failure, exit one; `rebind-control-b-proof.json` proves byte-identical production restoration. Historical format-marker failures, mirror-flush fixture failures, incorrect test-author expectations, deadlocked experimental attachment and an ES2021 indexing type error stay distinct from final product proof.
+
+Reuse, rather than duplicate, the existing contracts that actually ran:
+
+| File | Final journal PID | Cases and classification |
+| --- | ---: | --- |
+| `boundary.adequacy.test.ts` | 62903 | Five shared/public; export guard unchanged |
+| `profile-session-admission.behavior.test.ts` | 62923 | Three shared/public admission/concurrency contracts |
+| `recorded-history-persistence.test.ts` | 63003 | Two native committed purge/rollback contracts |
+| `recording-facade-chat-channel.behavior.test.ts` | 63040 | Four native above, four explicit old |
+| `recording-owner-lifetime.behavior.test.ts` | 63374 | Eight native startup write/flush failure, admitted-write shutdown, borrowed identity, subscription cleanup and late admission; ten explicit old |
+| `session-owner-restore-checkpoint.behavior.test.ts` | 63574 | Nine native, including failed client restoration with complete live/durable rollback, borrowed owners, actual reopen, and failed second media reservation with later release; nine explicit old |
+| `profile-atomicity-owner.test.ts` | 65125 | Three shared/public profile transaction cases |
+| `profile-postcommit-lifetime.test.ts` | 65269 | Five shared/public retirement/continuation cases |
+| `profile-postcommit-siblings.test.ts` | 65492 | One shared/public sibling isolation case |
+| `profile-preparation-cancellation.test.ts` | 65589 | Two shared/public candidate cancellation cases |
+
+The main matrix contributes 23 classified native contracts, 23 explicit old and eight shared/public; profile regressions contribute eleven shared/public. Supplemental outer-old executions are not added again to package totals. Exact case names, source hashes and second-environment PIDs are in durable `W22-FACADE-PROOF.json` and raw `facade-run-20261019-a/classification.json`. All eight final gates pass; four committed source hashes and the final 3318-path boundary match. Two DUP_ASSERT notices concern independent before/after compression phases; no final high-risk finding or policy suppression. Affected-graph validation is not affected-shard execution.
+
+The continuation then stopped at the first pending file, `recording-finalizer-join.behavior.test.ts`, child70469: zero pass/three original-bound timeouts, complete summary/JUnit, no retry. All three supervisor/driver/child PIDs exited. Current package census: **154 completed, 153 green/one red, 1237 pass/three fail/zero skip, 652 unexecuted**; classifications **79 native, 251 shared/public, 24 explicit old, 883 pending**. The appendFile/.json rename barriers in that red file are old-only seams, not native shutdown proof. Repair and map that next cluster before resuming. W22-STATUS.md identifies exact paths and source boundaries. W22 is incomplete. Review skipped per Andrew 2026-10-09.
+
+## Earlier proof increments
+
 **The first twenty agents package files are green on journal. This document preserves that bounded proof and its later boundary-fixture increment.** Current running-package counts are in W22-STATUS.md; the first-batch 786-path remainder below is historical to that checkpoint. This is new evidence from base `b1714cdea75dd297a122b443b853bbe36b1cead5`, not restored historical proof.
 
 Raw evidence is `tmp/854-notes/p4/w22/run-20261019-a/`, abbreviated `run/` below. Inventory and initial status were created before tests using both package runner discovery functions. No source test was excluded. All files run serially, alone in Bun, from `packages/agents`, with existing package preloads and timeouts.
