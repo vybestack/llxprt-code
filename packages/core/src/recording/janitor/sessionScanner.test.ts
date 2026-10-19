@@ -29,6 +29,9 @@ import * as path from 'node:path';
 import { scanGlobalSessions, ARCHIVE_DIR_NAME } from './sessionScanner.js';
 import { SessionRecordingService } from '../SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
+import { pinHistoryBackend } from '../__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 const bunIt = it;
 

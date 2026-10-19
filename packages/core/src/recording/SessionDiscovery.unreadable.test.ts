@@ -16,12 +16,15 @@ import { SessionDiscovery } from './SessionDiscovery.js';
 import { CheckpointService } from './CheckpointService.js';
 import { matchUnreadableRecordings } from './unreadableRecordings.js';
 import { resumeSessionNotFoundMessage } from './resumeNotFoundMessages.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 import {
   writeCorruptHeaderSession,
   writeLegacyUnknownProviderSession,
   writeRawRecordingFile,
   writeSessionWithHeaderPayload,
 } from './__tests__/recording-file-fixtures.js';
+
+pinHistoryBackend('old');
 
 const PROJECT_HASH = 'unreadable-discovery-project';
 

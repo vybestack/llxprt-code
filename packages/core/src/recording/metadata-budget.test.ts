@@ -7,6 +7,9 @@ import { readFirstLineFromFile, SessionDiscovery } from './SessionDiscovery.js';
 import { scanResumeMetadata } from './resumeMetadata.js';
 import { scanSessionMetadata } from './boundedSessionScan.js';
 import { readMetadataJsonLines } from './metadataJsonLines.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 const header = {
   v: 1,

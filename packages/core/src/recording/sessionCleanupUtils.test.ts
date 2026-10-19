@@ -39,6 +39,9 @@ import {
   type JsonlSessionFileEntry,
 } from './sessionCleanupUtils.js';
 import { SessionLockManager } from './SessionLockManager.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 // ---------------------------------------------------------------------------
 // Helpers

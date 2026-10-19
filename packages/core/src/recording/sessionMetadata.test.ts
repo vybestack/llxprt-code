@@ -35,6 +35,10 @@ import {
   assertReplayOk,
 } from './__tests__/replay-test-helpers.js';
 
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
+
 const tempDirs: string[] = [];
 const services: SessionRecordingService[] = [];
 

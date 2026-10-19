@@ -28,6 +28,9 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { getAllJsonlSessionFiles } from './sessionCleanupUtils.js';
 import type { ContinueTarget, SessionSummary } from './types.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 /** Proposed P05c extension of SessionSummary (tmp/verify854/p05c/api_sketch.md). */
 type SummaryWithKind = SessionSummary & { kind?: 'main' | 'subagent' };

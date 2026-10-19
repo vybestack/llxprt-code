@@ -27,6 +27,9 @@ import type {
   ContentPayload,
 } from '../types.js';
 import type { IContent } from '../../services/history/IContent.js';
+import { pinHistoryBackend } from './support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 const bunIt = it;
 

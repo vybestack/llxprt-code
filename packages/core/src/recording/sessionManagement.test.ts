@@ -40,6 +40,9 @@ import {
 } from './sessionManagement.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { type IContent } from '../services/history/IContent.js';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -179,6 +179,43 @@ function sortNewestFirst(summaries: SessionSummary[]): void {
   });
 }
 
+async function journalContinueTargets(
+  sessions: readonly SessionSummary[],
+  unreadable: UnreadableRecording[],
+): Promise<BoundedContinueTargets> {
+  const targets: ContinueTarget[] = [];
+  const checkpoints: ContinueTarget[] = [];
+  for (const session of sessions) {
+    const sessionCheckpoints = await readJournalCheckpoints(
+      session.filePath,
+    ).catch((error: unknown) => {
+      unreadable.push({
+        sessionId: session.sessionId,
+        filePath: session.filePath,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    if (sessionCheckpoints === undefined) continue;
+    targets.push({ kind: 'session', session });
+    for (const checkpoint of sessionCheckpoints) {
+      checkpoints.push({
+        kind: 'checkpoint',
+        source: session,
+        checkpointId: checkpoint.checkpointId,
+        checkpointName: checkpoint.name,
+        sequence: checkpoint.sequence,
+      });
+    }
+  }
+  return {
+    targets: [...targets, ...checkpoints],
+    skippedCount: unreadable.length,
+    recordingErrors: unreadable.map(describeUnreadableRecording),
+    unreadableRecordings: unreadable,
+  };
+}
+
 /**
  * Static utility class for discovering and resolving session files.
  *
@@ -250,30 +287,7 @@ export class SessionDiscovery {
       ...detailed.unreadableRecordings,
     ];
     if (selectBackend() === 'journal') {
-      // A journal summary carries the session name, and the live checkpoints
-      // come from the state map of the last trailer; no row is scanned.
-      const journalTargets: ContinueTarget[] = detailed.sessions.map(
-        (session): ContinueTarget => ({ kind: 'session', session }),
-      );
-      for (const session of detailed.sessions) {
-        for (const checkpoint of await readJournalCheckpoints(
-          session.filePath,
-        )) {
-          journalTargets.push({
-            kind: 'checkpoint',
-            source: session,
-            checkpointId: checkpoint.checkpointId,
-            checkpointName: checkpoint.name,
-            sequence: checkpoint.sequence,
-          });
-        }
-      }
-      return {
-        targets: journalTargets,
-        skippedCount: unreadable.length,
-        recordingErrors: unreadable.map(describeUnreadableRecording),
-        unreadableRecordings: unreadable,
-      };
+      return journalContinueTargets(detailed.sessions, unreadable);
     }
     for (const summary of detailed.sessions) {
       const scan = await scanSessionMetadata(
