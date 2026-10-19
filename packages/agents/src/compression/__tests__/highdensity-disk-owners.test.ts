@@ -1,10 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { indexedCheckpoint } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import {
+  checkpointRows,
+  type HistoryCheckpoint,
+} from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
@@ -28,20 +30,19 @@ class RetainingHistory extends HighdensityDiskHistory {
       value: {
         ...real,
         withCheckpoint: <T>(
-          execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+          execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
           signal?: AbortSignal,
         ): Promise<T> =>
           real.withCheckpoint((source) => {
-            const checkpoint = indexedCheckpoint(source);
+            const checkpoint = source;
             let retain = first;
             first = false;
             return execute({
               length: checkpoint.length,
-              readRow: (index) => checkpoint.readRow(index),
-              *[Symbol.iterator]() {
+              async *[Symbol.asyncIterator]() {
                 const pass = retain;
                 retain = false;
-                for (const row of checkpoint) {
+                for await (const row of checkpointRows(checkpoint)) {
                   if (pass) hold(row);
                   yield row;
                 }

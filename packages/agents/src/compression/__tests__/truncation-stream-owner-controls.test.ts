@@ -1,10 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { indexedCheckpoint } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import {
+  checkpointRows,
+  type HistoryCheckpoint,
+  type HistoryCheckpointRows,
+} from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   TruncationStreamHistory,
@@ -28,28 +31,26 @@ class RetainingHistory extends TruncationStreamHistory {
       value: {
         ...detached,
         withCheckpoint: <T>(
-          execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+          execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
           signal?: AbortSignal,
         ) =>
           withCheckpoint(
-            (checkpoint) =>
-              execute(this.retainingRows(indexedCheckpoint(checkpoint))),
+            (checkpoint) => execute(this.retainingRows(checkpoint)),
             signal,
           ),
       },
     });
   }
 
-  private retainingRows(checkpoint: HistoryIndexedRows): HistoryIndexedRows {
+  private retainingRows(checkpoint: HistoryCheckpoint): HistoryCheckpointRows {
     let retainedOnce = false;
     const { originalOwners, copyOwners, retained, copied } = this;
     return {
       length: checkpoint.length,
-      readRow: (index) => checkpoint.readRow(index),
-      *[Symbol.iterator]() {
+      async *[Symbol.asyncIterator]() {
         const retain = !retainedOnce;
         retainedOnce = true;
-        for (const row of checkpoint) {
+        for await (const row of checkpointRows(checkpoint)) {
           if (retain) {
             const copy = { ...row, blocks: [...row.blocks] };
             originalOwners.retain(row);
