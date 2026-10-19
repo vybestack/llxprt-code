@@ -114,6 +114,7 @@ async function publishOver(
     origin,
   });
   const scope = store.openPublication();
+  const completion = { finalized: false };
   let derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   let failure: { error: unknown } | undefined;
   try {
@@ -135,6 +136,7 @@ async function publishOver(
         effects,
         options,
         appendOnly,
+        completion,
       });
       scope.close(true);
     } else {
@@ -152,16 +154,14 @@ async function publishOver(
       derived,
       effects,
       appendOnly,
+      store,
+      completion,
     });
     failure = { error: historyMutationFailure(error, failures) };
   } finally {
     scope.close(false);
   }
-  const closing = closeTask(task, densitySpans);
-  if (failure !== undefined)
-    throw historyMutationFailure(failure.error, closing);
-  if (closing.length > 0)
-    throw new AggregateError(closing, 'Detached mutation cleanup failed');
+  closeTask(task, densitySpans, failure);
 }
 
 /**
@@ -280,6 +280,7 @@ interface FinishInput {
   readonly effects: readonly PreparedHistoryBatchEffect[];
   readonly options: DetachedHistoryOptions;
   readonly appendOnly: boolean;
+  readonly completion: { finalized: boolean };
 }
 
 /** After the ack: observers, the caller's hooks, media finalization, then the context range. */
@@ -289,7 +290,7 @@ async function finishPublication(
   candidate: JournalCandidate,
   spans: readonly RemovedInteriorSpan[],
   previousTokens: number,
-  { effects, options, appendOnly }: FinishInput,
+  { effects, options, appendOnly, completion }: FinishInput,
 ): Promise<void> {
   const delta = candidate.tokens - previousTokens;
   if (options.publishBatch === true) {
@@ -304,6 +305,7 @@ async function finishPublication(
   await options.afterPublication?.();
   options.signal?.throwIfAborted();
   await finalizeMutationEffects(effects);
+  completion.finalized = true;
   options.signal?.throwIfAborted();
   const range = candidate.range.snapshot(spans);
   if (options.publishBatch === true || options.publishTokens === true)
@@ -318,6 +320,8 @@ interface CompensationInput {
   readonly derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   readonly effects: readonly PreparedHistoryBatchEffect[];
   readonly appendOnly: boolean;
+  readonly store: JournalHistoryStore;
+  readonly completion: { readonly finalized: boolean };
 }
 
 /**
@@ -350,18 +354,34 @@ async function compensate(input: CompensationInput): Promise<unknown[]> {
     failures.push(error);
   }
   failures.push(...(await rollbackMutationEffects(effects)));
+  if (
+    compensated &&
+    input.completion.finalized &&
+    host.mediaOwner !== undefined
+  ) {
+    try {
+      await input.store.reconcileMedia(host.mediaOwner);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
   return failures;
 }
 
 function closeTask(
   task: DetachedHistoryTask,
   densitySpans: DensitySpanRows,
-): unknown[] {
+  failure: { error: unknown } | undefined,
+): void {
   task.transform = undefined;
+  const closing: unknown[] = [];
   try {
     densitySpans.close();
-    return [];
   } catch (error) {
-    return [error];
+    closing.push(error);
   }
+  if (failure !== undefined)
+    throw historyMutationFailure(failure.error, closing);
+  if (closing.length > 0)
+    throw new AggregateError(closing, 'Detached mutation cleanup failed');
 }

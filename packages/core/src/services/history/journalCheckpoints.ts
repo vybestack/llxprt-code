@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalSession } from './journalSession.js';
+import type { JournalMirrors } from './journalMirrors.js';
 import { ContextRangeAccumulator } from './contextRange.js';
 import type {
   DetachedHistoryHost,
@@ -19,6 +21,47 @@ import {
 import { snapshotRows } from './journalDetachedCapture.js';
 
 type Enqueue = (execute: () => Promise<void>) => Promise<void>;
+
+export class JournalCheckpointLifetime {
+  private holds = 0;
+  private closed = false;
+  private retire: (() => Promise<void>) | undefined;
+
+  hold(): () => Promise<void> {
+    if (this.closed) throw new Error('The checkpoint store is disposed');
+    this.holds++;
+    let released = false;
+    return async (): Promise<void> => {
+      if (released) throw new Error('The checkpoint hold was released twice');
+      released = true;
+      this.holds--;
+      if (this.holds === 0) await this.finish();
+    };
+  }
+
+  async close(retire: () => Promise<void>): Promise<void> {
+    this.closed = true;
+    this.retire = retire;
+    if (this.holds === 0) await this.finish();
+  }
+
+  async closePrimary(
+    primary: { mirrors: JournalMirrors; session: JournalSession },
+    adopted: boolean,
+  ): Promise<void> {
+    try {
+      await primary.mirrors.retire();
+    } finally {
+      if (!adopted) await this.close(() => primary.session.close());
+    }
+  }
+
+  private async finish(): Promise<void> {
+    const retire = this.retire;
+    this.retire = undefined;
+    await retire?.();
+  }
+}
 
 /** The rows of `snapshot` as a checkpoint: the version is fixed, each pass reads it again. */
 function snapshotCheckpoint(
@@ -46,22 +89,46 @@ export async function withCheckpointOnJournal<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const captured: { snapshot?: VersionSnapshot } = {};
-  await enqueue(async () => {
-    captured.snapshot = await store.settledSnapshot(
-      () => host.waitForTokenUpdates(),
-      signal,
-    );
-  });
-  const { snapshot } = captured;
+  const release = store.checkpointLifetime.hold();
+  let failure: { error: unknown } | undefined;
   try {
+    await enqueue(async () => {
+      captured.snapshot = await store.settledSnapshot(
+        () => host.waitForTokenUpdates(),
+        signal,
+      );
+    });
     signal?.throwIfAborted();
-    if (snapshot === undefined)
+    if (captured.snapshot === undefined)
       throw new Error('The checkpoint was not captured');
     return await execute(
-      snapshotCheckpoint(snapshot, signal, store.resumeBoundary),
+      snapshotCheckpoint(captured.snapshot, signal, store.resumeBoundary),
     );
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    snapshot?.close();
+    await releaseCheckpoint(captured.snapshot, release, failure);
+  }
+}
+
+async function releaseCheckpoint(
+  snapshot: VersionSnapshot | undefined,
+  release: () => Promise<void>,
+  failure: { error: unknown } | undefined,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const close of [() => snapshot?.close(), release]) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    if (failure !== undefined)
+      throw historyMutationFailure(failure.error, failures);
+    throw historyMutationFailure(failures[0], failures.slice(1));
   }
 }
 

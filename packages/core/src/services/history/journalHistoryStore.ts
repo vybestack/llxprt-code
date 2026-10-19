@@ -62,6 +62,7 @@ import {
   type CommittedBatchRowSource,
 } from './journalBatchSource.js';
 import {
+  JournalCheckpointLifetime,
   withCheckpointOnJournal,
   withRollbackCheckpointOnJournal,
 } from './journalCheckpoints.js';
@@ -147,6 +148,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   private failure: { readonly error: unknown } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
+  readonly checkpointLifetime = new JournalCheckpointLifetime();
   /** Dumps not yet closed: they read the file, so disposing closes them first. */
   private readonly openDumps = new Set<JournalDumpSnapshot>();
   private readonly publication = new JournalPublication();
@@ -930,14 +932,11 @@ export class JournalHistoryStore implements HistoryStorePort {
     await this.queue;
     await this.startup;
     for (const dump of [...this.openDumps]) await dump.close();
-    const open = this.journal;
-    if (open === undefined) return;
-    try {
-      await open.mirrors.retire();
-    } finally {
-      // An adopted file is the recorder's; the recorder closes it.
-      if (this.adopted === undefined) await open.session.close();
-    }
+    if (this.journal === undefined) return;
+    await this.checkpointLifetime.closePrimary(
+      this.journal,
+      this.adopted !== undefined,
+    );
   }
 
   /**
