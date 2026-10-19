@@ -17,6 +17,21 @@ function parseDetail(line: string): RecordingFailureDetail {
   const value: unknown = JSON.parse(line);
   return detailSchema.parse(value);
 }
+function closeDescriptor(
+  descriptor: number,
+  primaryFailure?: { error: unknown },
+): void {
+  try {
+    closeSync(descriptor);
+  } catch (cleanupError: unknown) {
+    if (primaryFailure !== undefined)
+      throw new AggregateError(
+        [primaryFailure.error, cleanupError],
+        'Diagnostic read and descriptor cleanup failed',
+      );
+    throw cleanupError;
+  }
+}
 export function* readFailureDetails(
   file: string,
 ): Generator<RecordingFailureDetail> {
@@ -24,6 +39,7 @@ export function* readFailureDetails(
   const buffer = Buffer.alloc(16384);
   const decoder = new StringDecoder('utf8');
   let pending = '';
+  let primaryFailure: { error: unknown } | undefined;
   try {
     for (;;) {
       const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
@@ -43,7 +59,10 @@ export function* readFailureDetails(
     pending += decoder.end();
     if (pending.length !== 0)
       throw new Error('Incomplete recording failure descriptor');
+  } catch (error: unknown) {
+    primaryFailure = { error };
+    throw error;
   } finally {
-    closeSync(descriptor);
+    closeDescriptor(descriptor, primaryFailure);
   }
 }

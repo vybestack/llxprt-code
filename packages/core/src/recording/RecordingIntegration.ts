@@ -306,7 +306,9 @@ export class RecordingIntegration {
         : this.persistJournal(history);
     const generation = this.nextPersistenceGeneration;
     const outcomes = await Promise.allSettled([
-      this.settleAttachment().then(() => this.recording.flush()),
+      this.settleAttachment().then(() =>
+        history === undefined ? this.recording.flush() : undefined,
+      ),
       this.awaitPersistenceThrough(generation),
       save,
     ]);

@@ -9,6 +9,7 @@ interface Measurement {
   readonly liveRows: number;
   readonly liveBytes: number;
   readonly count: number;
+  readonly heldReportCount?: number;
   readonly decodedDetails: number;
   readonly diagnosticBytes: number;
 }
@@ -18,12 +19,19 @@ const measurementSchema = z.object({
   liveRows: z.number(),
   liveBytes: z.number(),
   count: z.number(),
+  heldReportCount: z.number().optional(),
   decodedDetails: z.number(),
   diagnosticBytes: z.number(),
 });
-async function probe(count: number, trap: boolean): Promise<Measurement> {
+async function probe(
+  count: number,
+  trap: boolean,
+  native = false,
+): Promise<Measurement> {
   const script = new URL(
-    '../../../../scripts/tests/recording-failure-memory-child.ts',
+    native
+      ? '../../../../scripts/tests/recording-failure-native-memory-child.ts'
+      : '../../../../scripts/tests/recording-failure-memory-child.ts',
     import.meta.url,
   ).pathname;
   const child = Bun.spawn(
@@ -41,7 +49,7 @@ async function probe(count: number, trap: boolean): Promise<Measurement> {
   const evidence = process.env['LLXPRT_FAILURE_MEMORY_EVIDENCE'];
   if (evidence !== undefined)
     await Bun.write(
-      `${evidence}/${count}-${trap ? 'trap' : 'bounded'}.json`,
+      `${evidence}/${native ? 'native-' : ''}${count}-${trap ? 'trap' : 'bounded'}.json`,
       stdout,
     );
   return result;
@@ -68,6 +76,24 @@ describe('failure report retained owners and fixed controls', () => {
     const small = await probe(512, true);
     const large = await probe(8192, true);
     expect(large.liveRows).toBe(8192);
+    expect(accepted(small, large)).toBe(false);
+    expect(large.heap - small.heap).toBeGreaterThan(1048576);
+    expect(large.liveBytes).toBeGreaterThan(8388608);
+  }, 120000);
+});
+
+describe('native integration failure report retained owners', () => {
+  it('holds the final native report after 8192 failed boundaries within the same 1MiB, 8MiB and 440 controls', async () => {
+    const small = await probe(512, false, true);
+    const large = await probe(8192, false, true);
+    expect(large.count).toBe(8192);
+    expect(large.heldReportCount).toBe(1);
+    expect(accepted(small, large)).toBe(true);
+  }, 120000);
+  it('rejects independently retained diagnostic rows beside native failures with unchanged predicates', async () => {
+    const small = await probe(512, true, true);
+    const large = await probe(8192, true, true);
+    expect(large.liveRows).toBe(8193);
     expect(accepted(small, large)).toBe(false);
     expect(large.heap - small.heap).toBeGreaterThan(1048576);
     expect(large.liveBytes).toBeGreaterThan(8388608);

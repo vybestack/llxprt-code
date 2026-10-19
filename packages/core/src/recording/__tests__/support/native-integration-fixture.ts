@@ -38,7 +38,7 @@ export interface NativeIntegrationFixture {
   texts(): Promise<string[]>;
 }
 
-async function recordedRows(
+export async function recordedRows(
   recording: JournalRecordingService,
 ): Promise<IContent[]> {
   const path = recording.getFilePath();

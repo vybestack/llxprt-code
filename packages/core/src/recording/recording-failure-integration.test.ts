@@ -48,7 +48,7 @@ async function withRecorder(
     ),
     failReportStorage ? reportDirectory : undefined,
   );
-  const history = new HistoryService();
+  const history = new HistoryService({ backend: 'old' });
   await integration.subscribeToJournal(history);
   await history.addBatch([
     {
