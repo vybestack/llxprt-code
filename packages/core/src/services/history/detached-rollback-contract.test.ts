@@ -15,6 +15,8 @@ import {
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
+import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
+import type { HistoryBackend } from './historyBackendSelect.js';
 
 function scratch(): string[] {
   return readdirSync(getScratchRoot()).filter((name) =>
@@ -22,27 +24,35 @@ function scratch(): string[] {
   );
 }
 
-describe('opt-in detached rollback contract', () => {
-  it('accepts frozen caller metadata and repeated aliases without stamping caller values', async () => {
-    await withDetachedFixture(async ({ history, owners }) => {
-      const caller = {
-        ...rollbackRow(0),
-        metadata: Object.freeze({ id: 'alias' }),
-      };
-      await history.detachedValues.replace([caller, caller]);
-      const stored = await rowsOf(history);
-      expect(caller.metadata).toStrictEqual({ id: 'alias' });
-      expect(stored.map((row) => row.metadata?.chronology?.seq)).toStrictEqual([
-        1, 2,
-      ]);
-      expect(stored.map((row) => row.blocks)).toStrictEqual([
-        rollbackRow(0).blocks,
-        rollbackRow(0).blocks,
-      ]);
-      expect(owners.snapshot().liveRows).toBe(0);
+const backends: readonly HistoryBackend[] = ['old', 'journal'];
+
+describe.each([...backends])(
+  'opt-in detached rollback contract on %s',
+  (backend) => {
+    it('accepts frozen caller metadata and repeated aliases without stamping caller values', async () => {
+      await withDetachedContractFixture(
+        backend,
+        async ({ history, owners }) => {
+          const caller = {
+            ...rollbackRow(0),
+            metadata: Object.freeze({ id: 'alias' }),
+          };
+          await history.detachedValues.replace([caller, caller]);
+          const stored = await rowsOf(history);
+          expect(caller.metadata).toStrictEqual({ id: 'alias' });
+          expect(
+            stored.map((row) => row.metadata?.chronology?.seq),
+          ).toStrictEqual([1, 2]);
+          expect(stored.map((row) => row.blocks)).toStrictEqual([
+            rollbackRow(0).blocks,
+            rollbackRow(0).blocks,
+          ]);
+          expect(owners.snapshot().liveRows).toBe(0);
+        },
+      );
     });
-  });
-});
+  },
+);
 
 for (const stage of [
   'capture',
@@ -130,31 +140,38 @@ for (const stage of [
 }
 
 describe('detached scalar and large-value recovery', () => {
-  it('restores chronology counters after rejection and accepts a nine-MiB value', async () => {
-    await withDetachedFixture(async ({ history, recorder }) => {
-      const caller = rollbackRow(0, 9 * 1024 * 1024);
-      const failure = new Error('large rejection');
-      expect(
-        await rejectedValue(
-          history.detachedValues.replace([caller], undefined, {
-            onAcknowledged: () => {
-              throw failure;
-            },
-          }),
-        ),
-      ).toBe(failure);
-      expect(caller.metadata).toBeUndefined();
-      await history.detachedValues.replace([caller]);
-      const stored = await rowsOf(history);
-      expect(stored[0].metadata?.chronology?.seq).toBe(1);
-      expect(stored[0].blocks).toStrictEqual(
-        rollbackRow(0, 9 * 1024 * 1024).blocks,
+  it.each([...backends])(
+    'restores chronology counters after rejection and accepts a nine-MiB value on %s',
+    async (backend) => {
+      await withDetachedContractFixture(
+        backend,
+        async ({ history, durable }) => {
+          const caller = rollbackRow(0, 9 * 1024 * 1024);
+          const failure = new Error('large rejection');
+          expect(
+            await rejectedValue(
+              history.detachedValues.replace([caller], undefined, {
+                onAcknowledged: () => {
+                  throw failure;
+                },
+              }),
+            ),
+          ).toBe(failure);
+          expect(caller.metadata).toBeUndefined();
+          expect(history.getContextRange().totalEntries).toBe(0);
+          expect((await durable()).count).toBe(0);
+          await history.detachedValues.replace([caller]);
+          const stored = await rowsOf(history);
+          expect(stored[0].metadata?.chronology?.seq).toBe(1);
+          expect(stored[0].blocks).toStrictEqual(
+            rollbackRow(0, 9 * 1024 * 1024).blocks,
+          );
+          expect((await durable()).bytes).toBeGreaterThan(9 * 1024 * 1024);
+        },
       );
-      expect((await detachedDurableDigest(recorder)).bytes).toBeGreaterThan(
-        9 * 1024 * 1024,
-      );
-    });
-  }, 180_000);
+    },
+    180_000,
+  );
 
   it('restores scalars and rolls back participants even when compensation fails', async () => {
     await withDetachedFixture(async ({ history, recorder }) => {
