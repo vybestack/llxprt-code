@@ -13,6 +13,7 @@ import type {
 import { validateHistoryEntry } from './historyBatchContracts.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
+import { trackMutationOwners } from './historyMutationOwnership.js';
 import {
   draftEqualsStored,
   draftOfStoredRow,
@@ -165,6 +166,19 @@ export class JournalCandidate {
   }
 
   private async accept(source: IContent, owner: number): Promise<void> {
+    const marker = source.metadata?.chronology;
+    const release = trackMutationOwners(
+      marker === undefined ? [source] : [source, marker],
+      this.ctx.host.ownership,
+    );
+    try {
+      await this.acceptOwned(source, owner);
+    } finally {
+      release();
+    }
+  }
+
+  private async acceptOwned(source: IContent, owner: number): Promise<void> {
     const { host, modelName, signal, appendOnly } = this.ctx;
     validateHistoryEntry(source, this.count);
     // The stamper writes the marker in place; the caller's row stays as it was handed in.
