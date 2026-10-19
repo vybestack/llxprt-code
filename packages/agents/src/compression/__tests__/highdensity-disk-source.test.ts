@@ -8,7 +8,8 @@ import {
 } from './checkpoint-source-fault-helpers.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { nativeHighdensitySourceFailure } from './support/native-highdensity-source.js';
 import {
   highdensitySetup,
   highdensityRow,
@@ -28,7 +29,7 @@ class FailingSourceHistory extends HighdensityDiskHistory {
 async function sourceFailure(size: number, mode: string): Promise<number> {
   let created: FailingSourceHistory | undefined;
   let recording: RecordingPort | undefined;
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (history, ownership) => {
       if (created === undefined)
@@ -77,6 +78,7 @@ async function sourceFailure(size: number, mode: string): Promise<number> {
       created = new FailingSourceHistory(options);
       return created;
     },
+    'old',
   );
 }
 const cases: Array<[number, string]> = [
@@ -90,6 +92,16 @@ describe('disk high-density source lifetime', () => {
     'closes a failed %i-row %s source and can retry without eager collection',
     async (size, mode) => {
       expect(await sourceFailure(size, mode)).toBe(2);
+    },
+    180_000,
+  );
+});
+
+describe('native high-density source lifetime', () => {
+  it.each(cases)(
+    'closes a failed native %i-row %s source, preserves durable values and retries',
+    async (size, mode) => {
+      expect(await nativeHighdensitySourceFailure(size, mode)).toBe(size);
     },
     180_000,
   );

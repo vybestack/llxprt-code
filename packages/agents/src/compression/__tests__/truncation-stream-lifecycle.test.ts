@@ -9,6 +9,7 @@ import {
 } from './checkpoint-source-fault-helpers.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   withSuffixFixture,
   rowIndex,
@@ -83,7 +84,7 @@ async function longCandidate(size: number): Promise<number> {
 async function producerFailure(size: number): Promise<number> {
   let created: FaultHistory | undefined;
   let recording: RecordingPort | undefined;
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (history, reader) => {
       const handler = truncationHandler(history);
@@ -122,6 +123,7 @@ async function producerFailure(size: number): Promise<number> {
       created = new FaultHistory(options);
       return created;
     },
+    'old',
   );
 }
 
