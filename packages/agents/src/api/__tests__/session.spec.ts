@@ -30,6 +30,15 @@
  */
 
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import {
+  withHistoryBackend,
+  withNativeRecordingFixture,
+  nativeRows,
+  rowTexts,
+  requireRecordingPath,
+  readJournalCheckpoints,
+  readJournalFileFacts,
+} from './helpers/native-session-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
@@ -45,31 +54,16 @@ import { buildAgent, drain, isDoneEvent } from './helpers/agentHarness.js';
 
 /** Builds a public AgentMessage (Content) with role + a single text part. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
-  // Post-P21: produce neutral IContent shape { speaker, blocks }.
-  // AgentMessage is the public type but runtime objects are IContent.
   return {
     speaker: role === 'user' ? 'human' : 'ai',
     blocks: [{ type: 'text', text }],
-  } as unknown as AgentMessage;
+  };
 }
 
-/**
- * Extracts the concatenated text of a message's blocks (neutral IContent).
- * Post-P21, getHistory() returns IContent at runtime (typed as AgentMessage).
- * Reads .blocks (neutral) and falls back to .parts (legacy Content) so the
- * helper works regardless of which shape the runtime carries.
- */
 function messageText(msg: AgentMessage | AgentHistoryItem): string {
-  const blocks = (msg as unknown as AgentHistoryItem).blocks;
-  if (Array.isArray(blocks)) {
-    return blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
-  }
-  // Legacy Content shape fallback
-  const parts = msg.parts;
-  if (Array.isArray(parts)) {
-    return parts.map((p) => ('text' in p ? p.text : '')).join('');
-  }
-  return '';
+  return msg.blocks
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('');
 }
 
 /**
@@ -102,15 +96,17 @@ async function withIsolatedAgent<T>(
   fixture: string,
   fn: (agent: Agent, workingDir: string) => Promise<T>,
 ): Promise<T> {
-  const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
-  const { agent, cleanup } = await buildAgent(fixture, { workingDir });
-  try {
-    return await fn(agent, workingDir);
-  } finally {
-    await cleanup();
-    rmSync(workingDir, { recursive: true, force: true });
-    rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
-  }
+  return withHistoryBackend('old', async () => {
+    const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
+    const { agent, cleanup } = await buildAgent(fixture, { workingDir });
+    try {
+      return await fn(agent, workingDir);
+    } finally {
+      await cleanup();
+      rmSync(workingDir, { recursive: true, force: true });
+      rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    }
+  });
 }
 
 const observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFiles =
@@ -620,4 +616,297 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
       expect(texts).not.toContain('recorded origin');
     });
   });
+});
+
+describe('native public session controls', () => {
+  it('creates durable checkpoint facts and forks a self-contained child without changing the parent', async () => {
+    await withNativeRecordingFixture(async ({ agent, config }) => {
+      await agent.setHistory([
+        textMessage('user', 'branch source'),
+        textMessage('model', 'source reply'),
+      ]);
+      const checkpoint = await agent.session.createCheckpoint('branch-point');
+      const parentPath = requireRecordingPath(
+        agent.session.getRecording().path,
+      );
+      expect(existsSync(join(config.projectTempDir, 'checkpoints'))).toBe(
+        false,
+      );
+      expect(await agent.session.listCheckpoints()).toContainEqual(checkpoint);
+      expect(await readJournalCheckpoints(parentPath)).toContainEqual(
+        expect.objectContaining({
+          checkpointId: checkpoint.checkpointId,
+          name: checkpoint.name,
+          sequence: checkpoint.sequence,
+          createdAtMs: Date.parse(checkpoint.createdAt),
+        }),
+      );
+      expect((await readJournalFileFacts(parentPath))?.facts.sessionId).toBe(
+        checkpoint.sessionId,
+      );
+      await agent.restoreHistory([textMessage('user', 'source-only tail')]);
+      await agent.session.flushRecording();
+      const parentBefore = readFileSync(parentPath);
+      const child = await agent.session.forkFromCheckpoint(
+        checkpoint.checkpointId,
+      );
+      const childPath = requireRecordingPath(agent.session.getRecording().path);
+      expect(child).toMatchObject({
+        parentSessionId: checkpoint.sessionId,
+        checkpointId: checkpoint.checkpointId,
+        checkpointName: 'branch-point',
+      });
+      expect(child.id).not.toBe(checkpoint.sessionId);
+      expect(childPath).not.toBe(parentPath);
+      expect(rowTexts(await nativeRows(childPath))).toStrictEqual([
+        'branch source',
+        'source reply',
+      ]);
+      expect((await collectAgentHistory(agent)).map(messageText)).toStrictEqual(
+        ['branch source', 'source reply'],
+      );
+      await agent.session.setRecording({ enabled: false });
+      await agent.session.resume(child.id);
+      expect((await collectAgentHistory(agent)).map(messageText)).toStrictEqual(
+        ['branch source', 'source reply'],
+      );
+      expect(Buffer.compare(readFileSync(parentPath), parentBefore)).toBe(0);
+      expect(rowTexts(await nativeRows(parentPath))).toContain(
+        'source-only tail',
+      );
+    });
+  }, 30000);
+
+  it('durably clears a suffix, continues a turn and resumes only the kept prefix', async () => {
+    await withNativeRecordingFixture(async ({ agent }) => {
+      await agent.setHistory([
+        textMessage('user', 'initial question'),
+        textMessage('model', 'initial answer'),
+        textMessage('user', 'discarded question'),
+        textMessage('model', 'discarded answer'),
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const path = requireRecordingPath(agent.session.getRecording().path);
+      await agent.resetChat();
+      expect(rowTexts(await nativeRows(path))).toStrictEqual([
+        'initial question',
+        'initial answer',
+      ]);
+      expect((await collectAgentHistory(agent)).map(messageText)).toStrictEqual(
+        ['initial question', 'initial answer'],
+      );
+      const events = await drain(agent.stream('continued question'));
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
+      await agent.session.flushRecording();
+      const disk = rowTexts(await nativeRows(path));
+      expect(disk).toContain('continued question');
+      expect(disk).not.toContain('discarded question');
+      await agent.session.setRecording({ enabled: false });
+      await agent.session.resume('latest');
+      expect((await collectAgentHistory(agent)).map(messageText)).toStrictEqual(
+        disk,
+      );
+    });
+  }, 30000);
+
+  it('keeps repeated empty resets durable without writing another group', async () => {
+    await withNativeRecordingFixture(async ({ agent }) => {
+      await agent.setHistory([textMessage('user', 'stale previous history')]);
+      await agent.session.setRecording({ enabled: true });
+      const path = requireRecordingPath(agent.session.getRecording().path);
+      await agent.setHistory([]);
+      await agent.session.flushRecording();
+      const before = readFileSync(path);
+      await agent.resetChat();
+      await agent.resetChat();
+      await agent.session.setRecording({ enabled: false });
+      expect(await nativeRows(path)).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
+      expect(Buffer.compare(readFileSync(path), before)).toBe(0);
+    });
+  }, 30000);
+
+  it('activates a materialized journal and rejects missing resume targets', async () => {
+    await withNativeRecordingFixture(async ({ agent }) => {
+      expect(agent.session.getRecording().enabled).toBe(false);
+      const missing = await agent.session.resume('latest').then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(missing).toBeInstanceOf(Error);
+      const message = missing instanceof Error ? missing.message : '';
+      expect(message).toMatch(/session/i);
+      expect(message).not.toMatch(/NotYetImplemented/i);
+      await agent.setHistory([
+        textMessage('user', 'persist this sentinel: capybara'),
+        textMessage('model', 'recorded the sentinel: capybara'),
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const state = agent.session.getRecording();
+      expect(state).toMatchObject({ enabled: true, format: 'journal' });
+      const path = requireRecordingPath(state.path);
+      expect(rowTexts(await nativeRows(path))).toStrictEqual([
+        'persist this sentinel: capybara',
+        'recorded the sentinel: capybara',
+      ]);
+      expect((await readJournalFileFacts(path))?.rows).toBe(2);
+      await agent.session.setRecording({ enabled: false });
+      expect(agent.session.getRecording().enabled).toBe(false);
+    });
+  }, 30000);
+
+  it('renames and deletes checkpoints, names sessions and refuses deletion of the active session', async () => {
+    await withNativeRecordingFixture(async ({ agent }) => {
+      await agent.setHistory([
+        textMessage('user', 'lifecycle source'),
+        textMessage('model', 'lifecycle reply'),
+      ]);
+      const checkpoint = await agent.session.createCheckpoint('before-rename');
+      const path = requireRecordingPath(agent.session.getRecording().path);
+      await expect(
+        agent.session.deleteSession(checkpoint.sessionId),
+      ).rejects.toThrow('Cannot delete the active session');
+      expect(agent.session.getRecording()).toMatchObject({
+        enabled: true,
+        path,
+      });
+      expect(await agent.session.listCheckpoints()).toContainEqual(checkpoint);
+      await agent.session.renameCheckpoint(
+        checkpoint.checkpointId,
+        'after-rename',
+      );
+      expect(await readJournalCheckpoints(path)).toContainEqual(
+        expect.objectContaining({
+          checkpointId: checkpoint.checkpointId,
+          name: 'after-rename',
+        }),
+      );
+      await agent.session.nameCurrentSession('named-session');
+      expect(await agent.session.listSessions()).toContainEqual(
+        expect.objectContaining({
+          id: checkpoint.sessionId,
+          name: 'named-session',
+        }),
+      );
+      await agent.session.deleteCheckpoint(checkpoint.checkpointId);
+      expect(await agent.session.listCheckpoints()).toStrictEqual([]);
+      await agent.session.setRecording({ enabled: false });
+      await agent.session.deleteSession(checkpoint.sessionId);
+      expect(await agent.session.listSessions()).toStrictEqual([]);
+    });
+  }, 30000);
+
+  for (const target of ['latest', 'named'] as const) {
+    it(`publishes ${target} adopted identity before startup and preserves it through a later turn and detached stop`, async () => {
+      await withNativeRecordingFixture(async ({ agent, config }) => {
+        await agent.setHistory([
+          textMessage('user', 'selected prefix question'),
+          textMessage('model', 'selected prefix answer'),
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        await agent.session.nameCurrentSession('selected-session');
+        const path = requireRecordingPath(agent.session.getRecording().path);
+        const before = await readJournalFileFacts(path);
+        await agent.session.setRecording({ enabled: false });
+        await agent.setHistory([
+          textMessage('user', 'discarded current question'),
+        ]);
+        const selected =
+          target === 'latest'
+            ? await agent.session
+                .resume('latest')
+                .then(async () =>
+                  (await agent.session.listSessions()).find(
+                    (session) => session.id === before?.facts.sessionId,
+                  ),
+                )
+            : await agent.session.resumeSession('selected-session');
+        expect(selected).toMatchObject({
+          id: before?.facts.sessionId,
+          name: 'selected-session',
+        });
+        expect(agent.session.getRecording()).toMatchObject({
+          enabled: true,
+          path,
+        });
+        expect(config.getSessionId()).toBeUndefined();
+        expect(
+          (await collectAgentHistory(agent)).map(messageText),
+        ).toStrictEqual(['selected prefix question', 'selected prefix answer']);
+        const events = await drain(agent.stream('continuation question'));
+        expect(events.filter(isDoneEvent)).toHaveLength(1);
+        await agent.session.flushRecording();
+        const persisted = rowTexts(await nativeRows(path));
+        expect(persisted).toContain('continuation question');
+        expect(persisted).not.toContain('discarded current question');
+        const after = await readJournalFileFacts(path);
+        expect(after?.facts.sessionId).toBe(before?.facts.sessionId);
+        expect(after?.facts.start).toStrictEqual(before?.facts.start);
+        expect(after?.facts.name).toBe('selected-session');
+        await agent.session.setRecording({ enabled: false });
+        const closed = readFileSync(path);
+        await agent.restoreHistory([textMessage('user', 'detached-only row')]);
+        expect((await collectAgentHistory(agent)).map(messageText)).toContain(
+          'detached-only row',
+        );
+        const detachedEvents = await drain(agent.stream('detached next turn'));
+        expect(detachedEvents.filter(isDoneEvent)).toStrictEqual([
+          { type: 'done', reason: 'stop' },
+        ]);
+        expect((await collectAgentHistory(agent)).map(messageText)).toContain(
+          'detached next turn',
+        );
+        expect(Buffer.compare(readFileSync(path), closed)).toBe(0);
+        expect(rowTexts(await nativeRows(path))).toStrictEqual([
+          'selected prefix question',
+          'selected prefix answer',
+          'continuation question',
+          'turn one reply',
+        ]);
+      });
+    }, 30000);
+  }
+
+  it('rolls back failed adoption publication and carries the deferred live history into the next turn', async () => {
+    await withNativeRecordingFixture(async ({ agent, chatsDir }) => {
+      await agent.setHistory([
+        textMessage('user', 'recorded origin'),
+        textMessage('model', 'recorded response'),
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const path = requireRecordingPath(agent.session.getRecording().path);
+      await agent.session.setRecording({ enabled: false });
+      const before = readFileSync(path);
+      await agent.setHistory([textMessage('user', 'live deferred origin')]);
+      const history = agent.agentClient.getHistoryService();
+      if (history === null) throw new Error('Expected live history service');
+      const failure = new Error('adoption publication interrupted');
+      const interrupt = (): void => {
+        throw failure;
+      };
+      history.once('tokensUpdated', interrupt);
+      try {
+        await expect(agent.session.resume('latest')).rejects.toThrow(
+          'adoption publication interrupted',
+        );
+      } finally {
+        history.off('tokensUpdated', interrupt);
+      }
+      expect(agent.session.getRecording().enabled).toBe(false);
+      expect((await collectAgentHistory(agent)).map(messageText)).toStrictEqual(
+        ['live deferred origin'],
+      );
+      expect(Buffer.compare(readFileSync(path), before)).toBe(0);
+      const { readdir } = await import('node:fs/promises');
+      expect(
+        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+      ).toStrictEqual([]);
+      const events = await drain(agent.stream('live continuation'));
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
+      const texts = (await collectAgentHistory(agent)).map(messageText);
+      expect(texts).toContain('live deferred origin');
+      expect(texts).toContain('live continuation');
+      expect(texts).not.toContain('recorded origin');
+    });
+  }, 30000);
 });
