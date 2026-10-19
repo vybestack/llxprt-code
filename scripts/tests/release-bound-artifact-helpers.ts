@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   closeSync,
   cpSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -16,12 +17,25 @@ import {
   realpathSync,
   writeFileSync,
 } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
+import { createRequire } from 'node:module';
 import { z } from 'zod';
 import { NON_NPM_RELEASE_PACKAGES } from '../utils/release-packages.ts';
+
+const {
+  npmInvocation,
+}: {
+  npmInvocation: (
+    args: readonly string[],
+    options: { execPath: string },
+  ) => { command: string; args: string[] };
+} = createRequire(import.meta.url)('../lib/npm-command.cjs');
+
+const nodeExecutable = spawnSync('node', ['-p', 'process.execPath'], {
+  encoding: 'utf8',
+}).stdout.trim();
 
 const manifestSchema = z
   .object({
@@ -84,11 +98,16 @@ async function command(
   const fd = openSync(log, 'w');
   try {
     await new Promise<void>((resolvePromise, reject) => {
-      const child = spawn(executable, [...args], {
+      const invocation =
+        executable === 'npm'
+          ? npmInvocation(args, { execPath: nodeExecutable })
+          : { command: executable, args: [...args] };
+      const child = spawn(invocation.command, invocation.args, {
         cwd,
         env,
         stdio: ['ignore', fd, fd],
-        timeout: 180_000,
+        timeout: 600_000,
+        windowsVerbatimArguments: executable.toLowerCase().endsWith('cmd.exe'),
       });
       child.once('error', reject);
       child.once('close', (status, signal) => {
@@ -112,6 +131,7 @@ export async function packReleaseArtifacts(
   builtRoot: string,
   sourceRoot: string,
   evidence: string,
+  releaseVersion?: string,
 ): Promise<readonly ReleaseArtifact[]> {
   const work = join(evidence, 'release-copy');
   mkdirSync(work, { recursive: true });
@@ -137,32 +157,24 @@ export async function packReleaseArtifacts(
   }
   const env = {
     ...process.env,
-    npm_config_offline: 'true',
+    npm_config_offline: 'false',
     npm_config_ignore_scripts: 'true',
     npm_config_audit: 'false',
     npm_config_fund: 'false',
     npm_config_update_notifier: 'false',
   };
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const version = `0.0.0-release-proof.${Date.now()}.${randomUUID().replaceAll('-', '')}`;
+  const npm = 'npm';
+  if (
+    releaseVersion !== undefined &&
+    readReleaseManifest(join(work, 'package.json')).version !== releaseVersion
+  ) {
+    throw new Error(
+      'Built release version differs from the requested candidate',
+    );
+  }
   await command(
-    npm,
-    [
-      'version',
-      version,
-      '--workspaces',
-      '--include-workspace-root',
-      '--no-git-tag-version',
-      '--workspaces-update=false',
-      '--ignore-scripts',
-    ],
-    work,
-    env,
-    join(evidence, 'version.log'),
-  );
-  await command(
-    'bun',
-    ['scripts/bind-release-deps.ts'],
+    process.execPath,
+    ['run', join(work, 'scripts/bind-release-deps.ts')],
     work,
     env,
     join(evidence, 'bind.log'),
@@ -178,19 +190,8 @@ export async function packReleaseArtifacts(
       pkg.manifest.private !== true &&
       !NON_NPM_RELEASE_PACKAGES.has(pkg.manifest.name),
   );
-  const closure = new Set(['@vybestack/llxprt-code']);
-  for (const name of closure) {
-    const pkg = published.find((entry) => entry.manifest.name === name);
-    if (pkg === undefined)
-      throw new Error(`Unpublished runtime dependency ${name}`);
-    for (const dependency of Object.keys(runtimeDependencies(pkg.manifest))) {
-      if (workspaceNames.has(dependency)) closure.add(dependency);
-    }
-  }
   const artifacts: ReleaseArtifact[] = [];
-  for (const pkg of published.filter((entry) =>
-    closure.has(entry.manifest.name),
-  )) {
+  for (const pkg of published) {
     const output = await command(
       npm,
       ['pack', '--json', '--ignore-scripts', '--pack-destination', evidence],
@@ -198,15 +199,19 @@ export async function packReleaseArtifacts(
       env,
       join(evidence, `pack-${pkg.manifest.name.replaceAll('/', '-')}.log`),
     );
+    const entrySchema = z.object({ filename: z.string() });
     const packed = z
-      .array(z.object({ filename: z.string() }))
-      .nonempty()
+      .union([
+        z.array(entrySchema),
+        z.record(entrySchema).transform((entries) => Object.values(entries)),
+      ])
+      .pipe(z.array(entrySchema).nonempty())
       .parse(JSON.parse(output));
     const tarball = join(evidence, packed[0].filename);
     const metadata = await command(
       'tar',
-      ['-xOf', tarball, 'package/package.json'],
-      work,
+      ['-xOf', basename(tarball), 'package/package.json'],
+      evidence,
       env,
       join(evidence, `metadata-${pkg.manifest.name.replaceAll('/', '-')}.json`),
     );
@@ -223,6 +228,22 @@ export async function packReleaseArtifacts(
   return artifacts;
 }
 
+function releaseRuntimeClosure(
+  artifacts: readonly ReleaseArtifact[],
+  cli: ReleaseArtifact,
+): readonly ReleaseArtifact[] {
+  const closure = new Set([cli.manifest.name]);
+  for (const name of closure) {
+    const pkg = artifacts.find((artifact) => artifact.manifest.name === name);
+    if (pkg === undefined) throw new Error(`Missing release artifact ${name}`);
+    for (const dependency of Object.keys(runtimeDependencies(pkg.manifest))) {
+      if (artifacts.some((artifact) => artifact.manifest.name === dependency))
+        closure.add(dependency);
+    }
+  }
+  return artifacts.filter((pkg) => closure.has(pkg.manifest.name));
+}
+
 export async function installReleaseArtifacts(
   artifacts: readonly ReleaseArtifact[],
   evidence: string,
@@ -231,6 +252,7 @@ export async function installReleaseArtifacts(
     (pkg) => pkg.manifest.name === '@vybestack/llxprt-code',
   );
   if (cli === undefined) throw new Error('Missing CLI release artifact');
+  const runtimeArtifacts = releaseRuntimeClosure(artifacts, cli);
   const server = createServer((request, response) => {
     const path = decodeURIComponent(
       new URL(request.url ?? '/', 'http://localhost').pathname,
@@ -278,29 +300,34 @@ export async function installReleaseArtifacts(
   if (address === null || typeof address === 'string')
     throw new Error('Registry has no TCP port');
   const registry = `http://127.0.0.1:${address.port}`;
-  const consumer = join(evidence, 'consumer');
-  mkdirSync(consumer, { recursive: true });
-  writeFileSync(
-    join(consumer, 'package.json'),
-    JSON.stringify({ name: 'release-proof-consumer', private: true }),
-  );
-  writeFileSync(join(consumer, '.npmrc'), `@vybestack:registry=${registry}\n`);
   const home = join(evidence, 'home');
+  const seed = join(evidence, 'seed');
   mkdirSync(join(home, 'tmp'), { recursive: true });
+  mkdirSync(seed, { recursive: true });
+  writeFileSync(join(seed, '.npmrc'), `@vybestack:registry=${registry}\n`);
+  const userconfig = join(home, 'npmrc');
+  writeFileSync(
+    userconfig,
+    `@vybestack:registry=${registry}\nregistry=https://registry.npmjs.org/\n`,
+  );
   const env = {
     ...process.env,
     HOME: home,
+    USERPROFILE: home,
     LLXPRT_CONFIG_HOME: join(home, 'config'),
     XDG_CONFIG_HOME: join(home, 'config'),
     XDG_DATA_HOME: join(home, 'data'),
     TMPDIR: join(home, 'tmp'),
-    npm_config_cache: process.env.npm_config_cache ?? join(homedir(), '.npm'),
+    npm_config_userconfig: userconfig,
+    npm_config_cache: join(evidence, 'npm-cache'),
+    npm_config_ignore_scripts: 'true',
     npm_config_offline: 'true',
     npm_config_audit: 'false',
     npm_config_fund: 'false',
     npm_config_update_notifier: 'false',
+    NO_COLOR: '1',
   };
-  const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const npm = 'npm';
   try {
     for (const pkg of artifacts) {
       await command(
@@ -312,40 +339,275 @@ export async function installReleaseArtifacts(
           '--offline=false',
           `--registry=${registry}`,
         ],
-        consumer,
+        seed,
         env,
         join(evidence, `cache-${pkg.manifest.name.replaceAll('/', '-')}.log`),
       );
     }
+    writeFileSync(
+      join(seed, 'package.json'),
+      JSON.stringify({ name: 'release-proof-seed', private: true }),
+    );
+    await command(
+      npm,
+      [
+        'install',
+        cli.tarball,
+        '--offline=false',
+        '--ignore-scripts',
+        '--package-lock=false',
+      ],
+      seed,
+      env,
+      join(evidence, 'seed.log'),
+    );
   } finally {
     await new Promise<void>((resolvePromise, reject) =>
       server.close((error) => (error ? reject(error) : resolvePromise())),
     );
   }
-  await command(
-    npm,
-    [
-      'install',
-      cli.tarball,
-      '--offline',
-      '--ignore-scripts=false',
-      '--foreground-scripts',
-      '--package-lock=false',
-    ],
-    consumer,
-    env,
-    join(evidence, 'install.log'),
+  const nodeOnly = join(evidence, 'node-only');
+  mkdirSync(nodeOnly, { recursive: true });
+  copyFileSync(
+    nodeExecutable,
+    join(nodeOnly, process.platform === 'win32' ? 'node.exe' : 'node'),
   );
-  const workspaceNames = new Set(artifacts.map((pkg) => pkg.manifest.name));
-  const installed = artifacts.map((pkg) => {
-    const path = join(
-      consumer,
-      'node_modules',
-      pkg.manifest.name,
-      'package.json',
+  const launchEnv = {
+    ...env,
+    PATH:
+      process.platform === 'win32'
+        ? `${nodeOnly};${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`
+        : nodeOnly,
+  };
+  let help = '';
+  for (const mode of ['local', 'global']) {
+    const directory = join(evidence, mode);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, 'package.json'),
+      JSON.stringify({ name: 'release-proof-consumer', private: true }),
     );
-    if (!existsSync(path))
+    writeFileSync(
+      join(directory, '.npmrc'),
+      `@vybestack:registry=${registry}\n`,
+    );
+    const prefix = join(directory, 'prefix');
+    const globalArgs =
+      mode === 'global' ? ['--global', '--prefix', prefix] : [];
+    await command(
+      npm,
+      [
+        'install',
+        ...globalArgs,
+        cli.tarball,
+        '--offline',
+        '--ignore-scripts',
+        '--package-lock=false',
+      ],
+      directory,
+      env,
+      join(directory, 'install.log'),
+    );
+    let consumer = directory;
+    if (mode === 'global')
+      consumer = process.platform === 'win32' ? prefix : join(prefix, 'lib');
+    await verifyInstalledGraph(runtimeArtifacts, consumer, directory, env);
+    let bin = join(directory, 'node_modules/.bin/llxprt');
+    if (mode === 'global')
+      bin = join(
+        prefix,
+        process.platform === 'win32' ? 'llxprt' : 'bin/llxprt',
+      );
+    const executable =
+      process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : bin;
+    const argsFor = (arg: string): string[] =>
+      process.platform === 'win32'
+        ? ['/d', '/s', '/c', `""${bin}.cmd" ${arg}"`]
+        : [arg];
+    const version = await command(
+      executable,
+      argsFor('--version'),
+      directory,
+      launchEnv,
+      join(directory, 'installed-version.log'),
+    );
+    if (version.trim() !== cli.manifest.version)
+      throw new Error(`Installed ${mode} version mismatch: ${version}`);
+    help = await command(
+      executable,
+      argsFor('--help'),
+      directory,
+      launchEnv,
+      join(directory, 'installed-help.log'),
+    );
+    if (!help.includes('--help') || !help.includes('llxprt'))
+      throw new Error(`Installed ${mode} help is invalid`);
+    if (process.platform === 'win32')
+      await probeWindowsConsumer(bin, consumer, cli, directory, launchEnv);
+  }
+  return help;
+}
+
+async function probeWindowsConsumer(
+  bin: string,
+  consumer: string,
+  cli: ReleaseArtifact,
+  directory: string,
+  launchEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const powershell =
+    process.env.PWSH_PATH ??
+    join(
+      process.env.SystemRoot ?? 'C:\\Windows',
+      'System32/WindowsPowerShell/v1.0/powershell.exe',
+    );
+  for (const arg of ['--version', '--help']) {
+    const output = await command(
+      powershell,
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${bin}.ps1`, arg],
+      directory,
+      launchEnv,
+      join(directory, `installed-powershell-${arg.slice(2)}.log`),
+    );
+    if (
+      arg === '--version'
+        ? output.trim() !== cli.manifest.version
+        : !output.includes('--help')
+    )
+      throw new Error(`PowerShell ${arg} output is invalid`);
+  }
+
+  if (cli.manifest.dependencies?.bun !== undefined) {
+    await probeWindowsForwarding(
+      join(consumer, 'node_modules', cli.manifest.name, 'bundle/llxprt.js'),
+      bin,
+      directory,
+      launchEnv,
+    );
+  }
+}
+
+async function probeWindowsForwarding(
+  bundle: string,
+  bin: string,
+  directory: string,
+  launchEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const wrappers: {
+    probeArg: (request: {
+      stdin: boolean;
+      stderr: string;
+      exit: number;
+    }) => string;
+    invokeCmd: (
+      path: string,
+      args: string[],
+      opts: { env: NodeJS.ProcessEnv; input: string },
+    ) => { status: number | null; stdout: string; stderr: string };
+    invokePwsh: (
+      path: string,
+      args: string[],
+      opts: { env: NodeJS.ProcessEnv; input: string },
+    ) => { status: number | null; stdout: string; stderr: string };
+  } = createRequire(import.meta.url)(
+    '../windows-installed-command-smoke/launcher-invocation.cjs',
+  );
+  const original = readFileSync(bundle);
+  const probe = readFileSync(
+    fileURLToPath(new URL('./issue-2603-windows-probe.ts', import.meta.url)),
+    'utf8',
+  );
+  try {
+    writeFileSync(
+      bundle,
+      new Bun.Transpiler({ loader: 'ts' }).transformSync(probe),
+    );
+    const request = wrappers.probeArg({
+      stdin: true,
+      stderr: 'probe stderr',
+      exit: 17,
+    });
+    const argv = ['space value', 'amp&pipe|caret^bang!', 'unicode-雪'];
+    for (const { extension, run } of [
+      { extension: 'cmd', run: wrappers.invokeCmd },
+      { extension: 'ps1', run: wrappers.invokePwsh },
+    ]) {
+      const result = run(`${bin}.${extension}`, [request, ...argv], {
+        env: launchEnv,
+        input: 'stdin payload\n',
+      });
+      const line = result.stdout
+        .split(/\r?\n/)
+        .find((value) => value.startsWith('LLXPRT_PROBE:'));
+      if (!line) throw new Error(`Missing ${extension} runtime probe`);
+      const actual = z
+        .object({
+          argv: z.array(z.string()),
+          stdin: z.string(),
+          bunVersion: z.string().min(1),
+          execPath: z.string(),
+        })
+        .parse(JSON.parse(line.slice('LLXPRT_PROBE:'.length)));
+      const observed = {
+        status: result.status,
+        stderr: result.stderr,
+        stdin: actual.stdin,
+        argv: actual.argv.slice(2),
+      };
+      const expected = {
+        status: 17,
+        stderr: 'probe stderr',
+        stdin: 'stdin payload\n',
+        argv: [request, ...argv],
+      };
+      if (JSON.stringify(observed) !== JSON.stringify(expected))
+        throw new Error(
+          `Installed ${extension} forwarding probe failed: ${JSON.stringify(observed)}`,
+        );
+      if (!actual.execPath.includes('@oven'))
+        throw new Error(`Expected packaged @oven runtime: ${actual.execPath}`);
+      writeFileSync(
+        join(directory, `installed-${extension}-probe.json`),
+        JSON.stringify(actual, null, 2),
+      );
+    }
+  } finally {
+    writeFileSync(bundle, original);
+  }
+}
+
+function installedPackageRoot(name: string, cliRoot: string): string {
+  if (name === '@vybestack/llxprt-code') return cliRoot;
+  for (
+    let directory = cliRoot;
+    directory !== dirname(directory);
+    directory = dirname(directory)
+  ) {
+    const candidate = join(directory, 'node_modules', name);
+    if (existsSync(join(candidate, 'package.json'))) return candidate;
+  }
+  throw new Error(`Missing installed package ${name}`);
+}
+
+async function verifyInstalledGraph(
+  artifacts: readonly ReleaseArtifact[],
+  consumer: string,
+  evidence: string,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const workspaceNames = new Set(artifacts.map((pkg) => pkg.manifest.name));
+  const cliRoot = join(consumer, 'node_modules', '@vybestack/llxprt-code');
+  const roots = new Map(
+    artifacts.map((pkg) => [
+      pkg.manifest.name,
+      installedPackageRoot(pkg.manifest.name, cliRoot),
+    ]),
+  );
+  const installed = artifacts.map((pkg) => {
+    const root = roots.get(pkg.manifest.name);
+    if (root === undefined)
       throw new Error(`Missing installed package ${pkg.manifest.name}`);
+    const path = join(root, 'package.json');
     const actual = readReleaseManifest(path);
     if (actual.version !== pkg.manifest.version)
       throw new Error(
@@ -361,7 +623,7 @@ export async function installReleaseArtifacts(
       workspaceNames.has(name),
     );
     const parent = pathToFileURL(
-      join(consumer, 'node_modules', pkg.name, 'index.js'),
+      join(roots.get(pkg.name) ?? cliRoot, 'index.js'),
     ).href;
     const script = `console.log(JSON.stringify(Object.fromEntries(${JSON.stringify(names)}.map(name => [name, import.meta.resolve(name, ${JSON.stringify(parent)})]))));`;
     const output = await command(
@@ -378,7 +640,9 @@ export async function installReleaseArtifacts(
     );
     const resolutions = z.record(z.string()).parse(JSON.parse(output));
     for (const [name, url] of Object.entries(resolutions)) {
-      const expected = realpathSync(join(consumer, 'node_modules', name));
+      const root = roots.get(name);
+      if (root === undefined) throw new Error(`Missing release root ${name}`);
+      const expected = realpathSync(root);
       const actual = realpathSync(fileURLToPath(url));
       if (relative(expected, actual).startsWith('..'))
         throw new Error(`Release edge escaped package: ${pkg.name} -> ${name}`);
@@ -396,18 +660,37 @@ export async function installReleaseArtifacts(
       2,
     ),
   );
-  return command(
-    resolve(consumer, 'node_modules/.bin/llxprt'),
-    ['--help'],
-    consumer,
-    {
-      ...env,
-      HOME: home,
-      LLXPRT_CONFIG_HOME: join(home, 'config'),
-      XDG_CONFIG_HOME: join(home, 'config'),
-      XDG_DATA_HOME: join(home, 'data'),
-      NO_COLOR: '1',
-    },
-    join(evidence, 'installed-help.log'),
+}
+
+if (import.meta.main) {
+  const builtRoot = process.env.LLXPRT_RELEASE_BUILT_ROOT ?? process.cwd();
+  const evidence = process.env.LLXPRT_RELEASE_PROOF_DIR;
+  if (!evidence) throw new Error('LLXPRT_RELEASE_PROOF_DIR is required');
+  if (!existsSync(join(builtRoot, 'packages/cli/bundle/llxprt.js'))) {
+    throw new Error(
+      'Publisher must build the CLI bundle before consumer proof',
+    );
+  }
+  const artifacts = await packReleaseArtifacts(
+    builtRoot,
+    builtRoot,
+    evidence,
+    process.env.RELEASE_VERSION,
+  );
+  await installReleaseArtifacts(artifacts, evidence);
+  writeFileSync(
+    join(evidence, 'artifacts.json'),
+    JSON.stringify(
+      artifacts.map(({ tarball, manifest }) => ({
+        tarball,
+        name: manifest.name,
+        version: manifest.version,
+      })),
+      null,
+      2,
+    ),
+  );
+  console.log(
+    'Scripts-disabled release consumers passed (local + global, --version + --help).',
   );
 }

@@ -9,6 +9,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   existsSync,
   mkdtempSync,
+  chmodSync,
   writeFileSync,
   readFileSync,
   rmSync,
@@ -44,6 +45,15 @@ afterEach(() => {
     }
   }
 });
+
+const {
+  npmInvocation,
+}: {
+  npmInvocation: (
+    args: readonly string[],
+    options: { execPath: string },
+  ) => { command: string; args: string[] };
+} = createRequire(import.meta.url)('../lib/npm-command.cjs');
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -465,8 +475,60 @@ describe('release-bound artifact graph (issue #3771)', () => {
     expect(() => assertReleaseGraph(bound, workspaceNames)).not.toThrow();
   });
 
+  it('never executes consumer lifecycle scripts in local or global release proof installs', async () => {
+    const evidence = mkdtempSync(join(tmpdir(), 'llxprt-lifecycle-proof-'));
+    try {
+      const manifest = {
+        name: '@vybestack/llxprt-code',
+        version: '0.0.0-lifecycle-proof',
+        bin: { llxprt: 'probe' },
+        scripts: {
+          postinstall: 'node -e "throw new Error(\'consumer hook executed\')"',
+        },
+      };
+      writeFileSync(join(evidence, 'package.json'), JSON.stringify(manifest));
+      writeFileSync(
+        join(evidence, 'probe'),
+        '#!/usr/bin/env node\nconsole.log(process.argv.includes("--version") ? "0.0.0-lifecycle-proof" : "llxprt [promptWords...] --help");\n',
+      );
+      chmodSync(join(evidence, 'probe'), 0o755);
+      const node = Bun.which('node');
+      if (node === null) throw new Error('Node is required for npm fixtures');
+      const invocation = npmInvocation(['pack', '--ignore-scripts', '--json'], {
+        execPath: node,
+      });
+      const result = spawnSync(invocation.command, invocation.args, {
+        cwd: evidence,
+        encoding: 'utf8',
+        timeout: 30_000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const tarball = join(
+        evidence,
+        'vybestack-llxprt-code-0.0.0-lifecycle-proof.tgz',
+      );
+
+      const help = await installReleaseArtifacts(
+        [{ directory: evidence, tarball, manifest }],
+        evidence,
+      );
+
+      expect(help).toContain('llxprt [promptWords...]');
+      for (const mode of ['local', 'global']) {
+        expect(
+          readFileSync(
+            join(evidence, mode, 'installed-version.log'),
+            'utf8',
+          ).trim(),
+        ).toBe(manifest.version);
+      }
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it.skipIf(!process.env.LLXPRT_RELEASE_BUILT_ROOT)(
-    'installs actual release-bound tarballs offline without workspace links and runs installed help',
+    'installs release-bound tarballs with scripts disabled locally and globally and runs installed version/help',
     async () => {
       const builtRoot = process.env.LLXPRT_RELEASE_BUILT_ROOT;
       if (!builtRoot) throw new Error('LLXPRT_RELEASE_BUILT_ROOT is required');
@@ -480,6 +542,14 @@ describe('release-bound artifact graph (issue #3771)', () => {
       const help = await installReleaseArtifacts(artifacts, evidence);
       expect(help).toContain('llxprt [promptWords...]');
       expect(help).toContain('--help');
+      for (const mode of ['local', 'global']) {
+        expect(
+          readFileSync(join(evidence, mode, 'installed-version.log'), 'utf8'),
+        ).toContain(artifacts[0]?.manifest.version ?? 'missing version');
+        expect(
+          readFileSync(join(evidence, mode, 'installed-help.log'), 'utf8'),
+        ).toContain('--help');
+      }
     },
     1_200_000,
   );

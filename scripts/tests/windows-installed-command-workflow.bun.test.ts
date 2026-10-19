@@ -29,6 +29,7 @@
 
 import { describe, it, expect, beforeAll } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -52,9 +53,39 @@ const WORKFLOW_PATH = resolve(
 );
 const NIGHTLY_PATH = resolve(repoRoot, '.github', 'workflows', 'nightly.yml');
 
+describe('ci.yml: Windows-sensitive change selection', () => {
+  it.skipIf(process.platform === 'win32')(
+    'selects resolver source and CLI metadata for the Windows regression gate',
+    () => {
+      const workflow = parseWorkflowYaml(
+        readFileSync(resolve(repoRoot, '.github/workflows/ci.yml'), 'utf8'),
+      );
+      const detector = jobSteps(
+        workflowJob(workflow, 'windows_test_infra'),
+      ).find((step) => step.name === 'Detect Windows-sensitive changes');
+      const pattern = detector?.run?.match(/grep -Eq\s+\\\n\s+'([^']+)'/u)?.[1];
+      if (pattern === undefined)
+        throw new Error('Missing Windows change filter');
+      for (const changedPath of [
+        'packages/cli/src/launcher/bun-path-resolver.ts',
+        'packages/cli/src/launcher/bun-path-resolver.test.ts',
+        'packages/cli/package.json',
+      ]) {
+        const result = spawnSync('grep', ['-qE', pattern], {
+          input: `${changedPath}\n`,
+          encoding: 'utf8',
+        });
+        expect({ path: changedPath, status: result.status }).toEqual({
+          path: changedPath,
+          status: 0,
+        });
+      }
+    },
+  );
+});
+
 describe('windows-installed-command.yml: issue #3249 trigger wiring', () => {
   let workflow: WorkflowDocument;
-
   beforeAll(() => {
     workflow = parseWorkflowYaml(readFileSync(WORKFLOW_PATH, 'utf8'));
   });
@@ -129,11 +160,11 @@ describe('windows-installed-command.yml: smoke steps survive the rewiring', () =
     workflowSource = readFileSync(WORKFLOW_PATH, 'utf8');
   });
 
-  it('runs the committed behavioral smoke + benchmark script', () => {
+  it('runs the faithful scripts-disabled installed CMD and PowerShell consumer proof', () => {
     const steps = jobSteps(workflowJob(workflow, 'windows-installed-command'));
     const smokeStep = steps.find((s) =>
       (s.run ?? '').includes(
-        'node scripts/windows-installed-command-smoke.cjs',
+        'bun scripts/tests/release-bound-artifact-helpers.ts',
       ),
     );
     expect(smokeStep).toBeDefined();
@@ -174,6 +205,18 @@ describe('windows-installed-command.yml: smoke steps survive the rewiring', () =
     const condition = artifactStep?.if;
     expect(condition).toBeTruthy();
     expect(condition ?? '').toContain('failure()');
+  });
+
+  it('uploads only diagnostic logs and JSON, never consumer installation trees', () => {
+    const steps = jobSteps(workflowJob(workflow, 'windows-installed-command'));
+    const artifactStep = steps.find(
+      (s) => typeof s.uses === 'string' && s.uses.includes('upload-artifact'),
+    );
+    const paths = String(artifactStep?.with?.path).trim().split(/\r?\n/);
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      expect(path).toMatch(/\*\.(log|json)$/);
+    }
   });
 
   it('keeps every action pinned to a full SHA with a ratchet comment', () => {
