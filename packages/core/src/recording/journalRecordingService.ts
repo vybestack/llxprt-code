@@ -3,6 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { VersionEdit } from '../journal/groupEdits.js';
 import type { CommitAck } from '../journal/groupWriter.js';
+import { resolveJournalDependencies } from '../journal/journalWriterOpen.js';
 import {
   type CheckpointDescriptor,
   checkpointKey,
@@ -448,15 +449,27 @@ export class JournalRecordingService implements SessionRecordingPort {
       this.config.chatsDir,
       journalSessionFileName(this.config.sessionId),
     );
-    // The name is unique to this recorder, so a file at the path is ours and a
-    // failed creation takes it away again instead of leaving a partial journal.
+    const journal = await resolveJournalDependencies(
+      this.config.journal?.journal,
+    );
+    const allocation = { owned: false };
     let session: JournalSession | undefined;
     try {
-      session = await JournalSession.create(filePath, this.config.journal);
+      session = await JournalSession.create(filePath, {
+        ...this.config.journal,
+        journal: {
+          ...journal,
+          open: async (target, flags) => {
+            const handle = await journal.open(target, flags);
+            allocation.owned = true;
+            return handle;
+          },
+        },
+      });
       await this.commitStart(session);
     } catch (error) {
       await session?.close().catch(ignore);
-      await rm(filePath, { force: true });
+      if (allocation.owned) await rm(filePath, { force: true });
       throw error;
     }
     this.filePath = filePath;
