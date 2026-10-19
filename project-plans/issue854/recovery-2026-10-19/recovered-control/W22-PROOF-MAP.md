@@ -1,5 +1,37 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Native public finalizer proof, 2026-10-19
+
+Commit `ac0fa98d08591c9482c3f4b1bb02e4bbf8868a55` changes tests/fixtures only. All three original finalizer cases remain explicitly old; AST comparison preserves both complete `it` calls, the two-value failure domain and their 30000 ms limits. Eight native cases run in the same inventory file under both outer environments. Neither the original JSONL append barrier nor the `.json` rename barrier is used as native evidence.
+
+| Original finalizer contract | Native public proof |
+| --- | --- |
+| Final public-turn append must finish before the session lock releases | Real Agent.stream reaches the response-row positional write; disposal remains pending with its lock while that write is gated; shutdown resolves only after the stream settles and writer handles close; independently reopened rows contain the seed, prompt and response |
+| Accepted persistence success/failure joins finalization | Six native cases cross stop/dispose with success, rejected trailer and rejected platform flush. Real history mutation reaches the selected recorder handle; committed rows remain the previous version while the gate is held; accepting public flush settles before stop/dispose completes. Success commits the extra row; failed write/flush preserves the exact prior rows and keeps the original error on the accepting flush, without duplicate teardown failure |
+| Recording ownership ends with shutdown | Empty public recording acquires a lock without allocating `.llxj`; disposal releases it and rejects later recording admission without creating a file |
+
+Native file wrappers forward the real positional read/write/writev, close and platform flush. The decoded-row observation forwards the real counter function and release, recording positive acquisitions and zero live rows/serialized bytes after terminal completion. No decoder, history algorithm, recorder or integration is replaced. Native row proof uses independently opened committed row trees. Late history mutations leave stopped files byte-identical; disposal rejects late recording admission. Repeated public dispose calls share the same terminal promise. There is no timeout increase, skip, default change, production guard or production change.
+
+Existing W21 public lifetime proof was reused and actually RUN rather than duplicated. The final-source seven-file matrix ran each file alone in Bun, serially under both outer backends:
+
+| File under `packages/agents/src/api/__tests__/` | Journal PID | Old PID | Cases per environment and scope |
+| --- | ---: | ---: | --- |
+| `boundary.adequacy.test.ts` | 19195 | 20077 | Five shared/public boundary cases |
+| `profile-session-admission.behavior.test.ts` | 19211 | 20087 | Three shared/public retirement/admission cases |
+| `recorded-history-persistence.test.ts` | 19348 | 20145 | Two native committed mutation/rollback cases |
+| `recording-facade-chat-channel.behavior.test.ts` | 19374 | 20164 | Four native/four old routing and profile-binding cases |
+| `recording-finalizer-join.behavior.test.ts` | 19578 | 20359 | Eight native/three original old cases described above |
+| `recording-owner-lifetime.behavior.test.ts` | 19710 | 20496 | Eight native/ten old startup, admission, subscription and owner-lifetime cases |
+| `session-owner-restore-checkpoint.behavior.test.ts` | 19884 | 20669 | Nine native/nine old checkpoint rollback, borrowed-owner, reopen and media-reservation cases |
+
+Matrix result: **65 passes per environment, 130 total, zero failures/skips**. Each environment contains 31 native, 26 explicit old and eight shared/public cases. Supplemental outer-old executions do not add package coverage. A full-file control that makes SessionControl finalization resolve without joining or teardown produced **three passes/eight failures**, five of them native, PID **23895**. The three stop cases still pass because that control only removes disposal. Production is restored byte-identically; post-control target runs **24041** and **24189** have eleven passes each. These 22 post-control passes are separate from the 130-pass matrix and are not added again to package totals.
+
+All eight scoped gates pass with exact commands/PIDs in `W22-FINALIZER-PROOF.json`; no-emit tsc includes every changed file. The three committed blobs and full 3320-path boundary match tested source. Four pre-existing SELF_CONFIRMING notices and one DUP_ASSERT notice are unchanged except line numbers, with no new notice or suppression. The initial missing-baseline-flush fixture failure and lint-limit failures remain preserved. Affected graph validation is not shard-test execution.
+
+The pending-only supervisor then ran two of the recorded 652 unexecuted files: hook routing passed four shared/public cases (**27106**); adopted-instance resume failed one (**27267**) when its JSONL `replaySession` was given native bytes. Its original-path equality had already passed; later JSON parsing/sequence assertions are also old format. No repair or retry was made. Supervisor **27104** and driver **27105** exited, and all 35 recorded process IDs are absent.
+
+Current W22 census is **156 executed files: 155 green/one red, 1252 passing cases/one failure/zero skips, 650 unexecuted**. Classification is **87 native history, 255 shared/public, 27 explicit old and 883 pending**. Repair `recording-instance-resume.behavior.test.ts` with preserved old layout and native adoption/replacement/timestamp/listing proof before resuming the exact pending list. `W22-STATUS.md` and `finalizer-run-20261019-a/progress.ts` identify continuation evidence. W22 remains incomplete until all 806 files and case classification are accounted for. Review skipped per Andrew 2026-10-09.
+
 ## Facade native proof and profile attachment fix, 2026-10-19
 
 Commit `70fdd3e2110fec4466ae47a9ae835b1afb1431c1` adds four native cases alongside four explicit-old cases. `facade-run-20261019-a/old-contract-proof.json` proves all four original complete `it` calls AST-identical, including their 30000 ms bounds. Original JSONL marker checks remain in those old bodies. The native cases use real public Agents, session controls, HistoryService, recorder integration, and independently opened committed row trees through `nativeRows`. Compression's provider summary is injected at the existing strategy seam; persistence and ownership remain real.
