@@ -1,5 +1,32 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Pending-window final source and complete census, 2026-10-19T23:50:37Z
+
+**Pending-window is green at `7ab90bd22e38c6dc4ca685b8269369ac6419637f`; W22 remains incomplete.** This is WIP finalization, not review. Source parent: `31d15cd428cdf5ee1d7763da5528fd87b97a0ad6`. The eight intended test/support paths were committed before accounting work. Production and the backend default are unchanged.
+
+`W22-PENDING-WINDOW-PROOF.json` is the structured source/gate/case/control/census record. All sixteen final matrix/helper hashes match committed blobs and the worktree. Ten saved scoped gates passed, and the audit comparison has no touched findings. The six pending-window suites retain all 72 original assertions, original test domains/timeouts, 512/8192 scales, 440-row/8 MiB limits and oversized-row proof. Five assertions were added. No completed product test/gate was rerun for finalization.
+
+| Contract | Final evidence |
+| --- | --- |
+| Pending-window membership, compensation, no-op, reference/copy ownership and publication phases | Six backend-selected real-service suites: 27 journal cases, 27 supplemental outer-old cases; independent committed primary/mirror/public-row digest comparisons, real positional writer barriers and real media replacement ownership |
+| Actual delivery of installed caller rows | addbatch-pending-window additionally invokes real DirectMessageProcessor; transport consumes replayable contents and preserves caller blocks/chronology, response and final history |
+| Existing fallback rejection, partial admission/retry, queued chronology, live publication, media and source-stage compensation | Five native fallback suites actually ran, 31 cases per outer setting; they remain explicitly native even under outer-old |
+| Facade removal and direct-message regression | Two shared/public cases per outer setting |
+| Retention sensitivity | Trap PID 79899 exits one, zero passes/four failures at the unchanged within-bounds predicate, reference/copy at both scales; no timeout or unrelated exception |
+| Original backend completion | Driver 77055 completed normally at 23:46:14Z; final verification finished at 23:46:25Z, no hang, retry or timeout change |
+
+Matrix total: **26 serial isolated processes, 120 passes, zero failures/skips**. Original failures came from JSONL-only recorder construction under journal selection. Intermediate empty-metadata and old media-participant assumptions are preserved separately. Native fixture seeding, selected writer/admission seams, committed observation boundaries and real replacement ownership fix the inputs without pinning the suites to old or changing production. Detailed locations: pending-window-disk-helpers.ts:83-219 and 230-285; support/pending-publication-owner.ts:7-57; addbatch-pending-window.test.ts:67-115.
+
+Collection finished all 400 remaining paths at 23:27:11Z before these source edits. All **806 inventory paths are process-attempted**. Final accepted generation `b851a90a-c2cd-40d3-b591-5df87985232a`: **756 green/45 red/five unverified/zero unattempted**, 1018 retained attempt records. Verified cases: **6428 pass/126 fail/zero skip**. Recorded pass aggregate 6435 includes seven XML passes withheld as inconsistent runner evidence. Classifications sum to verified passes: **145 native/260 shared-public/27 explicit-old/5996 pending**, separate unclassified zero. No full-package green/native claim follows.
+
+Four latest missing-XML files stay unknown; a fifth runner meta-suite stays unverified because nested child summaries conflict with the XML and outer summary. Twenty-two historical missing attempts remain distinct. Original admission PID 98836 and later green PID 19211 have different source hashes; the missing original is not retroactively green. The proof retains both.
+
+The accounting-only update accepts exactly pending-final-journal-g-a after collection, imports its exact-case map and excludes diagnostics, controls and outer-old comparisons. Its observed red test selected the prior PID instead of the final PID. Final accounting verification is seven tests/59 assertions plus strict types, explicit no-ignore lint and formatting, all green. Frozen full ledger/checksums: `tmp/854-notes/p4/w22/pending-window-run-g/frozen-final/`. Exact remaining families/paths: `W22-REMAINING-FAMILIES.tsv`; scope and next action: `W22-STATUS.md`.
+
+Supervisor 25008 and all recorded final verification children/gates are absent. No new family repair, source-default flip, cleanup/deletion, generated obstruction move, `.llxprt/` edit/staging, raw recovery bulk staging, push or merge. W23-W26 remain open. Review skipped per Andrew 2026-10-09.
+
+The following sections are historical checkpoints at their stated times.
+
 ## Compression source cluster committed, 2026-10-19T22:45:02.124Z
 
 **Two source-failure files are repaired at `8a4f11980`; W22 remains partial.** Both shared suffix source-fault paths assumed a JSONL recorder and synchronous disk checkpoint despite native selection. Their original old-checkpoint cases now use the existing explicit-old core fixture, with every original test call/assertion/timeout AST-identical. Four native high-density cases cover Error/AbortError at 512/8192 rows, closure, released pin access, unchanged complete live/durable rows, token/base/range/anchor conservation and successful retry. Production is unchanged. Existing native truncation, fallback admission/cancellation, async acknowledgement, media-reservation and baseline contracts actually RAN rather than being duplicated.

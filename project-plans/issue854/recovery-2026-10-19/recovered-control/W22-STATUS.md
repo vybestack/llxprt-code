@@ -1,29 +1,67 @@
 # W22 agents sweep status
 
-Updated 2026-10-19T23:15:03.089Z.
+Updated 2026-10-19T23:50:37Z. This supersedes the running-collection checkpoint at `31d15cd42`.
 
-**W22 remains partial. Collection is running; no package source changed.** The exact 400 pending files resumed at `cdd66e039` under supervisor **25008**, using the existing serial collect-fail-and-continue driver, one Bun process per file, original timeouts and no automatic retries. Evidence is under `tmp/854-notes/p4/w22/completion-sweep-run-f/`. Do not start a duplicate sweep.
+**The pending-window cluster is committed and green. W22 remains incomplete.** Source commit: `7ab90bd22e38c6dc4ca685b8269369ac6419637f`, eight test/support paths, no production change. The original-backend run finished normally at 23:46:14Z; there was no hang or timeout increase. Final verification ended at 23:46:25Z. No new repair family was started.
 
-## Census at this checkpoint
+## Complete collection and accepted census
 
-**806 = 597 green + 46 red + 4 unverified + 159 unrun**. 647 files attempted; **4951 passes, 142 failures, 0 skips**. This continuation has attempted **241 of 400** pending files. Counts advance while collection runs. These are cumulative per-attempt source boundaries, not a final-source package pass.
+All **806 inventory paths were process-attempted**. Supervisor 25008 finished the final 400/400 at 23:27:11Z, before pending-window source edits. Collection is stopped, not awaiting another sweep. Supervisor 25008, verification driver 71705, journal driver 73406, old driver 77055, trap driver 79898 and all recorded final children/gates are absent. Receipt: `tmp/854-notes/p4/w22/pending-window-run-g/final-owned-processes.log`.
 
-Exact-case classifications remain conservative: **{"native-history":87,"journal-selected-shared-public":258,"explicit-old":27,"classification-pending":4579,"unclassified":0}**. The actual case ledger is `run-20261019-a/current-progress.json`; its frozen copy, all attempts, failure table, missing-evidence table and checksums are under `completion-sweep-run-f/frozen-handoff/`. Journal selection alone does not establish native coverage. History-independent cases need shared/public mapping when applicable, not invented native counterparts. 4 latest missing-XML files remain unknown, separate from 22 historical missing attempts.
+Final accepted census: **806 = 756 green + 45 red + 5 unverified**, with **zero unattempted paths**. There are 1018 retained attempt records, including historical, diagnostic, comparison and control attempts. Inventory paths and attempt records are different counts. These are cumulative accepted per-file source boundaries, not a final-source whole-package pass.
 
-## Live authority and continuation
+Verified case evidence has **6428 passes, 126 failures and zero skips**. The existing census's recorded pass aggregate is 6435: seven XML passes from an inconsistent runner meta-suite remain unverified and are excluded from verified passes and classification. Passing-case classifications reconcile to 6428: **145 native-history, 260 journal-selected shared/public, 27 explicit-old and 5996 classification-pending**. The separate unclassified bucket is zero. Journal selection alone is not native coverage. Earlier cluster mappings not imported into the cumulative classifier remain pending rather than being inferred.
 
-At capture: batch **package-resume-g-0450**, driver **39798**, child **50643**, current file `packages/agents/src/core/retained-array-memory.test.ts`, started `2026-10-19T23:14:54.958Z`, source SHA-256 `a553b0905e0e1f35ff1253607c2e9c40af0bb4091c0fd609064b5e2a7fdaae78`. These identities are timestamped observations. Read `tmp/854-notes/p4/w22/run-20261019-a/sweep-supervisor.json` and its `currentFilePath` before acting. The supervisor should continue the remaining files without intervention. Do not kill a test for the handoff.
+The accepted repair replaces six latest red files with actual final journal results. Thirteen source-matching final journal files are selected; old comparison and retaining-control attempts remain outside package totals. The census runner now names that final batch explicitly and reads its exact-case map. Its acceptance test was red before this accounting change, then passed: seven tests, 59 assertions, strict types, explicit no-ignore zero-warning lint and formatting all pass. No product tests or completed product gates were rerun during finalization.
 
-No package edits or gates may overlap active collection. Ordinary failures continue; disk/loader/driver-integrity failures stop the owned batch for diagnosis. After collection or a deliberate safe batch boundary, repair a shared-root cluster with its own verified source boundary.
+Generation: `b851a90a-c2cd-40d3-b591-5df87985232a`. Full ledger, failure table, missing evidence and publication checksums are frozen under `tmp/854-notes/p4/w22/pending-window-run-g/frozen-final/`. `W22-PENDING-WINDOW-PROOF.json` retains final source hashes, case/PID/gate evidence, classification, every unresolved path/case and missing-original boundaries. `W22-REMAINING-FAMILIES.tsv` is the exact 50-path open list.
 
-## Next repair clusters
+## Pending-window proof
 
-1. Six pending-window suites share `pending-window-disk-helpers.ts`: addbatch-pending-window and pending-window-disk-contracts/noop/owner-controls/phases/route. The helper constructs the JSONL-only AdmissionFailureRecorder without an explicit old backend, so native selection rejects construction before target assertions. Preserve old assertions, bounds and scales. Map existing real-service native fallback compensation, partial admission/retry, queued chronology, acknowledgement, media and retaining-control evidence; add only uncovered contracts. The implementation plan is `completion-sweep-run-f/cluster-plan.md`.
-2. Provider fallback/hardlimit suites share the same recorder/backend selection fault in `provider-fallback-disk-helpers.ts`. Keep diagnostics and native source-stage compensation coverage distinct.
-3. Other recorded families remain cursor `previous.close`, empty-block publication, token/owner/span parity, serialized-request equality, and newly collected core synchronous-observation/JSONL assumptions. Exact red paths/counts are in `W22-COMPLETION-SWEEP-PROOF.json`; failed cases and raw references are in the frozen failure table. This is repair planning, not a completed code review.
+The shared fixture constructed a JSONL-only recorder while selecting journal history, so six suites failed constructor validation before their assertions. The fixture now selects a real recorder, seeds native primary history through streaming replacement, gates real positional writes, and independently compares committed primary, mirror and public-row digests. Native partial admission fails the tokenizer after one row; old retains its enqueue fault. The publication participant now extends real media ownership for both replacement protocols and holds a pre-publication snapshot. Paused observations use independently reopened committed rows instead of waiting on the operation being paused. No old-only pin supplies native proof.
 
-## Preserved verified work
+Final matrix: **13 files per outer backend, 60 passes each, 120 total, zero failures/skips**. The six pending-window suites contribute 27 native cases in the journal run; five reused native fallback suites contribute 31, and facade removal/direct-message regression contribute two shared/public cases. The outer-old run is supplemental: the five explicitly native fallback suites still select journal internally. It is not 60 old-format cases.
 
-Source repair **`8a4f11980`** and documentation **`cdd66e039`** remain intact. The prior compression-source matrix had **114 passes, zero failures/skips, 16 serial processes and ten passing scoped gates**. It was not rerun for this continuation. Details remain in `W22-COMPRESSION-SOURCE-PROOF.md/json`; earlier increments retain their own proof files and git history.
+The real DirectMessageProcessor additionally consumes the installed caller rows through the transport seam and preserves blocks, chronology and history. The four-case native retaining trap exits one at the unchanged ownership predicate: both 512/8192 scales and reference/copy variants reject deliberate retention. Original test-call domains, all 72 original assertions, bounds and timeouts are preserved; five assertions were added. The 440-row/8 MiB limits and oversized-row cases remain.
 
-This run has no product edit and ran **no verification gates**, declaration build or OCR. Review skipped per Andrew 2026-10-09. No cleanup, deletion, obstruction move, .llxprt edit, raw recovery bulk staging, default flip, weaker assertions/timeouts, push or merge. W23-W26 remain open. W22 cannot close until all 806 inventory paths and required native contracts have evidence.
+All ten saved source-bound gates pass: API surface, declaration build, core types, agents types, agents Bun types, touched-path types, zero-warning ESLint, Prettier, affected graph and test audit. No touched audit findings before or after. Sixteen matrix/helper hashes match the worktree and committed blobs. Affected-graph validation is not affected-shard execution. Proof uses the saved completed runs, not new successful retries.
+
+Intermediate authoring failures remain separate: the empty fixture lacked recording metadata, the prior media participant had no native replacement protocol, and native observations needed a committed baseline. Metadata allocation, real ownership and explicit commit boundaries fix these fixture inputs. No production defect or unrelated-library repair was established in this cluster.
+
+## Unverified evidence stays open
+
+Four latest files lack XML and a complete summary after their recorded outer SIGTERM: `middleout-disk-{large-request,publication-owners}` and `oneshot-disk-{large-request,publication-owners}`. Counts remain unknown. The publication logs contain first-case timeouts; the large-request logs have no completed case summary. They were attempted, not skipped or unrun.
+
+The fifth file is `test-bun/run-bun-tests.issue3253.bun.ts`, PID 62524: exit zero and XML/final outer summary say seven passes, but both existing parsers captured the earlier nested child's one-pass summary. It remains inconsistent-record-unverified. This run did not repair that separate parser family or rerun the suite.
+
+Keep 22 historical missing attempts distinct from four latest missing files. Original profile-admission PID 98836 timed out on an unreachable JSONL disposal gate under journal and has no XML/complete summary. Later selected PID 19211 has three real passes at a different source hash after backend-specific disposal targeting. The missing original stays unverified; later success does not reconstruct it. Exact hashes and references are in the proof.
+
+## Remaining families
+
+These are observed grouping labels, not established shared root causes. The TSV gives exact paths, state, PID, source hash, batch and counts; the proof JSON gives exact failed cases and raw references.
+
+| Family                                          | Red files | Unverified files |
+| ----------------------------------------------- | --------: | ---------------: |
+| Compression attempt cursor/estimation/lifecycle |         3 |                0 |
+| Compression value lifetime/recorder             |         2 |                0 |
+| Density capture/lifecycle/span accounting       |         3 |                0 |
+| Effective token count                           |         1 |                0 |
+| High-density fallback rollback                  |         1 |                0 |
+| Middle-out request/publication                  |         5 |                2 |
+| One-shot request/publication                    |         5 |                2 |
+| Provider fallback/hardlimit                     |         6 |                0 |
+| Strategy type contract                          |         1 |                0 |
+| Conversation observations/model stamping        |         5 |                0 |
+| Child ownership/transport                       |         3 |                0 |
+| Retained growth and its controls                |         3 |                0 |
+| Send snapshot count                             |         1 |                0 |
+| Deferred acknowledgement                        |         1 |                0 |
+| Semantic purge                                  |         2 |                0 |
+| Stream request demand                           |         2 |                0 |
+| Turn media rollback                             |         1 |                0 |
+| Runner summary accounting                       |         0 |                1 |
+| Total                                           |        45 |                5 |
+
+Next work is classification and one root-caused red family, not another package collection. Provider fallback/hardlimit still has its separately recorded recorder/backend mismatch; preserve its diagnostics and source-stage compensation scope. Do not infer that other cursor, empty-block, token/owner/span, serialization or synchronous-observation failures share that cause. No bounds, retries, expectations or enforcement were relaxed.
+
+Old default unchanged; W23-W26 and scratch removal remain open. Review skipped per Andrew 2026-10-09. No OCR, cleanup/deletion, generated obstruction move, `.llxprt/` edit/staging, raw recovery bulk staging, push or merge. Unrelated dirty memory and recovery artifacts remain untouched.

@@ -113,6 +113,10 @@ function acceptedBatches(
         ...groups(/^package-resume-g-\d+$/),
       ],
     },
+    {
+      reference: 'pending-window-run-g/verify-current.json',
+      batches: ['pending-final-journal-g-a'],
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -192,6 +196,7 @@ function classificationContracts(
     'facade-run-20261019-a/classification.json',
     'finalizer-run-20261019-a/classification.json',
     'finalizer-run-20261019-a/hook-classification.json',
+    'pending-window-run-g/classification.json',
   ]) {
     const path = join(w22, name);
     if (!existsSync(path)) continue;

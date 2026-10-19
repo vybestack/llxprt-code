@@ -387,6 +387,49 @@ describe('W22 shared runner', () => {
           test.classificationProvenance.endsWith('progress-g.ts.before-census'),
         ),
     ).toBe(true);
+    batch(
+      'pending-final-journal-g-a',
+      { ...base, pid: 80, sourceHash: 'pending-final' },
+      xml(),
+    );
+    batch(
+      'pending-retaining-control-g-a',
+      { ...base, pid: 90, code: 1, pass: 0, fail: 1 },
+      xml('failed'),
+    );
+    const pending = join(w22, 'pending-window-run-g');
+    mkdirSync(pending, { recursive: true });
+    writeFileSync(
+      join(pending, 'classification.json'),
+      JSON.stringify({
+        rows: [
+          {
+            path: base.path,
+            cases: [
+              {
+                classname: 'suite',
+                name: 'works',
+                classification: 'native-history',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const completed = runCensus(root);
+    expect(completed.rows.find((row) => row.path === base.path)?.pid).toBe(80);
+    expect(
+      completed.rows.find((row) => row.path === base.path)?.sourceHash,
+    ).toBe('pending-final');
+    expect(
+      completed.rows.find((row) => row.path === base.path)?.supersedes,
+    ).toHaveLength(2);
+    expect(completed.classifications['native-history']).toBe(2);
+    expect(completed.historicalMissingAttempts).toHaveLength(1);
+    expect(completed.attempts).toHaveLength(overrides.attempts.length + 2);
+    expect(completed.attempts.find((row) => row.pid === 90)?.accepted).toBe(
+      false,
+    );
     writeFileSync(
       join(run, 'package-resume-g-0000/results.json'),
       JSON.stringify([{ ...base, pid: 'invalid' }]),
