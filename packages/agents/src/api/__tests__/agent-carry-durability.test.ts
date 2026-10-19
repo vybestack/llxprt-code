@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, vi } from 'bun:test';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { describe, expect, it } from 'bun:test';
+import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
 import {
   expectedDigest,
   historyDigest,
@@ -11,6 +11,9 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
   return withAgentCarry(
     size,
     async (agent, replacement, previous) => {
+      const failure = carryAcknowledgementFailure(
+        'Carried write acknowledgement failed',
+      );
       const started = agent.setModel('durability-model');
       const outcome = started.then(
         () => undefined,
@@ -22,26 +25,25 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
       const history = previous.getHistoryService();
       if (history === null) throw new Error('Missing previous journal');
       const tokens = history.getTotalTokens();
-      // Only the carried write's acknowledgement fails; the rollback of that
-      // admission acknowledges through the same recorder and must still succeed.
-      const failure = vi
-        .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-        .mockImplementationOnce(async () => {
-          throw new Error('Carried write acknowledgement failed');
-        });
+      failure.arm();
       try {
         next.proceed.open();
         expect(await outcome).toBeInstanceOf(Error);
         await expect(started).rejects.toThrow(
           'Carried write acknowledgement failed',
         );
-        // The injected failure plus the rollback's own acknowledgement.
-        expect(failure).toHaveBeenCalledTimes(2);
+        if (failure.oldAcknowledgement !== undefined) {
+          expect(failure.oldAcknowledgement).toHaveBeenCalledTimes(2);
+        } else {
+          expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
+          expect(failure.rejectedTrailer?.path).not.toBe(history.journalPath());
+        }
       } finally {
-        failure.mockRestore();
+        failure.restore();
         next.proceed.open();
       }
       expect(next.admissions).toBe(1);
+      expect(next.visited).toBe(size);
       expect(next.hasChatInitialized()).toBe(false);
       expect(next.getHistoryService()).toBeNull();
       expect(await historyDigest(next.streamHistory())).toStrictEqual({

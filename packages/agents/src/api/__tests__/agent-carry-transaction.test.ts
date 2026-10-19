@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { statSync } from 'node:fs';
-import { describe, expect, it, vi } from 'bun:test';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { describe, expect, it } from 'bun:test';
+import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
 import {
   expectedDigest,
   historyDigest,
@@ -19,6 +19,9 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
   return withAgentCarry(
     size,
     async (agent, replacement, previous) => {
+      const failure = carryAcknowledgementFailure(
+        'Candidate durable acknowledgement failed',
+      );
       const started = agent.setModel('transaction-carried-model');
       const outcome = started.then(
         () => undefined,
@@ -33,21 +36,21 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
       if (source === null) throw new Error('Missing carried source');
       await source.waitForCommit();
       const before = durableBytes(source.journalPath());
-      const failure = vi
-        .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-        .mockImplementationOnce(async () => {
-          throw new Error('Candidate durable acknowledgement failed');
-        });
+      failure.arm();
       try {
         next.proceed.open();
         expect(await outcome).toBeInstanceOf(Error);
         await expect(started).rejects.toThrow(
           'Candidate durable acknowledgement failed',
         );
-        // The injected failure plus the rollback's own acknowledgement.
-        expect(failure).toHaveBeenCalledTimes(2);
+        if (failure.oldAcknowledgement !== undefined) {
+          expect(failure.oldAcknowledgement).toHaveBeenCalledTimes(2);
+        } else {
+          expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
+          expect(failure.rejectedTrailer?.path).not.toBe(source.journalPath());
+        }
       } finally {
-        failure.mockRestore();
+        failure.restore();
         next.proceed.open();
       }
       await source.waitForOwnershipSettlement();
@@ -55,6 +58,7 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
       const after = durableBytes(source.journalPath());
       expect(after - before).toBe(0);
       expect(next.admissions).toBe(1);
+      expect(next.visited).toBe(size);
       expect(next.getHistoryService()).toBeNull();
       expect(agent.agentClient).toBe(previous);
       expect(previous.getHistoryService() === source).toBe(true);
