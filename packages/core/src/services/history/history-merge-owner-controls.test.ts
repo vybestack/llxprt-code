@@ -37,12 +37,20 @@ async function retainingMerge(size: number, copy: boolean): Promise<number> {
           0,
           async (target) => {
             target.setTokenizerFactory(exactTokenizer());
-            target.on('contentAdded', (row) => {
+            const retain = (row: IContent): void => {
               const kept = copy ? structuredClone(row) : row;
               owners.retain(kept);
               retained.push(kept);
+            };
+            let retention = Promise.resolve();
+            target.on('contentAdded', retain);
+            target.on('contentBatchAdded', (batch) => {
+              retention = (async () => {
+                for await (const row of batch.rows()) retain(row);
+              })();
             });
             await target.merge(source);
+            await retention;
             expect(await streamDigest(target.streamRawHistory())).toBe(
               oracleDigest(size),
             );
