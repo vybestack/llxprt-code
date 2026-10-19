@@ -1,5 +1,30 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Handoff census, 2026-10-19T22:16:31.530Z
+
+Latest published evidence: **806 = 334 green + 33 red + four unverified + 435 unrun**; 371 selected files, **2570 passes/119 failures/zero skips**, classification **87 native/258 shared-public/27 explicit-old/2198 pending**, separate unclassified zero. This supersedes only the earlier dated census below. Supervisor **9092**, driver **9096**, batch **g-0150** had completed **15 green/zero red** at 22:16:31.227Z; child **11698** was running `compression/__tests__/truncation-stream-lifecycle.test.ts`. Next are truncation-stream-owner-controls, truncation-stream-retry, truncation-stream and truncation-value-failures. Live authority remains `sweep-supervisor.json` and its `currentFilePath`; exact retained state is the proof JSON handoff field. The source commit remains **d13e565c5**. Do not edit package source or overlap gates while this serial collection runs.
+
+## Shared-origin rollback finalized at d13e565c5, 2026-10-19
+
+`W22-SHARED-RECORDING-PROOF.json` is the new structured evidence. Base `3da8460d8`; source commit `d13e565c5a52307ecbc81d32e83c7d0a1a006594`. Only the shared-origin test changes. All nine original test calls/assertions/timeouts match their original AST after the single old-fixture normalization. Reused native-session-fixture.ts was already tracked. Production is unchanged.
+
+| Contract | Old and native evidence |
+| --- | --- |
+| Rejected shared and facade-owned publication leaves both recordings unchanged | Original raw-marker absence assertions remain explicitly old. New native case rejects both origins, checks unchanged public chronology/full rows and independently reopened committed row trees in both mirrors |
+| Recording remains usable and origins stay isolated | New native case records a shared row and separate public facade turns after rollback; exact four-row count, seed equality, shared visibility and foreign-origin exclusion; stop preserves complete independently reopened rows |
+| Adoption, owner lifetime and public finalization | Existing instance-resume, owner-lifetime and finalizer-join suites actually ran, without duplicate counterparts |
+| Regression sensitivity | Disabled native restore: PID 3292, nine passes/one native failure, exit one, at the live unchanged-row assertion; original production SHA-256 restored to `2b5bd891135395147be04091c342298fe71c45d95364a736d84b7b0789751010` |
+
+Final matrix: journal PIDs **3726/3814/3862/3990**, old PIDs **4460/4541/4595/4719**. Per-setting file counts are **11/2/18/10**, total **82 passes/zero failures/skips**. Every saved JUnit is nonempty/all-passing and agrees with recorded counts; each tested source hash matches worktree and committed blob. All 3321 captured package source entries were checked, with only the intended test differing from the prior manifest.
+
+All nine final-source scoped gates completed at 22:12:36.563Z, exit zero: API surface, declaration build, core tsc, agents tsc, agents Bun types, scoped zero-warning lint/format, affected graph and AST audit. Three SELF_CONFIRMING and two DUP_ASSERT notices are retained conservation checks across lifecycle phases, with independent input/count/origin assertions and an observed rejecting control; no suppression or scanner change. Graph validation is not shard execution. The finalization reused these verified logs rather than rerunning successful tests or gates.
+
+Census generation `8db63dcf-e323-4401-8489-0dba12ff37c9`, 22:14:39.442Z: **321 green/33 red/four unverified/448 unrun**, 2482 passes/119 failures/zero skips; classifications **87 native/258 shared-public/27 explicit-old/2110 pending**. The final journal repair is accepted as package-resume-g-0100, PID 3990. The proof retains all 37 red/unverified file rows and exact failed-case names/raw references. Four latest missing XML attempts remain unknown, separate from 22 historical missing attempts. No old green result hides a later unverified attempt.
+
+After this source commit, inspected pending-only continuation resumed under **supervisor 9092/driver 9096**, 450 selected paths, serial 50-file batches starting at g-0150, zero automatic retries. Timestamped current/next paths, remaining error families and live authority are in the leading W22-STATUS section. Do not edit package source or overlap gates while running. W22 stays partial, W23-W26 open, old default unchanged. No production fix, cleanup, obstruction move, `.llxprt/` edit, raw recovery staging, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+All sections below are earlier dated checkpoints, not live counts or process instructions.
+
 ## Current continuation checkpoint, 2026-10-19T21:36:35.279Z
 
 The census orchestration is verified; W22 remains partial. The frozen inventory is **806 = 293 green + 14 red + one unverified + 498 unrun**. There are **308 selected files, 2333 measured passes, 37 failures and zero skips**, across cumulative per-file source boundaries. Classification is **88 native history, 258 journal-selected shared/public, 28 explicit old and 1959 classification-pending**. The separate unclassified bucket is zero; journal selection alone does not classify a case as native. Passing cases in selected red files retain their classifications without making those files green.

@@ -1,5 +1,19 @@
 # Recovered decision guidance
 
+## Handoff census, 2026-10-19T22:16:31.530Z
+
+Latest published evidence: **806 = 334 green + 33 red + four unverified + 435 unrun**; 371 selected files, **2570 passes/119 failures/zero skips**, classification **87 native/258 shared-public/27 explicit-old/2198 pending**, separate unclassified zero. This supersedes only the earlier dated census below. Supervisor **9092**, driver **9096**, batch **g-0150** had completed **15 green/zero red** at 22:16:31.227Z; child **11698** was running `compression/__tests__/truncation-stream-lifecycle.test.ts`. Next are truncation-stream-owner-controls, truncation-stream-retry, truncation-stream and truncation-value-failures. Live authority remains `sweep-supervisor.json` and its `currentFilePath`; exact retained state is the proof JSON handoff field. The source commit remains **d13e565c5**. Do not edit package source or overlap gates while this serial collection runs.
+
+## W22 shared-origin finalization decision, 2026-10-19
+
+Source commit `d13e565c5a52307ecbc81d32e83c7d0a1a006594` changes only the shared-origin test. Keep raw binary marker absence out of native rollback acceptance: appended bytes can remain after compensation selects a restored version. Preserve every original old assertion with explicit-old construction for that case; prove native public/live and independently reopened committed rows for both origins and both mirrors. Continued public turns, exact membership/counts and stop-boundary conservation must remain. Reuse the existing tracked helper and actual adoption/finalizer/owner-lifetime executions instead of duplicating them. No production change was needed.
+
+Accept the saved eight-process/82-pass final matrix and nine completed gates only after exact test/artifact/committed-source checks. The disabled-restore control fails the new native case and restores byte-identically. Retain the three strict-conservation SELF_CONFIRMING and two phase-distinct DUP_ASSERT notices with their explanation and rejecting proof; do not weaken assertions or scanner policy. All original nine test calls/assertions/timeouts are AST-identical after the sole fixture selection. Commit the green source before more collection or functional work.
+
+The census already accepts g-0100/PID3990 at the new source hash. Preserve the measured checkpoint: 321 green/33 red/four unverified/448 unrun at 22:14:39.442Z, 2482 passes/119 failures, zero skips, 2110 passing-case classifications pending. Keep the four latest missing XML files separate from 22 historical missing attempts and from the 33 measured red files. Metadata default zeros are not measurements. This is cumulative per-file evidence, not package parity.
+
+Resume the inspected pending-only run-d driver from the committed boundary: supervisor9092/driver9096, 450 paths, serial 50-file batches starting g-0150, no automatic retries. Ordinary failure/incomplete results continue; loader/disk/integrity errors stop. No package source edits or gates while active. The exact live authority is sweep-supervisor.json/currentFilePath, not old PID notes. Next bounded repair is recorder/backend fixtures; missing cursor close, empty-block, token/owner/span and byte-order failures remain distinct and are not repaired here. W22 remains partial, W23-W26 open, old default unchanged. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edit, broad staging, OCR, push or merge.
+
 ## Current W22 coordination decision, 2026-10-19T21:36:35.279Z
 
 Continue the existing pending-only 550-path sweep under supervisor 94663. Collect ordinary red and incomplete attempts without retries or duplicate tests; do not change package source during the active batch. Disk-full, loader and driver-integrity stop conditions remain distinct. Process identities observed at 21:36:42Z confirmed supervisor 94663, driver 25162 and child 48284 on middleout-disk-owners. Always re-read live state and process identity before acting on a PID.
