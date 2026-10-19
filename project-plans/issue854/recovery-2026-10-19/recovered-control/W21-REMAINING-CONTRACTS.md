@@ -1,6 +1,6 @@
 # W21 current remaining contracts, 2026-10-19
 
-This status map includes the exact-replay increment from verified base `529a4abf59a4e72cde1cecbf7164949f94591208`, implemented at `88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3`. It supersedes earlier queue entries only where the contract below is explicitly accounted for. Historical deleted evidence remains missing.
+This status map includes the discovery increment from verified production `88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3` and first proof-document commit `dbb6b27d8`, implemented at `0981cc19d` and `9f176b7ab`. It supersedes earlier queue entries only where the contract below is explicitly accounted for. Historical deleted evidence remains missing.
 
 ## Accounted contracts
 
@@ -31,9 +31,17 @@ The original 25 replay cases and assertions remain unchanged. Their exact map is
 
 Final matrix: 48 serial isolated processes across 24 files, 492 passes, zero failures/skips, both outer backend settings; 76 new case executions and 416 reused regressions. All eight final gates pass, 1848 captured core source hashes and six committed source blobs match tested bytes. All 30 fixed input vectors match byte-for-byte across both backends. Four full-file deliberate regressions reject and restore exactly. All 113 recorded run PIDs are absent. Raw evidence remains under `tmp/854-notes/p4/w21/exact-replay/run-20261019-a/`; fixtures remain in its sibling directory. No historical raw recovery is claimed.
 
-## Other W21 remainder
+## Accounted discovery contracts
 
-The wider unreadable-session/directory-scan/resume-identity/extension/checkpoint/fork/janitor inventory remains open beyond the previously delivered bounded cases. W21 remains partial until that inventory is mapped and verified; exact-replay completion does not imply broader discovery closure.
+`W21-DISCOVERY-PROOF.md` maps actual SessionDiscovery, boundedSessionScan, unreadable matching, continue-target, resume-identity, extension, checkpoint/fork, cleanup and janitor branches. It replaces the historical 306-candidate queue with an actual 34-file related-caller inventory and explicit execution boundaries. Eleven retained JSONL suites are unchanged apart from explicit old-backend pins; existing native equivalents are run rather than duplicated. Native discovery uses state facts, aggregate counts and live checkpoint descriptors instead of JSONL sequence/version semantics.
+
+`0981cc19d` fixes malformed native start facts and empty identity (#3901, unchanged-production nine pass/ten fail). `9f176b7ab` isolates a later per-file checkpoint read so healthy sibling targets survive (#3902, nine pass/one fail). Five new native suites prove external shape validation, exact retired messages, valid resume beside damaged/retired siblings, header/frame/body corruption with no older-version fallback under intact latest trailers, correct identity/name/workspace/provider/title/filter/sort, checkpoint/lock uniqueness and native scan/fork/cleanup/janitor extension rules.
+
+Final confirmed proof is 66 serial processes, 710 passes, zero failures/skips across 33 files under both outer settings; 92 new native executions and 618 reused regressions. All eight gates pass, 1854 core source hashes and 19 committed blobs match tested bytes, and four full-file deliberate regressions fail and restore exactly. Metadata reads remain below 512 KiB per public operation on 40/4000-row files with an 8 MiB body; maximum request is 64 KiB. All 239 recorded PIDs are absent. Raw new evidence is retained under `tmp/854-notes/p4/w21/discovery/run-20261019-a/`.
+
+## Remaining scope limits
+
+The named bounded W21 discovery remainder is accounted for. This does not establish cumulative W21 full-package closure. Broader integration/front-door/recorder, JSONL first-user-scanner and janitor safety files identified as related but not executed remain inventory-only at their whole-file scope; the discovery branches they call have the native public-boundary coverage mapped in `W21-DISCOVERY-PROOF.md`. No new unverified W21 production contract is claimed complete by referring to those files. The JSONL portable-transfer temporary grammar remains intentionally format-specific.
 
 W23's send/planning-envelope refusal and 40 MiB send are separate from W21's 17/40/200 MiB service persistence and resume proof. W24 still owns whole-product proof and primary-plus-mirror write-amplification measurement, including a measurement-based decision on adopting the attached recorder as primary. The correctness fixtures supply neither a write-budget measurement nor that topology decision. W22-W26 and later phase requirements remain; W25's default flip is not authorized by these results.
 
