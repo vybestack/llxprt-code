@@ -262,11 +262,12 @@ export abstract class HistoryServiceCore
     );
   }
 
-  prepareCuratedForProviderSnapshot(
+  async prepareCuratedForProviderSnapshot(
     tailContents: readonly IContent[] = [],
     options: ProviderCuratedStreamOptions = {},
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): Promise<ProviderRequestSnapshot> {
+    await this.waitForCommit();
     return prepareProviderContentSnapshot(
       streamCuratedProviderHistory(
         this.logger,

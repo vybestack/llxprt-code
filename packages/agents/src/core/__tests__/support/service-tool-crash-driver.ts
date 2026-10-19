@@ -1,0 +1,180 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { z } from 'zod';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+} from '@vybestack/llxprt-code-core/recording/journalResume.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
+import {
+  observedRecording,
+  recordingFile,
+  diskToolState,
+  report,
+} from './service-tool-recorders.js';
+import {
+  completedTool,
+  localProvider,
+  serviceToolChat,
+  requestFacts,
+  toolId,
+  modelName,
+  resultBlock,
+  toolGate,
+} from './service-tool-runtime.js';
+
+const directory = z.string().min(1).parse(process.argv[2]);
+const role = z.enum(['primary', 'mirror', 'none']).parse(process.argv[3]);
+const exitMode = z.enum(['crash', 'clean']).parse(process.argv[4]);
+const primary = await observedRecording(directory, 'primary');
+const mirror = await observedRecording(directory, 'mirror');
+const history = new HistoryService({ backend: 'journal' });
+await history.adoptResumeBoot(
+  primary.recording,
+  new JournalResumeBoot(
+    primary.recording,
+    await resumePointOf(primary.recording),
+  ),
+);
+const origin = {};
+const primaryIntegration = new RecordingIntegration(primary.recording);
+await primaryIntegration.subscribeToJournal(history, origin);
+const integration = new RecordingIntegration(mirror.recording);
+await integration.subscribeToJournal(history, origin);
+const sessions = [
+  await primary.recording.session(),
+  await mirror.recording.session(),
+];
+const responseGate = toolGate();
+const nextGate = toolGate();
+let entries = 0;
+let nextStarted = false;
+const files = [
+  recordingFile(primary.recording),
+  recordingFile(mirror.recording),
+];
+const facts = (): Record<string, unknown> => ({
+  entries,
+  nextStarted,
+  seqs: sessions.map((session) => session.store.published?.commitSeq ?? 0),
+  flushes: [primary.flushes(), mirror.flushes()],
+});
+const provider = localProvider((options) => {
+  entries++;
+  if (entries === 2) report('transport-entry', facts());
+  return (async function* (): AsyncGenerator<IContent> {
+    const request = await requestFacts(options.contents);
+    if (entries === 1) {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: toolId,
+            name: 'lookup',
+            parameters: { query: 'durability' },
+          },
+        ],
+      };
+      return;
+    }
+    report('transport-request', {
+      ...facts(),
+      request,
+      disk: await Promise.all(files.map(diskToolState)),
+    });
+    await responseGate.promise;
+    yield {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'subsequent response must not survive crash' },
+      ],
+    };
+  })();
+});
+const setup = serviceToolChat(history, provider, 'primary', directory);
+const execution = {
+  historyOrigin: origin,
+  transcriptPath: () => files[0],
+  persistSemanticMediaPurge: async (): Promise<never> => {
+    throw new Error('Unexpected purge');
+  },
+};
+process.on('message', (input: unknown) => {
+  const command = z.enum(['next', 'probe', 'release', 'respond']).parse(input);
+  if (command === 'next') nextGate.resolve();
+  if (command === 'release') {
+    primary.seams.release();
+    mirror.seams.release();
+  }
+  if (command === 'respond') responseGate.resolve();
+  if (command === 'probe') {
+    void Bun.sleep(100).then(async () =>
+      report('probe', {
+        ...facts(),
+        disk: await Promise.all(files.map(diskToolState)),
+      }),
+    );
+  }
+});
+
+try {
+  await setup.chat.sendMessage({ message: 'Run lookup.' }, 'first', execution);
+  await history.waitForCommit();
+  await integration.flushAtTurnBoundary();
+  report('ready', {
+    ...facts(),
+    files,
+    owner: historyOriginId(origin),
+    disk: await Promise.all(files.map(diskToolState)),
+  });
+  await nextGate.promise;
+  const selected = role === 'primary' ? primary : mirror;
+  const writes = selected.seams.events.filter(
+    (event) => event.type === 'write',
+  ).length;
+  if (role !== 'none') selected.failures.gateWriteAt = writes + 1;
+  setup.chat.recordCompletedToolCalls(modelName, [completedTool()]);
+  nextStarted = true;
+  const send = (async (): Promise<void> => {
+    for await (const _event of await setup.chat.sendMessageStream(
+      { message: [resultBlock] },
+      'second',
+    )) {
+      /* consume the production stream */
+    }
+  })();
+  void send.catch((error: unknown) =>
+    report('send-error', { error: String(error) }),
+  );
+  while (
+    selected.seams.events.filter((event) => event.type === 'write').length <=
+      writes + 1 &&
+    entries < 2
+  )
+    await Bun.sleep(5);
+  report('held', {
+    ...facts(),
+    disk: await Promise.all(files.map(diskToolState)),
+  });
+  await send;
+  if (exitMode === 'crash')
+    throw new Error('Crash driver unexpectedly completed response');
+  report('completed', {
+    ...facts(),
+    disk: await Promise.all(files.map(diskToolState)),
+  });
+} finally {
+  primary.seams.release();
+  mirror.seams.release();
+  await primaryIntegration.dispose();
+  await integration.dispose();
+  await history.dispose();
+  await mirror.recording.dispose();
+  await primary.recording.dispose();
+  await setup.close();
+}
+report('closed', {});
+process.disconnect();
