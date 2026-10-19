@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { nativePublication } from './support/native-publication-owners.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   highdensitySetup,
@@ -24,7 +25,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 async function publication(size: number): Promise<number> {
   const transaction = new RowOwnership();
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (history, source) => {
       const expected = await highdensityOracle(history, size);
@@ -62,7 +63,12 @@ async function publication(size: number): Promise<number> {
         () => undefined,
         (failure: unknown) => failure,
       );
-      await ready.promise;
+      await Promise.race([
+        ready.promise,
+        operation.then((failure) => {
+          throw failure ?? new Error('Publication ended before pause');
+        }),
+      ]);
       const live = transaction.snapshot();
       expect(live.liveRows).toBeGreaterThan(0);
       expect(
@@ -93,9 +99,10 @@ async function publication(size: number): Promise<number> {
     highdensityRow,
     transaction,
     (options) => new HighdensityDiskHistory(options),
+    'old',
   );
 }
-describe('invoked high-density publication owners', () => {
+describe('old invoked high-density publication owners', () => {
   it.each([512, 8192])(
     'pauses the real %i-row transaction with bounded owners and restores all membership after failure',
     async (size) => {
@@ -103,4 +110,17 @@ describe('invoked high-density publication owners', () => {
     },
     180_000,
   );
+});
+
+describe('native invoked high-density publication owners', () => {
+  it.each([512, 8192])(
+    'reserves media while publishing %i rows, restores persisted membership on failure and retries with bounded owners',
+    async (size) => {
+      expect(await nativePublication(size)).toBeUndefined();
+    },
+    180_000,
+  );
+  it('rejects an explicitly retained 8192-row prior version at the unchanged owner bounds', async () => {
+    expect(await nativePublication(8192, true)).toBeUndefined();
+  }, 180_000);
 });

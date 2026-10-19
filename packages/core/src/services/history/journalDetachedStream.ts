@@ -111,7 +111,10 @@ export function pullFeed<T, R>(
   return {
     put: async (row) => {
       await Promise.race([readied, consumerEnded]);
-      await putRow?.(row);
+      await putRow?.(row).catch(() => {
+        end();
+        return consumerEnded;
+      });
     },
     close: () => {
       end();

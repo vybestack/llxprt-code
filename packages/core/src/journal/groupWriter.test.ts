@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { JournalWriterPoisonedError } from './errors.js';
+import { JournalInputError, JournalWriterPoisonedError } from './errors.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { frameLength } from './frame.js';
 import { DEFAULT_BATCH_BYTES, type RecordAppender } from './groupAppender.js';
@@ -548,5 +548,70 @@ describe('streamed groups', () => {
     const reader = await openJournalReadOnly(file, dependencies);
     expect(reader.trailer?.rowRoot).toBe(lastOffset);
     await reader.close();
+  });
+});
+
+describe('aborted input groups', () => {
+  const directory = useTempDir('journal-input-abort-');
+
+  it('truncates only the uncommitted input tail, preserves the original error and retries at the prior durable end', async () => {
+    const file = path.join(directory(), 'retry.llxj');
+    const { dependencies } = testJournalSeams();
+    const writer = await createJournal(file, dependencies);
+    try {
+      const before = await writer.commitGroup(standardGroup(1));
+      const failure = new Error('input aborted');
+      await expect(
+        writer.commitStreamedGroup(async (appender) => {
+          await appender.append(
+            plainRecord(RECORD_KIND.ROW, 2, DEFAULT_BATCH_BYTES * 2),
+          );
+          await appender.drain();
+          expect((await fsp.stat(file)).size).toBeGreaterThan(
+            before.durableEnd,
+          );
+          throw new JournalInputError(failure);
+        }),
+      ).rejects.toBe(failure);
+      expect((await fsp.stat(file)).size).toBe(before.durableEnd);
+      expect(writer.published?.commitSeq).toBe(before.commitSeq);
+      const after = await writer.commitGroup(standardGroup(2));
+      expect(after.commitSeq).toBe(before.commitSeq + 1);
+      expect(after.durableEnd).toBeGreaterThan(before.durableEnd);
+    } finally {
+      await writer.close();
+    }
+  });
+
+  it('keeps both errors and poisons the writer if discarding the input tail fails', async () => {
+    const { dependencies } = testJournalSeams({ failTruncate: true });
+    const writer = await createJournal(
+      path.join(directory(), 'refused.llxj'),
+      dependencies,
+    );
+    const failure = new Error('input aborted');
+    try {
+      const result = await writer
+        .commitStreamedGroup(async (appender) => {
+          await appender.append(plainRecord(RECORD_KIND.ROW, 2, 32));
+          throw new JournalInputError(failure);
+        })
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      expect(result).toBeInstanceOf(AggregateError);
+      if (!(result instanceof AggregateError))
+        throw new Error('Expected aggregate input rollback error');
+      expect(result.errors[0]).toBe(failure);
+      expect(result.errors[1]).toStrictEqual(
+        expect.objectContaining({ message: 'injected truncate failure' }),
+      );
+      await expect(writer.commitGroup(standardGroup(2))).rejects.toBeInstanceOf(
+        JournalWriterPoisonedError,
+      );
+    } finally {
+      await writer.close();
+    }
   });
 });

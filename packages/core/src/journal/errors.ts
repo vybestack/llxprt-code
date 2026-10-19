@@ -1,5 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
+/** The input iterator failed before a trailer, independently of the writer's I/O. */
+export class JournalInputError extends Error {
+  constructor(readonly failure: unknown) {
+    super('Journal input producer failed', { cause: failure });
+    this.name = 'JournalInputError';
+  }
+}
+
 /** A record or header whose bytes do not describe a valid journal structure. */
 export class JournalFormatError extends Error {
   constructor(message: string, options?: ErrorOptions) {

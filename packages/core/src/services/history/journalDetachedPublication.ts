@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionEdit } from '../../journal/groupEdits.js';
+import { JournalInputError } from '../../journal/errors.js';
+
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { pulledRows } from './journalDetachedStream.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
@@ -13,6 +15,15 @@ import type { JournalHistoryStore } from './journalHistoryStore.js';
 import { applyAppendDrafts, encodeAppended } from './journalOps.js';
 import type { JournalCompensationMark } from './journalPublication.js';
 
+async function* inputDrafts(
+  rows: AsyncIterable<RowDraft>,
+): AsyncGenerator<RowDraft, void, unknown> {
+  try {
+    yield* rows;
+  } catch (error) {
+    throw new JournalInputError(error);
+  }
+}
 /** Encoded bytes after which an append group is written, so a long append holds a bounded part in memory. */
 const APPEND_GROUP_BYTES = 4 * 1024 * 1024;
 
@@ -105,7 +116,11 @@ export class JournalDetachedPublication {
     try {
       signal?.throwIfAborted();
       this.admittedCount++;
-      this.lastAck = await this.store.replaceDrafts(rows, signal, ownerEdits);
+      this.lastAck = await this.store.replaceDrafts(
+        inputDrafts(rows),
+        signal,
+        ownerEdits,
+      );
       signal?.throwIfAborted();
     } catch (error) {
       this.failure = error;

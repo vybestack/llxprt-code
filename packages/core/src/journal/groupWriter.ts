@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalWriterPoisonedError } from './errors.js';
+import { JournalInputError, JournalWriterPoisonedError } from './errors.js';
 import type { FlushRecords } from './flushRecords.js';
 import { frameLength } from './frame.js';
 import { VectoredRecordAppender, type GroupRecord } from './groupAppender.js';
@@ -82,8 +82,8 @@ function groupTagFrom(random: Uint8Array): bigint {
  * tracked offset on a read-write descriptor and never relies on the file
  * position. A group is its records, then `flushRecords`, then the trailer as
  * one write; the group is committed when that write returns. The published
- * state moves only there. A failure after the first byte of a group poisons
- * the writer.
+ * state moves only there. A write failure after a group starts poisons the
+ * writer. A marked input failure discards the uncommitted tail instead.
  */
 export class JournalGroupWriter {
   private handle: JournalFileHandle;
@@ -148,8 +148,8 @@ export class JournalGroupWriter {
    * offset as it goes, and returns the trailer state. It is the same commit
    * point as `commitGroup`: the records are written, flushed, and only then
    * the trailer. A `build` that throws before it appends anything leaves the
-   * writer usable; one that throws after poisons it, as any failure after a
-   * group began does.
+   * writer usable. After appending, only a marked input failure can discard
+   * the uncommitted tail and leave the writer usable; other failures poison it.
    */
   commitStreamedGroup(
     build: (appender: VectoredRecordAppender) => Promise<TrailerState>,
@@ -224,6 +224,19 @@ export class JournalGroupWriter {
       await this.writeRecordsFlushThenTrailer(appender, record, selfOffset);
       return this.acknowledge(trailer);
     } catch (error) {
+      if (error instanceof JournalInputError) {
+        try {
+          await this.handle.truncate(this.writeOffset);
+        } catch (rollback) {
+          const failure = new AggregateError(
+            [error.failure, rollback],
+            'Journal input rollback failed',
+          );
+          this.failure = { error: failure };
+          throw failure;
+        }
+        throw error.failure;
+      }
       if (appender.started) this.failure = { error };
       throw error;
     }

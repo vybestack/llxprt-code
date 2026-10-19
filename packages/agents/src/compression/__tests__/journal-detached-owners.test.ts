@@ -16,6 +16,9 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/journalOwnedFixture.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { OwnerDictionary } from '@vybestack/llxprt-code-core/journal/ownerDictionary.js';
+
 import { applyCompressionValuesWithAnchor } from '../cache-anchor-values.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { curatedCandidate, curatedDensityRows } from '../curatedCandidate.js';
@@ -35,6 +38,25 @@ import {
 import { highdensitySetup } from './highdensity-disk-helpers.js';
 import { middleoutSetup } from './middleout-disk-helpers.js';
 
+async function persistedOrigins(
+  owned: OwnedJournal,
+): Promise<Array<string | undefined>> {
+  await owned.store.waitForDurable();
+  const session = await JournalSession.open(owned.session.store.path);
+  try {
+    const dictionary = await OwnerDictionary.load(session.store);
+    const origins: Array<string | undefined> = [];
+    for await (const { entry } of session.rows()) {
+      origins.push(
+        entry.owner === 0 ? undefined : dictionary.originOf(entry.owner),
+      );
+    }
+    expect(origins).toStrictEqual(await owned.originsOfRows());
+    return origins;
+  } finally {
+    await session.close();
+  }
+}
 const OWNERS = ['agent-a', 'agent-b'] as const;
 const SIZES: number[] = [3, 64, 65];
 // The middle-out and one-shot strategies leave a history of fewer than a dozen rows alone.
@@ -148,7 +170,7 @@ describe('compression modules on the journal store keep the owner of every row t
           rows.close();
         }
       });
-      expect(await owned.originsOfRows()).toStrictEqual(ownersFrom(1, count));
+      expect(await persistedOrigins(owned)).toStrictEqual(ownersFrom(1, count));
       expect(owned.store.getLength()).toBe(count - 1);
     },
   );
@@ -177,7 +199,7 @@ describe('compression modules on the journal store keep the owner of every row t
         rows.close();
       }
     });
-    expect(await owned.originsOfRows()).toStrictEqual(['agent-b', undefined]);
+    expect(await persistedOrigins(owned)).toStrictEqual(['agent-b', undefined]);
   });
 
   it.each(SIZES)(
@@ -202,7 +224,7 @@ describe('compression modules on the journal store keep the owner of every row t
           curated.close();
         }
       });
-      expect(await owned.originsOfRows()).toStrictEqual(ownersFrom(2, count));
+      expect(await persistedOrigins(owned)).toStrictEqual(ownersFrom(2, count));
     },
   );
 
@@ -235,7 +257,7 @@ describe('compression modules on the journal store keep the owner of every row t
           curated.close();
         }
       });
-      expect(await owned.originsOfRows()).toStrictEqual([
+      expect(await persistedOrigins(owned)).toStrictEqual([
         ...ownersFrom(count - 2, count),
         historyOriginId(origin),
       ]);
@@ -270,7 +292,7 @@ describe('compression modules on the journal store keep the owner of every row t
         rows.close();
       }
     });
-    expect(await owned.originsOfRows()).toStrictEqual(['agent-b', 'agent-a']);
+    expect(await persistedOrigins(owned)).toStrictEqual(['agent-b', 'agent-a']);
   });
 
   it.each(SIZES)(
@@ -308,7 +330,7 @@ describe('compression modules on the journal store keep the owner of every row t
       } finally {
         ranking.close();
       }
-      expect(await owned.originsOfRows()).toStrictEqual(
+      expect(await persistedOrigins(owned)).toStrictEqual(
         ownersFrom(0, count).filter((_, index) => index !== 1),
       );
     },
@@ -347,7 +369,7 @@ describe('compression modules on the journal store keep the owner of every row t
       );
       expect(replaced).toBe(true);
       // The empty row is dropped by the rewrite; every other row keeps its owner.
-      expect(await owned.originsOfRows()).toStrictEqual(
+      expect(await persistedOrigins(owned)).toStrictEqual(
         ownersFrom(0, count).filter((_, index) => index !== 1),
       );
     },
@@ -378,7 +400,7 @@ describe('compression modules on the journal store keep the owner of every row t
       } finally {
         candidate.close();
       }
-      expect(await owned.originsOfRows()).toStrictEqual([
+      expect(await persistedOrigins(owned)).toStrictEqual([
         ...ownersFrom(1, count),
         historyOriginId(origin),
       ]);
@@ -416,7 +438,7 @@ describe('compression modules on the journal store keep the owner of every row t
       const kept = owned.store.getLength();
       expect(kept).toBeGreaterThan(0);
       expect(kept).toBeLessThan(count);
-      expect(await owned.originsOfRows()).toStrictEqual(
+      expect(await persistedOrigins(owned)).toStrictEqual(
         ownersFrom(count - kept, count),
       );
       // The retained head still holds a tool response the module rewrote.
@@ -448,7 +470,7 @@ describe('compression modules on the journal store keep the owner of every row t
         );
         expect(outcome.outcome).toBe('applied');
         const label = historyOriginId(origin);
-        const actual = await owned.originsOfRows();
+        const actual = await persistedOrigins(owned);
         const head = actual.indexOf(label);
         const summary = actual.filter((entry) => entry === label).length;
         const tail = actual.length - head - summary;

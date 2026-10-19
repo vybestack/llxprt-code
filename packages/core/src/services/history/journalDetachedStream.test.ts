@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
-import { pulledRows } from './journalDetachedStream.js';
+import { pulledRows, pullFeed } from './journalDetachedStream.js';
 
 function row(seq: number): IContent {
   return {
@@ -75,5 +75,19 @@ describe('pulledRows', () => {
     expect(first.done).toBe(false);
     await rows.return(undefined);
     expect(pushFailure).toBeInstanceOf(Error);
+  });
+});
+
+describe('pullFeed consumer failures', () => {
+  it('rejects an outstanding put with the original consumer failure after taking a row', async () => {
+    const failure = new Error('media reservation failed');
+    const feed = pullFeed<IContent, void>(async (rows) => {
+      for await (const content of rows) {
+        expect(seqOf(content)).toBe(1);
+        throw failure;
+      }
+    });
+    await expect(feed.put(row(1))).rejects.toBe(failure);
+    await expect(feed.close()).rejects.toBe(failure);
   });
 });
