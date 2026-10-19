@@ -54,6 +54,7 @@ async function clientSend(
   }
 }
 try {
+  if (variant === 'turn') await rig.client.resetChat();
   if (variant !== 'turn' && variant !== 'pause') {
     await clientSend('initial input', 'initial');
     await rig.history.waitForCommit();
@@ -76,9 +77,12 @@ try {
   selected.arm(rowTargets[variant]);
   const work = (async (): Promise<void> => {
     if (variant === 'turn') {
-      const first = clientSend('held standalone input', 'initial').then(() => {
-        firstSettled = true;
-      });
+      const first = rig.client
+        .getChat()
+        .sendMessage({ message: 'held standalone input' }, 'initial')
+        .then(() => {
+          firstSettled = true;
+        });
       while (selected.held() === undefined) await Bun.sleep(5);
       const second = clientSend('pending next input', 'next');
       await Promise.all([first, second]);
@@ -89,10 +93,14 @@ try {
       firstSettled = true;
     } else if (variant === 'client') {
       const done = toolGate();
-      const channel = rig.agent.tools.openClientChannel((calls) => {
-        for (const call of calls) pending.push(...call.response.responseParts);
-        admissionSettled = true;
-        done.resolve();
+      const channel = rig.agent.tools.openClientChannel();
+      const detach = channel.subscribe({
+        onAllToolCallsComplete: (calls) => {
+          for (const call of calls)
+            pending.push(...call.response.responseParts);
+          admissionSettled = true;
+          done.resolve();
+        },
       });
       await channel.ready;
       await channel.schedule(
@@ -106,6 +114,7 @@ try {
         new AbortController().signal,
       );
       await done.promise;
+      detach();
       await channel.release();
     } else {
       await rig.admit();

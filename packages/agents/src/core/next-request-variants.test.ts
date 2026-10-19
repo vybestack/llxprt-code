@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { nextRequestChild } from './__tests__/support/next-request-child.js';
 import {
@@ -92,8 +93,10 @@ async function scenario(
     expect(z.array(z.number()).parse(held.details.flushes)[selected]).toBe(
       candidate.flushes,
     );
-    expect(candidate.flushes).toBeGreaterThan(
-      z.array(z.number()).parse(ready.details.flushes)[selected],
+    const readyFlushes = z.array(z.number()).parse(ready.details.flushes);
+    const readySeqs = z.array(z.number()).parse(ready.details.seqs);
+    expect(candidate.flushes - readyFlushes[selected]).toBe(
+      candidate.seq - readySeqs[selected],
     );
     child.send('release');
     const transport = await child.wait('transport');
@@ -102,6 +105,11 @@ async function scenario(
     if (variant === 'turn') expect(held.details.nextAttempted).toBe(true);
     const committed = await Promise.all(files.map(diskToolState));
     expect(committed[selected].seq).toBeGreaterThanOrEqual(candidate.seq);
+    const entrySeqs = z.array(z.number()).parse(transport.details.seqs);
+    const entryFlushes = z.array(z.number()).parse(transport.details.flushes);
+    expect(
+      entryFlushes.map((count, index) => count - readyFlushes[index]),
+    ).toStrictEqual(entrySeqs.map((seq, index) => seq - readySeqs[index]));
     assertRows(variant, committed, transport);
     child.send('respond');
     const completed = await child.wait('completed');
@@ -112,9 +120,9 @@ async function scenario(
     expect(completed.details.disk).toStrictEqual(committed);
     await child.wait('closed');
     expect(await child.child.exited).toBe(0);
-    expect(await Promise.all(files.map(diskToolState))).toStrictEqual(
-      committed,
-    );
+    expect(
+      isDeepStrictEqual(await Promise.all(files.map(diskToolState)), committed),
+    ).toBe(true);
     await writeFile(
       join(child.directory, 'proof.json'),
       JSON.stringify(
