@@ -250,7 +250,7 @@ export abstract class HistoryServiceCore
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,
-      this.chronology,
+      () => this.chronology,
       this.spanWindow,
       this.mutationOwnership,
       () => this.mediaOwner,

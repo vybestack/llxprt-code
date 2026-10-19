@@ -109,7 +109,7 @@ export function notifyDetachedRows(
 export function createDetachedHistoryAPI(
   history: HistoryServiceCore,
   journal: HistoryStorePort,
-  chronology: ChronologyStamper,
+  getChronology: () => ChronologyStamper,
   spans: SpanWindow,
   ownership: RowOwnership | undefined,
   getMediaOwner: () => HistoryMediaOwner | undefined,
@@ -118,13 +118,15 @@ export function createDetachedHistoryAPI(
 ): DetachedHistoryAPI {
   const host = (): DetachedHistoryHost => ({
     journal,
-    chronology,
+    get chronology(): ChronologyStamper {
+      return getChronology();
+    },
     ownership,
     mediaOwner: getMediaOwner(),
     snapshot: () => ({
       tokens: history.getTotalTokens() - history.getBaseTokenOffset(),
       spans: spans.get(),
-      chronology: chronology.snapshot(),
+      chronology: getChronology().snapshot(),
     }),
     apply: (tokens, nextSpans) => {
       setTokens(tokens);
