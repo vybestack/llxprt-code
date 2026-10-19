@@ -38,9 +38,6 @@ jobs:
         with:
           bun-version-file: '.bun-version'
 
-      - name: 'Diagnose synchronous stdin EOF'
-        run: 'bun scripts/tests/windows-stdin-diagnostic.ts'
-
       # Publish the absolute path to PowerShell 7 (pwsh.exe) so the smoke
       # resolves it robustly under a constrained PATH. windows-latest ships
       # pwsh but NOT legacy `powershell` on PATH, which previously caused

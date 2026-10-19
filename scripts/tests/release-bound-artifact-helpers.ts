@@ -24,6 +24,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { z } from 'zod';
 import { NON_NPM_RELEASE_PACKAGES } from '../utils/release-packages.ts';
+import { diagnoseInstalledStdin } from './windows-stdin-diagnostic.ts';
 
 const {
   npmInvocation,
@@ -528,7 +529,12 @@ async function probeWindowsForwarding(
   const probe = readFileSync(
     fileURLToPath(new URL('./issue-2603-windows-probe.ts', import.meta.url)),
     'utf8',
-  );
+  )
+    .replace('import { readFileSync }', 'import { appendFileSync, readFileSync }')
+    .replace(
+      "return readFileSync(0, 'utf8');",
+      `appendFileSync(${JSON.stringify(join(directory, 'stdin-events.log'))}, 'before stdin\\n'); const input = readFileSync(0, 'utf8'); appendFileSync(${JSON.stringify(join(directory, 'stdin-events.log'))}, 'after stdin\\n'); return input;`,
+    );
   try {
     writeFileSync(
       bundle,
@@ -539,6 +545,7 @@ async function probeWindowsForwarding(
       stderr: 'probe stderr',
       exit: 17,
     });
+    await diagnoseInstalledStdin(bin, directory, launchEnv, request);
     const argv = ['space value', 'amp&pipe|caret^bang!', 'unicode-雪'];
     for (const { extension, run } of [
       { extension: 'cmd', run: wrappers.invokeCmd },
