@@ -163,7 +163,7 @@ describe('native recorder pathname ownership', () => {
     expect(await SessionLockManager.isLocked(chats, INSTANCE)).toBe(false);
     expect(await SessionLockManager.isLocked(chats, 'source')).toBe(false);
     expect(await fs.readFile(occupied, 'utf8')).toBe('another owner');
-    expect(await fs.readFile(source.filePath)).toStrictEqual(before);
+    expect(Buffer.compare(await fs.readFile(source.filePath), before)).toBe(0);
     expect((await fs.readdir(chats)).sort()).toStrictEqual(
       [basename(source.filePath), basename(occupied)].sort(),
     );
