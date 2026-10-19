@@ -1,0 +1,546 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { z } from 'zod';
+import {
+  attemptSchema,
+  inspectEvidence,
+  reconcile,
+  type Attempt,
+  type AttemptInput,
+  type CensusCase,
+  type Provenance,
+} from './w22-census.ts';
+
+const BEFORE_SHA256 =
+  '61780e2313d471bf6acf26568a53306ddfa1b17d90245d4b6193c93dad1029fc';
+const checkpointSchema = z
+  .object({
+    rows: z.array(
+      z
+        .object({
+          path: z.string(),
+          cases: z.array(
+            z
+              .object({
+                classname: z.string(),
+                name: z.string(),
+                classification: z.string(),
+              })
+              .passthrough(),
+          ),
+        })
+        .passthrough(),
+    ),
+  })
+  .passthrough();
+const inventorySchema = z.array(z.object({ path: z.string() }).passthrough());
+
+function json(path: string): unknown {
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+function text(path: string): string | null {
+  return existsSync(path) ? readFileSync(path, 'utf8') : null;
+}
+function digest(content: string | Buffer): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+function caseKey(
+  path: string,
+  test: { classname: string; name: string },
+): string {
+  return JSON.stringify([path, test.classname, test.name]);
+}
+
+function acceptedBatches(
+  names: readonly string[],
+): { batch: string; reference: string }[] {
+  const groups = (pattern: RegExp): string[] =>
+    names.filter((name) => pattern.test(name)).sort();
+  const layers = [
+    {
+      reference: 'progress.ts.before-census',
+      batches: [
+        'unobstructed-20',
+        'final-system-carry-journal',
+        'package-next-20',
+        'fixed-boundary-export',
+        'package-36-55',
+        ...groups(/^package-auto-\d+$/),
+      ],
+    },
+    {
+      reference: 'next-run-20261019-b/progress.ts',
+      batches: [
+        'fixed-profile-disposal-journal',
+        'final-profile-disposal-journal',
+        ...groups(/^package-resume-b-\d+$/),
+        'fixed-node-runtime-exports',
+        ...groups(/^package-resume-c-\d+$/),
+      ],
+    },
+    {
+      reference: 'facade-run-20261019-a/progress.ts',
+      batches: [
+        'facade-run-final-journal-b',
+        'facade-run-profiles-journal-b',
+        ...groups(/^package-resume-d-\d+$/),
+      ],
+    },
+    {
+      reference: 'finalizer-run-20261019-a/progress.ts',
+      batches: [
+        'finalizer-run-final-journal-a',
+        'finalizer-run-restored-journal-a',
+        ...groups(/^package-resume-e-\d+$/),
+      ],
+    },
+    {
+      reference: 'instance-run-20261019-a/progress-g.ts.before-census',
+      batches: [
+        'instance-run-final-journal-a',
+        'instance-run-final-journal-b',
+        ...groups(/^package-resume-f-\d+$/),
+        'instance-nodefix-final-journal-a',
+        ...groups(/^package-resume-g-\d+$/),
+      ],
+    },
+  ];
+  return layers.flatMap((layer) =>
+    layer.batches.map((batch) => ({ batch, reference: layer.reference })),
+  );
+}
+
+function resultFiles(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = join(root, entry.name);
+      if (entry.isDirectory())
+        return [
+          'llxprt-tests',
+          'held-generated',
+          'continuation-run-c',
+          'node_modules',
+          '.git',
+        ].includes(entry.name)
+          ? []
+          : resultFiles(path);
+      return entry.name === 'results.json' ||
+        entry.name === 'stopped-after-failure.json' ||
+        entry.name.endsWith('-result.json')
+        ? [path]
+        : [];
+    })
+    .sort();
+}
+
+function resultRows(value: unknown): AttemptInput[] {
+  const container = z.object({ rows: z.array(z.unknown()) }).safeParse(value);
+  const values = Array.isArray(value)
+    ? value
+    : container.success
+      ? container.data.rows
+      : [value];
+  return values.flatMap((item) => {
+    const candidate = z
+      .object({ path: z.string(), junit: z.string() })
+      .passthrough()
+      .safeParse(item);
+    return candidate.success ? [attemptSchema.parse(item)] : [];
+  });
+}
+
+function normalize(
+  input: AttemptInput,
+  run: string,
+): { input: AttemptInput; backendProvenance: string; batch: string } {
+  const batch = basename(dirname(input.junit));
+  const earlyDefault =
+    ['initial-20', 'unobstructed-20'].includes(batch) &&
+    dirname(dirname(input.junit)) === run;
+  const backend = input.backend ?? (earlyDefault ? 'journal' : 'unknown');
+  return {
+    input: { ...input, backend },
+    backendProvenance: input.backend
+      ? 'result.backend'
+      : earlyDefault
+        ? 'driver.ts recorded journal default; early result omitted backend'
+        : 'backend-not-recorded',
+    batch,
+  };
+}
+
+function classificationContracts(
+  w22: string,
+): Map<string, { classification: string; provenance: string }> {
+  const contracts = new Map<
+    string,
+    { classification: string; provenance: string }
+  >();
+  for (const name of [
+    'instance-run-20261019-a/census-before.json',
+    'run-20261019-a/accounting-after-boundary.json',
+    'next-run-20261019-b/classification-b.json',
+    'facade-run-20261019-a/classification.json',
+    'finalizer-run-20261019-a/classification.json',
+    'finalizer-run-20261019-a/hook-classification.json',
+  ]) {
+    const path = join(w22, name);
+    if (!existsSync(path)) continue;
+    for (const row of checkpointSchema.parse(json(path)).rows) {
+      for (const test of row.cases) {
+        const key = caseKey(row.path, test);
+        if (
+          test.classification !== 'classification-pending' ||
+          !contracts.has(key)
+        )
+          contracts.set(key, {
+            classification: test.classification,
+            provenance: path,
+          });
+      }
+    }
+  }
+  return contracts;
+}
+
+function classify(
+  row: Attempt,
+  contracts: ReturnType<typeof classificationContracts>,
+  w22: string,
+): Attempt {
+  const cases: CensusCase[] = row.cases.map((test) => {
+    const known = contracts.get(caseKey(row.path, test));
+    const instanceOverride =
+      row.accepted &&
+      /^instance-(?:run-final-journal-[ab]|nodefix-final-journal-a)$/.test(
+        row.batch,
+      ) &&
+      row.path.endsWith('/recording-instance-resume.behavior.test.ts');
+    const shellOverride =
+      row.accepted &&
+      row.batch === 'instance-nodefix-final-journal-a' &&
+      row.path.endsWith('/shell-owner-exit.behavior.test.ts');
+    const contract = instanceOverride
+      ? {
+          classification: test.classname.startsWith('native ')
+            ? 'native-history'
+            : 'explicit-old',
+          provenance: join(
+            w22,
+            'continuation-run-c/progress-g.ts.before-census',
+          ),
+        }
+      : shellOverride
+        ? {
+            classification: 'journal-selected-shared-public',
+            provenance: join(
+              w22,
+              'continuation-run-c/progress-g.ts.before-census',
+            ),
+          }
+        : known;
+    return {
+      ...test,
+      classification: contract?.classification ?? 'classification-pending',
+      classificationProvenance:
+        contract?.provenance ?? 'no-exact-case-contract',
+    };
+  });
+  return { ...row, cases };
+}
+
+function atomic(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const staging = `${path}.${process.pid}.${randomUUID()}.publishing`;
+  writeFileSync(staging, content, { flag: 'wx' });
+  renameSync(staging, path);
+}
+
+export function runCensus(root: string): ReturnType<typeof reconcile> & {
+  generation: string;
+  timestamp: string;
+  inventory: number;
+  executedFiles: number;
+  greenFiles: number;
+  redFiles: number;
+  unverifiedFiles: number;
+  unexecutedFiles: number;
+  pass: number;
+  fail: number;
+  skip: number;
+  supervisor: unknown;
+  current: unknown;
+} {
+  const w22 = resolve(root, 'tmp/854-notes/p4/w22');
+  const run = join(w22, 'run-20261019-a');
+  const out = join(w22, 'continuation-run-c');
+  const snapshot = join(out, 'current-progress.before.json');
+  if (existsSync(snapshot) && digest(readFileSync(snapshot)) !== BEFORE_SHA256)
+    throw new Error('Readonly before snapshot checksum mismatch');
+  const inventory = inventorySchema
+    .parse(json(join(run, 'inventory.json')))
+    .map((entry) => entry.path);
+  const inventorySet = new Set(inventory);
+  const order = new Map(
+    acceptedBatches(readdirSync(run)).map((entry, index) => [
+      entry.batch,
+      { ...entry, index },
+    ]),
+  );
+  const contracts = classificationContracts(w22);
+  const checkpoints = [
+    join(run, 'accounting.json'),
+    join(run, 'accounting-after-boundary.json'),
+    join(w22, 'instance-run-20261019-a/census-before.json'),
+    snapshot,
+  ].filter(existsSync);
+  const references = [...new Set([...resultFiles(w22), ...checkpoints])];
+  const gathered = references.flatMap((reference) =>
+    resultRows(json(reference))
+      .filter((row) => inventorySet.has(row.path))
+      .map((input) => {
+        const normalized = normalize(input, run);
+        const boundary = order.get(normalized.batch);
+        const inPrimaryRun = dirname(dirname(normalized.input.junit)) === run;
+        const provenance: Provenance = {
+          batch: normalized.batch,
+          acceptedOrder: inPrimaryRun && boundary ? boundary.index : null,
+          acceptanceReference: boundary
+            ? join(
+                w22,
+                boundary.reference.startsWith('progress.ts') ||
+                  boundary.reference.endsWith('before-census')
+                  ? `continuation-run-c/${boundary.reference.startsWith('progress.ts') ? 'progress.ts.before-census' : 'progress-g.ts.before-census'}`
+                  : boundary.reference,
+              )
+            : null,
+          references: [reference],
+          backendProvenance: normalized.backendProvenance,
+        };
+        return { input: normalized.input, provenance };
+      }),
+  );
+  const deduplicated = new Map<
+    string,
+    { input: AttemptInput; provenance: Provenance }
+  >();
+  for (const item of gathered) {
+    const key = JSON.stringify([
+      item.input.path,
+      item.input.pid,
+      item.input.junit,
+    ]);
+    const prior = deduplicated.get(key);
+    const rawResult =
+      basename(item.provenance.references[0] ?? '') === 'results.json';
+    const chosen = !prior || rawResult ? item : prior;
+    deduplicated.set(key, {
+      input: chosen.input,
+      provenance: {
+        ...chosen.provenance,
+        references: [
+          ...new Set([
+            ...(prior?.provenance.references ?? []),
+            ...item.provenance.references,
+          ]),
+        ],
+      },
+    });
+  }
+  const attempts = [...deduplicated.values()].map(({ input, provenance }) =>
+    classify(
+      inspectEvidence(input, provenance, text(input.junit), text(input.log)),
+      contracts,
+      w22,
+    ),
+  );
+  const census = reconcile(inventory, attempts);
+  const supervisorPath = join(run, 'sweep-supervisor.json');
+  const supervisor = existsSync(supervisorPath) ? json(supervisorPath) : null;
+  const supervisorRecord = z
+    .object({ currentFilePath: z.string().optional() })
+    .passthrough()
+    .safeParse(supervisor);
+  const currentPath = supervisorRecord.success
+    ? supervisorRecord.data.currentFilePath
+    : undefined;
+  const current =
+    currentPath && existsSync(currentPath) ? json(currentPath) : null;
+  const totals = census.rows.reduce(
+    (sum, row) => ({
+      pass: sum.pass + (row.counts?.pass ?? 0),
+      fail: sum.fail + (row.counts?.fail ?? 0),
+      skip: sum.skip + (row.counts?.skip ?? 0),
+    }),
+    { pass: 0, fail: 0, skip: 0 },
+  );
+  const generation = randomUUID();
+  const result = {
+    ...census,
+    generation,
+    timestamp: new Date().toISOString(),
+    inventory: inventory.length,
+    executedFiles: census.rows.length,
+    greenFiles: census.partition.green,
+    redFiles: census.partition.red,
+    unverifiedFiles: census.partition.unverified,
+    unexecutedFiles: census.partition.unrun,
+    attemptedFilesAllHistory: new Set(census.attempts.map((row) => row.path))
+      .size,
+    historicalMissingAttemptCount: census.historicalMissingAttempts.length,
+    latestMissingFileCount: census.latestMissingFiles.length,
+    ...totals,
+    supervisor,
+    current,
+    sourceBoundaryPolicy:
+      'Per-attempt test source hashes and recorded accepted progress-layer order; retained results are not a final whole-package source run. No source tree scan on refresh.',
+    sourceProofReferences: [
+      'run-20261019-a/after-boundary-source-comparison.json',
+      'next-run-20261019-b/source-comparison.json',
+      'facade-run-20261019-a/source-comparison.json',
+      'finalizer-run-20261019-a/source-comparison.json',
+      'instance-run-20261019-a/source-comparison.json',
+      'instance-run-20261019-a/full-final-source-hashes-b.json',
+    ]
+      .map((path) => join(w22, path))
+      .filter(existsSync),
+    inputReferences: references,
+    beforeSnapshotSha256: existsSync(snapshot) ? BEFORE_SHA256 : null,
+  };
+  if (
+    Object.values(result.partition).reduce((a, b) => a + b, 0) !==
+    inventory.length
+  )
+    throw new Error('Inventory partition does not reconcile');
+  const failures = census.rows
+    .filter((row) => row.state !== 'green')
+    .map((row) => ({
+      ...row,
+      failureType:
+        row.failureType ??
+        (row.state === 'unverified'
+          ? row.evidenceStatus
+          : 'historical-test-error'),
+      failures: row.cases.filter((test) => test.status !== 'passed'),
+    }));
+  const table = [
+    `Generation: ${generation}`,
+    '',
+    '| File | State | Pass | Fail | Skip | PID | Batch | Source hash |',
+    '| --- | --- | ---: | ---: | ---: | ---: | --- | --- |',
+    ...inventory.map((path) => {
+      const row = census.rows.find((row) => row.path === path);
+      return row
+        ? `| \`${path}\` | ${row.state} | ${row.counts?.pass ?? '?'} | ${row.counts?.fail ?? '?'} | ${row.counts?.skip ?? '?'} | ${row.pid} | ${row.batch} | ${row.sourceHash} |`
+        : `| \`${path}\` | unrun | | | | | | |`;
+    }),
+    '',
+  ].join('\n');
+  const { attempts: allAttempts, ...progress } = result;
+  const documents = new Map<string, string>([
+    [
+      join(run, 'current-progress.json'),
+      JSON.stringify(
+        { ...progress, allAttemptsPath: join(out, 'all-attempts.json') },
+        null,
+        2,
+      ) + '\n',
+    ],
+    [
+      join(run, 'current-not-run.txt'),
+      census.pending.length ? census.pending.join('\n') + '\n' : '',
+    ],
+    [join(run, 'current-files-table.md'), table],
+    [
+      join(w22, 'instance-run-20261019-a/failure-table.json'),
+      JSON.stringify(failures, null, 2) + '\n',
+    ],
+    [
+      join(out, 'all-attempts.json'),
+      JSON.stringify(
+        { generation, timestamp: result.timestamp, attempts: allAttempts },
+        null,
+        2,
+      ) + '\n',
+    ],
+    [
+      join(out, 'missing-evidence.json'),
+      JSON.stringify(
+        {
+          generation,
+          historicalMissingAttempts: census.historicalMissingAttempts,
+          latestMissingFiles: census.latestMissingFiles,
+        },
+        null,
+        2,
+      ) + '\n',
+    ],
+    [
+      join(out, 'census-counts-final.json'),
+      JSON.stringify(
+        {
+          generation,
+          timestamp: result.timestamp,
+          inventory: result.inventory,
+          partition: result.partition,
+          executedFiles: result.executedFiles,
+          ...totals,
+          classifications: result.classifications,
+          attempts: allAttempts.length,
+          historicalMissingAttempts: result.historicalMissingAttemptCount,
+          latestMissingFiles: result.latestMissingFileCount,
+          supervisor,
+          current,
+        },
+        null,
+        2,
+      ) + '\n',
+    ],
+  ]);
+  for (const [path, content] of documents) atomic(path, content);
+  atomic(
+    join(out, 'publication.json'),
+    JSON.stringify(
+      {
+        generation,
+        timestamp: result.timestamp,
+        files: [...documents].map(([path, content]) => ({
+          path: relative(root, path),
+          sha256: digest(content),
+        })),
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  return result;
+}
+
+export function printCensus(root: string): void {
+  const result = runCensus(root);
+  console.log(
+    JSON.stringify({
+      generation: result.generation,
+      timestamp: result.timestamp,
+      inventory: result.inventory,
+      executedFiles: result.executedFiles,
+      partition: result.partition,
+      pass: result.pass,
+      fail: result.fail,
+      skip: result.skip,
+      classifications: result.classifications,
+      attempts: result.attempts.length,
+      historicalMissingAttempts: result.historicalMissingAttempts.length,
+      latestMissingFiles: result.latestMissingFiles.length,
+    }),
+  );
+}

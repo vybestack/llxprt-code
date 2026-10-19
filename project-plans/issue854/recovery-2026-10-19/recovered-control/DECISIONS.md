@@ -1,5 +1,23 @@
 # Recovered decision guidance
 
+## Current W22 coordination decision, 2026-10-19T21:36:35.279Z
+
+Continue the existing pending-only 550-path sweep under supervisor 94663. Collect ordinary red and incomplete attempts without retries or duplicate tests; do not change package source during the active batch. Disk-full, loader and driver-integrity stop conditions remain distinct. Process identities observed at 21:36:42Z confirmed supervisor 94663, driver 25162 and child 48284 on middleout-disk-owners. Always re-read live state and process identity before acting on a PID.
+
+The frozen inventory is **806 = 293 green + 14 red + one unverified + 498 unrun**, with **308 selected paths, 2333 passes, 37 failures, zero skips**. Passing-case classification is **88 native history, 258 shared/public, 28 explicit old and 1959 classification-pending**; separate unclassified count zero. Keep pending classifications distinct from native coverage. The 433-attempt ledger retains 22 historical missing XML attempts separately from one latest missing file. Latest incomplete large-request PID 25163 timed out at the 300000 ms outer boundary without XML/summary; metadata zero counts are not measurements and do not require an automatic rerun or fatal sweep stop.
+
+Accept green only from valid, nonempty, consistent JUnit and successful termination with no timeout/failure/skip. Select by accepted progress-layer order, never by pass count or a newer diagnostic timestamp, and retain the latest accepted unverified result rather than hiding it behind an earlier pass. Both progress entrypoints use the shared runner. Original admission PID 98836 remains missing evidence; selected later admission PID 19211 has three valid passes at a distinct source boundary. Restored-finalizer PID 24041 proves only its finalizer file. No historical evidence restoration, deletion or overwrite is inferred.
+
+The selected next repair is recording-shared-history-origin rollback. Preserve original old cases; add or reuse native committed-visible-row rollback proof because raw binary marker absence cannot establish publication rollback. Follow with recorder/backend mismatches in pending-window/compression-value-recorder/highdensity fallback/source, then cursor-close and empty-block publication. Keep token, owner, span-order and request-byte failures open. No package fixture is repaired during the running sweep.
+
+Orchestration checks pass: seven Bun tests/52 assertions, strict scoped types, explicit no-ignore zero-warning ESLint and Prettier. Recovery paths receive unchanged base recommended lint rules; there is no applicable max-lines rule. Product matrices/build/types/agents tsc/lint/Prettier/graph/audit gates remain required at a safe stop for future product fixture changes. Earlier bc46927e6/75fe4c8a4 gates do not establish a new product boundary here.
+
+Durable evidence is W22-CONTINUATION-PROOF.json, W22-STATUS.md and the latest proof-map subsection. Raw frozen generation dacd0f20-8913-4f82-aa77-4ccf0413918e is in continuation-run-c/durable-checkpoint-a, with seven matching publication hashes. Source comparison once at 21:30:29Z matched all 3321 manifest entries; inventory is 799 src plus seven shared, no additions/missing/duplicates. The readonly snapshot hash remains 61780e2313d471bf6acf26568a53306ddfa1b17d90245d4b6193c93dad1029fc. No repeated whole-source hashing is needed for polls.
+
+W22 remains partial, W23-W26 open, old default unchanged, no 802 reset; W26 scratch removal remains required within the PR. No cleanup, .llxprt edit, process kills, duplicate runs, skips, weaker checks, push or merge. Commit only the three census files, these four tracked controls and compact proof, never raw recovery output. Review skipped per Andrew 2026-10-09. Historical directions and checkpoint counts below remain scoped to their dates; they do not override this continuation decision.
+
+## Historical decisions and recovered guidance
+
 This is a reconstructed index, not the original complete DECISIONS file. Eleven D-ORCH append bodies are preserved verbatim under `fragments/DECISIONS/`; source timestamp, seq, command and result are indexed in `provenance.json` and `../extracts/index.json`. Other per-slice decisions survive only as quoted fragments or task reports. The recreated post-incident DECISIONS file is preserved separately.
 
 | Decision | Current-recording command seq | Recovered substance |
