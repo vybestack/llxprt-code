@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { compressionBackendFixture } from './support/compression-backend-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,9 +23,18 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * - System prompt never gets compressed (verified indirectly)
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createUserMessage } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+let fixture: ReturnType<typeof compressionBackendFixture>;
+function createHistory(): HistoryService {
+  return fixture.createHistory();
+}
+function sampleCurated(
+  history: HistoryService,
+): IContent[] | Promise<IContent[]> {
+  return fixture.sampleCurated(history);
+}
 function legacyTest0() {
   const systemPromptTokens = 500;
   legacySuite0_historyService.setBaseTokenOffset(systemPromptTokens);
@@ -175,7 +184,7 @@ async function legacyTest8() {
     thresholdTokens,
   );
 }
-function legacyTest10() {
+function legacyTest10(): void | Promise<void> {
   const systemPromptTokens = 1000;
   legacySuite0_historyService.setBaseTokenOffset(systemPromptTokens);
   // Add multiple messages
@@ -203,16 +212,20 @@ function legacyTest10() {
     },
   };
   legacySuite0_historyService.add(aiResponse2);
-  const curatedHistory = curatedHistoryForTest(legacySuite0_historyService);
-  // Curated history should only contain the 4 messages, not system prompt
-  expect(curatedHistory.length).toBe(4);
-  // System prompt offset should remain unchanged
-  expect(legacySuite0_historyService.getBaseTokenOffset()).toBe(
-    systemPromptTokens,
-  );
-  // Total tokens should include system prompt
-  expect(legacySuite0_historyService.getTotalTokens()).toBeGreaterThanOrEqual(
-    systemPromptTokens,
+  return fixture.assertCurated(
+    legacySuite0_historyService,
+    (curatedHistory) => {
+      // Curated history should only contain the 4 messages, not system prompt
+      expect(curatedHistory.length).toBe(4);
+      // System prompt offset should remain unchanged
+      expect(legacySuite0_historyService.getBaseTokenOffset()).toBe(
+        systemPromptTokens,
+      );
+      // Total tokens should include system prompt
+      expect(
+        legacySuite0_historyService.getTotalTokens(),
+      ).toBeGreaterThanOrEqual(systemPromptTokens);
+    },
   );
 }
 async function legacyTest11() {
@@ -235,7 +248,7 @@ async function legacyTest11() {
   }
   // Simulate compression by clearing and re-adding only the messages we want to keep
   // This mimics how compression works: get curated history, keep only recent messages
-  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  const curated = await sampleCurated(legacySuite0_historyService);
   const messagesToKeep = curated.slice(10); // Keep last 10 messages (remove first 10)
   // Clear history and re-add the messages we want to keep
   await legacySuite0_historyService.clear();
@@ -273,12 +286,15 @@ function legacyTest14() {
     largeSystemPromptTokens,
   );
 }
-function legacyTest15() {
+function legacyTest15(): void | Promise<void> {
   const systemPromptTokens = 1000;
   legacySuite0_historyService.setBaseTokenOffset(systemPromptTokens);
-  // No messages added
-  expect(curatedHistoryForTest(legacySuite0_historyService).length).toBe(0);
-  expect(legacySuite0_historyService.getTotalTokens()).toBe(systemPromptTokens);
+  return fixture.assertCurated(legacySuite0_historyService, (rows) => {
+    expect(rows.length).toBe(0);
+    expect(legacySuite0_historyService.getTotalTokens()).toBe(
+      systemPromptTokens,
+    );
+  });
 }
 function legacyTest16() {
   let eventEmitted = false;
@@ -343,107 +359,116 @@ function legacyTest19() {
 }
 let legacySuite0_historyService: HistoryService;
 const legacyHook0 = () => {
-  legacySuite0_historyService = new HistoryService();
+  legacySuite0_historyService = createHistory();
 };
-describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should return only baseTokenOffset when history is empty', () => {
-  beforeEach(legacyHook0);
-  it('should return only baseTokenOffset when history is empty', () => {
-    expect(legacyTest0).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should return baseTokenOffset + history tokens when history exists', () => {
-  beforeEach(legacyHook0);
-  it('should return baseTokenOffset + history tokens when history exists', async () => {
-    await expect(legacyTest1()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should handle baseTokenOffset changes during conversation', () => {
-  beforeEach(legacyHook0);
-  it('should handle baseTokenOffset changes during conversation', async () => {
-    await expect(legacyTest2()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should normalize negative baseTokenOffset to zero', () => {
-  beforeEach(legacyHook0);
-  it('should normalize negative baseTokenOffset to zero', () => {
-    expect(legacyTest3).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should floor fractional baseTokenOffset values', () => {
-  beforeEach(legacyHook0);
-  it('should floor fractional baseTokenOffset values', () => {
-    expect(legacyTest4).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should include system prompt in total when estimating if compression is needed', () => {
-  beforeEach(legacyHook0);
-  it('should include system prompt in total when estimating if compression is needed', async () => {
-    await expect(legacyTest6()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should maintain consistent total across multiple message additions', () => {
-  beforeEach(legacyHook0);
-  it('should maintain consistent total across multiple message additions', async () => {
-    await expect(legacyTest7()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should correctly report token count for compression decision at various thresholds', () => {
-  beforeEach(legacyHook0);
-  it('should correctly report token count for compression decision at various thresholds', async () => {
-    await expect(legacyTest8()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > System prompt is never compressed / should only operate on curated history, not including system prompt', () => {
-  beforeEach(legacyHook0);
-  it('should only operate on curated history, not including system prompt', () => {
-    expect(legacyTest10).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > System prompt is never compressed / should preserve system prompt offset after compression operations', () => {
-  beforeEach(legacyHook0);
-  it('should preserve system prompt offset after compression operations', async () => {
-    await expect(legacyTest11()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle zero system prompt tokens', () => {
-  beforeEach(legacyHook0);
-  it('should handle zero system prompt tokens', async () => {
-    await expect(legacyTest13()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle very large system prompt tokens', () => {
-  beforeEach(legacyHook0);
-  it('should handle very large system prompt tokens', () => {
-    expect(legacyTest14).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle empty history with system prompt', () => {
-  beforeEach(legacyHook0);
-  it('should handle empty history with system prompt', () => {
-    expect(legacyTest15).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit tokensUpdated event when baseTokenOffset changes', () => {
-  beforeEach(legacyHook0);
-  it('should emit tokensUpdated event when baseTokenOffset changes', () => {
-    expect(legacyTest16).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should not emit tokensUpdated event when setting same baseTokenOffset', () => {
-  beforeEach(legacyHook0);
-  it('should not emit tokensUpdated event when setting same baseTokenOffset', () => {
-    expect(legacyTest17).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit correct delta when baseTokenOffset increases', () => {
-  beforeEach(legacyHook0);
-  it('should emit correct delta when baseTokenOffset increases', () => {
-    expect(legacyTest18).not.toThrow();
-  });
-});
-describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit correct negative delta when baseTokenOffset decreases', () => {
-  beforeEach(legacyHook0);
-  it('should emit correct negative delta when baseTokenOffset decreases', () => {
-    expect(legacyTest19).not.toThrow();
-  });
-});
+describe.each(['old', 'journal'] as const)(
+  '%s compression history',
+  (backend) => {
+    const backendFixture = compressionBackendFixture(backend);
+    beforeEach(() => {
+      fixture = backendFixture;
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should return only baseTokenOffset when history is empty', () => {
+      beforeEach(legacyHook0);
+      it('should return only baseTokenOffset when history is empty', () => {
+        expect(legacyTest0).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should return baseTokenOffset + history tokens when history exists', () => {
+      beforeEach(legacyHook0);
+      it('should return baseTokenOffset + history tokens when history exists', async () => {
+        await expect(legacyTest1()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should handle baseTokenOffset changes during conversation', () => {
+      beforeEach(legacyHook0);
+      it('should handle baseTokenOffset changes during conversation', async () => {
+        await expect(legacyTest2()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should normalize negative baseTokenOffset to zero', () => {
+      beforeEach(legacyHook0);
+      it('should normalize negative baseTokenOffset to zero', () => {
+        expect(legacyTest3).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > HistoryService.getTotalTokens() includes baseTokenOffset / should floor fractional baseTokenOffset values', () => {
+      beforeEach(legacyHook0);
+      it('should floor fractional baseTokenOffset values', () => {
+        expect(legacyTest4).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should include system prompt in total when estimating if compression is needed', () => {
+      beforeEach(legacyHook0);
+      it('should include system prompt in total when estimating if compression is needed', async () => {
+        await expect(legacyTest6()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should maintain consistent total across multiple message additions', () => {
+      beforeEach(legacyHook0);
+      it('should maintain consistent total across multiple message additions', async () => {
+        await expect(legacyTest7()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Compression threshold calculation consistency / should correctly report token count for compression decision at various thresholds', () => {
+      beforeEach(legacyHook0);
+      it('should correctly report token count for compression decision at various thresholds', async () => {
+        await expect(legacyTest8()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > System prompt is never compressed / should only operate on curated history, not including system prompt', () => {
+      beforeEach(legacyHook0);
+      it('should only operate on curated history, not including system prompt', async () => {
+        await expect(Promise.resolve(legacyTest10())).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > System prompt is never compressed / should preserve system prompt offset after compression operations', () => {
+      beforeEach(legacyHook0);
+      it('should preserve system prompt offset after compression operations', async () => {
+        await expect(legacyTest11()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle zero system prompt tokens', () => {
+      beforeEach(legacyHook0);
+      it('should handle zero system prompt tokens', async () => {
+        await expect(legacyTest13()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle very large system prompt tokens', () => {
+      beforeEach(legacyHook0);
+      it('should handle very large system prompt tokens', () => {
+        expect(legacyTest14).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should handle empty history with system prompt', () => {
+      beforeEach(legacyHook0);
+      it('should handle empty history with system prompt', async () => {
+        await expect(Promise.resolve(legacyTest15())).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit tokensUpdated event when baseTokenOffset changes', () => {
+      beforeEach(legacyHook0);
+      it('should emit tokensUpdated event when baseTokenOffset changes', () => {
+        expect(legacyTest16).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should not emit tokensUpdated event when setting same baseTokenOffset', () => {
+      beforeEach(legacyHook0);
+      it('should not emit tokensUpdated event when setting same baseTokenOffset', () => {
+        expect(legacyTest17).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit correct delta when baseTokenOffset increases', () => {
+      beforeEach(legacyHook0);
+      it('should emit correct delta when baseTokenOffset increases', () => {
+        expect(legacyTest18).not.toThrow();
+      });
+    });
+    describe('Compression Threshold: System Prompt Token Inclusion > Edge cases and boundary conditions / should emit correct negative delta when baseTokenOffset decreases', () => {
+      beforeEach(legacyHook0);
+      it('should emit correct negative delta when baseTokenOffset decreases', () => {
+        expect(legacyTest19).not.toThrow();
+      });
+    });
+  },
+);

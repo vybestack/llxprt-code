@@ -13,86 +13,16 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * structurally compatible Content shape, so the compression round-trip under
  * test is unchanged.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
-import type { IContent } from '../services/history/IContent.js';
-/** Wire shapes mirroring the provider encoder's Content/Part output. */
-interface WireToolCallPart {
-  functionCall: {
-    id?: string;
-    name?: string;
-    args?: Record<string, unknown>;
-  };
-}
-interface WireToolResponsePart {
-  functionResponse: {
-    id?: string;
-    name?: string;
-    response?: Record<string, unknown>;
-  };
-}
-interface WireTextPart {
-  text: string;
-}
-type WirePart = WireTextPart | WireToolCallPart | WireToolResponsePart;
-interface WireContent {
-  role: string;
-  parts: WirePart[];
-}
-/**
- * Tool parameters are `unknown` on IContent; the wire shape requires a JSON
- * object (the same invariant the deleted encoder asserted). Guarded
- * narrowing with an empty-object fallback for non-object values.
- */
-function argsAsRecord(parameters: unknown): Record<string, unknown> {
-  if (typeof parameters === 'object' && parameters !== null) {
-    return parameters as Record<string, unknown>;
-  }
-  return {};
-}
-/** Encode one IContent into the provider wire shape (mirrors the deleted outbound encoder). */
-function encodeContentForProvider(content: IContent): WireContent | null {
-  const parts: WirePart[] = [];
-  for (const block of content.blocks) {
-    if (block.type === 'text') {
-      parts.push({ text: block.text });
-    } else if (block.type === 'tool_call') {
-      parts.push({
-        functionCall: {
-          id: block.id,
-          name: block.name,
-          args: argsAsRecord(block.parameters),
-        },
-      });
-    } else if (block.type === 'tool_response') {
-      parts.push({
-        functionResponse: {
-          id: block.callId,
-          name: block.toolName,
-          response: { status: 'success', result: block.result },
-        },
-      });
-    }
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  return {
-    role: content.speaker === 'ai' ? 'model' : 'user',
-    parts,
-  };
-}
-/** Encode curated history into the provider wire shape. */
-function encodeForProvider(contents: IContent[]): WireContent[] {
-  const encoded: WireContent[] = [];
-  for (const content of contents) {
-    const wire = encodeContentForProvider(content);
-    if (wire !== null) {
-      encoded.push(wire);
-    }
-  }
-  return encoded;
+import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
+const histories: HistoryService[] = [];
+
+function createOldHistory(): HistoryService {
+  const history = new HistoryService({ backend: 'old' });
+  histories.push(history);
+  return history;
 }
 function collectBlockId(
   block: {
@@ -121,7 +51,7 @@ function collectToolCallId(
   }
 }
 function legacyTest0() {
-  const historyService = new HistoryService();
+  const historyService = createOldHistory();
   // Add initial conversation with a tool call
   historyService.add({
     speaker: 'human',
@@ -175,7 +105,7 @@ function legacyTest0() {
   expect(historyToKeep[1].role).toBe('user'); // Tool response (user role in wire format)
   expect(historyToKeep[2].role).toBe('model'); // AI final response
   // Step 4: Create new history service (what startChat does)
-  const newHistoryService = new HistoryService();
+  const newHistoryService = createOldHistory();
   // Step 5: Add compressed summary
   newHistoryService.add({
     speaker: 'human',
@@ -215,7 +145,7 @@ function addHumanFixture(history: HistoryService, text: string): void {
   history.add({ speaker: 'human', blocks: [{ type: 'text', text }] });
 }
 async function legacyTest1() {
-  const historyService = new HistoryService();
+  const historyService = createOldHistory();
   // Add some history with tool calls
   addHumanFixture(historyService, 'Do something');
   const toolId1 = 'hist_tool_abc123';
@@ -301,13 +231,19 @@ async function legacyTest1() {
   const uniqueIds = new Set(allToolIds);
   expect(allToolIds.length).toBe(uniqueIds.size);
 }
-describe('Compression and duplicate tool call IDs / should not create duplicate tool IDs when rebuilding history after compression', () => {
-  it('should not create duplicate tool IDs when rebuilding history after compression', () => {
-    expect(legacyTest0).not.toThrow();
+describe('old synchronous compression tool identities', () => {
+  afterEach(async () => {
+    for (const history of histories) await history.dispose();
+    histories.length = 0;
   });
-});
-describe('Compression and duplicate tool call IDs / should handle multiple compressions without duplicating IDs', () => {
-  it('should handle multiple compressions without duplicating IDs', async () => {
-    await expect(legacyTest1()).resolves.toBeUndefined();
+  describe('Compression and duplicate tool call IDs / should not create duplicate tool IDs when rebuilding history after compression', () => {
+    it('should not create duplicate tool IDs when rebuilding history after compression', () => {
+      expect(legacyTest0).not.toThrow();
+    });
+  });
+  describe('Compression and duplicate tool call IDs / should handle multiple compressions without duplicating IDs', () => {
+    it('should handle multiple compressions without duplicating IDs', async () => {
+      await expect(legacyTest1()).resolves.toBeUndefined();
+    });
   });
 });

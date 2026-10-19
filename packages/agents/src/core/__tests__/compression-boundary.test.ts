@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { compressionBackendFixture } from './support/compression-backend-fixture.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -18,7 +18,7 @@ import { createSessionPolicyFixture } from './session-policy-fixture.js';
  */
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -29,6 +29,15 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
+let fixture: ReturnType<typeof compressionBackendFixture>;
+function createHistory(): HistoryService {
+  return fixture.createHistory();
+}
+function sampleCurated(
+  history: HistoryService,
+): IContent[] | Promise<IContent[]> {
+  return fixture.sampleCurated(history);
+}
 function createToolCallAiMessage(callIds: string[]): IContent {
   return {
     speaker: 'ai',
@@ -234,9 +243,9 @@ async function legacyTest6() {
   const mockProvider = buildMockProvider(summaryText);
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
   vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-  const beforeCount = curatedHistoryForTest(legacySuite0_historyService).length;
+  const beforeCount = (await sampleCurated(legacySuite0_historyService)).length;
   await chat.performCompression('test-prompt-id');
-  const afterCount = curatedHistoryForTest(legacySuite0_historyService).length;
+  const afterCount = (await sampleCurated(legacySuite0_historyService)).length;
   // Should have compressed (or at minimum, not crashed)
   expect(afterCount).toBeLessThanOrEqual(beforeCount);
 }
@@ -254,7 +263,7 @@ async function legacyTest8() {
     legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
     legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
   }
-  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  const curated = await sampleCurated(legacySuite0_historyService);
   expect(curated.length).toBe(202);
   const chat = new ChatSession(
     legacySuite1_runtimeContext,
@@ -268,7 +277,7 @@ async function legacyTest8() {
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
   vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   // Should have compressed: fewer messages than 202
   expect(finalHistory.length).toBeLessThan(202);
 }
@@ -316,14 +325,12 @@ const legacySuite4_observeCompressWhenContextHasToolDominatedHistory =
     const mockProvider = buildMockProvider(summaryText);
     vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
     vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-    const beforeCount = curatedHistoryForTest(
-      legacySuite0_historyService,
-    ).length;
+    const beforeCount = (await sampleCurated(legacySuite0_historyService))
+      .length;
     await chat.performCompression('test-prompt-id');
-    const afterCount = curatedHistoryForTest(
-      legacySuite0_historyService,
-    ).length;
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const afterCount = (await sampleCurated(legacySuite0_historyService))
+      .length;
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     const hasSummary = finalHistory.some((msg) =>
       msg.blocks.some(
         (b) => b.type === 'text' && b.text.includes('state_snapshot'),
@@ -350,7 +357,7 @@ const legacySuite5_observePreservedToolPairs = async () => {
   vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
   vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   // In the preserved sections (non-summary), tool calls should have matching responses
   const nonSummary = finalHistory.filter(
     (msg) =>
@@ -407,7 +414,7 @@ const legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
       legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
       legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
     }
-    const curated = curatedHistoryForTest(legacySuite0_historyService);
+    const curated = await sampleCurated(legacySuite0_historyService);
     const chat = new ChatSession(
       legacySuite1_runtimeContext,
       legacySuite2_mockContentGenerator,
@@ -420,7 +427,7 @@ const legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
     vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
     vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     const hasSummary = finalHistory.some((msg) =>
       msg.blocks.some(
         (b) => b.type === 'text' && b.text.includes('state_snapshot'),
@@ -433,63 +440,72 @@ let legacySuite1_runtimeContext: AgentRuntimeContext;
 let legacySuite2_mockContentGenerator: ContentGenerator;
 const legacyHook0 = () => {
   vi.clearAllMocks();
-  legacySuite0_historyService = new HistoryService();
+  legacySuite0_historyService = createHistory();
   legacySuite1_runtimeContext = buildRuntimeContext(
     legacySuite0_historyService,
   );
   legacySuite2_mockContentGenerator = createMockContentGenerator();
 };
-describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should not push splitIndex past the end of history', () => {
-  beforeEach(legacyHook0);
-  it('should not push splitIndex past the end of history', () => {
-    expect(legacyTest0).not.toThrow();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should find valid split point when initial split is inside tool response sequence', () => {
-  beforeEach(legacyHook0);
-  it('should find valid split point when initial split is inside tool response sequence', () => {
-    expect(legacyTest1).not.toThrow();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should handle history with only tool calls and responses', () => {
-  beforeEach(legacyHook0);
-  it('should handle history with only tool calls and responses', () => {
-    expect(legacyTest2).not.toThrow();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress when context has tool-dominated history', () => {
-  beforeEach(legacyHook0);
-  it('should compress when context has tool-dominated history', async () => {
-    await expect(legacyTest4()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should preserve tool call/response pairs in kept sections', () => {
-  beforeEach(legacyHook0);
-  it('should preserve tool call/response pairs in kept sections', async () => {
-    await expect(legacyTest5()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle history with continuous tool call/response pairs', () => {
-  beforeEach(legacyHook0);
-  it('should handle history with continuous tool call/response pairs', async () => {
-    await expect(legacyTest6()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle edge case where split falls inside long tool sequence', () => {
-  beforeEach(legacyHook0);
-  it('should handle edge case where split falls inside long tool sequence', async () => {
-    await expect(legacyTest7()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', () => {
-  beforeEach(legacyHook0);
-  it('should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', async () => {
-    await expect(legacyTest8()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should not crash with edge case histories', () => {
-  beforeEach(legacyHook0);
-  it('should not crash with edge case histories', async () => {
-    await expect(legacyTest9()).resolves.toBeUndefined();
-  });
-});
+describe.each(['old', 'journal'] as const)(
+  '%s compression history',
+  (backend) => {
+    const backendFixture = compressionBackendFixture(backend);
+    beforeEach(() => {
+      fixture = backendFixture;
+    });
+    describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should not push splitIndex past the end of history', () => {
+      beforeEach(legacyHook0);
+      it('should not push splitIndex past the end of history', () => {
+        expect(legacyTest0).not.toThrow();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should find valid split point when initial split is inside tool response sequence', () => {
+      beforeEach(legacyHook0);
+      it('should find valid split point when initial split is inside tool response sequence', () => {
+        expect(legacyTest1).not.toThrow();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should handle history with only tool calls and responses', () => {
+      beforeEach(legacyHook0);
+      it('should handle history with only tool calls and responses', () => {
+        expect(legacyTest2).not.toThrow();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress when context has tool-dominated history', () => {
+      beforeEach(legacyHook0);
+      it('should compress when context has tool-dominated history', async () => {
+        await expect(legacyTest4()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should preserve tool call/response pairs in kept sections', () => {
+      beforeEach(legacyHook0);
+      it('should preserve tool call/response pairs in kept sections', async () => {
+        await expect(legacyTest5()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle history with continuous tool call/response pairs', () => {
+      beforeEach(legacyHook0);
+      it('should handle history with continuous tool call/response pairs', async () => {
+        await expect(legacyTest6()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle edge case where split falls inside long tool sequence', () => {
+      beforeEach(legacyHook0);
+      it('should handle edge case where split falls inside long tool sequence', async () => {
+        await expect(legacyTest7()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', () => {
+      beforeEach(legacyHook0);
+      it('should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', async () => {
+        await expect(legacyTest8()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should not crash with edge case histories', () => {
+      beforeEach(legacyHook0);
+      it('should not crash with edge case histories', async () => {
+        await expect(legacyTest9()).resolves.toBeUndefined();
+      });
+    });
+  },
+);

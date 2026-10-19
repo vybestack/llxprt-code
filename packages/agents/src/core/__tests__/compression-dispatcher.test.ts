@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { compressionBackendFixture } from './support/compression-backend-fixture.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -21,7 +21,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -41,6 +41,15 @@ void vi.mock(
 // ---------------------------------------------------------------------------
 // Message helpers (same pattern as sandwich-compression.test.ts)
 // ---------------------------------------------------------------------------
+let fixture: ReturnType<typeof compressionBackendFixture>;
+function createHistory(): HistoryService {
+  return fixture.createHistory();
+}
+function sampleCurated(
+  history: HistoryService,
+): IContent[] | Promise<IContent[]> {
+  return fixture.sampleCurated(history);
+}
 function createUserMessage(text: string): IContent {
   return {
     speaker: 'human',
@@ -166,8 +175,8 @@ const legacySuite2_observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTr
       compressionStrategy: 'top-down-truncation',
     });
     populateHistory(legacySuite0_historyService);
-    const messageCountBefore = curatedHistoryForTest(
-      legacySuite0_historyService,
+    const messageCountBefore = (
+      await sampleCurated(legacySuite0_historyService)
     ).length;
     const chat = new ChatSession(
       runtimeContext,
@@ -186,7 +195,7 @@ const legacySuite2_observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTr
     );
     vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     // Top-down truncation should NOT produce any state_snapshot summary
     const hasSummary = finalHistory.some((msg) =>
       msg.blocks.some(
@@ -225,7 +234,7 @@ const legacySuite3_observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut 
     );
     vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     // Middle-out SHOULD produce a state_snapshot summary
     const hasSummary = finalHistory.some((msg) =>
       msg.blocks.some(
@@ -262,7 +271,7 @@ const legacySuite4_observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet =
     );
     vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     // Should behave as middle-out: summary with state_snapshot present
     const hasSummary = finalHistory.some((msg) =>
       msg.blocks.some(
@@ -300,7 +309,7 @@ const legacySuite5_observeRebuildHistoryWithMessagesInCorrectOrderAfterCompressi
     );
     vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     // History should have content (not be empty)
     // Find the summary message index
     const summaryIndex = finalHistory.findIndex((msg) =>
@@ -381,7 +390,7 @@ async function legacyTest8() {
     );
   }).not.toThrow();
   // And the message should actually appear in the history
-  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  const curated = await sampleCurated(legacySuite0_historyService);
   const lastMsg = curated[curated.length - 1];
   expect(lastMsg.blocks[0]).toMatchObject({
     type: 'text',
@@ -439,7 +448,7 @@ function legacyTest11() {
   expect(knownFields.has('historyService' as never)).toBe(false);
 }
 async function legacyTest13() {
-  const historyService = new HistoryService(8000);
+  const historyService = createHistory();
   // Add a message to trigger compression
   historyService.add(createUserMessage('Test message'), 'test-model');
   const mockContentGenerator: ContentGenerator = vi.fn();
@@ -471,7 +480,7 @@ async function legacyTest13() {
   );
 }
 async function legacyTest14() {
-  const localHistoryService = new HistoryService(8000);
+  const localHistoryService = createHistory();
   populateHistory(localHistoryService);
   const localContentGenerator = buildMockContentGenerator();
   const summaryText =
@@ -497,7 +506,7 @@ async function legacyTest14() {
   expect(localMockProvider.generateChatCompletion).toHaveBeenCalled();
 }
 async function legacyTest15() {
-  const historyService = new HistoryService(8000);
+  const historyService = createHistory();
   // Empty history - compression will be skipped after PreCompress hook
   const mockContentGenerator: ContentGenerator = vi.fn();
   const runtimeContext = buildRuntimeContext(historyService, {
@@ -517,78 +526,87 @@ let legacySuite0_historyService: HistoryService;
 let legacySuite1_mockContentGenerator: ContentGenerator;
 const legacyHook0 = () => {
   vi.clearAllMocks();
-  legacySuite0_historyService = new HistoryService();
+  legacySuite0_historyService = createHistory();
   legacySuite1_mockContentGenerator = buildMockContentGenerator();
 };
 const legacyHook1 = () => {
   vi.clearAllMocks();
 };
-describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use top-down-truncation when compressionStrategy is "top-down-truncation"', () => {
-  beforeEach(legacyHook0);
-  it('should use top-down-truncation when compressionStrategy is "top-down-truncation"', async () => {
-    await expect(legacyTest0()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use middle-out (default) when compressionStrategy is "middle-out"', () => {
-  beforeEach(legacyHook0);
-  it('should use middle-out (default) when compressionStrategy is "middle-out"', async () => {
-    await expect(legacyTest1()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should default to middle-out when no strategy is explicitly set', () => {
-  beforeEach(legacyHook0);
-  it('should default to middle-out when no strategy is explicitly set', async () => {
-    await expect(legacyTest2()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > result application (REQ-CS-006.2) / should rebuild history with messages in correct order after compression', () => {
-  beforeEach(legacyHook0);
-  it('should rebuild history with messages in correct order after compression', async () => {
-    await expect(legacyTest4()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > error propagation (REQ-CS-006.3) / should propagate strategy errors and still call endCompression', () => {
-  beforeEach(legacyHook0);
-  it('should propagate strategy errors and still call endCompression', async () => {
-    await expect(legacyTest6()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after error (endCompression called in finally)', () => {
-  beforeEach(legacyHook0);
-  it('should unlock historyService after error (endCompression called in finally)', async () => {
-    await expect(legacyTest8()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after successful compression', () => {
-  beforeEach(legacyHook0);
-  it('should unlock historyService after successful compression', async () => {
-    await expect(legacyTest9()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > context boundary (REQ-CS-001.6) / CompressionContext type should not include historyService', () => {
-  beforeEach(legacyHook0);
-  it('CompressionContext type should not include historyService', () => {
-    expect(legacyTest11).not.toThrow();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should trigger PreCompress hook before compression', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('should trigger PreCompress hook before compression', async () => {
-    await expect(legacyTest13()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should proceed with compression even if PreCompress hook throws', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('should proceed with compression even if PreCompress hook throws', async () => {
-    await expect(legacyTest14()).resolves.toBeUndefined();
-  });
-});
-describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should call PreCompress hook when compression is attempted on empty history', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('should call PreCompress hook when compression is attempted on empty history', async () => {
-    await expect(legacyTest15()).resolves.toBeUndefined();
-  });
-});
+describe.each(['old', 'journal'] as const)(
+  '%s compression history',
+  (backend) => {
+    const backendFixture = compressionBackendFixture(backend);
+    beforeEach(() => {
+      fixture = backendFixture;
+    });
+    describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use top-down-truncation when compressionStrategy is "top-down-truncation"', () => {
+      beforeEach(legacyHook0);
+      it('should use top-down-truncation when compressionStrategy is "top-down-truncation"', async () => {
+        await expect(legacyTest0()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use middle-out (default) when compressionStrategy is "middle-out"', () => {
+      beforeEach(legacyHook0);
+      it('should use middle-out (default) when compressionStrategy is "middle-out"', async () => {
+        await expect(legacyTest1()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should default to middle-out when no strategy is explicitly set', () => {
+      beforeEach(legacyHook0);
+      it('should default to middle-out when no strategy is explicitly set', async () => {
+        await expect(legacyTest2()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > result application (REQ-CS-006.2) / should rebuild history with messages in correct order after compression', () => {
+      beforeEach(legacyHook0);
+      it('should rebuild history with messages in correct order after compression', async () => {
+        await expect(legacyTest4()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > error propagation (REQ-CS-006.3) / should propagate strategy errors and still call endCompression', () => {
+      beforeEach(legacyHook0);
+      it('should propagate strategy errors and still call endCompression', async () => {
+        await expect(legacyTest6()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after error (endCompression called in finally)', () => {
+      beforeEach(legacyHook0);
+      it('should unlock historyService after error (endCompression called in finally)', async () => {
+        await expect(legacyTest8()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after successful compression', () => {
+      beforeEach(legacyHook0);
+      it('should unlock historyService after successful compression', async () => {
+        await expect(legacyTest9()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > context boundary (REQ-CS-001.6) / CompressionContext type should not include historyService', () => {
+      beforeEach(legacyHook0);
+      it('CompressionContext type should not include historyService', () => {
+        expect(legacyTest11).not.toThrow();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should trigger PreCompress hook before compression', () => {
+      beforeEach(legacyHook0);
+      beforeEach(legacyHook1);
+      it('should trigger PreCompress hook before compression', async () => {
+        await expect(legacyTest13()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should proceed with compression even if PreCompress hook throws', () => {
+      beforeEach(legacyHook0);
+      beforeEach(legacyHook1);
+      it('should proceed with compression even if PreCompress hook throws', async () => {
+        await expect(legacyTest14()).resolves.toBeUndefined();
+      });
+    });
+    describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should call PreCompress hook when compression is attempted on empty history', () => {
+      beforeEach(legacyHook0);
+      beforeEach(legacyHook1);
+      it('should call PreCompress hook when compression is attempted on empty history', async () => {
+        await expect(legacyTest15()).resolves.toBeUndefined();
+      });
+    });
+  },
+);

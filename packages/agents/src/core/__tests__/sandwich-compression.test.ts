@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { compressionBackendFixture } from './support/compression-backend-fixture.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -18,13 +18,22 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+let fixture: ReturnType<typeof compressionBackendFixture>;
+function createHistory(): HistoryService {
+  return fixture.createHistory();
+}
+function sampleCurated(
+  history: HistoryService,
+): IContent[] | Promise<IContent[]> {
+  return fixture.sampleCurated(history);
+}
 function createUserMessage(text: string): IContent {
   return {
     speaker: 'human',
@@ -135,7 +144,7 @@ function legacyTest0() {
   expect(defaultThreshold).toBe(0.2);
 }
 function legacyTest1() {
-  const customContext = buildRuntimeContext(new HistoryService(), {
+  const customContext = buildRuntimeContext(createHistory(), {
     topPreserveThreshold: 0.25,
   });
   const customThreshold = customContext.ephemerals.topPreserveThreshold();
@@ -163,9 +172,8 @@ async function legacyTest4() {
     legacySuite0_historyService.add(createUserMessage(`User message ${i}`));
     legacySuite0_historyService.add(createAiTextMessage(`AI response ${i}`));
   }
-  const messageCountBefore = curatedHistoryForTest(
-    legacySuite0_historyService,
-  ).length;
+  const messageCountBefore = (await sampleCurated(legacySuite0_historyService))
+    .length;
   const chat = new ChatSession(
     legacySuite1_runtimeContext,
     legacySuite2_mockContentGenerator,
@@ -181,7 +189,7 @@ async function legacyTest4() {
   // Middle-out could not form a valid middle, so one-shot ran as fallback
   // and compressed the history (fewer messages than before).
   expect(result).toBe(PerformCompressionResult.COMPRESSED);
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   expect(finalHistory.length).toBeLessThan(messageCountBefore);
 }
 async function legacyTest5() {
@@ -202,8 +210,8 @@ const legacySuite3_observeProduceCorrectTopBottomSplitFor20MessagesWithDefaultTh
       legacySuite0_historyService.add(createUserMessage(`User message ${i}`));
       legacySuite0_historyService.add(createAiTextMessage(`AI response ${i}`));
     }
-    const messageCountBefore = curatedHistoryForTest(
-      legacySuite0_historyService,
+    const messageCountBefore = (
+      await sampleCurated(legacySuite0_historyService)
     ).length;
     const chat = new ChatSession(
       legacySuite1_runtimeContext,
@@ -219,7 +227,7 @@ const legacySuite3_observeProduceCorrectTopBottomSplitFor20MessagesWithDefaultTh
     );
     vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
     await chat.performCompression('test-prompt-id');
-    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const finalHistory = await sampleCurated(legacySuite0_historyService);
     // Should have: top preserved (4) + summary (1) + ack (1) + bottom preserved (6) = 12
     // Top 20% of 20 = 4, Bottom 30% of 20 = 6, Middle 10 compressed
     // First message should be the original first user message
@@ -255,7 +263,7 @@ const legacySuite4_observePreserveToolCallBoundaries = async () => {
   );
   vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   // Check that tool calls are not split in the preserved sections
   const toolCallCount = (msg: IContent) =>
     msg.blocks.filter((b) => b.type === 'tool_call').length;
@@ -301,7 +309,7 @@ const legacySuite5_observeIntegrateAllThreeSectionsCorrectly = async () => {
   );
   vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   // Should have summary + kept top + kept bottom
   const hasSummary = finalHistory.some((msg) =>
     msg.blocks.some(
@@ -357,7 +365,7 @@ const legacySuite6_observeMaintainProperOrderTopSummaryAckBottom = async () => {
   );
   vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
   await chat.performCompression('test-prompt-id');
-  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  const finalHistory = await sampleCurated(legacySuite0_historyService);
   // First message should be from original top section
   const firstMessage = finalHistory[0];
   // Last message should be from original bottom section
@@ -382,7 +390,7 @@ let legacySuite1_runtimeContext: AgentRuntimeContext;
 let legacySuite2_mockContentGenerator: ContentGenerator;
 const legacyHook0 = () => {
   vi.clearAllMocks();
-  legacySuite0_historyService = new HistoryService();
+  legacySuite0_historyService = createHistory();
   legacySuite1_runtimeContext = buildRuntimeContext(
     legacySuite0_historyService,
   );
@@ -393,45 +401,54 @@ const legacyHook0 = () => {
     embedContent: vi.fn(),
   } as unknown as ContentGenerator;
 };
-describe('Sandwich Compression (Issue #1011) > topPreserveThreshold ephemeral setting / should return correct default value of 0.2 when not specified in settings', () => {
-  beforeEach(legacyHook0);
-  it('should return correct default value of 0.2 when not specified in settings', () => {
-    expect(legacyTest0).not.toThrow();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > topPreserveThreshold ephemeral setting / should return override value when specified in settings', () => {
-  beforeEach(legacyHook0);
-  it('should return override value when specified in settings', () => {
-    expect(legacyTest1).not.toThrow();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > performCompression integration / should produce correct top/bottom split for 20 messages with default thresholds', () => {
-  beforeEach(legacyHook0);
-  it('should produce correct top/bottom split for 20 messages with default thresholds', async () => {
-    await expect(legacyTest3()).resolves.toBeUndefined();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > performCompression integration / routes middle-out structural no-op to one-shot fallback (issue #2602)', () => {
-  beforeEach(legacyHook0);
-  it('routes middle-out structural no-op to one-shot fallback (issue #2602)', async () => {
-    await expect(legacyTest4()).resolves.toBeUndefined();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > performCompression integration / should preserve tool call boundaries', () => {
-  beforeEach(legacyHook0);
-  it('should preserve tool call boundaries', async () => {
-    await expect(legacyTest5()).resolves.toBeUndefined();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > performCompression integration / should integrate all three sections correctly', () => {
-  beforeEach(legacyHook0);
-  it('should integrate all three sections correctly', async () => {
-    await expect(legacyTest6()).resolves.toBeUndefined();
-  });
-});
-describe('Sandwich Compression (Issue #1011) > applyCompression order via performCompression / should maintain proper order: top + summary + ack + bottom', () => {
-  beforeEach(legacyHook0);
-  it('should maintain proper order: top + summary + ack + bottom', async () => {
-    await expect(legacyTest8()).resolves.toBeUndefined();
-  });
-});
+describe.each(['old', 'journal'] as const)(
+  '%s compression history',
+  (backend) => {
+    const backendFixture = compressionBackendFixture(backend);
+    beforeEach(() => {
+      fixture = backendFixture;
+    });
+    describe('Sandwich Compression (Issue #1011) > topPreserveThreshold ephemeral setting / should return correct default value of 0.2 when not specified in settings', () => {
+      beforeEach(legacyHook0);
+      it('should return correct default value of 0.2 when not specified in settings', () => {
+        expect(legacyTest0).not.toThrow();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > topPreserveThreshold ephemeral setting / should return override value when specified in settings', () => {
+      beforeEach(legacyHook0);
+      it('should return override value when specified in settings', () => {
+        expect(legacyTest1).not.toThrow();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > performCompression integration / should produce correct top/bottom split for 20 messages with default thresholds', () => {
+      beforeEach(legacyHook0);
+      it('should produce correct top/bottom split for 20 messages with default thresholds', async () => {
+        await expect(legacyTest3()).resolves.toBeUndefined();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > performCompression integration / routes middle-out structural no-op to one-shot fallback (issue #2602)', () => {
+      beforeEach(legacyHook0);
+      it('routes middle-out structural no-op to one-shot fallback (issue #2602)', async () => {
+        await expect(legacyTest4()).resolves.toBeUndefined();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > performCompression integration / should preserve tool call boundaries', () => {
+      beforeEach(legacyHook0);
+      it('should preserve tool call boundaries', async () => {
+        await expect(legacyTest5()).resolves.toBeUndefined();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > performCompression integration / should integrate all three sections correctly', () => {
+      beforeEach(legacyHook0);
+      it('should integrate all three sections correctly', async () => {
+        await expect(legacyTest6()).resolves.toBeUndefined();
+      });
+    });
+    describe('Sandwich Compression (Issue #1011) > applyCompression order via performCompression / should maintain proper order: top + summary + ack + bottom', () => {
+      beforeEach(legacyHook0);
+      it('should maintain proper order: top + summary + ack + bottom', async () => {
+        await expect(legacyTest8()).resolves.toBeUndefined();
+      });
+    });
+  },
+);
