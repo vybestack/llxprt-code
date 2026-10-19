@@ -13,7 +13,7 @@
  */
 
 import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { OAuthProfileReads } from './oauth-profile-reads.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type {
@@ -65,8 +65,6 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * - TOCTOU double-check pattern around refresh
  * - Delegates auth flows to injected AuthenticatorInterface
  */
-
-type OAuthProfileReads = Pick<ProfileManager, 'loadProfile'>;
 
 export class TokenAccessCoordinator {
   private bucketResolutionLocks: Map<string, Promise<void>> = new Map();

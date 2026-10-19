@@ -35,6 +35,7 @@ interface Session {
   readonly server: Server;
   readonly trusted: boolean;
   readonly streamClosed: ReturnType<typeof deferred>;
+  initialContext?: Promise<void>;
 }
 
 class Companion {
@@ -77,7 +78,9 @@ class Companion {
     server.setRequestHandler(PingRequestSchema, async (_request, extra) => {
       this.pingEntered.resolve();
       if (this.blockPing) await this.releasePing.promise;
-      await transport.send(
+      // Use the companion's authoritative ping path for fixture bootstrap.
+      // Opening the subscription stream must not replay a completed handshake.
+      owned.initialContext ??= transport.send(
         {
           jsonrpc: '2.0',
           method: 'ide/contextUpdate',
@@ -85,6 +88,7 @@ class Companion {
         },
         { relatedRequestId: extra.requestId },
       );
+      await owned.initialContext;
       return {};
     });
     server.setRequestHandler(CallToolRequestSchema, async (call) => {
@@ -140,20 +144,6 @@ class Companion {
           error instanceof Error ? error : new Error(String(error)),
         ),
       );
-    if (request.method === 'GET')
-      setImmediate(() => {
-        void active.transport
-          .send({
-            jsonrpc: '2.0',
-            method: 'ide/contextUpdate',
-            params: { workspaceState: { isTrusted: active.trusted } },
-          })
-          .catch((error: unknown) =>
-            response.destroy(
-              error instanceof Error ? error : new Error(String(error)),
-            ),
-          );
-      });
   }
 
   async start(): Promise<void> {

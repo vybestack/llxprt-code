@@ -3,11 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { createOAuthProfileReads } from './oauth-profile-reads.js';
+import {
+  createOAuthProfileReads,
+  type OAuthProfileReads,
+} from './oauth-profile-reads.js';
 
-export interface PreflightOAuthProfileReads
-  extends Pick<ProfileManager, 'loadProfile'> {
+export interface PreflightOAuthProfileReads extends OAuthProfileReads {
   attachProfileDirectory(directory: string | undefined): void;
 }
 
@@ -15,7 +16,7 @@ type ProfileReadPhase =
   | { readonly kind: 'pre-config' }
   | {
       readonly kind: 'attached';
-      readonly reads: Pick<ProfileManager, 'loadProfile'>;
+      readonly reads: OAuthProfileReads;
     };
 
 export function createPreflightOAuthProfileReads(): PreflightOAuthProfileReads {
