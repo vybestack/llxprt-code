@@ -384,6 +384,7 @@ export class AgentImpl implements Agent {
       },
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
+      () => this.session.rebindRecording(),
     )(changed, signal);
 
   private buildSessionControl(): SessionControl {

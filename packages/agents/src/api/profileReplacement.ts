@@ -20,6 +20,7 @@ export function assembleProfileReplacement(
   deps: RebuildLoopDeps,
   prepareClientReplacement: PrepareClientReplacement,
   readActiveRun: () => ActiveRun | undefined,
+  refreshRecording: () => Promise<void>,
 ): (changed: boolean, signal: AbortSignal) => Promise<PreparedProfileFacade> {
   return (changed, signal) => {
     const active = readActiveRun();
@@ -36,7 +37,10 @@ export function assembleProfileReplacement(
       signal,
       deps,
       prepareClientReplacement,
-      retirePrior,
+      async (retire) => {
+        await retirePrior(retire);
+        await refreshRecording();
+      },
     );
   };
 }

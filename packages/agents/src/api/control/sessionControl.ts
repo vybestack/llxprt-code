@@ -393,6 +393,11 @@ export class SessionControl implements AgentSessionControl {
 
   recordRecordingEvent = this.flushRecording;
 
+  rebindRecording = (): Promise<void> =>
+    this.runExclusive(async () => {
+      if (this.integration !== null) await this.attachHistory(this.integration);
+    });
+
   async createCheckpoint(
     name: string,
     options?: { readonly overwrite?: boolean },
