@@ -5,9 +5,10 @@
  */
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core';
 import { AgentBusyError, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildAgent, drain } from './helpers/agentHarness.js';
+import { recordingDisposalTarget } from './helpers/recording-disposal-target.js';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve = (): void => {
@@ -39,8 +40,10 @@ describe('profile admission during a session switch', () => {
       const entered = deferred();
       const release = deferred();
       let switching: Promise<void> | undefined;
-      const original = SessionRecordingService.prototype.dispose;
-      const pause = spyOn(SessionRecordingService.prototype, 'dispose');
+      let retiringSessionId: string | undefined;
+      const target = recordingDisposalTarget();
+      const original = target.dispose;
+      const pause = spyOn(target, 'dispose');
       try {
         await agent.session.setRecording({ enabled: true });
         await drain(agent.stream('old question'));
@@ -54,14 +57,16 @@ describe('profile admission during a session switch', () => {
           model: 'profile-during-clear',
         });
         pause.mockImplementationOnce(async function (
-          this: SessionRecordingService,
+          this: SessionRecordingPort,
         ): Promise<void> {
+          retiringSessionId = this.getSessionId();
           entered.resolve();
           await release.promise;
           await original.call(this);
         });
         switching = agent.session.startNewSession();
         await entered.promise;
+        expect(retiringSessionId).toBe(oldState.sessionId);
         const application = applyProfile(agent, operation);
         await expect(application).rejects.toBeInstanceOf(AgentBusyError);
         expect({
