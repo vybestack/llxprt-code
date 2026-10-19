@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 import {
   mkdir,
   mkdtemp,

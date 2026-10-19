@@ -26,6 +26,9 @@ import { collectRows } from './__tests__/support/p05dTestKit.js';
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';

@@ -15,6 +15,9 @@
  */
 /** @plan PLAN-20260211-SESSIONRECORDING.P25 */
 import { describe, expect, it } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';

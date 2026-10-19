@@ -25,6 +25,9 @@
  */
 
 import { describe, expect } from 'bun:test';
+import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+pinHistoryBackend('old');
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
