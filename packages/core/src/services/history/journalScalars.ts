@@ -10,6 +10,8 @@ import type { HistoryRowView } from './historyRowView.js';
 import type { IContent } from './IContent.js';
 import type { JournalOwners } from './journalOwners.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import { countDecodedRow } from './journalRowCounters.js';
 
 /**
  * What `getContextRange()` takes from the stored rows: the chronology
@@ -104,11 +106,14 @@ export async function lastContentOf(
 /** The facts of the rows of one pinned version; every read goes to the file. */
 export class JournalRowView implements HistoryRowView {
   private closed = false;
+  private readonly readers = new Set<AsyncGenerator<IContent, void, unknown>>();
 
   constructor(
     private readonly snapshot: VersionSnapshot,
     private readonly owners: JournalOwners,
     private readonly resumeBoundary?: bigint,
+    private readonly counters?: JournalReadCounters,
+    private readonly signal?: AbortSignal,
   ) {}
 
   get length(): number {
@@ -127,20 +132,52 @@ export class JournalRowView implements HistoryRowView {
       : Number(chronologySeq);
   }
 
-  async *rows(): AsyncGenerator<IContent, void, unknown> {
+  rows(): AsyncGenerator<IContent, void, unknown> {
     this.assertOpen();
-    for await (const entry of this.snapshot.entries()) {
+    const reader = this.readRows(() => this.readers.delete(reader));
+    this.readers.add(reader);
+    return reader;
+  }
+
+  private async *readRows(
+    onClose: () => void,
+  ): AsyncGenerator<IContent, void, unknown> {
+    try {
       this.assertOpen();
-      yield decodeStoredRow(
-        await this.snapshot.readRow(entry),
-        this.resumeBoundary,
-      );
+      for await (const entry of this.snapshot.entries()) {
+        this.assertOpen();
+        const row = decodeStoredRow(
+          await this.snapshot.readRow(entry),
+          this.resumeBoundary,
+        );
+        this.assertOpen();
+        const release = countDecodedRow(row, this.counters);
+        try {
+          yield row;
+        } finally {
+          release();
+        }
+      }
+      this.assertOpen();
+    } finally {
+      onClose();
     }
   }
 
   /** Later reads fail; the snapshot is the store's to release. */
-  close(): void {
+  async close(): Promise<void> {
     this.closed = true;
+    const failures: unknown[] = [];
+    for (const reader of this.readers) {
+      try {
+        await reader.return();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this.readers.clear();
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Row view cleanup failed');
   }
 
   private entryAt(index: number): ReturnType<VersionSnapshot['entryAt']> {
@@ -150,7 +187,25 @@ export class JournalRowView implements HistoryRowView {
 
   private assertOpen(): void {
     if (this.closed) throw new Error('The row view is closed');
+    this.signal?.throwIfAborted();
   }
+}
+
+export async function withVersionSnapshot<T>(
+  snapshot: VersionSnapshot,
+  read: (snapshot: VersionSnapshot) => Promise<T>,
+): Promise<T> {
+  try {
+    return await read(snapshot);
+  } finally {
+    snapshot.close();
+  }
+}
+
+interface RowViewScope<T> {
+  readonly execute: (view: HistoryRowView) => Promise<T>;
+  readonly counters?: JournalReadCounters;
+  readonly signal?: AbortSignal;
 }
 
 /** Hands `execute` the row view of `snapshot`; the view is closed once `execute` has settled. */
@@ -158,12 +213,12 @@ export async function withRowView<T>(
   snapshot: VersionSnapshot,
   owners: JournalOwners,
   boundary: bigint | undefined,
-  execute: (view: HistoryRowView) => Promise<T>,
+  { execute, counters, signal }: RowViewScope<T>,
 ): Promise<T> {
-  const view = new JournalRowView(snapshot, owners, boundary);
+  const view = new JournalRowView(snapshot, owners, boundary, counters, signal);
   try {
     return await execute(view);
   } finally {
-    view.close();
+    await view.close();
   }
 }

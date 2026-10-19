@@ -41,6 +41,7 @@ import {
   contextBoundaryOf,
   contextRangeOf,
   withRowView,
+  withVersionSnapshot,
   lastContentOf,
   statisticsOf,
   type ContextBoundary,
@@ -692,7 +693,11 @@ export class JournalHistoryStore implements HistoryStorePort {
   ): Promise<T> {
     signal?.throwIfAborted();
     return this.withDurableSnapshot((snapshot) =>
-      withRowView(snapshot, this.owners, this.boundary, execute),
+      withRowView(snapshot, this.owners, this.boundary, {
+        execute,
+        counters: this.options.counters,
+        signal,
+      }),
     );
   }
 
@@ -701,12 +706,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   ): Promise<T> {
     this.assertUsable();
     await this.waitForDurable();
-    const snapshot = await this.session.store.snapshot();
-    try {
-      return await read(snapshot);
-    } finally {
-      snapshot.close();
-    }
+    return withVersionSnapshot(await this.session.store.snapshot(), read);
   }
 
   /** Every row; for tests and tools that need the whole history, which a send never does. */
