@@ -954,6 +954,41 @@
       "types": "./dist/src/services/workspace-memory-owner.d.ts",
       "bun": "./src/services/workspace-memory-owner.ts",
       "import": "./dist/src/services/workspace-memory-owner.js"
+    },
+    "./services/history/historyCheckpointRows.js": {
+      "types": "./dist/src/services/history/historyCheckpointRows.d.ts",
+      "bun": "./src/services/history/historyCheckpointRows.ts",
+      "import": "./dist/src/services/history/historyCheckpointRows.js"
+    },
+    "./config/ephemeralSettingsHelpers.js": {
+      "types": "./dist/src/config/ephemeralSettingsHelpers.d.ts",
+      "bun": "./src/config/ephemeralSettingsHelpers.ts",
+      "import": "./dist/src/config/ephemeralSettingsHelpers.js"
+    },
+    "./recording/journalSessionListing.js": {
+      "types": "./dist/src/recording/journalSessionListing.d.ts",
+      "bun": "./src/recording/journalSessionListing.ts",
+      "import": "./dist/src/recording/journalSessionListing.js"
+    },
+    "./journal/journalReader.js": {
+      "types": "./dist/src/journal/journalReader.d.ts",
+      "bun": "./src/journal/journalReader.ts",
+      "import": "./dist/src/journal/journalReader.js"
+    },
+    "./journal/journalReaderState.js": {
+      "types": "./dist/src/journal/journalReaderState.d.ts",
+      "bun": "./src/journal/journalReaderState.ts",
+      "import": "./dist/src/journal/journalReaderState.js"
+    },
+    "./journal/idKeys.js": {
+      "types": "./dist/src/journal/idKeys.d.ts",
+      "bun": "./src/journal/idKeys.ts",
+      "import": "./dist/src/journal/idKeys.js"
+    },
+    "./recording/sessionMetaKeys.js": {
+      "types": "./dist/src/recording/sessionMetaKeys.d.ts",
+      "bun": "./src/recording/sessionMetaKeys.ts",
+      "import": "./dist/src/recording/sessionMetaKeys.js"
     }
   },
   "scripts": {
