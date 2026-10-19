@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
+import type { HistoryService } from './HistoryService.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
@@ -10,46 +11,59 @@ import {
   streamDigest,
 } from './__tests__/support/history-merge-test-helpers.js';
 
-describe('transactional history merge rows', () => {
-  for (const size of [512, 8192]) {
-    it(`appends ${size} mixed rows without eager reads and preserves complete source values`, async () => {
-      const owners = new RowOwnership();
-      await withCoreSuffixFixture(
-        size,
-        async (source) => {
-          await withCoreSuffixFixture(
-            1,
-            async (target) => {
-              target.setTokenizerFactory(exactTokenizer());
-              await target.merge(source);
-              expect(target.getTotalTokens()).toBe(size * 4);
-              await target.waitForCommit();
-              expect(await streamDigest(target.streamRawHistory())).toBe(
-                oracleDigest(size, 1, true),
-              );
-              expect(await streamDigest(source.streamRawHistory())).toBe(
-                oracleDigest(size),
-              );
-              expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
-              expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
-                8 * 1024 * 1024,
-              );
-              expect(owners.snapshot().liveRows).toBe(0);
-            },
-            0,
-            () => mergeRow(20000),
-            owners,
-            (options) => new MergeRowHistory(options),
-          );
-        },
-        2048,
-        mergeRow,
-        owners,
-        (options) => new MergeRowHistory(options),
-      );
-    }, 600_000);
-  }
-});
+describe.each(['old', 'journal'] as const)(
+  'transactional history merge rows (%s)',
+  (backend) => {
+    const createHistory = (
+      options: ConstructorParameters<typeof HistoryService>[0],
+    ): MergeRowHistory => {
+      const history = new MergeRowHistory(options);
+      history.setTokenizerFactory(exactTokenizer());
+      return history;
+    };
+    for (const size of [512, 8192]) {
+      it(`appends ${size} mixed rows without eager reads and preserves complete source values`, async () => {
+        const owners = new RowOwnership();
+        await withCoreSuffixFixture(
+          size,
+          async (source) => {
+            await withCoreSuffixFixture(
+              1,
+              async (target) => {
+                const prefixTokens = backend === 'old' ? 0 : 4;
+                expect(target.getTotalTokens()).toBe(prefixTokens);
+                await target.merge(source);
+                expect(target.getTotalTokens()).toBe(prefixTokens + size * 4);
+                await target.waitForCommit();
+                expect(await streamDigest(target.streamRawHistory())).toBe(
+                  oracleDigest(size, 1, true),
+                );
+                expect(await streamDigest(source.streamRawHistory())).toBe(
+                  oracleDigest(size),
+                );
+                expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
+                expect(
+                  owners.snapshot().peakSerializedBytes,
+                ).toBeLessThanOrEqual(8 * 1024 * 1024);
+                expect(owners.snapshot().liveRows).toBe(0);
+              },
+              0,
+              () => mergeRow(20000),
+              owners,
+              createHistory,
+              backend,
+            );
+          },
+          2048,
+          mergeRow,
+          owners,
+          createHistory,
+          backend,
+        );
+      }, 600_000);
+    }
+  },
+);
 
 describe('history merge self append and large row', () => {
   it('pins self-merge once and preserves markers when the appended rows are duplicated', async () => {

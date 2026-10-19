@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
 import {
   accountingFactory,
   accountingRow,
@@ -10,7 +11,7 @@ import {
 
 describe('pop token accounting settlement', () => {
   it('returns the removed row only after the streamed token recalculation releases its ownership', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (service, ownership) => {
         service.add(accountingRow(3));
@@ -58,9 +59,10 @@ describe('pop token accounting settlement', () => {
   });
 
   it('reports tokenizer failure from pop without leaving a borrowed token row', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       2,
       async (service, ownership) => {
+        expect(service.getTotalTokens()).toBe(0);
         service.setTokenizerFactory(accountingFactory((text) => text.length));
         service.add(accountingRow(2));
         await service.waitForTokenUpdates();
@@ -74,6 +76,7 @@ describe('pop token accounting settlement', () => {
           (sum, text) => sum + text.length,
           0,
         );
+        expect(service.getTotalTokens()).toBe(expected);
         await expect(service.pop()).rejects.toThrow('pop accounting failed');
         expect(service.getTotalTokens()).toBe(expected);
         expect(ownership.snapshot().liveRows).toBe(0);
@@ -81,6 +84,12 @@ describe('pop token accounting settlement', () => {
       },
       2048,
       accountingRow,
+      undefined,
+      (options): HistoryService => {
+        const service = new HistoryService(options);
+        service.setTokenizerFactory(accountingFactory(() => 0));
+        return service;
+      },
     );
   });
 });
