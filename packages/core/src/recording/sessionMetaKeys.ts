@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { z } from 'zod';
 import type { StateReader } from '../journal/journalReaderState.js';
 import { ownedString } from '../utils/ownedString.js';
 import type { SessionStartKind } from './types.js';
@@ -110,9 +111,16 @@ export function decodeDirectoriesFact(bytes: Uint8Array): string[] {
 
 /** The title of a `session:title` entry: a string, or null for explicitly untitled. */
 export function decodeTitleFact(bytes: Uint8Array): string | null {
+  return decodeNullableStringFact(bytes, SESSION_KEYS.title);
+}
+
+function decodeNullableStringFact(
+  bytes: Uint8Array,
+  key: string,
+): string | null {
   const fact = decodeSessionFact(bytes);
   if (fact !== null && typeof fact !== 'string') {
-    throw malformed(SESSION_KEYS.title);
+    throw malformed(key);
   }
   return fact;
 }
@@ -127,35 +135,19 @@ export interface SessionStartFact {
   readonly parentSessionId?: string;
 }
 
-type StartFields = Record<string, unknown> & {
-  startTime: string;
-  projectHash: string;
-  kind: SessionStartKind;
-  workspaceDirs: unknown[];
-};
-
-function hasStartFields(fact: Record<string, unknown>): fact is StartFields {
-  const strings = ['startTime', 'projectHash'].every(
-    (key) => typeof fact[key] === 'string',
-  );
-  const kind = fact['kind'] === 'main' || fact['kind'] === 'subagent';
-  return strings && kind && Array.isArray(fact['workspaceDirs']);
-}
+const sessionStartFactSchema = z.object({
+  startTime: z.string().min(1),
+  projectHash: z.string().min(1),
+  workspaceDirs: z.array(z.string()),
+  kind: z.enum(['main', 'subagent']),
+  cwd: z.string().optional(),
+  parentSessionId: z.string().optional(),
+});
 
 export function decodeStartFact(bytes: Uint8Array): SessionStartFact {
-  const fact = decodeSessionFact(bytes);
-  if (!isRecord(fact) || !hasStartFields(fact)) {
-    throw malformed(SESSION_KEYS.start);
-  }
-  const { cwd, parentSessionId } = fact;
-  return {
-    startTime: fact['startTime'],
-    projectHash: fact['projectHash'],
-    workspaceDirs: fact['workspaceDirs'].map(String),
-    kind: fact['kind'],
-    ...(typeof cwd === 'string' ? { cwd } : {}),
-    ...(typeof parentSessionId === 'string' ? { parentSessionId } : {}),
-  };
+  const result = sessionStartFactSchema.safeParse(decodeSessionFact(bytes));
+  if (!result.success) throw malformed(SESSION_KEYS.start);
+  return result.data;
 }
 
 /** The session facts of one journal, as discovery and resume need them. */
@@ -185,7 +177,12 @@ export async function readSessionFacts(
   const sessionId = decodeSessionFact(id);
   const start = await read(SESSION_KEYS.start);
   const provider = await read(SESSION_KEYS.provider);
-  if (typeof sessionId !== 'string' || !start || !provider) {
+  if (
+    typeof sessionId !== 'string' ||
+    sessionId === '' ||
+    !start ||
+    !provider
+  ) {
     throw malformed(SESSION_KEYS.id);
   }
   const directories = await read(SESSION_KEYS.directories);
@@ -201,6 +198,8 @@ export async function readSessionFacts(
         ? startFact.workspaceDirs
         : decodeDirectoriesFact(directories),
     ...(title === undefined ? {} : { title: decodeTitleFact(title) }),
-    ...(name === undefined ? {} : { name: decodeTitleFact(name) }),
+    ...(name === undefined
+      ? {}
+      : { name: decodeNullableStringFact(name, SESSION_KEYS.name) }),
   };
 }
