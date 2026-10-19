@@ -68,6 +68,7 @@ import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { optimizeDensityOnJournal } from './journalDensity.js';
 import { mergeOnJournal } from './journalMerge.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
+import { waitForDetachedCapture } from './journalDetachedCapture.js';
 import {
   reconcileMediaOnJournal,
   removeTailOnJournal,
@@ -477,13 +478,12 @@ export class JournalHistoryStore implements HistoryStorePort {
     settleTokens: () => Promise<void>,
     signal?: AbortSignal,
   ): Promise<VersionSnapshot> {
-    await this.waitForDurable();
+    await waitForDetachedCapture(() => this.waitForDurable(), signal);
     const snapshot = await this.session.store.snapshot();
     try {
-      await settleTokens();
-      await this.waitForDurable();
+      await waitForDetachedCapture(settleTokens, signal);
+      await waitForDetachedCapture(() => this.waitForDurable(), signal);
       this.assertSettled(snapshot, 'captured');
-      signal?.throwIfAborted();
     } catch (error) {
       snapshot.close();
       throw error;
