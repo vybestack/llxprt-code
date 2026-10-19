@@ -4,7 +4,7 @@ import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-
 /**
  * Test that compression locking prevents race conditions
  */
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   createBlockedTokenizerFactory,
   rebuildAfterClear,
@@ -726,8 +726,11 @@ function legacyTest25() {
   expect(reports).toStrictEqual([2, 2]);
 }
 const legacyHook0 = () => {
-  legacySuite0_historyService = new HistoryService();
+  legacySuite0_historyService = new HistoryService({ backend: 'old' });
 };
+async function disposeHistory(): Promise<void> {
+  await legacySuite0_historyService.dispose();
+}
 const legacyHook1 = () => {
   legacySuite1_observed = [];
   legacySuite0_historyService.on('contentAdded', () => {
@@ -740,129 +743,132 @@ const legacyHook1 = () => {
     legacySuite1_observed.push('compressionEnded');
   });
 };
-describe('Compression locking / should queue adds during compression', () => {
-  beforeEach(legacyHook0);
-  it('should queue adds during compression', async () => {
-    await expect(legacyTest0()).resolves.toBeUndefined();
+describe('old synchronous compression contracts', () => {
+  afterEach(disposeHistory);
+  describe('Old same-turn compression locking / should queue adds during compression', () => {
+    beforeEach(legacyHook0);
+    it('should queue adds during compression', async () => {
+      await expect(legacyTest0()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking / never drops or rejects additions queued during a long compression', () => {
-  beforeEach(legacyHook0);
-  it('never drops or rejects additions queued during a long compression', () => {
-    expect(legacyTest1).not.toThrow();
+  describe('Old same-turn compression locking / never drops or rejects additions queued during a long compression', () => {
+    beforeEach(legacyHook0);
+    it('never drops or rejects additions queued during a long compression', () => {
+      expect(legacyTest1).not.toThrow();
+    });
   });
-});
-describe('Compression locking / releases the compression lock even when the compression body throws', () => {
-  beforeEach(legacyHook0);
-  it('releases the compression lock even when the compression body throws', () => {
-    expect(legacyTest2).not.toThrow();
+  describe('Old same-turn compression locking / releases the compression lock even when the compression body throws', () => {
+    beforeEach(legacyHook0);
+    it('releases the compression lock even when the compression body throws', () => {
+      expect(legacyTest2).not.toThrow();
+    });
   });
-});
-describe('Compression locking / should prevent duplicate IDs during compression rebuild', () => {
-  beforeEach(legacyHook0);
-  it('should prevent duplicate IDs during compression rebuild', async () => {
-    await expect(legacyTest3()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking / should prevent duplicate IDs during compression rebuild', () => {
+    beforeEach(legacyHook0);
+    it('should prevent duplicate IDs during compression rebuild', async () => {
+      await expect(legacyTest3()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking / should handle getCurated during compression', () => {
-  beforeEach(legacyHook0);
-  it('should handle getCurated during compression', async () => {
-    await expect(legacyTest4()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking / should handle getCurated during compression', () => {
+    beforeEach(legacyHook0);
+    it('should handle getCurated during compression', async () => {
+      await expect(legacyTest4()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking / should serialize multiple compressions', () => {
-  beforeEach(legacyHook0);
-  it('should serialize multiple compressions', async () => {
-    await expect(legacyTest5()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking / should serialize multiple compressions', () => {
+    beforeEach(legacyHook0);
+    it('should serialize multiple compressions', async () => {
+      await expect(legacyTest5()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > compressionLockReleased event / releases the lock on an argless endCompression without compressionEnded', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('releases the lock on an argless endCompression without compressionEnded', () => {
-    expect(legacyTest6).not.toThrow();
+  describe('Old same-turn compression locking > compressionLockReleased event / releases the lock on an argless endCompression without compressionEnded', () => {
+    beforeEach(legacyHook0);
+    beforeEach(legacyHook1);
+    it('releases the lock on an argless endCompression without compressionEnded', () => {
+      expect(legacyTest6).not.toThrow();
+    });
   });
-});
-describe('Compression locking > compressionLockReleased event / releases the lock on a failed-shaped endCompression without compressionEnded', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('releases the lock on a failed-shaped endCompression without compressionEnded', () => {
-    expect(legacyTest7).not.toThrow();
+  describe('Old same-turn compression locking > compressionLockReleased event / releases the lock on a failed-shaped endCompression without compressionEnded', () => {
+    beforeEach(legacyHook0);
+    beforeEach(legacyHook1);
+    it('releases the lock on a failed-shaped endCompression without compressionEnded', () => {
+      expect(legacyTest7).not.toThrow();
+    });
   });
-});
-describe('Compression locking > compressionLockReleased event / releases the lock and emits compressionEnded when a summary is provided', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('releases the lock and emits compressionEnded when a summary is provided', () => {
-    expect(legacyTest8).not.toThrow();
+  describe('Old same-turn compression locking > compressionLockReleased event / releases the lock and emits compressionEnded when a summary is provided', () => {
+    beforeEach(legacyHook0);
+    beforeEach(legacyHook1);
+    it('releases the lock and emits compressionEnded when a summary is provided', () => {
+      expect(legacyTest8).not.toThrow();
+    });
   });
-});
-describe('Compression locking > compressionLockReleased event / flushes streaming contentAdded after compressionLockReleased so recording captures it', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('flushes streaming contentAdded after compressionLockReleased so recording captures it', () => {
-    expect(legacyTest9).not.toThrow();
+  describe('Old same-turn compression locking > compressionLockReleased event / flushes streaming contentAdded after compressionLockReleased so recording captures it', () => {
+    beforeEach(legacyHook0);
+    beforeEach(legacyHook1);
+    it('flushes streaming contentAdded after compressionLockReleased so recording captures it', () => {
+      expect(legacyTest9).not.toThrow();
+    });
   });
-});
-describe('Compression locking > compressionLockReleased event / emits compressionLockReleased without a preceding startCompression', () => {
-  beforeEach(legacyHook0);
-  beforeEach(legacyHook1);
-  it('emits compressionLockReleased without a preceding startCompression', () => {
-    expect(legacyTest10).not.toThrow();
+  describe('Old same-turn compression locking > compressionLockReleased event / emits compressionLockReleased without a preceding startCompression', () => {
+    beforeEach(legacyHook0);
+    beforeEach(legacyHook1);
+    it('emits compressionLockReleased without a preceding startCompression', () => {
+      expect(legacyTest10).not.toThrow();
+    });
   });
-});
-describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / preserves content queued before the rebuild clear, landing it after the rebuild', () => {
-  beforeEach(legacyHook0);
-  it('preserves content queued before the rebuild clear, landing it after the rebuild', async () => {
-    await expect(legacyTest12()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > mid-compression content vs the rebuild clear (#3264) / preserves content queued before the rebuild clear, landing it after the rebuild', () => {
+    beforeEach(legacyHook0);
+    it('preserves content queued before the rebuild clear, landing it after the rebuild', async () => {
+      await expect(legacyTest12()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', () => {
-  beforeEach(legacyHook0);
-  it('flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', async () => {
-    await expect(legacyTest13()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > mid-compression content vs the rebuild clear (#3264) / flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', () => {
+    beforeEach(legacyHook0);
+    it('flushes rebuild contentAdded before compressionLockReleased and streaming contentAdded after', async () => {
+      await expect(legacyTest13()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / keeps every queued streaming entry when several arrive before the rebuild clear', () => {
-  beforeEach(legacyHook0);
-  it('keeps every queued streaming entry when several arrive before the rebuild clear', async () => {
-    await expect(legacyTest14()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > mid-compression content vs the rebuild clear (#3264) / keeps every queued streaming entry when several arrive before the rebuild clear', () => {
+    beforeEach(legacyHook0);
+    it('keeps every queued streaming entry when several arrive before the rebuild clear', async () => {
+      await expect(legacyTest14()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', () => {
-  beforeEach(legacyHook0);
-  it('flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', async () => {
-    await expect(legacyTest15()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > mid-compression content vs the rebuild clear (#3264) / flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', () => {
+    beforeEach(legacyHook0);
+    it('flushes a late streaming add after the release events when an explicit rebuild runs first (#3338)', async () => {
+      await expect(legacyTest15()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > mid-compression content vs the rebuild clear (#3264) / flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', () => {
-  beforeEach(legacyHook0);
-  it('flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', async () => {
-    await expect(legacyTest16()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > mid-compression content vs the rebuild clear (#3264) / flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', () => {
+    beforeEach(legacyHook0);
+    it('flushes queued rebuild work in the rebuild phase when the callback throws after queueing it', async () => {
+      await expect(legacyTest16()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > deferred asynchronous mutation ordering / keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', () => {
-  beforeEach(legacyHook0);
-  it('keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', async () => {
-    await expect(legacyTest18()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > deferred asynchronous mutation ordering / keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', () => {
+    beforeEach(legacyHook0);
+    it('keeps rebuild contentAdded inside the lock-release events when a replaceAll is in flight', async () => {
+      await expect(legacyTest18()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > listener throw during flush / still applies the streaming phase and rethrows when a compressionLockReleased listener throws', () => {
-  beforeEach(legacyHook0);
-  it('still applies the streaming phase and rethrows when a compressionLockReleased listener throws', async () => {
-    await expect(legacyTest20()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > listener throw during flush / still applies the streaming phase and rethrows when a compressionLockReleased listener throws', () => {
+    beforeEach(legacyHook0);
+    it('still applies the streaming phase and rethrows when a compressionLockReleased listener throws', async () => {
+      await expect(legacyTest20()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > listener throw during flush / still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', () => {
-  beforeEach(legacyHook0);
-  it('still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', async () => {
-    await expect(legacyTest21()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > listener throw during flush / still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', () => {
+    beforeEach(legacyHook0);
+    it('still emits compressionLockReleased, preserves streaming content, and rethrows when a rebuild operation throws', async () => {
+      await expect(legacyTest21()).resolves.toBeUndefined();
+    });
   });
-});
-describe('Compression locking > listener throw during flush / propagates a thrown undefined listener failure instead of swallowing it', () => {
-  beforeEach(legacyHook0);
-  it('propagates a thrown undefined listener failure instead of swallowing it', async () => {
-    await expect(legacyTest22()).resolves.toBeUndefined();
+  describe('Old same-turn compression locking > listener throw during flush / propagates a thrown undefined listener failure instead of swallowing it', () => {
+    beforeEach(legacyHook0);
+    it('propagates a thrown undefined listener failure instead of swallowing it', async () => {
+      await expect(legacyTest22()).resolves.toBeUndefined();
+    });
   });
 });
 describe('CompressionOperationQueue high-water latch / re-arms the one-shot high-water diagnostic after clear() (#2852)', () => {

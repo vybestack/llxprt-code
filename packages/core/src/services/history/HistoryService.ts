@@ -563,7 +563,14 @@ export class HistoryService extends HistoryServiceReads {
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   async validateAndFix(): Promise<void> {
-    await this.enqueueAsynchronousHistoryMutation(() =>
+    if (this.isCompressing) {
+      return new Promise<void>((resolve, reject) => {
+        this.queueCompressionOperation(() => {
+          void this.validateAndFix().then(resolve, reject);
+        });
+      });
+    }
+    return this.enqueueAsynchronousHistoryMutation(() =>
       this.validateAndFixInternal(),
     );
   }

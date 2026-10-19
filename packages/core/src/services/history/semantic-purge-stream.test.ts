@@ -1,4 +1,3 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
@@ -48,6 +47,10 @@ class NoArrayHistory extends HistoryService {
       'whole-history materializer seam',
     );
   }
+
+  attemptMaterialization(): Promise<IContent[]> {
+    return this.journal.materialize();
+  }
 }
 
 describe('journal materialization guard', () => {
@@ -55,7 +58,7 @@ describe('journal materialization guard', () => {
     const history = new NoArrayHistory();
 
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(history.attemptMaterialization()).rejects.toThrow(
         'whole-history materializer seam',
       );
     } finally {
@@ -133,6 +136,9 @@ async function verifyFullFixture(
         },
         2048,
         purgeRow,
+        undefined,
+        undefined,
+        'old',
       );
     },
     2048,

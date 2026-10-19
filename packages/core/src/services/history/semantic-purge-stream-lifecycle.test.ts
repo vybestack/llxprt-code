@@ -123,10 +123,10 @@ describe('semantic purge request and abort lifecycle', () => {
   });
 
   it('rejects a pre-aborted begin without acquiring cursor owners', async () => {
-    const owners = new RowOwnership();
     await withCoreSuffixFixture(
       3,
       async (history) => {
+        const owners = new RowOwnership();
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
           enabled: true,
           explicitCacheWriteRequired: false,
@@ -142,7 +142,6 @@ describe('semantic purge request and abort lifecycle', () => {
       },
       2048,
       imageRow,
-      owners,
     );
   });
 });

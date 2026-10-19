@@ -4,9 +4,9 @@ import { HistoryService } from './HistoryService.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
-describe('detached history capture', () => {
+describe('old fold capture layout', () => {
   it('pins the journal once and takes the row origins from that pin', async () => {
-    const history = new HistoryService();
+    const history = new HistoryService({ backend: 'old' });
     try {
       for (let index = 0; index < 12; index++)
         history.add(suffixRow(index, 64));
