@@ -12,6 +12,7 @@ import {
   withPendingFixture,
   pendingCaller,
   pendingGate,
+  pendingPublishedRows,
   type PendingFixture,
 } from './pending-window-disk-helpers.js';
 import { digestRows } from './tool-truncation-stream-helpers.js';
@@ -77,6 +78,7 @@ async function rollback(size: number, failure: Failure): Promise<number> {
     const callers = [pendingCaller(0), pendingCaller(1)];
     history.add(callers[0]);
     history.add(callers[1]);
+    await fixture.assertCommitted();
     const markers = callers.map((row) => row.metadata?.chronology);
     const callerValues = callers.map((row) => structuredClone(row));
     const before = await digestRows(history.streamRawHistory());
@@ -87,7 +89,7 @@ async function rollback(size: number, failure: Failure): Promise<number> {
     const gate = pendingGate();
     deps.performFallbackCompression = async (prompt, install, target) => {
       if (failure === 'missing') return true;
-      if (failure === 'partial-admission') recorder.failAdmissionAfter(1);
+      if (failure === 'partial-admission') fixture.failAdmissionAfter(1);
       const applied = await fallback(
         prompt,
         async (candidate) => {
@@ -119,7 +121,7 @@ async function rollback(size: number, failure: Failure): Promise<number> {
     ).catch((error: unknown) => error);
     if (!['missing', 'partial-admission'].includes(failure)) {
       await ready.promise;
-      expect(await collectRawHistory(history)).toStrictEqual(callers);
+      expect(await pendingPublishedRows(fixture)).toStrictEqual(callers);
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
       ).toBe(true);

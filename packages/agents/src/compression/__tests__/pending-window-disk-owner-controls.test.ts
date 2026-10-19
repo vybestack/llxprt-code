@@ -15,14 +15,20 @@ describe('pending-window retained owner controls', () => {
     async ({ size, copy }) => {
       await withPendingFixture(
         size,
-        async ({ history, pauseWriter, releaseWriter, recorder }) => {
+        async ({
+          history,
+          pauseWriter,
+          releaseWriter,
+          recorder,
+          publishedRows,
+        }) => {
           pauseWriter();
           history.add(pendingCaller(0));
           history.add(pendingCaller(1));
           const owners = new RowOwnership();
           const retained: IContent[] = [];
           try {
-            for await (const row of history.streamRawHistory()) {
+            for await (const row of publishedRows()) {
               const owner = copy ? { ...row } : row;
               retained.push(owner);
               owners.retain(owner);

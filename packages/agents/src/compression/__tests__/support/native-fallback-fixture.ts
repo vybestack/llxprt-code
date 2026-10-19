@@ -45,7 +45,7 @@ class FinalizationOwner extends HistoryMediaOwnership {
   }
 }
 
-async function pausedWriter(root: string): Promise<{
+export async function pausedWriter(root: string): Promise<{
   session: JournalSession;
   paused: Promise<void>;
   arm(): void;

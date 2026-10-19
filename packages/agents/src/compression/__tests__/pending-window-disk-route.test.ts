@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   withPendingFixture,
   pendingCaller,
   pendingGate,
+  pendingPublishedRows,
 } from './pending-window-disk-helpers.js';
 import { middleoutRow } from './middleout-disk-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
@@ -51,72 +51,58 @@ async function durableParity(size: number): Promise<number> {
   });
 }
 async function pendingParity(size: number): Promise<number> {
-  return withPendingFixture(
-    size,
-    async ({ history, recorder, owners, reads, setup }) => {
-      const callers = [pendingCaller(0), pendingCaller(1)];
-      history.add(callers[0]);
-      history.add(callers[1]);
-      const markers = callers.map((row) => row.metadata?.chronology);
-      history.startCompression();
-      const queued = pendingCaller(2);
-      history.add(queued);
-      const ready = pendingGate();
-      const gate = pendingGate();
-      await history.registerMediaOwner(
-        mediaParticipant((input) => ({
-          rollback: () => {},
-          publish: async () => {
-            for (const _row of input.next) {
-              ready.resolve();
-              await gate.promise;
-              break;
-            }
-          },
-        })),
-      );
-      const operation = setup.handler.enforceContextWindow(
-        600,
-        'pending-paused',
-      );
-      await ready.promise;
-      try {
-        expect(owners.snapshot().liveRows).toBeGreaterThan(0);
-        expect(
-          owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
-        ).toBe(true);
-        expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
-        expect((await collectRawHistory(history)).slice(-2)).toStrictEqual(
-          callers,
-        );
-        expect(queued.metadata?.chronology).toBeUndefined();
-      } finally {
-        gate.resolve();
-      }
-      await operation;
-      const installed = await collectRawHistory(history);
-      expect(installed).toHaveLength(2);
-      for (let index = 0; index < callers.length; index++) {
-        expect(installed[index]).toStrictEqual(callers[index]);
-        expect(installed[index].metadata?.chronology).toStrictEqual(
-          markers[index],
-        );
-      }
+  return withPendingFixture(size, async (fixture) => {
+    const { history, recorder, owners, assertCommitted, reads, setup } =
+      fixture;
+    const callers = [pendingCaller(0), pendingCaller(1)];
+    history.add(callers[0]);
+    history.add(callers[1]);
+    await assertCommitted();
+    const markers = callers.map((row) => row.metadata?.chronology);
+    history.startCompression();
+    const queued = pendingCaller(2);
+    history.add(queued);
+    const ready = pendingGate();
+    const gate = pendingGate();
+    await fixture.pausePublication(ready, gate);
+    const operation = setup.handler.enforceContextWindow(600, 'pending-paused');
+    await ready.promise;
+    try {
+      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
       ).toBe(true);
-      history.endCompression();
-      const queuedRows = await collectRawHistory(history);
-      expect(queuedRows[queuedRows.length - 1]).toStrictEqual(queued);
-      await recorder.flush();
-      expect(owners.snapshot().liveRows).toBe(0);
-      expect(await collectRawHistory(history)).toStrictEqual([
-        ...callers,
-        queued,
-      ]);
-      return queuedRows.length;
-    },
-  );
+      expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
+      expect((await pendingPublishedRows(fixture)).slice(-2)).toStrictEqual(
+        callers,
+      );
+      expect(queued.metadata?.chronology).toBeUndefined();
+    } finally {
+      gate.resolve();
+    }
+    await operation;
+    const installed = await collectRawHistory(history);
+    expect(installed).toHaveLength(2);
+    for (let index = 0; index < callers.length; index++) {
+      expect(installed[index]).toStrictEqual(callers[index]);
+      expect(installed[index].metadata?.chronology).toStrictEqual(
+        markers[index],
+      );
+    }
+    expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
+      true,
+    );
+    history.endCompression();
+    const queuedRows = await collectRawHistory(history);
+    expect(queuedRows[queuedRows.length - 1]).toStrictEqual(queued);
+    await recorder.flush();
+    expect(owners.snapshot().liveRows).toBe(0);
+    expect(await collectRawHistory(history)).toStrictEqual([
+      ...callers,
+      queued,
+    ]);
+    return queuedRows.length;
+  });
 }
 describe('actual pending-window disk route', () => {
   it.each([512, 8192])(
