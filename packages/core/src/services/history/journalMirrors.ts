@@ -140,10 +140,13 @@ export class JournalMirrors {
 
   /** Unbinds a recorder once its file has applied what was delivered; one that is not bound is ignored. */
   async detachRecorder(recorder: JournalRecordingService): Promise<void> {
-    const bound = this.recorders.get(recorder);
-    if (bound === undefined) return;
-    if (bound.session !== undefined) await this.detach(bound.session);
-    this.recorders.delete(recorder);
+    await this.queue.exclusive(async () => {
+      const bound = this.recorders.get(recorder);
+      if (bound === undefined) return;
+      if (bound.session !== undefined)
+        await this.fanout.detach(bound.session.store);
+      this.recorders.delete(recorder);
+    });
   }
 
   /** Whether every bound mirror is a recorder, which is what a swap of the primary can move. */

@@ -664,7 +664,7 @@ async function beforeEachRecordingCore(): Promise<void> {
 
   recordingService = new SessionRecordingService(makeConfig(chatsDir));
   integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService();
+  historyService = new HistoryService({ backend: 'old' });
   emitter = historyEmitter(historyService);
 }
 
