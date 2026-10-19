@@ -8,6 +8,13 @@ import { readFile } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
 import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
+import {
+  withOldRecordingFixture,
+  withNativeRecordingFixture,
+  nativeRows,
+  requireRecordingPath,
+  rowTexts,
+} from './helpers/native-session-fixture.js';
 
 describe('shared history recording origin', () => {
   test('two recording facades on the same history append only their own turns', async () => {
@@ -235,7 +242,7 @@ describe('shared history recording origin', () => {
   }, 30000);
 
   test('failed shared history publication rolls back both prepared recording effects', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
+    await withOldRecordingFixture(async ({ agent, borrow }) => {
       const sibling = await borrow();
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
@@ -291,6 +298,84 @@ describe('shared history recording origin', () => {
       expect(await readFile(bPath, 'utf8')).not.toContain(
         'owned-rollback-marker',
       );
+    });
+  }, 30000);
+});
+
+describe('native shared history recording rollback', () => {
+  test('restores both committed recording views after shared and owned rejection, then records continued public turns', async () => {
+    await withNativeRecordingFixture(async ({ agent, borrow }) => {
+      const sibling = await borrow();
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'native-seed' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      await sibling.session.setRecording({ enabled: true });
+      const history = agent.agentClient.getHistoryService();
+      if (!history) throw new Error('Missing shared history');
+      const pathA = requireRecordingPath(agent.session.getRecording().path);
+      const pathB = requireRecordingPath(sibling.session.getRecording().path);
+      await agent.session.flushRecording();
+      await sibling.session.flushRecording();
+      const before = await Array.fromAsync(agent.streamHistory());
+      expect(rowTexts(before)).toStrictEqual(['native-seed']);
+      expect(await nativeRows(pathA)).toStrictEqual(before);
+      expect(await nativeRows(pathB)).toStrictEqual(before);
+
+      for (const origin of [undefined, agent.session]) {
+        const failure = new Error('reject native publication');
+        await expect(
+          history.addBatch(
+            [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'native-rejected-marker' }],
+              },
+            ],
+            undefined,
+            {
+              origin,
+              afterPublication: () => {
+                throw failure;
+              },
+            },
+          ),
+        ).rejects.toBe(failure);
+        await agent.session.flushRecording();
+        await sibling.session.flushRecording();
+        expect(await Array.fromAsync(agent.streamHistory())).toStrictEqual(
+          before,
+        );
+        expect(await nativeRows(pathA)).toStrictEqual(before);
+        expect(await nativeRows(pathB)).toStrictEqual(before);
+      }
+
+      await history.addBatch([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'native-shared-after-rollback' }],
+        },
+      ]);
+      await drain(agent.stream('native-A-after-rollback'));
+      await drain(sibling.stream('native-B-after-rollback'));
+      await agent.session.flushRecording();
+      await sibling.session.flushRecording();
+      const a = await nativeRows(pathA);
+      const b = await nativeRows(pathB);
+      expect(a).toHaveLength(4);
+      expect(b).toHaveLength(4);
+      expect(a[0]).toStrictEqual(before[0]);
+      expect(b[0]).toStrictEqual(before[0]);
+      expect(rowTexts(a)).toContain('native-shared-after-rollback');
+      expect(rowTexts(b)).toContain('native-shared-after-rollback');
+      expect(rowTexts(a)).toContain('native-A-after-rollback');
+      expect(rowTexts(b)).toContain('native-B-after-rollback');
+      expect(rowTexts(a)).not.toContain('native-B-after-rollback');
+      expect(rowTexts(b)).not.toContain('native-A-after-rollback');
+      await agent.session.setRecording({ enabled: false });
+      await sibling.session.setRecording({ enabled: false });
+      expect(await nativeRows(pathA)).toStrictEqual(a);
+      expect(await nativeRows(pathB)).toStrictEqual(b);
     });
   }, 30000);
 });
