@@ -1,0 +1,292 @@
+{
+  "created": "2026-10-19T19:33:37.978992+00:00",
+  "reason": "External volume 388 MiB free; only explicit closed run-owned W21 large-row generated journals. lsof +D fixtures found no open handles. Active W22 uses separate recorded system-temp roots.",
+  "destination": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f",
+  "durability": "System temp preservation is not permanent archival storage. Logs, source hashes, code and notes remain workspace-local.",
+  "preflight": "First preflight moved nothing: case-xv16iX contains a lock in addition to journal. It was excluded, untouched; fourteen journal-only directories selected.",
+  "status": "complete",
+  "entries": [
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-OUwMIZ",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-OUwMIZ",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-21-34-b2083fc8-5d75-4df2-8243-8ab409b21b0f-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "69cdccc74f5d224c9213c7400491e002bca13db8a69bab7e345fda12efcfd986"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-21-34-b2083fc8-5d75-4df2-8243-8ab409b21b0f-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "69cdccc74f5d224c9213c7400491e002bca13db8a69bab7e345fda12efcfd986"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-bsrz2w",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-bsrz2w",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T15-54-48-e5bf0f7c-a479-46ff-8c95-87d1cc1fc8a8-service-larg.llxj",
+          "bytes": 262152447,
+          "sha256": "5684ed08f22f813963f33d2e50283e31fe401ec17f1b3938d7575a5d7d834656"
+        }
+      ],
+      "bytes": 262152447,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T15-54-48-e5bf0f7c-a479-46ff-8c95-87d1cc1fc8a8-service-larg.llxj",
+          "bytes": 262152447,
+          "sha256": "5684ed08f22f813963f33d2e50283e31fe401ec17f1b3938d7575a5d7d834656"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-InsnFH",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-InsnFH",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-03-20-7dad7cb1-1f13-4237-b2fa-0bac3178eba1-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "c75a524cb15279b6dd45330dbc9d9318e7baeff407cc901e2c1a27fdd030afe4"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-03-20-7dad7cb1-1f13-4237-b2fa-0bac3178eba1-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "c75a524cb15279b6dd45330dbc9d9318e7baeff407cc901e2c1a27fdd030afe4"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-urQEDk",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-urQEDk",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-21-26-8792c782-56f0-4a0c-9135-202de9c9c246-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "2f31ffb9954e9907695975de9c1ca92e739134a01ef11d4070d28b3831889aaa"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-21-26-8792c782-56f0-4a0c-9135-202de9c9c246-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "2f31ffb9954e9907695975de9c1ca92e739134a01ef11d4070d28b3831889aaa"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-QNL6ec",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-QNL6ec",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-05-44-043947cc-0913-4474-924b-48393f8c7703-service-larg.llxj",
+          "bytes": 262148424,
+          "sha256": "c8a3378a71538a6ff876a49242406253c4ae866838e57a76b816191f73f42163"
+        }
+      ],
+      "bytes": 262148424,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-05-44-043947cc-0913-4474-924b-48393f8c7703-service-larg.llxj",
+          "bytes": 262148424,
+          "sha256": "c8a3378a71538a6ff876a49242406253c4ae866838e57a76b816191f73f42163"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-JEmbwG",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-JEmbwG",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-07-38-30b44f39-17ad-4fa4-b0ce-57b30e2ea008-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "65baa82656666069fce2b70be16c8cfa5d3db54a4ec1d8ba686603afb3f08bac"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-07-38-30b44f39-17ad-4fa4-b0ce-57b30e2ea008-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "65baa82656666069fce2b70be16c8cfa5d3db54a4ec1d8ba686603afb3f08bac"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-ZRGzSV",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-ZRGzSV",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-07-31-ac98ab5a-7057-4ea6-8c1a-3140b77d17d2-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "e57b81d85058b73feaa38146e08b374e59d45de92865ba62d9b9e8d533080ca4"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-07-31-ac98ab5a-7057-4ea6-8c1a-3140b77d17d2-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "e57b81d85058b73feaa38146e08b374e59d45de92865ba62d9b9e8d533080ca4"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-Wqk0u6",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-Wqk0u6",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-00-07-2dc8f8f5-053e-4ce1-85db-f84513206d4e-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "f70f66c9115604c1194ef3e09f7ac2128ac902cc5d454432613909fb694d8d28"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-00-07-2dc8f8f5-053e-4ce1-85db-f84513206d4e-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "f70f66c9115604c1194ef3e09f7ac2128ac902cc5d454432613909fb694d8d28"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-UM0ywF",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-UM0ywF",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-03-13-72fa162a-0d02-413c-a6d0-dcf8302ed631-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "cd0feaa60501d28559fd2b50556394a73aa89fcdec8d4ddb7937f64002c8b1d3"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-03-13-72fa162a-0d02-413c-a6d0-dcf8302ed631-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "cd0feaa60501d28559fd2b50556394a73aa89fcdec8d4ddb7937f64002c8b1d3"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-Glo6pX",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-Glo6pX",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T15-57-33-4ad57d2f-f0d4-44bb-97f7-e169139dec44-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "9002b259a846139d7e761548eb93eb5e31a81ab1e95ad7d8fdcfa2c627918a42"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T15-57-33-4ad57d2f-f0d4-44bb-97f7-e169139dec44-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "9002b259a846139d7e761548eb93eb5e31a81ab1e95ad7d8fdcfa2c627918a42"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-xjjtMV",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-xjjtMV",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T15-52-34-1e4add31-ef52-4879-b599-28bb2cf5fe4e-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "1912b746d853915529b9f81fdeb9381957f2871dcd45fc7e0c1781fb2852453f"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T15-52-34-1e4add31-ef52-4879-b599-28bb2cf5fe4e-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "1912b746d853915529b9f81fdeb9381957f2871dcd45fc7e0c1781fb2852453f"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-JBXovJ",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-JBXovJ",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-25-57-67563337-c24b-4575-90fc-ecfeadd32c67-service-larg.llxj",
+          "bytes": 262148424,
+          "sha256": "edbe737581ec28a988131636ee46e79508a4fcb4c0399e1a94e7047b5a827412"
+        }
+      ],
+      "bytes": 262148424,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-25-57-67563337-c24b-4575-90fc-ecfeadd32c67-service-larg.llxj",
+          "bytes": 262148424,
+          "sha256": "edbe737581ec28a988131636ee46e79508a4fcb4c0399e1a94e7047b5a827412"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-ADc6Ry",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-ADc6Ry",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-09-29-67cd31c5-713c-4545-8734-d3eb4faed33b-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "cba7d7471d1d11e4f4fbf0d5a159ceea4d0bfc3205be8052d6e4a300bfed1888"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-09-29-67cd31c5-713c-4545-8734-d3eb4faed33b-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "cba7d7471d1d11e4f4fbf0d5a159ceea4d0bfc3205be8052d6e4a300bfed1888"
+        }
+      ]
+    },
+    {
+      "from": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w21/service-large-row/fixtures/case-s5dmvV",
+      "to": "/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/case-s5dmvV",
+      "filesBefore": [
+        {
+          "path": "session-2026-10-19T16-09-20-9fa7cca0-42ca-4eef-a9fa-f61e63db4b85-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "d6e200d402a60cc89125a05ea680b5df94a2f541e3da10d3a01ec5b57a576178"
+        }
+      ],
+      "bytes": 262152448,
+      "state": "relocated-sha256-verified-symlinked",
+      "filesAfter": [
+        {
+          "path": "session-2026-10-19T16-09-20-9fa7cca0-42ca-4eef-a9fa-f61e63db4b85-service-larg.llxj",
+          "bytes": 262152448,
+          "sha256": "d6e200d402a60cc89125a05ea680b5df94a2f541e3da10d3a01ec5b57a576178"
+        }
+      ]
+    }
+  ],
+  "completed": "2026-10-19T19:33:53.149753+00:00",
+  "totalBytes": 3670126223
+}

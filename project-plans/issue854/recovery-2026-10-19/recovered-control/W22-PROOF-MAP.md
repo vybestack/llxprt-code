@@ -76,3 +76,45 @@ W23-W26 and later phases remain separate. W26 scratch-candidate removal remains 
 The resulting first 37-file map is 264 passes: 27 native history, 236 shared/public and one explicit old with its native counterpart RUN. `accounting-after-boundary.json` preserves exact case names, source hashes and PIDs. The old comparison carry reruns stay separate. All eight four-path gates pass in `gates-b/`, and all 3317 source hashes plus four committed code blobs match tested bytes. The export scan retains the same three SELF_CONFIRMING and one DUP_ASSERT notices found in gates-a before this edit; no new finding or suppression.
 
 `package-36-55` subsequently passed all twenty selected files. A serial pending-path supervisor now continues twenty-file batches and stops on the first failure, without retries. Current execution-only additions have pending native/shared/old case classification, reported separately in W22-STATUS.md and `current-progress.json`. They are not silently counted as native history contracts. The full inventory includes W11/W17 native runtime regressions and test-bun meta suites; all still require current W22 execution/accounting before closure.
+
+## Profile disposal fixture and disk preservation
+
+Commit `883720445` changes two test/fixture files only. Native selection uses `JournalRecordingService.dispose`; the original test spied only on JSONL `SessionRecordingService.dispose` and waited for an unreachable barrier. The preserved native log shows one case timeout, followed by the existing outer driver termination without JUnit. This interrupted file is RED, despite the summary parser's zero failure count. No production bug was established.
+
+`helpers/recording-disposal-target.ts:7-14` returns the actual selected prototype. `profile-session-admission.behavior.test.ts:44-69` gates its real disposal, forwards the original call and witnesses the retiring session ID. Lines 70-82 retain every original admission/state/success assertion. All six original assertion ASTs and the three-case parameter domain match; one witness was added. The 180000 ms Bun and 300000 ms driver limits are unchanged.
+
+| Final-source proof | PID | Pass | Fail | Classification |
+| --- | ---: | ---: | ---: | --- |
+| `final-profile-disposal-journal`, boundary guard | 30501 | 5 | 0 | Shared/public; guard unchanged |
+| Same batch, profile admission | 30512 | 3 | 0 | Journal-selected shared/public concurrency |
+| `final-profile-disposal-old`, profile comparison | 30727 | 3 | 0 | Supplemental old, outside package totals |
+
+Raw increment: `tmp/854-notes/p4/w22/next-run-20261019-b/`. `assertion-proof.json`, `audit-comparison.json`, `commit-proof.json`, `classification-b.json` and `interrupted-profile-observation.json` retain the bounded evidence. All eight final-source gates passed in `gates-d/`; the earlier formatting failure stays in `gates-c/`. All 3318 captured source hashes match. One baseline SELF_CONFIRMING notice is unchanged, with no policy change or new finding.
+
+Disk proof is the durable `W22-FIXTURE-RELOCATIONS.json`: fourteen explicit closed journal-only fixture directories, 3,670,126,223 bytes, before/after SHA-256 equality and original-path symlinks. Preserved destination: `/private/tmp/llxprt-branch3-preserved-20261019-go6wku4f/`. It is system-temp storage, not a permanent archive. Code, logs, notes and hash evidence stayed workspace-local. Only the separately verified ignored MCP declaration obstruction moved within the workspace after gates, with matching inode and 237 file hashes.
+
+The repaired checkpoint is 125 green package files/1015 passes; 681 paths remained when serial supervisor 31425 resumed. Three profile cases add shared/public classification, not native disk proof: 27 native history, 239 shared/public, one explicit old and 748 pending at that checkpoint. New execution/classification checkpoints belong to W22-STATUS.md and the continuation's progress driver. Full-package W22 remains partial. Review skipped per Andrew 2026-10-09.
+
+## Continued native public-history execution
+
+The first resumed batch completed all twenty files. Five unchanged public-history files contribute 29 additional native-history contracts, with every executed case name, source hash and PID in `next-run-20261019-b/classification-b.json`:
+
+| File under `src/api/__tests__/` | PID | Pass | Native behavior |
+| --- | ---: | ---: | --- |
+| `public-history-deferred.test.ts` | 33010 | 2 | 512/8192 pinned snapshots survive replacement without original object retention |
+| `public-history-faults.test.ts` | 33154 | 4 | Source fault propagation and early-break iterator closure at both scales |
+| `public-history-owner-controls.test.ts` | 33651 | 4 | Borrowed/copy consumer retention exceeds unchanged bounds and releases all owners |
+| `public-history-pause.test.ts` | 34214 | 4 | Stored/active clear while paused retains only the returned row and reads indexed boundaries |
+| `public-history-stream.test.ts` | 34868 | 15 | Exact mixed-row digests, membership pins, backpressure, consumer fault/abort, unused readers, 9 MiB row and deferred replacement |
+
+Reachability is through the real selected recorder and HistoryService in `history-suffix-test-helpers.ts:155-195`. `public-history-fixture.ts` forwards `super.streamRawHistory`, instruments actual row ownership/decodes and injects that service into a real public Agent. Deferred cases use real Agent history directly. No history decoder is replaced. The 512/8192 scales, 440-row/8 MiB bounds, 9 MiB row, active/stored variants and timeouts remain unchanged. The four owner controls are classified as controls, not bounded-production positive proof. A separate `PUBLIC_HISTORY_RETAINING_TRAP=1` launch has not run in this increment and is not claimed here.
+
+This raises classified native history from 27 to 56; shared/public and pending counts remain separate. The next batch stopped on the unchanged Node-export publication test because `core/dist/index.js` was absent after declaration-only builds. Its observed 0 pass/1 fail is preserved in `package-resume-b-0020/`; runtime prerequisite emission is recorded separately, without changing the test or calling the ordinary full-build cleanup path.
+
+Direct runtime compilation through the existing build configs passed without a clean stage (40268), followed by the existing MCP asset copier. The unchanged Node-export test then passed (41617), same SHA-256, and adds one shared/public publication case. Generated runtime outputs remain intact; 3318 source hashes still match. Supervisor 42344 resumed only the new 658-path remainder in `package-resume-c-NNNN` batches. At `2026-10-19T19:47:29.643Z`, execution was 149 green files/1186 passes, zero current red/skips, 657 uncompleted files; classification was 56 native history, 240 shared/public, one explicit old and 889 pending. `next-run-20261019-b/final-checkpoint.json` freezes that bounded state; W22-STATUS.md identifies current-file and pending-path sources. No full-package claim follows.
+
+## Current unresolved facade cluster
+
+At `2026-10-19T19:50:07.781Z`, supervisor 42344 had stopped at `recording-facade-chat-channel.behavior.test.ts` (42825), two pass/two fail. All supervisor/driver/child PIDs are absent. Failures at lines 136 and 246-248 expect a JSONL purge-event marker in native bytes; `recordedHistoryPersistence.ts:84-91` emits that event only for JSONL. No product defect is established by those assertions, and the negative-marker pass is not native isolation proof. No fix or old pin has been made. Map all four original cases to actual native facade/history/disk semantics before repair, preserving their original limits and old assertions where justified.
+
+Latest exact package state is 151 completed files: 150 green, one red; 1195 passes/two failures/zero skips; 655 unexecuted paths. Passing-case classification: 56 native history, 240 shared/public, one explicit old, 898 pending. Frozen evidence/continuation: `next-run-20261019-b/final-stopped-checkpoint.json`, `next-root-cluster.json`, current pending list and W22-STATUS.md. Earlier running counts above are historical checkpoints. W22 is partial; there is no live sweep.
