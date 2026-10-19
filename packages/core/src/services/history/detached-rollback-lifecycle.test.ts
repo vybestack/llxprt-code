@@ -5,47 +5,62 @@ import type { IContent } from './IContent.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
-  detachedDurableDigest,
   detachedRows,
   detachedRow,
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
+import {
+  withDetachedContractFixture,
+  withNativeDetachedFixture,
+} from './__tests__/support/detached-contract-fixture.js';
+import type { HistoryBackend } from './historyBackendSelect.js';
 
-describe('detached cleanup error ordering', () => {
-  it('reports primary failure before scratch close failure while releasing all owners', async () => {
-    await withDetachedFixture(async ({ history, owners }) => {
-      const failure = new Error('transform failure');
-      const cleanupFailure = new Error('scratch close failure');
-      const close = fs.closeSync;
-      let armed = false;
-      const closing = spyOn(fs, 'closeSync').mockImplementation((fd): void => {
-        close(fd);
-        if (armed) {
-          armed = false;
-          throw cleanupFailure;
-        }
-      });
-      let result: unknown;
-      try {
-        result = await rejectedValue(
-          history.detachedValues.transform(async (_source, sink) => {
-            await sink.appendValue(detachedRow(0));
-            armed = true;
-            throw failure;
-          }),
-        );
-      } finally {
-        closing.mockRestore();
-      }
-      expect(result).toBeInstanceOf(AggregateError);
-      if (!(result instanceof AggregateError))
-        throw new Error('Expected aggregate');
-      expect(result.errors[0]).toBe(failure);
-      expect(owners.snapshot().liveRows).toBe(0);
+const backends: readonly HistoryBackend[] = ['old', 'journal'];
+
+describe.each([...backends])(
+  'detached cleanup error ordering on %s',
+  (backend) => {
+    it('reports primary failure before scratch close failure while releasing all owners', async () => {
+      await withDetachedContractFixture(
+        backend,
+        async ({ history, owners }) => {
+          const failure = new Error('transform failure');
+          const cleanupFailure = new Error('scratch close failure');
+          const close = fs.closeSync;
+          let armed = false;
+          const closing = spyOn(fs, 'closeSync').mockImplementation(
+            (fd): void => {
+              close(fd);
+              if (armed) {
+                armed = false;
+                throw cleanupFailure;
+              }
+            },
+          );
+          let result: unknown;
+          try {
+            result = await rejectedValue(
+              history.detachedValues.transform(async (_source, sink) => {
+                await sink.appendValue(detachedRow(0));
+                armed = true;
+                throw failure;
+              }),
+            );
+          } finally {
+            closing.mockRestore();
+          }
+          expect(result).toBeInstanceOf(AggregateError);
+          if (!(result instanceof AggregateError))
+            throw new Error('Expected aggregate');
+          expect(result.errors[0]).toBe(failure);
+          expect(result.errors[1]).toBe(cleanupFailure);
+          expect(owners.snapshot().liveRows).toBe(0);
+        },
+      );
     });
-  });
-});
+  },
+);
 
 describe('detached resource lifecycle', () => {
   for (const file of ['rows', 'index', 'markers']) {
@@ -88,9 +103,9 @@ describe('detached resource lifecycle', () => {
   }
 });
 
-describe('detached cursor lifecycle', () => {
+describe.each([...backends])('detached cursor lifecycle on %s', (backend) => {
   it('closes a source cursor that escapes its transform before acknowledgement', async () => {
-    await withDetachedFixture(async ({ history, owners }) => {
+    await withDetachedContractFixture(backend, async ({ history, owners }) => {
       await history.detachedValues.replace(detachedRows(8));
       let cursor: AsyncIterator<IContent> | undefined;
       let ackOwners = -1;
@@ -118,38 +133,84 @@ describe('detached cursor lifecycle', () => {
   });
 
   it('returns a cancelled submitted iterator without altering previous history', async () => {
-    await withDetachedFixture(async ({ history, recorder, owners }) => {
+    await withDetachedContractFixture(
+      backend,
+      async ({ history, durable, owners }) => {
+        await history.detachedValues.replace(detachedRows(3));
+        const controller = new AbortController();
+        const failure = new Error('cancel capture');
+        let returned = false;
+        const submitted = async function* (): AsyncGenerator<
+          IContent,
+          void,
+          unknown
+        > {
+          try {
+            yield detachedRow(8);
+            controller.abort(failure);
+            yield detachedRow(9);
+          } finally {
+            returned = true;
+          }
+        };
+        expect(
+          await rejectedValue(
+            history.detachedValues.replace(submitted(), undefined, {
+              signal: controller.signal,
+            }),
+          ),
+        ).toBe(failure);
+        expect(returned).toBe(true);
+        const expected = await detachedDigest(detachedRows(3));
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          expected,
+        );
+        expect(await durable()).toStrictEqual(expected);
+        expect(owners.snapshot().liveRows).toBe(0);
+      },
+    );
+  });
+});
+
+describe('native detached resource acquisition', () => {
+  it('releases submitted array owners when the span index cannot be opened and preserves the durable prior rows', async () => {
+    await withNativeDetachedFixture(async ({ history, owners, durable }) => {
       await history.detachedValues.replace(detachedRows(3));
-      const controller = new AbortController();
-      const failure = new Error('cancel capture');
-      let returned = false;
-      const submitted = async function* (): AsyncGenerator<
-        IContent,
-        void,
-        unknown
-      > {
-        try {
-          yield detachedRow(8);
-          controller.abort(failure);
-          yield detachedRow(9);
-        } finally {
-          returned = true;
-        }
-      };
+      const failure = new Error('native span acquisition failed');
+      const before = fs.readdirSync(getScratchRoot());
+      const open = fs.openSync;
+      const fault = spyOn(fs, 'openSync').mockImplementation(
+        (path, flags, mode) => {
+          if (String(path).endsWith('/intervals')) throw failure;
+          return open(path, flags, mode);
+        },
+      );
+      let result: unknown;
+      try {
+        result = await rejectedValue(
+          history.detachedValues.replace([detachedRow(8)]),
+        );
+      } finally {
+        fault.mockRestore();
+      }
+      expect(result).toBe(failure);
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(owners.snapshot().liveSerializedBytes).toBe(0);
       expect(
-        await rejectedValue(
-          history.detachedValues.replace(submitted(), undefined, {
-            signal: controller.signal,
-          }),
-        ),
-      ).toBe(failure);
-      expect(returned).toBe(true);
+        fs
+          .readdirSync(getScratchRoot())
+          .filter(
+            (name) =>
+              name.startsWith('llxprt-resolver-') && !before.includes(name),
+          ),
+      ).toStrictEqual([]);
       const expected = await detachedDigest(detachedRows(3));
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
       );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-      expect(owners.snapshot().liveRows).toBe(0);
+      expect(await durable()).toStrictEqual(expected);
+      await history.detachedValues.replace(detachedRows(1));
+      expect(history.getTotalTokens()).toBe(4);
     });
   });
 });

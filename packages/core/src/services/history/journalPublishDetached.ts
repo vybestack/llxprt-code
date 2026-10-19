@@ -42,12 +42,15 @@ export async function publishDetachedOnJournal(
   modelName: string | undefined,
   options: DetachedHistoryOptions,
 ): Promise<void> {
-  const snapshot = await store.settledSnapshot(
-    () => host.waitForTokenUpdates(),
-    options.signal,
-  );
-  const publication = new JournalDetachedPublication(store);
+  let snapshot: VersionSnapshot | undefined;
+  let publication: JournalDetachedPublication | undefined;
+  let failure: { error: unknown } | undefined;
   try {
+    snapshot = await store.settledSnapshot(
+      () => host.waitForTokenUpdates(),
+      options.signal,
+    );
+    publication = new JournalDetachedPublication(store);
     await publishOver(
       snapshot,
       publication,
@@ -57,10 +60,27 @@ export async function publishDetachedOnJournal(
       modelName,
       options,
     );
-  } finally {
-    snapshot.close();
-    await publication.release();
+  } catch (error) {
+    failure = { error };
   }
+  task.transform = undefined;
+  const failures: unknown[] = [];
+  for (const close of [() => snapshot?.close(), () => task.dispose?.()]) {
+    try {
+      close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  try {
+    await publication?.release();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failure !== undefined)
+    throw historyMutationFailure(failure.error, failures);
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Detached publication cleanup failed');
 }
 
 async function publishOver(
@@ -138,7 +158,8 @@ async function publishOver(
     scope.close(false);
   }
   const closing = closeTask(task, densitySpans);
-  if (failure !== undefined) throw failure.error;
+  if (failure !== undefined)
+    throw historyMutationFailure(failure.error, closing);
   if (closing.length > 0)
     throw new AggregateError(closing, 'Detached mutation cleanup failed');
 }
@@ -337,13 +358,10 @@ function closeTask(
   densitySpans: DensitySpanRows,
 ): unknown[] {
   task.transform = undefined;
-  const failures: unknown[] = [];
-  for (const close of [() => task.dispose?.(), () => densitySpans.close()]) {
-    try {
-      close();
-    } catch (error) {
-      failures.push(error);
-    }
+  try {
+    densitySpans.close();
+    return [];
+  } catch (error) {
+    return [error];
   }
-  return failures;
 }

@@ -58,8 +58,30 @@ async function cancelled(kind: 'checkpoint' | 'transform'): Promise<void> {
 }
 
 const kinds: Array<'checkpoint' | 'transform'> = ['checkpoint', 'transform'];
-
 describe('native detached cancellation before mutation', () => {
+  it('releases borrowed array inputs when capture is already cancelled', async () => {
+    await withNativeDetachedFixture(async (fixture) => {
+      await fixture.history.detachedValues.replace(values(1));
+      const failure = new Error('cancel before native array capture');
+      const controller = new AbortController();
+      controller.abort(failure);
+      await expect(
+        fixture.history.detachedValues.replace([suffixRow(0)], undefined, {
+          signal: controller.signal,
+        }),
+      ).rejects.toBe(failure);
+      expect(fixture.owners.snapshot().acquisitions).toBeGreaterThan(0);
+      expect(fixture.owners.snapshot().liveRows).toBe(0);
+      expect(fixture.owners.snapshot().liveSerializedBytes).toBe(0);
+      expect(await fixture.durable()).toStrictEqual(
+        await detachedDigest(values(1)),
+      );
+      await fixture.history.detachedValues.replace(values(2));
+      expect(await fixture.durable()).toStrictEqual(
+        await detachedDigest(values(2)),
+      );
+    });
+  });
   it.each(kinds)(
     'cancels pending %s without waiting for the original writer acknowledgement, then reuses the service',
     async (kind) => {
