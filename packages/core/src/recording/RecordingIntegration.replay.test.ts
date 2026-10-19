@@ -139,7 +139,7 @@ async function withFreshHarness(
     }),
   );
   const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({ backend: 'old' });
   const emitter = historyEmitter(historyService);
 
   try {
@@ -746,7 +746,7 @@ async function r21(): Promise<void> {
       }),
       async (messages) => {
         await withFreshHarness(async (harness) => {
-          const secondHistory = new HistoryService();
+          const secondHistory = new HistoryService({ backend: 'old' });
 
           await harness.integration.subscribeToJournal(harness.historyService);
           await harness.integration.subscribeToJournal(secondHistory);
@@ -921,7 +921,7 @@ async function beforeEachRecordingReplay(): Promise<void> {
 
   recordingService = new SessionRecordingService(makeConfig(chatsDir));
   integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService();
+  historyService = new HistoryService({ backend: 'old' });
   emitter = historyEmitter(historyService);
 }
 

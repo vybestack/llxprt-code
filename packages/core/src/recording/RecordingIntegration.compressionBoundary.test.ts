@@ -243,7 +243,7 @@ async function createHarness(): Promise<RecordingHarness> {
   await fs.mkdir(chatsDir, { recursive: true });
   const recordingService = new SessionRecordingService(makeConfig(chatsDir));
   const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService();
+  const historyService = new HistoryService({ backend: 'old' });
   await integration.subscribeToJournal(historyService);
   return {
     tempDir,
@@ -531,7 +531,10 @@ async function testRecordingCompressionBoundary07(): Promise<void> {
   );
   resumedRecording.initializeForResume(sessionPath, replayed.lastSeq);
   const resumedIntegration = new RecordingIntegration(resumedRecording);
-  const resumedHistory = new HistoryService({ recording: resumedRecording });
+  const resumedHistory = new HistoryService({
+    backend: 'old',
+    recording: resumedRecording,
+  });
   await resumedIntegration.subscribeToJournal(resumedHistory);
 
   try {
@@ -563,7 +566,7 @@ async function testRecordingCompressionBoundary08(): Promise<void> {
 }
 
 async function testRecordingCompressionBoundary09(): Promise<void> {
-  const replacementService = new HistoryService();
+  const replacementService = new HistoryService({ backend: 'old' });
   await harness.integration.subscribeToJournal(replacementService);
 
   try {
@@ -619,7 +622,7 @@ async function resumeHarnessSession(
   const recording = new SessionRecordingService(makeConfig(harness.chatsDir));
   recording.initializeForResume(sessionPath, replayed.lastSeq);
   const integration = new RecordingIntegration(recording);
-  const history = new HistoryService({ recording });
+  const history = new HistoryService({ backend: 'old', recording });
   await integration.subscribeToJournal(history);
   return { resumed: { recording, integration, history }, replayed };
 }

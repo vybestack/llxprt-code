@@ -204,8 +204,8 @@ describe('replace transaction interleaving', () => {
     it('keeps the file readable when a foreign write lands inside a history attachment', async () => {
       const recording = new InterleavingRecording(makeConfig());
       const integration = new RecordingIntegration(recording);
-      const first = new HistoryService();
-      const second = new HistoryService();
+      const first = new HistoryService({ backend: 'old' });
+      const second = new HistoryService({ backend: 'old' });
       try {
         await integration.subscribeToJournal(first);
         first.add(text('first-user'));
@@ -239,7 +239,7 @@ describe('replace transaction interleaving', () => {
 
       class ObservedHistory extends HistoryService {
         constructor(private readonly name: string) {
-          super();
+          super({ backend: 'old' });
         }
 
         override async detachJournal(
