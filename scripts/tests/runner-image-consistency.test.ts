@@ -174,6 +174,10 @@ describe('runner image consistency (#2688)', () => {
       .filter(([, files]) => files.length === 1)
       .map(([image, files]) => `${image} used only by ${files[0]}`);
 
-    expect(orphans).toStrictEqual(['macos-latest used only by nightly.yml']);
+    expect(orphans).toStrictEqual([
+      'macos-latest used only by nightly.yml',
+      'macos-15 used only by nightly.yml',
+      'macos-15-intel used only by nightly.yml',
+    ]);
   });
 });

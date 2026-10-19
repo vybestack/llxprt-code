@@ -785,10 +785,8 @@ jobs:
           fi
           TARGET_SHA="$(git rev-parse "${TARGET_REF}^{commit}")"
 
-          # Ship the source-containing CLI npm tarball as the release asset
-          # instead of the esbuild bundle (retired by S4). The tarball is
-          # packed in the "Prepare sandbox package tarballs" step above.
-          CLI_TARBALL="packages/cli/dist/vybestack-llxprt-code-${RELEASE_VERSION}.tgz"
+          # Attach the same CLI tarball that passed scripts-disabled consumer proof.
+          CLI_TARBALL="${RUNNER_TEMP}/release-proof/vybestack-llxprt-code-${RELEASE_VERSION}.tgz"
           if [[ ! -f "$CLI_TARBALL" ]]; then
             echo "CLI tarball not found at $CLI_TARBALL; cannot create release" >&2
             exit 1

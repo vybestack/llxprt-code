@@ -721,10 +721,136 @@ were retained. No further review/OCR round was performed.
   recent GitHub main runs skipped agents tests; there is no evidence establishing
   the original full-suite failure as unrelated. Do not treat isolated passes
   as a replacement for a complete passing suite.
+- The fresh complete `npm run test` passes, exit 0, confirmed by
+  `/var/tmp/issue3904-final/test.exit` and `test.log`. This supersedes the earlier
+  incomplete/failing full-suite checkpoints; those historical results remain
+  recorded above.
 - The final rebuilt release-bound consumer proof passes, exit 0, for both
-  local/global script-disabled installs and version/help commands. A fresh full
-  workspace run is still running. Logs are under `/var/tmp/issue3904-final/`.
-- `ocr` is unavailable (`command not found`). The two bounded subagent review
-  rounds and their remediation are recorded above; OCR is not claimed.
-- The authenticated Luna smoke remains blocked by the absent profile. Hosted
-  macOS/Windows execution is pending; neither is claimed as locally verified.
+  local/global script-disabled installs and version/help commands, confirmed by
+  `/var/tmp/issue3904-final/consumer-proof.exit` and `consumer-proof.log`.
+- PR: https://github.com/vybestack/llxprt-code/pull/3905, pushed head
+  `f62d43fa4b1e23df7c22bfd1ca9b97ab6743a1af`.
+- Local `ocr` is unavailable (`command not found`). The two bounded subagent
+  review rounds and their remediation are recorded above; no third review was
+  started. Hosted OCR workflow 39329620797 reports success, but its report says
+  LLM preflight failed with HTTP 401 (expired/incorrect token), exit 1 and zero
+  review tokens. Neither local nor hosted OCR completion is claimed.
+- The authenticated Luna smoke remains blocked by the absent profile. No
+  credentials or profiles were created or modified. Hosted macOS execution is
+  unverified. The manually dispatched Windows installed-command proof for this
+  exact head is run 39329774447; its result is recorded below when available.
+
+## PR CI/review remediation checkpoint (2026-10-19)
+
+- CodeRabbit completed its review with one actionable outside-diff finding at
+  `.github/workflows/release.yml:791`: attach the proven CLI tarball to the GitHub
+  release rather than a separately packed workspace tarball. No actionable
+  inline threads were returned. The local workflow now selects the release-proof
+  artifact; sandbox tarballs are unchanged. The real shell-step harness now
+  supplies the proven artifact and rejects an unproven workspace repack when
+  proof is missing. Before the fix: 2 pass, 6 fail. After: all 8 harness cases pass.
+- Hosted Windows proof was explicitly dispatched for the pushed PR head:
+  https://github.com/vybestack/llxprt-code/actions/runs/39329774447.
+  It **failed**, before installed-command execution, because the helper parsed
+  merged stdout/stderr as JSON. Downloaded diagnostic
+  `/var/tmp/issue3904-final/windows-diagnostic/pack-@vybestack-llxprt-code-tools.log`
+  begins with `npm warn config ignoring workspace config`, then valid JSON.
+  The local fix parses only stdout and retains both streams in diagnostic logs.
+  A real npm workspace `.npmrc` regression reproduces the same JSON exception
+  before the fix and passes on pinned Bun 1.3.14 afterward.
+- Red/green evidence: `/var/tmp/issue3904-final/ci-remediation-pack-{red,green}.log`,
+  `ci-remediation-release-red.log`, and `ci-remediation-focused.log`. Focused
+  release/tag/publication/Windows workflow suites: 73 pass, 0 fail. The npm
+  warning regression separately reports 1 pass, 0 fail. Prettier and
+  `git diff --check` pass for the narrow changes.
+- Serialized post-remediation full verification is running under managed job
+  `shell_6e64152e6ebc`, logs and per-command exit files at
+  `/var/tmp/issue3904-ci-remediation/`. This includes root typecheck/lint/format/
+  build, Luna smoke, fresh release consumer proof, and full tests. Earlier green
+  full-suite results apply to the pushed head, not these uncommitted fixes.
+- No third broad review was initiated. No commit/push/merge or `.llxprt/`
+  modification was performed. Hosted Windows must be rerun after the foreground
+  commits/pushes the fixes; the failed hosted run is not a Windows pass.
+
+### Observed post-remediation checks and remaining hosted failures
+
+- Root lint (all 18 groups), format, and build each pass, exit 0, in
+  `/var/tmp/issue3904-ci-remediation/{lint,format,build}.{log,exit}`.
+- Root typecheck initially exits 2 for nullable `child.stdout` in the new pipe
+  handling. An explicit failure/cleanup guard corrects it. The final scripts
+  TypeScript project passes (`scripts-typecheck-final.exit`, 0); another complete
+  root typecheck after that correction is not established.
+- Fresh faithful Linux local/global scripts-disabled consumer proof passes,
+  exit 0 (`consumer-proof.log` and `consumer-proof.exit` in the remediation
+  evidence directory). Fresh full `npm run test` has now started under the
+  existing serialized job; no final full-suite result is claimed yet.
+- Final pinned-Bun release/workflow suites: 73 pass, 0 fail
+  (`workflow-final.log`). Final release-bound helper behavior subset: 4 pass,
+  1 opt-in skip, 0 fail (`helper-final.log`). A broader legacy release-install
+  attempt timed out after 110 seconds (`focused-final.log`, `focused-final.status`);
+  its detached fixture group was terminated, not counted as passing.
+- Test-audit scan exits 0. The changed tests have no new restricted findings;
+  the legacy helper-export assertion retains its existing STRUCTURE_ONLY entry.
+- Luna again exits 1 because the profile is absent (`luna.log`); no profile or
+  credential changes were made. Hosted OCR remains unavailable despite its
+  successful workflow conclusion, and the LLxprt walkthrough reports unavailable.
+- Hosted agents job 118324936780 fails:
+  https://github.com/vybestack/llxprt-code/actions/runs/39329620856/job/118324936780.
+  Its log reports the activation media-owner teardown rejection test failing,
+  and `high-density-compress-helpers.test.ts` producing no report despite exit 0.
+  Both files were rerun together locally on pinned Bun: 2 tests pass, 0 fail;
+  the compression file defines helpers but runs no tests. This local result does
+  not clear the CI failure or establish it as unrelated. Raw evidence is
+  `hosted-agents.log`, `hosted-agents-focused.log` and its exit file.
+- Hosted E2E (both sandbox:none and sandbox:docker), Interactive UI, CodeQL,
+  Windows test-infra gate, and the CLI/core/providers/rest shards pass. The
+  Windows **consumer proof** still fails as recorded above; test-infra passing
+  must not be confused with installed CMD/PowerShell proof passing. Main CI
+  scripts and SecureStore checks are still pending at this checkpoint.
+- CodeRabbit finding/action and Windows evidence were posted to the PR:
+  https://github.com/vybestack/llxprt-code/pull/3905#issuecomment-6278225414.
+  No actionable inline threads exist; the outside-diff finding remains pending
+  delivery until the foreground commits/pushes the local fix. No merge performed.
+
+## Hosted CI failure remediation
+
+- The hosted agents teardown failure was reproduced by delaying observation of
+  its concurrently rejecting cleanup promise. Observe both operation promises
+  with `Promise.allSettled` before releasing the test gate, retaining the
+  existing rejection and filesystem assertions. No production lifetime behavior
+  changed. Pinned Bun passes six paired runs with the neighboring cleanup suite.
+- Rename the helper-only compression file from `.test.ts` to `.ts` and update
+  its real test import. Its contents are unchanged. Add a discovery regression
+  proving compression behavior remains scheduled and the empty helper suite does
+  not. No runner exclusions or discovery implementation changes.
+- The completed hosted scripts failure is the exact runner-image expectation:
+  add the deliberately covered Intel/ARM macOS nightly images. Other sharing
+  enforcement remains unchanged.
+- Pinned Bun focused checks: owner/compression 26 pass; discovery/image guards
+  18 pass. Scoped typechecks, lint, formatting, audit and whitespace checks pass.
+  The complete root typecheck after stdout handling also passes.
+- The final serialized post-code cycle completed on 2026-10-19 at 22:25 UTC:
+  root typecheck, all 18 lint groups, format, and build each exit 0, recorded in
+  `/var/tmp/issue3904-final-ci/{typecheck,lint,format,build}.{log,exit}`.
+  The cycle's final `git diff --check` also passes. Formatting introduced no
+  unrelated worktree changes.
+- The existing complete `npm run test` job `shell_6e64152e6ebc` is still running
+  at this commit checkpoint, now in the 822-file CLI phase. Its providers and
+  Zed ACP phases report 664/664 and 40/40 isolated files passed. The run began
+  before the last small test-only fixes; focused owner/compression and discovery
+  regressions above cover those fixes. No completed full-suite pass is claimed
+  for this remediation. Its definitive result will be
+  `/var/tmp/issue3904-ci-remediation/test.exit` and `test.log`.
+- Per the delivery instruction, proceed with the bounded remediation commit and
+  push after the completed mandated cycle while observing that existing suite.
+  Dispatch a fresh Windows installed-command run on the new pushed head; the
+  previous Windows failure does not count as proof. Hosted PR checks must also
+  complete on that head before any ready-to-merge claim.
+- The fresh Linux local/global scripts-disabled consumer proof remains exit 0
+  in `/var/tmp/issue3904-ci-remediation/consumer-proof.{log,exit}`. Luna remains
+  unavailable because its profile is absent. Local OCR is unavailable; hosted
+  OCR failed preflight with HTTP 401 despite its green workflow conclusion.
+  macOS consumer execution is nightly-only and remains unverified.
+- Logs: `/var/tmp/issue3904-ci-remediation/` and
+  `/var/tmp/issue3904-final-ci/`. These fixes are not a claim the prior failed
+  hosted head is green. No `.llxprt/` or credential/profile edits. No merge.

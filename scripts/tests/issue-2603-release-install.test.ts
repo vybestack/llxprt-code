@@ -8,6 +8,7 @@ import { describe, it, expect } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   chmodSync,
   writeFileSync,
@@ -474,6 +475,48 @@ describe('release-bound artifact graph (issue #3771)', () => {
       });
     expect(() => assertReleaseGraph(bound, workspaceNames)).not.toThrow();
   });
+
+  it('packs release artifacts when npm emits workspace warnings on stderr', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'llxprt-pack-warning-'));
+    try {
+      const built = join(root, 'built');
+      const evidence = join(root, 'evidence');
+      const workspace = join(built, 'packages/probe');
+      mkdirSync(workspace, { recursive: true });
+      mkdirSync(join(built, 'scripts/utils'), { recursive: true });
+      mkdirSync(evidence);
+      writeFileSync(
+        join(built, 'package.json'),
+        JSON.stringify({
+          name: 'release-proof-fixture',
+          version: '1.0.0',
+          private: true,
+          workspaces: ['packages/probe'],
+        }),
+      );
+      writeFileSync(join(built, 'package-lock.json'), '{}');
+      writeFileSync(
+        join(workspace, 'package.json'),
+        JSON.stringify({
+          name: 'release-proof-warning-fixture',
+          version: '1.0.0',
+        }),
+      );
+      writeFileSync(join(workspace, '.npmrc'), 'audit=false\n');
+      const artifacts = await packReleaseArtifacts(built, repoRoot, evidence);
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0]?.manifest.name).toBe('release-proof-warning-fixture');
+      expect(existsSync(artifacts[0]?.tarball ?? '')).toBe(true);
+      expect(
+        readFileSync(
+          join(evidence, 'pack-release-proof-warning-fixture.log'),
+          'utf8',
+        ),
+      ).toContain('ignoring workspace config');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it('never executes consumer lifecycle scripts in local or global release proof installs', async () => {
     const evidence = mkdtempSync(join(tmpdir(), 'llxprt-lifecycle-proof-'));

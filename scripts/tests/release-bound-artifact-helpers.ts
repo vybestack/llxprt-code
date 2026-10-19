@@ -16,6 +16,7 @@ import {
   readFileSync,
   realpathSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -96,6 +97,7 @@ async function command(
   log: string,
 ): Promise<string> {
   const fd = openSync(log, 'w');
+  let stdout = '';
   try {
     await new Promise<void>((resolvePromise, reject) => {
       const invocation =
@@ -105,9 +107,19 @@ async function command(
       const child = spawn(invocation.command, invocation.args, {
         cwd,
         env,
-        stdio: ['ignore', fd, fd],
+        stdio: ['ignore', 'pipe', fd],
         timeout: 600_000,
         windowsVerbatimArguments: executable.toLowerCase().endsWith('cmd.exe'),
+      });
+      if (child.stdout === null) {
+        child.kill();
+        reject(new Error('Command stdout pipe was not created'));
+        return;
+      }
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', (chunk: string) => {
+        stdout += chunk;
+        writeSync(fd, chunk);
       });
       child.once('error', reject);
       child.once('close', (status, signal) => {
@@ -124,7 +136,7 @@ async function command(
   } finally {
     closeSync(fd);
   }
-  return readFileSync(log, 'utf8');
+  return stdout;
 }
 
 export async function packReleaseArtifacts(

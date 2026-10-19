@@ -37,7 +37,7 @@ import {
   resetCallIds,
   resultHistory,
   wordCountEstimateTokens,
-} from './high-density-compress-helpers.test.js';
+} from './high-density-compress-helpers.js';
 
 function collectToolResponses(
   result: StrategyCompressionResult,
