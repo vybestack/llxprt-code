@@ -1,6 +1,8 @@
 # W21 current remaining contracts, 2026-10-19
 
-This status map includes the discovery increment from verified production `88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3` and first proof-document commit `dbb6b27d8`, implemented at `0981cc19d` and `9f176b7ab`. It supersedes earlier queue entries only where the contract below is explicitly accounted for. Historical deleted evidence remains missing.
+**W21's owned, named contract queue is DONE at the bounded scope recorded here.** This is not a full-package, affected-shard or monorepo result. The ten discovery inventory-only files have now actually run, with separate native counterparts and additional fault coverage. See `W21-DISCOVERY-REMAINDER-PROOF.md` and the exact 102-case map in `W21-DISCOVERY-REMAINDER-CASES.md`.
+
+This status includes the discovery fixes at `0981cc19d` and `9f176b7ab`, explicit remaining JSONL fixtures at `786d4cf0d`, and the native allocation-ownership fix at `ba9c1829a`, from verified starting HEAD `6ed0dfbe2`. It supersedes earlier partial/inventory-only status only for the named contracts below. Historical deleted evidence remains missing.
 
 ## Accounted contracts
 
@@ -41,7 +43,9 @@ Final confirmed proof is 66 serial processes, 710 passes, zero failures/skips ac
 
 ## Remaining scope limits
 
-The named bounded W21 discovery remainder is accounted for. This does not establish cumulative W21 full-package closure. Broader integration/front-door/recorder, JSONL first-user-scanner and janitor safety files identified as related but not executed remain inventory-only at their whole-file scope; the discovery branches they call have the native public-boundary coverage mapped in `W21-DISCOVERY-PROOF.md`. No new unverified W21 production contract is claimed complete by referring to those files. The JSONL portable-transfer temporary grammar remains intentionally format-specific.
+There are no remaining unexecuted files in the ten-file W21 discovery remainder. All 102 original cases execute under each outer backend setting; seven explicit old fixtures retain their complete original test AST. Existing native equivalents are reused and RUN. Twenty-two new native cases close the identified pathname, checkpoint metadata, deletion, partial-tool resume and janitor/media safety gaps. Actual collision RED led to the allocation-ownership fix, rather than relabeling native data loss as old-only.
+
+Together with the earlier service defects 1–5, lifecycle/failure-family/public ownership, generated and unstamped replay, referenced-media, service large-row/crash and next-request transport proofs, this closes only W21's owned named gaps. Those prior proofs retain their stated boundaries and their own rejecting controls. This run does not claim to rerun every earlier lane or restore deleted historical logs. No full package, cumulative package inventory, affected-shard execution or monorepo closure follows. The JSONL portable-transfer temporary grammar remains intentionally format-specific.
 
 W23's send/planning-envelope refusal and 40 MiB send are separate from W21's 17/40/200 MiB service persistence and resume proof. W24 still owns whole-product proof and primary-plus-mirror write-amplification measurement, including a measurement-based decision on adopting the attached recorder as primary. The correctness fixtures supply neither a write-budget measurement nor that topology decision. W22-W26 and later phase requirements remain; W25's default flip is not authorized by these results.
 

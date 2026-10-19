@@ -1,5 +1,7 @@
 # W21 discovery inventory and native proofs, 2026-10-19
 
+**Current addendum:** the ten whole-file inventory-only gaps listed at the end of this earlier run are now executed and accounted for by `W21-DISCOVERY-REMAINDER-PROOF.md` and `W21-DISCOVERY-REMAINDER-CASES.md`. The addendum verifies 102 original cases per outer setting, native counterparts, the allocation fix at `ba9c1829a` and remaining native proofs at `05c4bc046`. Earlier execution tables below retain their original scope. W21's owned named contract queue is DONE, without a full-package claim; `W21-REMAINING-CONTRACTS.md` states the current boundary.
+
 The named discovery cluster now has native behavioral and fault proofs. The original 306-candidate list is not a current native-port queue. This pass inventories actual production branches and their test callers, preserves format-specific regressions, and supplies missing native contracts. It does not claim a full-package, affected-shard execution or monorepo result. W22, W23 and W24 remain separate.
 
 Starting production revision was `88dd7f8f00ab3c7e1c6e005673ff001ea25c3aa3`. The four already-staged exact-replay proof documents were committed first at `dbb6b27d8`, after checking status, staged diff, recent history and the absent index lock. No existing lock was deleted. Other recovery artifacts and `.llxprt/` were left untouched.
@@ -147,9 +149,11 @@ Every control restored byte-identically. The eager-row-read control fails the sa
 
 The 239 distinct recorded process IDs are checked in summary.json; 0 remain present. Managed supervisors are checked separately by the task tool. These are new run artifacts, not recovered historical proof.
 
-## Related files not executed in this cluster
+## Related files not executed in the earlier cluster
 
-These are explicit whole-file execution gaps, not silently counted native proof. Recording/integration and transition consumers have their public discovery branches covered by the executed native discovery/resume/checkpoint proofs; their other behavior belongs to the earlier service/recording increments or remains outside this bounded run. The JSONL first-message scanner is an old-format implementation. Janitor safety is broader than the native filename/header/listing branch proved here.
+This table records the earlier run's gaps. All ten have since run, with exact native accounting in `W21-DISCOVERY-REMAINDER-CASES.md`; none remains a current whole-file execution gap in the owned ten-file set.
+
+These were explicit whole-file execution gaps, not silently counted native proof. Recording/integration and transition consumers have their public discovery branches covered by the executed native discovery/resume/checkpoint proofs; their other behavior belongs to the earlier service/recording increments or remains outside this bounded run. The JSONL first-message scanner is an old-format implementation. Janitor safety is broader than the native filename/header/listing branch proved here.
 
 | Related file | Declared case sites in inventory | Classification |
 | --- | --- | --- |
