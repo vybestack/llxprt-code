@@ -162,6 +162,22 @@ describe('interactive Agent owner AppWrapper', () => {
           { timeout: 5000 },
         );
         expect(view.lastFrame()).toContain('Enter - Send message');
+        await agent.agentClient.startChat([
+          {
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: 'live composition history '.repeat(500) },
+            ],
+          },
+        ]);
+        const liveHistory = agent.agentClient.getHistoryService();
+        if (!liveHistory) throw new Error('Missing live composition history');
+        await liveHistory.waitForTokenUpdates();
+        await waitFor(() =>
+          expect(view.lastFrame()).toContain(
+            `${(liveHistory.getTotalTokens() / 1000).toFixed(1)}k/`,
+          ),
+        );
       } finally {
         view.unmount();
       }

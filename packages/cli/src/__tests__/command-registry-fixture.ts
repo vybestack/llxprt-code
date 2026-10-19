@@ -3,6 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { bindCommandRawResume } from '../ui/hooks/commandRawResumeHost.js';
+import { performResume } from '../services/performResume.js';
+import { slashCommandLogger } from '../ui/hooks/slashCommandProcessor.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { bindChatOwnerOperations } from '../ui/commands/chatCommandHost.js';
 import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
@@ -83,7 +86,7 @@ type CommandRegistrationFixture = Pick<
   | 'registerSubagentCommand'
   | 'resumeOwnedCommand'
   | 'replaceCommandHistory'
-  | 'readCommandHistoryService'
+  | 'bindRawCommandResume'
   | 'recordCommandEvent'
   | 'isMcpDiscoveryPending'
   | 'endCommandSession'
@@ -162,7 +165,15 @@ export function createCommandRegistrationFixture(
     registerSubagentCommand: () => fixtureCommand('subagent'),
     resumeOwnedCommand: unavailableOwner,
     replaceCommandHistory: unavailableOwner,
-    readCommandHistoryService: unavailableOwner,
+    bindRawCommandResume: (config, callbacks) =>
+      bindCommandRawResume(
+        config,
+        config?.sessionPersistence,
+        () => agent?.agentClient.getHistoryService() ?? null,
+        callbacks,
+        slashCommandLogger,
+        performResume,
+      ),
     recordCommandEvent: null,
     isMcpDiscoveryPending: () => false,
     endCommandSession: async () => {},

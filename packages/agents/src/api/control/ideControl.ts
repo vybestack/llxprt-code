@@ -7,7 +7,14 @@ import type {
   WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
 
-import type { AgentIdeControl, IdeInfo, IdeStatus } from '../agent.js';
+import type {
+  AgentIdeControl,
+  IdeInfo,
+  IdeStatus,
+  Unsubscribe,
+} from '../agent.js';
+import type { WorkspaceIdeConnection } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 import type { EditorCallbacks } from '../config-types.js';
 import {
   detectIdeFromEnv,
@@ -36,12 +43,88 @@ function toIdeInfo(entry: FakeIdeFixtureEntry): IdeInfo {
 }
 
 export class IdeControl implements AgentIdeControl {
+  private closed = false;
+  private readonly subscriptions = new Set<Unsubscribe>();
+
   constructor(
     private readonly trustOwner: WorkspaceTrustControlPort,
     private readonly ideOwner: WorkspaceIdePort,
     private readonly readModeEnabled: () => boolean,
     private readonly readEditorCallbacks: () => EditorCallbacks,
   ) {}
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error('Agent IDE control is disposed');
+  }
+
+  closeAdmission(): void {
+    this.closed = true;
+    const failures: unknown[] = [];
+    for (const unsubscribe of this.subscriptions) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this.subscriptions.clear();
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'IDE subscriptions cleanup failed');
+  }
+
+  private ownSubscription(unsubscribe: Unsubscribe): Unsubscribe {
+    const release = (): void => {
+      if (this.subscriptions.delete(release)) unsubscribe();
+    };
+    this.subscriptions.add(release);
+    return release;
+  }
+
+  readConnection(): WorkspaceIdeConnection {
+    this.assertOpen();
+    return this.ideOwner.readConnection();
+  }
+
+  readContext(): IdeContext | undefined {
+    this.assertOpen();
+    return this.ideOwner.readContext();
+  }
+
+  readWorkspaceTrust(): boolean | undefined {
+    this.assertOpen();
+    return this.ideOwner.readWorkspaceTrust();
+  }
+
+  subscribeContext(
+    listener: (context: IdeContext | undefined) => void,
+  ): Unsubscribe {
+    this.assertOpen();
+    return this.ownSubscription(this.ideOwner.subscribeContext(listener));
+  }
+
+  subscribeWorkspaceTrust(
+    listener: (trusted: boolean | undefined) => void,
+  ): Unsubscribe {
+    this.assertOpen();
+    return this.ownSubscription(
+      this.ideOwner.subscribeWorkspaceTrust(listener),
+    );
+  }
+
+  subscribeConnection(
+    listener: (connection: WorkspaceIdeConnection) => void,
+  ): Unsubscribe {
+    this.assertOpen();
+    return this.ownSubscription(this.ideOwner.subscribeConnection(listener));
+  }
+
+  async resolveDiff(
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ): Promise<void> {
+    this.assertOpen();
+    await this.ideOwner.resolveDiff(filePath, outcome);
+  }
 
   isTrustedFolder(): boolean {
     return this.trustOwner.isTrustedFolder();
@@ -65,10 +148,12 @@ export class IdeControl implements AgentIdeControl {
     this.ideOwner.setEnabled(enabled);
   }
   async setIdeClientConnected(): Promise<void> {
-    await this.ideOwner.getClient()?.connect();
+    this.assertOpen();
+    await this.ideOwner.connect();
   }
   async setIdeClientDisconnected(): Promise<void> {
-    await this.ideOwner.getClient()?.disconnect();
+    this.assertOpen();
+    await this.ideOwner.disconnect();
   }
 
   /**

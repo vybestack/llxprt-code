@@ -107,8 +107,8 @@ import { useBrowserCatalogCommands } from './hooks/useBrowserCatalogCommands.js'
 import {
   bindOwnerBrowserResume,
   bindRawBrowserResume,
-  bindRawBrowserSession,
 } from './components/browserResumeHost.js';
+import type { bindRawBrowserSession } from './components/browserResumeHost.js';
 import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
 import { useVimMode } from './contexts/VimModeContext.js';
 import { useTodoContext } from './contexts/TodoContext.js';
@@ -137,7 +137,7 @@ export interface AppContainerRuntimeProps
     | 'registerSubagentCommand'
     | 'resumeOwnedCommand'
     | 'replaceCommandHistory'
-    | 'readCommandHistoryService'
+    | 'bindRawCommandResume'
     | 'recordCommandEvent'
     | 'isMcpDiscoveryPending'
     | 'endCommandSession'
@@ -149,9 +149,8 @@ export interface AppContainerRuntimeProps
   appendHistory: AppBootstrapProps['appendHistory'];
   recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
   metrics: SessionMetricUpdates;
-  readTokenHistory: () => ReturnType<
-    Agent['agentClient']['getHistoryService']
-  > | null;
+  subscribeHistoryTokens: AppBootstrapProps['subscribeHistoryTokens'];
+  connectRecordingHistory: Parameters<typeof useBootstrapRuntime>[7];
   readProviderMetrics: AppBootstrapProps['readProviderMetrics'];
   readSessionTokenUsage: AppBootstrapProps['readSessionTokenUsage'];
   historyReads: RegisteredHistoryReads;
@@ -159,12 +158,17 @@ export interface AppContainerRuntimeProps
   readBuiltinCommands: ReadBuiltinCommands;
   loadRegisteredCommands: LoadRegisteredCommands;
   subscribeCommandChanges: SubscribeCommandChanges;
-  uiRuntime: UiRuntime;
+  uiRuntime: Omit<UiRuntime, 'agentClientSource'>;
   slashCommandRuntime: SlashCommandRuntime;
   session: Parameters<typeof useInputBrowserCommands>[0] &
     Parameters<typeof useInputAgentOperations>[10];
   mediaStore: Parameters<typeof useInputBrowserCommands>[4];
-  readClientHistory: Parameters<typeof useInputBrowserCommands>[5];
+  bindRawBrowserSession: (
+    config: Parameters<typeof bindRawBrowserSession>[0],
+    swaps: Parameters<typeof bindRawBrowserSession>[2],
+    logger: Parameters<typeof bindRawBrowserSession>[3],
+  ) => ReturnType<typeof bindRawBrowserSession>;
+  isAgentClientPresent: () => boolean;
   readHistory: Parameters<typeof useInputAgentOperations>[0];
   stream: Parameters<typeof useInputAgentOperations>[1];
   injectSteer: Parameters<typeof useInputAgentOperations>[3];
@@ -331,7 +335,7 @@ function useInputBindings(
     props.recordingOwner,
     recordingSwapCallbacks,
     props.mediaStore,
-    props.readClientHistory,
+    props.bindRawBrowserSession,
     turnStore,
     dialogStore,
     commands.commandContext.ui.clear,
@@ -379,7 +383,7 @@ function useInputBindings(
     ...useInputReadOperations(
       runtime.hooks,
       runtime.app,
-      runtime.agentClientSource,
+      props.isAgentClientPresent,
       runtime.ide,
       runtime.shell,
       runtime.mcp,
@@ -419,7 +423,7 @@ function useAppInputRuntime(
     registerSubagentCommand: props.registerSubagentCommand,
     resumeOwnedCommand: props.resumeOwnedCommand,
     replaceCommandHistory: props.replaceCommandHistory,
-    readCommandHistoryService: props.readCommandHistoryService,
+    bindRawCommandResume: props.bindRawCommandResume,
     recordCommandEvent: props.recordCommandEvent,
     isMcpDiscoveryPending: props.isMcpDiscoveryPending,
     endCommandSession: props.endCommandSession,
@@ -461,7 +465,6 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
   const { uiRuntime, slashCommandRuntime: config, settings, metrics } = props;
   const stores = useAppStores(config);
-  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
   const { recordingIntegrationRef, recordingSwapCallbacks } =
     useRecordingInfrastructure(
       props.initialRecordingService,
@@ -481,6 +484,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       ),
       readProviderMetrics: props.readProviderMetrics,
       readSessionTokenUsage: props.readSessionTokenUsage,
+      subscribeHistoryTokens: props.subscribeHistoryTokens,
       resumedHistory: props.resumedHistory,
       version: props.version,
       memoryController: props.memoryController,
@@ -491,7 +495,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     uiRuntime.shell,
     uiRuntime.ide,
     uiRuntime.app,
-    props.readTokenHistory,
+    props.connectRecordingHistory,
     props.recordingOwner,
     recordingIntegrationRef,
   );
@@ -512,10 +516,10 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     uiRuntime,
     settings,
     clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
-    turnStore,
-    store: dialogStore,
-    terminalStore,
-    settingsStore,
+    turnStore: stores.turnStore,
+    store: stores.dialogStore,
+    terminalStore: stores.terminalStore,
+    settingsStore: stores.settingsStore,
   });
   return renderAppRuntimeView(
     props.runtimeMessageBus,
@@ -528,7 +532,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settings,
     props.startupWarnings,
     layout,
-    useAppCommands(dialogs, input, layout, terminalStore),
+    useAppCommands(dialogs, input, layout, stores.terminalStore),
     stores,
     useTranscriptReader(
       props.recordingOwner,
@@ -602,7 +606,7 @@ function useInputBrowserCommands(
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
   mediaStore: Agent['agentClient']['mediaStore'],
-  readRawHistory: () => ReturnType<Agent['agentClient']['getHistoryService']>,
+  bindRawSession: AppContainerRuntimeProps['bindRawBrowserSession'],
   turnStore: TurnStore,
   dialogStore: DialogStore,
   clear: () => void,
@@ -633,12 +637,7 @@ function useInputBrowserCommands(
       );
     const logger = new DebugLogger('llxprt:ui:dialogmanager');
     return bindRawBrowserResume(
-      bindRawBrowserSession(
-        config,
-        readRawHistory,
-        recordingSwapCallbacks,
-        logger,
-      ),
+      bindRawSession(config, recordingSwapCallbacks, logger),
       () => resolveEmojiFilterMode(config),
       clear,
       turnStore.commands.addItem,
@@ -647,7 +646,7 @@ function useInputBrowserCommands(
     );
   }, [
     session,
-    readRawHistory,
+    bindRawSession,
     config,
     turnStore,
     dialogStore,
@@ -729,7 +728,7 @@ function noop(): void {}
 function useInputReadOperations(
   hooks: UiRuntime['hooks'],
   app: UiRuntime['app'],
-  source: UiRuntime['agentClientSource'],
+  isAgentClientPresent: () => boolean,
   ide: UiRuntime['ide'],
   shell: UiRuntime['shell'],
   mcp: UiRuntime['mcp'],
@@ -741,10 +740,7 @@ function useInputReadOperations(
     readDebugMode,
     endInputHookSession: useBound(hooks, hooks.endHookSession),
     readInitialPrompt: useBound(app, app.getQuestion),
-    isAgentClientPresent: useCallback(
-      () => Boolean(source.getAgentClient()),
-      [source],
-    ),
+    isAgentClientPresent,
     readIdeMode: useBound(ide, ide.getIdeMode),
     readInteractiveShellEnabled: useBound(
       shell,

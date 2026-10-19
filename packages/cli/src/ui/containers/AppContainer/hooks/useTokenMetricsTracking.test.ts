@@ -5,7 +5,10 @@
  */
 
 import { act, useMemo } from 'react';
-import { bindHistoryTokenSubscription } from './historyTokenSubscriptions.js';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './historyTokenSubscriptions.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
@@ -493,7 +496,7 @@ describe('useTokenMetricsTracking', () => {
 
 function useBindings(
   config: ConfigStub,
-  recordingIntegrationRef?: Parameters<typeof bindBootstrapRecordingHistory>[3],
+  recordingIntegrationRef?: Parameters<typeof bindBootstrapRecordingHistory>[2],
   recordingOwner?: 'agent' | 'raw',
 ) {
   const runtime: RuntimeApiStub = useRuntimeApiMock();
@@ -515,8 +518,7 @@ function useBindings(
     subscribeRecordingHistory: useMemo(
       () =>
         bindBootstrapRecordingHistory(
-          readHistory,
-          logger,
+          bindRecordingHistorySubscription(readHistory, logger),
           recordingOwner,
           recordingIntegrationRef,
         ),

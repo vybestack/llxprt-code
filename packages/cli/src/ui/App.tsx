@@ -41,6 +41,15 @@ import { createHeadlessCommandLoader } from '../nonInteractiveBindings.js';
 
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from './containers/AppContainer/hooks/historyTokenSubscriptions.js';
+import { bindRawBrowserSession } from './components/browserResumeHost.js';
+import { bindCommandRawResume } from './hooks/commandRawResumeHost.js';
+import { performResume } from '../services/performResume.js';
+import { slashCommandLogger } from './hooks/slashCommandProcessor.js';
 import { SettingScope } from '../config/settings.js';
 import {
   createCredentialRegistration,
@@ -59,7 +68,7 @@ import {
   createToolkeyCommands,
 } from './hooks/credentialRegistrars.js';
 
-import { Component, useReducer } from 'react';
+import { Component, useReducer, type ReactNode } from 'react';
 import type {
   IContent,
   RecordingIntegration,
@@ -94,7 +103,6 @@ import type {
   SetEphemeralSettingOperation,
   UpdateActiveProviderApiKeyOperation,
 } from './contexts/RuntimeContext.js';
-import type { ReactNode } from 'react';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import {
   ProviderAliasRefreshProvider,
@@ -178,6 +186,23 @@ interface AppProps {
  */
 export class AppWrapper extends Component<AppProps> {
   #captured: AppProps | undefined;
+  #uiSource: UiRuntime | undefined;
+  #uiView: AppContainerProps['uiRuntime'] | undefined;
+  readonly #tokenLogger = new DebugLogger('llxprt:ui:tokentracking');
+  private readonly isAgentClientPresent = (): boolean =>
+    Boolean(this.props.uiRuntime.agentClientSource.getAgentClient());
+  readonly #rawHistory = () => this.props.agent.agentClient.getHistoryService();
+  private readonly readTokenHistory = () =>
+    this.props.agent.agentClient.hasChatInitialized() === true
+      ? this.#rawHistory()
+      : null;
+  private readonly subscribeHistoryTokens: AppContainerProps['subscribeHistoryTokens'] =
+    bindHistoryTokenSubscription(this.readTokenHistory, this.#tokenLogger);
+  private readonly connectRecordingHistory: AppContainerProps['connectRecordingHistory'] =
+    bindRecordingHistorySubscription(this.readTokenHistory, this.#tokenLogger);
+  private readonly bindRawBrowserSession: AppContainerProps['bindRawBrowserSession'] =
+    (config, swaps, logger) =>
+      bindRawBrowserSession(config, this.#rawHistory, swaps, logger);
   #registry:
     | {
         readBuiltinCommands: ReadBuiltinCommands;
@@ -230,15 +255,6 @@ export class AppWrapper extends Component<AppProps> {
   ) => this.props.agent.setApprovalMode(...args);
   private readonly generatePromptContent: AppContainerProps['generatePromptContent'] =
     (...args) => this.props.agent.agentClient.generateContent(...args);
-  private readonly readClientHistory: AppContainerProps['readClientHistory'] =
-    () => this.props.agent.agentClient.getHistoryService();
-  private readonly readTokenHistory: AppContainerProps['readTokenHistory'] =
-    () => {
-      const client = this.props.agent.agentClient;
-      return client.hasChatInitialized() === true
-        ? (client.getHistoryService() ?? null)
-        : null;
-    };
   private readonly readProviderMetrics: AppContainerProps['readProviderMetrics'] =
     () => this.props.agent.providerReads.getActiveProviderMetrics();
   private readonly readSessionTokenUsage: AppContainerProps['readSessionTokenUsage'] =
@@ -416,7 +432,15 @@ export class AppWrapper extends Component<AppProps> {
       ) => {
         await a.setHistory(history);
       },
-      readCommandHistoryService: () => a.agentClient.getHistoryService(),
+      bindRawCommandResume: ((config, callbacks) =>
+        bindCommandRawResume(
+          config,
+          config?.sessionPersistence,
+          () => a.agentClient.getHistoryService(),
+          callbacks,
+          slashCommandLogger,
+          performResume,
+        )) satisfies AppContainerProps['bindRawCommandResume'],
       recordCommandEvent: session.recordRecordingEvent.bind(session),
       isMcpDiscoveryPending: () => a.mcp.discoveryState() === 'pending',
       endCommandSession: a.hooks.triggerSessionEnd.bind(a.hooks),
@@ -706,21 +730,29 @@ export class AppWrapper extends Component<AppProps> {
   private renderAppWithState(
     registerCredentials: CredentialCommandRegistration,
   ): ReactNode {
-    const { agent, ...props } = this.props;
-    if (this.#registry === undefined)
-      throw new Error('Application command discovery was not registered');
-    if (this.#history === undefined)
-      throw new Error('Application history was not registered');
-    if (this.#sessionCommands === undefined)
-      throw new Error('Application session commands were not registered');
+    const { agent, uiRuntime, ...props } = this.props;
+    if (this.#uiSource !== uiRuntime) {
+      const { agentClientSource: _agentClientSource, ...view } = uiRuntime;
+      this.#uiSource = uiRuntime;
+      this.#uiView = view;
+    }
+    if (
+      !this.#uiView ||
+      !this.#registry ||
+      !this.#history ||
+      !this.#sessionCommands
+    )
+      throw new Error('Application operations were not initialized');
     return (
       <AppWithState
         {...props}
+        uiRuntime={this.#uiView}
+        isAgentClientPresent={this.isAgentClientPresent}
         {...this.#registry}
         {...this.#sessionCommands}
         session={agent.session}
         mediaStore={agent.agentClient.mediaStore}
-        readClientHistory={this.readClientHistory}
+        bindRawBrowserSession={this.bindRawBrowserSession}
         readHistory={this.readHistory}
         stream={this.stream}
         appendHistory={this.appendHistory}
@@ -741,7 +773,8 @@ export class AppWrapper extends Component<AppProps> {
         profileDefinitions={agent.workspace.profileDefinitions}
         triggerSessionStart={this.#sessionCommands.startCommandSession}
         recordRecordingEvent={this.#sessionCommands.recordCommandEvent}
-        readTokenHistory={this.readTokenHistory}
+        subscribeHistoryTokens={this.subscribeHistoryTokens}
+        connectRecordingHistory={this.connectRecordingHistory}
         readProviderMetrics={this.readProviderMetrics}
         readSessionTokenUsage={this.readSessionTokenUsage}
         historyReads={this.#history}

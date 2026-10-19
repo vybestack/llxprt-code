@@ -6,6 +6,11 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  bindHistoryTokenSubscription,
+  bindRecordingHistorySubscription,
+} from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -98,6 +103,10 @@ describe('bootstrap captured operation ownership', () => {
         const bootstrap = useBootstrapRuntime(
           {
             version: 'test',
+            subscribeHistoryTokens: bindHistoryTokenSubscription(
+              () => owner.agentClient.getHistoryService(),
+              new DebugLogger('test:bootstrap:tokens'),
+            ),
             readLlxprtMdFileCount: owner.memory.getFileCount.bind(owner.memory),
             readCoreMemoryFileCount: owner.memory.getCoreFileCount.bind(
               owner.memory,
@@ -127,7 +136,10 @@ describe('bootstrap captured operation ownership', () => {
           uiRuntime.shell,
           uiRuntime.ide,
           uiRuntime.app,
-          () => owner.agentClient.getHistoryService() ?? null,
+          bindRecordingHistorySubscription(
+            () => owner.agentClient.getHistoryService(),
+            new DebugLogger('test:bootstrap:recording'),
+          ),
           'agent',
           undefined,
         );

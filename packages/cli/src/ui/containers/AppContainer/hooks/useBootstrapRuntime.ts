@@ -5,16 +5,12 @@
  */
 import { useCallback, useMemo } from 'react';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
 import { registerCleanup } from '../../../../utils/cleanup.js';
 import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './historyTokenSubscriptions.js';
+import type { RecordingHistorySubscription } from './historyTokenSubscriptions.js';
 import {
   useAppBootstrap,
   type AppBootstrapProps,
@@ -23,6 +19,7 @@ import {
 
 type BootstrapInputs = Pick<
   AppBootstrapProps,
+  | 'subscribeHistoryTokens'
   | 'triggerSessionStart'
   | 'appendHistory'
   | 'recordRecordingEvent'
@@ -75,16 +72,12 @@ export function useBootstrapRuntime(
   shell: UiRuntime['shell'],
   ide: UiRuntime['ide'],
   app: UiRuntime['app'],
-  readTokenHistory: Parameters<typeof bindHistoryTokenSubscription>[0],
+  connectRecordingHistory: RecordingHistorySubscription,
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegrationRef:
     | React.MutableRefObject<RecordingIntegration | null>
     | undefined,
 ): AppBootstrapResult {
-  const tokenLogger = useMemo(
-    () => new DebugLogger('llxprt:ui:tokentracking'),
-    [],
-  );
   const recordRecordingEvent = inputs.recordRecordingEvent;
   return useAppBootstrap({
     ...inputs,
@@ -111,26 +104,20 @@ export function useBootstrapRuntime(
       },
       [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
     ),
-    subscribeHistoryTokens: useMemo(
-      () => bindHistoryTokenSubscription(readTokenHistory, tokenLogger),
-      [readTokenHistory, tokenLogger],
-    ),
     subscribeRecordingHistory: useMemo(
       () =>
         bindBootstrapRecordingHistory(
-          readTokenHistory,
-          tokenLogger,
+          connectRecordingHistory,
           recordingOwner,
           recordingIntegrationRef,
         ),
-      [readTokenHistory, tokenLogger, recordingOwner, recordingIntegrationRef],
+      [connectRecordingHistory, recordingOwner, recordingIntegrationRef],
     ),
   });
 }
 
 export function bindBootstrapRecordingHistory(
-  readTokenHistory: Parameters<typeof bindHistoryTokenSubscription>[0],
-  tokenLogger: DebugLogger,
+  connectRecordingHistory: RecordingHistorySubscription,
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegrationRef:
     | React.MutableRefObject<RecordingIntegration | null>
@@ -139,9 +126,6 @@ export function bindBootstrapRecordingHistory(
   return () => {
     if (recordingOwner === 'agent' || !recordingIntegrationRef?.current)
       return () => {};
-    return bindRecordingHistorySubscription(
-      readTokenHistory,
-      tokenLogger,
-    )(recordingIntegrationRef);
+    return connectRecordingHistory(recordingIntegrationRef);
   };
 }

@@ -1252,6 +1252,7 @@ export class AgentImpl extends AgentProviderFileDomain implements Agent {
       () => this.skills.closeAdmission(),
       () => this.workspace.closeAdmission(),
       () => this.session.closeAdmission(),
+      () => this.ide.closeAdmission(),
     ];
   }
 

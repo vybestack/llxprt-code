@@ -43,8 +43,7 @@ import {
   bindCommandHistoryLoader,
   bindResumedHistoryReplay,
 } from './commandHistoryLoaderHost.js';
-import { bindCommandRawResume } from './commandRawResumeHost.js';
-import { performResume } from '../../services/performResume.js';
+import type { bindCommandRawResume } from './commandRawResumeHost.js';
 import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 import { bindCommandErrorRecorder } from './commandErrorRecorderHost.js';
 import type { useHistoryCommandOwners } from './useHistoryCommandOwners.js';
@@ -134,9 +133,10 @@ export interface UseSlashCommandProcessorCoreArgs
   registerSubagentCommand: RegisterSubagentCommand;
   resumeOwnedCommand: ResumeOwnedCommand;
   replaceCommandHistory: Agent['setHistory'];
-  readCommandHistoryService: () => ReturnType<
-    Agent['agentClient']['getHistoryService']
-  >;
+  bindRawCommandResume: (
+    config: CliUiRuntime | null,
+    callbacks: RecordingSwapCallbacks | undefined,
+  ) => ReturnType<typeof bindCommandRawResume>;
   recordCommandEvent: Agent['session']['recordRecordingEvent'] | null;
   isMcpDiscoveryPending: () => boolean;
   endCommandSession: EndCommandSession;
@@ -269,13 +269,9 @@ function buildHandlerDeps(
       args.store.commands.setConfirmationRequest(request);
     },
     recordingIntegration: args.recordingIntegration,
-    resumeRawSession: bindCommandRawResume(
+    resumeRawSession: args.bindRawCommandResume(
       args.config,
-      args.config?.sessionPersistence,
-      args.readCommandHistoryService,
       args.recordingSwapCallbacks,
-      slashCommandLogger,
-      performResume,
     ),
     replayResumedHistory: bindResumedHistoryReplay(
       () => resolveEmojiFilterMode(args.config),
