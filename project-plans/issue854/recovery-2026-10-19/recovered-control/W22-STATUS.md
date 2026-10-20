@@ -4,6 +4,10 @@ Updated 2026-10-20T02:27:25.284Z. WIP finalization only, not review.
 
 **The fourteen middle-out/one-shot request/publication targets are green and source changes are committed. Verification is still running. W22 remains incomplete.** Production `d7e78deae` is preserved. Commits: one-shot fixtures `6a8d4c944`, census source/API tests `f126215be`, media proof `ba487149d`, digest proof `95ca77b0d`.
 
+## Latest process observation, 2026-10-20T02:28:10Z
+
+Positive supervisor 21084 finished at 02:27:31Z, including both six-file supplemental comparisons. Source-control supervisor 21362 and child driver 30110 are running the original-source comparison; the middle-out large-request digest has rejected with different measured SHA-256 values. This is an observed partial RED, not a completed control receipt. Production worktree files `journalRowCodec.ts` and `historyCloneUtils.ts` are temporarily at the original source while that control runs. Restoration has not yet been observed. Supervisor 22669 waits to run final graph/audit and freeze the ledger. Do not overlap work or commit those temporary production changes. The committed WIP proof boundary before this observation is `70d609e4a9a9627699cde25d2ca944653e5cea22`.
+
 ## Accepted target census
 
 **806 = 787 green + 18 red + one unverified**, zero unrun. Exactly ten red and four unverified target paths become green from 773/28/5. All fourteen original target files pass **51 cases per backend**, plus forty codec cases per backend. Their exact-source positive matrices are complete.
