@@ -1,9 +1,6 @@
 family	state	path	pid	source_sha256	batch	pass	fail	skip
-child-ownership-transport	red	packages/agents/src/core/__tests__/childaccept-body.test.ts	25704	1dc75e3b20a43ac52d295b49bf45f276cb0d6073128594fa762f09279d54bc3c	package-resume-g-0250	1	3	0
-child-ownership-transport	red	packages/agents/src/core/__tests__/childaccept.test.ts	25736	cb39afefcf176222a7e71a2e551e66300e03f17c786f0c0e3658f60a7e2a2a1a	package-resume-g-0250	2	1	0
 retained-growth	red	packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts	26066	0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72	package-resume-g-0250	0	1	0
 retained-growth	red	packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts	26089	9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3	package-resume-g-0300	0	1	0
 retained-growth	red	packages/agents/src/core/__tests__/journal-retained-growth.test.ts	26096	d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72	package-resume-g-0300	14	1	0
 send-snapshot-count	red	packages/agents/src/core/__tests__/send-journal-opens.test.ts	26139	700ab6548a4731503980ccad48298a4030de9a686d4b3145bb1ed32e1c52f579	package-resume-g-0300	0	2	0
-child-ownership-transport	red	packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts	26229	0ae76833ac5131283e438033a192a8f4d510a69fb0dd76aafd147b313de204bc	package-resume-g-0300	0	2	0
 runner-summary-accounting	unverified	packages/agents/test-bun/run-bun-tests.issue3253.bun.ts	62524	58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5	package-resume-g-0600	7	0	0
