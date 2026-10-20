@@ -17,25 +17,49 @@ describe('native CLI resume rollback', () => {
     const target = await fixture.agent('cli-fault-target');
     let primaryFailure: unknown;
     try {
+      const targetStore = target.agentClient.mediaStore;
+      const priorStore = fixture.live.agentClient.mediaStore;
+      if (targetStore === undefined || priorStore === undefined)
+        throw new Error('Missing actual CLI media stores');
+      const targetMedia = await targetStore.admit({
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      });
+      const priorMedia = await priorStore.admit({
+        bytes: new Uint8Array([9, 8]),
+        mimeType: 'application/octet-stream',
+        semanticMetadata: {},
+      });
       await target.session.setRecording({ enabled: true });
-      await turn(target, 'target only');
+      await turn(target, 'target only', targetMedia);
       const targetPath = await recording(target);
       const targetBefore = await durable(targetPath);
       await target.dispose();
       await fixture.live.session.setRecording({ enabled: true });
-      await turn(fixture.live, 'prior only');
+      await turn(fixture.live, 'prior only', priorMedia);
       const priorPath = await recording(fixture.live);
       const priorBefore = await durable(priorPath);
       const history = fixture.live.agentClient.getHistoryService();
       if (history === null) throw new Error('Missing actual CLI history');
-      const priorTokens = history.getTotalTokens();
-      const priorRange = history.getContextRange();
+      const before = {
+        prior: priorBefore,
+        target: targetBefore,
+        tokens: history.getTotalTokens(),
+        range: history.getContextRange(),
+      };
       const adopt = history.adoptResumeBoot.bind(history);
       const fault = vi
         .spyOn(history, 'adoptResumeBoot')
         .mockImplementationOnce((recorder, boot, publish) =>
           adopt(recorder, boot, async () => {
             await publish?.();
+            expect(await priorStore.hasReservations(priorMedia.contentId)).toBe(
+              true,
+            );
+            expect(
+              await priorStore.hasReservations(targetMedia.contentId),
+            ).toBe(true);
             expect(fixture.live.session.getRecording().path).toBe(targetPath);
             expect(
               await SessionLockManager.isLocked(
@@ -67,10 +91,17 @@ describe('native CLI resume rollback', () => {
         path: priorPath,
       });
       expect(fixture.live.session.getSessionId()).toBe('cli-fault-current');
-      expect(history.getTotalTokens()).toBe(priorTokens);
-      expect(history.getContextRange()).toStrictEqual(priorRange);
-      expect(await durable(priorPath)).toStrictEqual(priorBefore);
-      expect(await durable(targetPath)).toStrictEqual(targetBefore);
+      expect(history.getTotalTokens()).toBe(before.tokens);
+      expect(history.getContextRange()).toStrictEqual(before.range);
+      expect(await durable(priorPath)).toStrictEqual(before.prior);
+      expect(await durable(targetPath)).toStrictEqual(before.target);
+      expect(await priorStore.hasReservations(priorMedia.contentId)).toBe(true);
+      expect(await priorStore.hasReservations(targetMedia.contentId)).toBe(
+        false,
+      );
+      expect(await priorStore.readVerified(priorMedia)).toStrictEqual(
+        new Uint8Array([9, 8]),
+      );
       expect(
         await SessionLockManager.isLocked(
           dirname(priorPath),
@@ -81,7 +112,7 @@ describe('native CLI resume rollback', () => {
       expect((await durable(await recording(fixture.live))).count).toBe(
         priorBefore.count + 2,
       );
-      expect(await durable(targetPath)).toStrictEqual(targetBefore);
+      expect(await durable(targetPath)).toStrictEqual(before.target);
       await fixture.live.dispose();
       expect(
         (await readdir(dirname(priorPath))).filter((name) =>

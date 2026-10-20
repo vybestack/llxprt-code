@@ -260,6 +260,8 @@ function logDiscarded(
 }
 
 function describeError(error: unknown): string {
+  if (error instanceof AggregateError)
+    return `${error.message}: ${error.errors.map(describeError).join('; ')}`;
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -650,8 +652,7 @@ async function performOwnerSessionResume(
   context: CommandContext,
   action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (agent === null) throw new Error('Session agent is unavailable');
+  const agent = requireSessionAgent(context);
   try {
     const limits = historyLimitsFromSettings(context.services.settings);
     const replay =
@@ -673,7 +674,7 @@ async function performOwnerSessionResume(
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
-      content: error instanceof Error ? error.message : String(error),
+      content: describeError(error),
       timestamp: new Date(),
     });
   }

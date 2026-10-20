@@ -250,7 +250,7 @@ async function bootNewest(
 ): Promise<Booted | { ok: false; error: string }> {
   let firstFailure: string | undefined;
   let sawLocked = false;
-  for (const session of sessions) {
+  for (const session of sessions.filter((entry) => entry.messageCount !== 0)) {
     const lockHandle = await tryLock(request.chatsDir, session.sessionId);
     if (lockHandle === null) {
       sawLocked = true;

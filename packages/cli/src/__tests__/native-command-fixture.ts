@@ -77,9 +77,16 @@ export async function recording(agent: Agent): Promise<string> {
   return path;
 }
 
-export async function turn(agent: Agent, text: string): Promise<void> {
+export async function turn(
+  agent: Agent,
+  text: string,
+  media?: MediaReferenceBlock,
+): Promise<void> {
   let done = false;
-  for await (const event of agent.stream(text)) {
+  for await (const event of agent.stream({
+    speaker: 'human',
+    blocks: [{ type: 'text', text }, ...(media === undefined ? [] : [media])],
+  })) {
     if (event.type === 'error') throw new Error(event.error.message);
     if (event.type === 'done') done = event.reason === 'stop';
   }
@@ -178,7 +185,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
   };
 }
 
-function commandDeps(
+export function commandDeps(
   context: ReturnType<typeof createMockCommandContext>,
   errors: Message[],
 ): SlashCommandHandlerDeps {
