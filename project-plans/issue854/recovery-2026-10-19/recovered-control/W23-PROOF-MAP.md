@@ -1,5 +1,13 @@
 # W23 proof map
 
+## Active sendPeak checkpoint
+
+First cluster source commit: `2f20ada0c50e65e127b89c07957872e26e72b18f`. `W23-SEND-PEAK-CHECKPOINT.json` binds the two completed OpenAI chat measurements, four passes and zero failures/skips, at 2026-10-20T05:23:55Z. Complete bytes/Content-Length and unchanged heap/ArrayBuffer/retained predicates pass. This is separate from frozen corpus parity: the existing sendPeak oracle is computed outside measurement, and its source is disk rows rather than HistoryService.
+
+Driver 88231 is running the fourteen-file serial manifest; current test at the snapshot is PID 89482, Anthropic text-only. Twelve paths remain including that active file. Current state/results, not this dated note, are the live authority. STATUS contains exact paths and managed job ID. Dedicated trap suites are pending; actual positive-assertion failures under trap environments are not yet run. No source edits or overlapping heavy gates occur during this collection.
+
+Native remainder paths and hashes were persisted before any further execution. Prior W21 curated lifecycle/fault test hashes and logs still exist, but the HistoryServiceCore dependency hash differs; these are candidates for targeted execution rather than current-source native passes. Repeated-turn retention reuse additionally has no intervening production source delta: the package diff from `888461db4` to the first-cluster commit names only three tests.
+
 ## First bounded cluster, 2026-10-20
 
 The native bootstrap fixture and raw-history provider wire corpus are green. W23 remains open. Starting HEAD is `f092ca898ede471f1cf6265e59dd402ed45f6b02`; no production code or backend default changed.

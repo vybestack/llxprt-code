@@ -1,5 +1,15 @@
 # W23 bounded integration and provider parity
 
+## SendPeak collection handoff, 2026-10-20T05:23:55Z
+
+First green cluster committed as `2f20ada0c50e65e127b89c07957872e26e72b18f`. A separate fourteen-file sendPeak batch is running serially, with no package source edits or overlapping heavy gates. At this timestamp, two files have complete agreeing raw/JUnit results: OpenAI chat text-only and tool-heavy, **four passes, zero failures/skips**. Both complete byte/Content-Length and unchanged memory predicates pass. Twelve paths remain, including the currently running file.
+
+Live driver **88231**, current test **89482**, `packages/providers/src/__tests__/sendPeak.anthropicTextOnly.test.ts` (index two of fourteen). Managed job: `shell_265985fe87db`. The driver records each next PID/current file immediately and stops at the fourteen-file boundary. Current authority is `tmp/854-notes/p4/w23/run-a/send-peak-a-state.json`; append-only results/process records and per-file logs/XML/measurement summaries remain alongside it. `W23-SEND-PEAK-CHECKPOINT.json` preserves this dated snapshot and every exact path. No automatic retries. Ordinary assertion failures continue; loader/disk failures stop this driver. Do not start another heavy lane or edit package source until the recorded driver reaches its boundary.
+
+These sendPeak suites use independent disk-row inputs, not native HistoryService sources. Their oracle is assembled outside measurement by the existing harness; the frozen-corpus proof remains separate. Dedicated trap suites are in this batch. Running unchanged positive tests with trap environments to obtain actual assertion failures is still required afterward. Do not treat a pending trap as executed.
+
+The exact fifteen-path native remainder is inventoried in `run-a/native-remainder-inventory.json`, not queued. Three repeated-turn files reuse validated prior proof. Two prior W21 curated lifecycle/fault tests retain matching test hashes and executed logs, but HistoryServiceCore changed since that source boundary; no current-source native promotion is made. The remaining suffix/curated/borrowed requirements stay open. No W24, default flip, cleanup, OCR, push or merge.
+
 ## First cluster green, 2026-10-20
 
 The CLI bootstrap fixture and native raw-history provider wire corpus are green. W23 remains open. Starting HEAD verified: `f092ca898ede471f1cf6265e59dd402ed45f6b02`. W22's 806 files/6575 passes remain accumulated evidence, not a fresh final-source whole-package run.
@@ -12,7 +22,7 @@ The new native wire corpus feeds committed HistoryService rows through the exist
 
 Final two-environment matrix: **338 passes, zero failures/skips**. Eight scoped gates pass: both touched declaration builds, both package noemit/test type sets with complete Node/Bun test ambient declarations, zero-warning ESLint, Prettier, dependency-graph validation and AST audit. Touched audit findings are zero. Graph validation is not shard execution. Twenty frozen fixture files match the starting commit.
 
-Repeated-turn retention is reused from the executed W22 native normal/retaining/release proofs after thirty-five matching source/measurement/log/JUnit hash checks. No memory workers were repeated. Exact details and scope: `W23-PROOF-MAP.md`, `W23-FIRST-CLUSTER-PROOF.json`; raw receipts: `tmp/854-notes/p4/w23/run-a/`. All 52 recorded first-cluster driver/test/gate PIDs are absent. No live sweep or restoration is handed off.
+Repeated-turn retention is reused from the executed W22 native normal/retaining/release proofs after thirty-five matching source/measurement/log/JUnit hash checks. No memory workers were repeated. Exact details and scope: `W23-PROOF-MAP.md`, `W23-FIRST-CLUSTER-PROOF.json`; raw receipts: `tmp/854-notes/p4/w23/run-a/`. All 52 recorded first-cluster driver/test/gate PIDs were absent at that cluster's proof publication. The later sendPeak collection is documented above; no restoration is pending.
 
 ## Remaining W23 work
 
