@@ -190,7 +190,7 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       'stop',
     );
 
-    const recordedText = getRecordedHistoryText(historyService);
+    const recordedText = await getRecordedHistoryText(historyService);
     expect(recordedText).toBe('Hello World');
   });
 
@@ -228,9 +228,9 @@ describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
       'stop',
     );
 
-    const thinkingBlocks = getRecordedThinkingBlocks(historyService);
+    const thinkingBlocks = await getRecordedThinkingBlocks(historyService);
     expect(thinkingBlocks).toHaveLength(0);
-    expect(getRecordedHistoryText(historyService)).toBe('visible');
+    expect(await getRecordedHistoryText(historyService)).toBe('visible');
   });
 
   it('syncs prompt token count to history service when usage provided', async () => {

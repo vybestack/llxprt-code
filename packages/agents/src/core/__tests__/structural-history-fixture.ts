@@ -1,4 +1,4 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { afterEach } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -71,8 +71,11 @@ export function humanText(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-export function getRecordedHistoryText(history: HistoryService): string {
-  const all = testHistory(history);
+export async function getRecordedHistoryText(
+  history: HistoryService,
+): Promise<string> {
+  await history.waitForCommit();
+  const all = await collectRawHistory(history);
   return all
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
@@ -81,10 +84,11 @@ export function getRecordedHistoryText(history: HistoryService): string {
     .join('');
 }
 
-export function getRecordedThinkingBlocks(
+export async function getRecordedThinkingBlocks(
   history: HistoryService,
-): Array<{ thought: string; signature?: string }> {
-  return testHistory(history)
+): Promise<Array<{ thought: string; signature?: string }>> {
+  await history.waitForCommit();
+  return (await collectRawHistory(history))
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
     .filter((b) => b.type === 'thinking')

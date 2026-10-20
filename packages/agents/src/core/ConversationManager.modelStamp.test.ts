@@ -1,5 +1,5 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -83,7 +83,6 @@ function buildConversationManager(
     getModels: vi.fn(async () => []),
     getDefaultModel: () => model,
     generateChatCompletion: vi.fn(async function* () {}),
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
   };
   manager.registerProvider(provider);
 
@@ -354,7 +353,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
       buildConversationManager(GENERATING_MODEL));
   });
 
-  it('importInitialHistory does NOT stamp metadata.model on imported AI turns', () => {
+  it('importInitialHistory does NOT stamp metadata.model on imported AI turns', async () => {
     const importedHistory: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'old question' }] },
       {
@@ -365,8 +364,10 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     conversationManager.importInitialHistory(importedHistory, GENERATING_MODEL);
 
-    const all = testHistory(historyService);
+    await historyService.waitForCommit();
+    const all = await collectRawHistory(historyService);
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai?.blocks).toStrictEqual(importedHistory[1].blocks);
 
     // Imported turns have unknown origin and must remain unstamped.
     expect(ai?.metadata?.model).toBeUndefined();
@@ -393,7 +394,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
     });
   });
 
-  it('addHistory does NOT stamp metadata.model on externally-supplied turns', () => {
+  it('addHistory does NOT stamp metadata.model on externally-supplied turns', async () => {
     const externalAiTurn: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'externally supplied model turn' }],
@@ -401,8 +402,10 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     conversationManager.addHistory(externalAiTurn);
 
-    const all = testHistory(historyService);
+    await historyService.waitForCommit();
+    const all = await collectRawHistory(historyService);
     const ai = all.find((c) => c.speaker === 'ai');
+    expect(ai?.blocks).toStrictEqual(externalAiTurn.blocks);
 
     expect(ai?.metadata?.model).toBeUndefined();
     expect(ai?.metadata?.providerBaseURL).toBeUndefined();

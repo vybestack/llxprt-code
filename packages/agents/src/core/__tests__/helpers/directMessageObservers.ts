@@ -21,7 +21,7 @@
  * @requirement:REQ-INT-001.3
  */
 
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
@@ -76,8 +76,13 @@ export function visibleText(result: unknown): string {
  * A deep clone of the committed neutral `HistoryService` state (already
  * `IContent`-based today).
  */
-export function committedHistory(historyService: HistoryService): IContent[] {
-  return testHistory(historyService).map((entry) => structuredClone(entry));
+export async function committedHistory(
+  historyService: HistoryService,
+): Promise<IContent[]> {
+  await historyService.waitForCommit();
+  return (await collectRawHistory(historyService)).map((entry) =>
+    structuredClone(entry),
+  );
 }
 
 export interface NeutralUsageCounts {

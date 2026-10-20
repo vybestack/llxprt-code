@@ -70,7 +70,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
     await conversationManager.recordHistory(userInput, modelOutput);
 
-    const recordedText = getRecordedHistoryText(historyService);
+    const recordedText = await getRecordedHistoryText(historyService);
     expect(recordedText).toBe('Hello World');
   });
 
@@ -84,7 +84,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
     await conversationManager.recordHistory(userInput, modelOutput);
 
-    const recordedText = getRecordedHistoryText(historyService);
+    const recordedText = await getRecordedHistoryText(historyService);
     expect(recordedText).toBe('ABC');
   });
 
@@ -109,7 +109,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
     await mgr.recordHistory(userInput, modelOutput);
 
-    const recordedText = getRecordedHistoryText(historyService);
+    const recordedText = await getRecordedHistoryText(historyService);
     expect(recordedText).toBe('visible answer');
     expect(recordedText).not.toContain('secret thought');
   });
@@ -141,7 +141,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
     // When includeThoughts=false, the thinking block is NOT recorded as
     // a standalone block in history. The signature is retained on any
     // thinking blocks that ARE present.
-    const thinkingBlocks = getRecordedThinkingBlocks(historyService);
+    const thinkingBlocks = await getRecordedThinkingBlocks(historyService);
     // Thoughts are filtered out from history blocks when includeThoughts=false
     expect(thinkingBlocks).toHaveLength(0);
   });
@@ -168,7 +168,7 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
 
     await conversationManager.recordHistory(userInput, modelOutput);
 
-    const thinkingBlocks = getRecordedThinkingBlocks(historyService);
+    const thinkingBlocks = await getRecordedThinkingBlocks(historyService);
     expect(thinkingBlocks.length).toBeGreaterThan(0);
     expect(thinkingBlocks[0].thought).toBe('my thought');
     expect(thinkingBlocks[0].signature).toBe('sigXYZ');
@@ -229,7 +229,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 
         await mgr.recordHistory(userInput, modelOutput);
 
-        const recordedText = getRecordedHistoryText(hs);
+        const recordedText = await getRecordedHistoryText(hs);
         expect(recordedText).toBe(texts.join(''));
       }),
     );
@@ -277,7 +277,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 
           await mgr.recordHistory(userInput, modelOutput);
 
-          const recordedText = getRecordedHistoryText(hs);
+          const recordedText = await getRecordedHistoryText(hs);
           expect(recordedText).toBe(answer);
           expect(recordedText).not.toContain(thought);
         },
@@ -306,7 +306,7 @@ describe('REQ-005.1: consolidation + thought filtering (property)', () => {
 
         await mgr.recordHistory(userInput, modelOutput);
 
-        const recordedText = getRecordedHistoryText(hs);
+        const recordedText = await getRecordedHistoryText(hs);
         expect(recordedText.length).toBeGreaterThan(0);
         expect(recordedText).toBe(text);
       }),
@@ -445,7 +445,7 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
       } as IContent,
     ];
 
-    const result = await generateJson(
+    const result: unknown = await generateJson(
       makeConfig(),
       () => undefined,
       {} as never,

@@ -1,6 +1,6 @@
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -341,9 +341,9 @@ async function verifyRuntime2(): Promise<
   );
 
   expect(JSON.stringify(response)).not.toContain('run_shell_command');
-  expect(JSON.stringify(curatedHistoryForTest(historyService))).not.toContain(
-    'run_shell_command',
-  );
+  expect(
+    JSON.stringify(await curatedHistoryAfterCommit(historyService)),
+  ).not.toContain('run_shell_command');
 
   return response;
 }

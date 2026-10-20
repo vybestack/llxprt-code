@@ -41,6 +41,12 @@ function snapshotHistoryRow(index: number): IContent {
       id: `history-${index}`,
       turnId: `history-turn-${index}`,
       cacheAnchor: index === 0,
+      chronology: {
+        seq: index + 1,
+        userTurn: index + 1,
+        step: 0,
+        recordedAt: 0,
+      },
     },
   };
 }
