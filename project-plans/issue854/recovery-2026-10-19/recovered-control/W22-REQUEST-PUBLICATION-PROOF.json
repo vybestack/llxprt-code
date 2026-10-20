@@ -1,0 +1,1226 @@
+{
+  "scope": "Request/publication finalization complete; W22 incomplete. Cumulative per-file evidence, not whole-package final-source green.",
+  "timestamp": "2026-10-20T02:33:02.823Z",
+  "baseHead": "c33ca02a39f324d2a0f2b39aa8989fdc5ceda03c",
+  "productionCommit": "d7e78deae3cf17a9d4d4de11e4370d1ed67fe9df",
+  "sourceCommits": [
+    "6a8d4c944f61ce182cdcaad123f5d9643e940813",
+    "f126215becd904e9dde177be8c57f24cbde42705",
+    "ba487149d8ff5478d7de78d9653e244c1a83fb4c",
+    "95ca77b0d4afdc6501f798335d75b4cb6ba0b956"
+  ],
+  "rawEvidence": {
+    "path": "tmp/854-notes/p4/w22/request-publication-run-k/final-ledger-summary.json",
+    "sha256": "25d7c3ef11290c2bb49920ea1ba1c71886b9dfb1488dd1d552f9ca2a309632fa"
+  },
+  "sourceHashes": {
+    "packages/core/src/services/history/journalRowCodec.test.ts": "f666574a6f10890f9911f0968e703dc199a6d7f6ddd53c104c0cbbafd102810a",
+    "packages/agents/src/compression/__tests__/middleout-disk-large-request.test.ts": "13778dd2a39ed266e8ab37c11b6bb128eb2ccbd7c660d9f86a90022eda47ef02",
+    "packages/agents/src/compression/__tests__/middleout-disk-lifecycle.test.ts": "a378e21999b1ea9f4878aa0880bdea1bf5cbbbe5c4961e2e19d8ac7033de7b22",
+    "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts": "62d152168d24c56906fee4329f0d9b8c52406bc2d7f7d44f5cfac79c0730b2e8",
+    "packages/agents/src/compression/__tests__/middleout-disk-publication-owners.test.ts": "00a6d3ba16045d0ab0f5e7b71f8bb86af3adfddac60eeda13acb14066ca7b3f4",
+    "packages/agents/src/compression/__tests__/middleout-disk-retry.test.ts": "b58c7a3ecdb2d930acc0b879ad1b87140e4a7d011c3f48c527e7f7e1a114e0f7",
+    "packages/agents/src/compression/__tests__/middleout-disk-splits.test.ts": "889046e147227e9ddd02d4c6b7b5336af99832d5046a9b041f722be3a7ab3d58",
+    "packages/agents/src/compression/__tests__/middleout-disk.test.ts": "1d3f9bfe53a649c9644cbdc1f1914cbcb02f7364c5590c212e5e96e766732d98",
+    "packages/agents/src/compression/__tests__/oneshot-disk-large-request.test.ts": "803821a70588accdb2d1aa66c16c993473702a292249532d6515107a06e1b2b1",
+    "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts": "ca3dfffe48a0970084f7b7c1e5e1b1e74e03e394bed6df0bd15debf4d11a6163",
+    "packages/agents/src/compression/__tests__/oneshot-disk-publication-owners.test.ts": "8435f7e5890ddf2f59e13545b59d89efc0aff85f1de3f433e163145c3af3905c",
+    "packages/agents/src/compression/__tests__/oneshot-disk-request-charge.test.ts": "5eff774e732045a833dc759483f11d3d050b9ed9ae2a9544f084fc059939e10c",
+    "packages/agents/src/compression/__tests__/oneshot-disk-retry.test.ts": "614fc163a2c4f373114687b1c408da4e48f6703caddc8d4a1544a613184204c4",
+    "packages/agents/src/compression/__tests__/oneshot-disk-splits.test.ts": "a53cf4d5158f1bce072cee78690718798db42d0644639471ef4269f8ea3cb5b3",
+    "packages/agents/src/compression/__tests__/oneshot-disk.test.ts": "ff77962a4b2978b6bf929a364bc0a21697f13ba560684b2f6b5dd38e2f7e9e51",
+    "packages/agents/src/compression/__tests__/middleout-disk-source.test.ts": "d0f94625037adaeb0013afefdf169d91e21c511c3335ad20c80f3603689f83e3",
+    "packages/agents/src/compression/__tests__/oneshot-disk-source.test.ts": "9217ae38212359850dcf37434ace2f7115034dd5152c7b8a880f373adfcba8b1",
+    "packages/agents/src/compression/__tests__/oneshot-disk-lifecycle.test.ts": "2460fd712daad4126a7b5e19d1ceca1fe728261061cbb1d56e2954f967139337",
+    "packages/agents/src/compression/__tests__/oneshot-disk-verification.test.ts": "a5b183163f91d5004100233e5eaa285a36ff5534ce5c0e82a3bb66f5588493e4",
+    "packages/agents/src/compression/__tests__/oneshot-disk-fallback-rollback.test.ts": "3a74d217dfc5dc731fb18f867e3665ef16a9dbff7a612cc7c26f763c59a28e8c",
+    "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts": "bd05f95216a1750d138b4a446196140a6efa938b0f18d22ca085378b23ff9cd5",
+    "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts": "859103de9b870f82913d559c913d325dba53e787413087e91efd8d97592430c7",
+    "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts": "dae38da4c26f8d57ef813345168206f4f81976e84e35e8748f16a95c344fc800",
+    "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts": "226098d6d8f6f88f770db79a607271a38a71fe85b633ddba9d8599ccb6fa712f",
+    "packages/core/src/services/history/history-clone-utils.test.ts": "3293344b21034db1e157f06a3343b9419aa111f6476aaf922d19c1cc0d065294",
+    "packages/core/src/services/history/addbatch-value-serialization.test.ts": "6c075b820f59681830fb416d5f93c9942810afa6f003a7a155bf756c89bbf348",
+    "packages/core/src/services/history/journalHistoryStore.publishDetached.test.ts": "d6f23f10317afb1560de2f41105d0800f6ef9825a8a036a3a0dc7da3b5a207de",
+    "packages/core/src/services/history/detached-publication-shapes.journal.test.ts": "b7dc033e24f4c8bdb03200d5c6d5a0a287be7e28e0ff8077774125b1fb44181b",
+    "packages/agents/src/compression/__tests__/summary-media-publication.journal.test.ts": "f01e8c2899f50d764370fca35b19aafd07019f0fdfada0849eb97863a1c7324d",
+    "packages/core/src/services/history/journalRowCodec.ts": "e85f21d09917c28a2b020af6d38789b47f22512f7ee38eb8a03bccf4016df03a",
+    "packages/core/src/services/history/historyCloneUtils.ts": "be9827c9004eec3bae25703bbf8657e6a909a4e436b241ca16f65b20660c1dec",
+    "packages/agents/src/compression/__tests__/middleout-disk-helpers.ts": "b0b9b02971f89d829a4a4703503e720a15fe95f612b3b670bd820e96d5b37d5e",
+    "packages/agents/src/compression/__tests__/support/native-summary-publication.ts": "3338c948e9463b9f4c19e4e81ffb1f9edd04b5cd5a5b203ff212ebf98caea08d",
+    "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts": "9242e0ef4891b3a29195882c4ad2c4ca8587f3c69c1ed6be5cbeb8d0dd97ab59",
+    "packages/agents/src/compression/__tests__/oneshot-disk-helpers.ts": "29b3bc9a2d37b3840391f84b83be10f08fcd28f1eb01ae1a5010ccb30e583b28",
+    "packages/agents/src/compression/__tests__/support/middleout-array-oracle.ts": "a70975684a8075d6b10806ca48b98177717cd291b140229c342aef2c5f47544a",
+    "packages/agents/src/compression/__tests__/support/oneshot-array-oracle.ts": "0ced56d7ecc5d03a19cf6f12980eda38866b4ff6132f8757718002559ff6d879",
+    "packages/agents/src/compression/__tests__/support/compression-value-recorder-fixture.ts": "a02ed30f9293638c13e2a7b3172859263ca37da82c239772288ea62df785c829",
+    "packages/agents/src/compression/diskMiddleOut.ts": "f22e8c907b61508550805c6cb72418e2d776119e4be5cfb2e0eaf6a613b2ff8d",
+    "packages/agents/src/compression/middleOutDiskPlan.ts": "d4606d7b7906dab696ccab5d327f2d9da5d277e7c9514436e6a04e73b3ca0250",
+    "packages/agents/src/compression/curatedCandidate.ts": "d36ded90c68f70683de56a789332897fd19921813a8de39cb872ad5095750675",
+    "packages/agents/src/compression/cache-anchor-values.ts": "8cec2f6293b9b9a4d5ccc87a6cdd75686136006ec3bde36cc02cab04efb8c94d",
+    "packages/agents/src/compression/MiddleOutStrategy.ts": "7dea68197e92b9487326891dbefc46f30dc687ea73dce937286d7f60a6fa553c",
+    "packages/agents/src/compression/OneShotStrategy.ts": "70e1151ccb82e625b671d9c16ec45543260ce6f0bdec2405e3e84752fe115760",
+    "packages/agents/src/compression/compressionSystemPrompt.ts": "568c96ee7580901940e181bdeaf380edea3643e8cc25eb72a3b6bf45b602c668",
+    "packages/agents/src/compression/__tests__/summary-request-digest.journal.test.ts": "26403bd799a5a70890c84d53173f86d59a48e39c9104e9aaaca05d115f4fae55",
+    "packages/agents/src/compression/__tests__/density-disk.test.ts": "803b3c7475c915ad0012d88b03aec73f7a44262cffc554992755e8724a30af23",
+    "packages/agents/src/compression/__tests__/density-disk-lifecycle.test.ts": "df0a297d0d30c71188b5516f6003a364ccdba52eff888a6bca7337c01e77fceb",
+    "packages/agents/src/compression/__tests__/effective-token-count-stream.test.ts": "6d8b5b0cdbfa095095f9e7c91b99920c9b854e24e4961eb8921dd23505fd4c37",
+    "packages/core/src/services/history/detached-checkpoint.journal.test.ts": "2a22ddd54aea11787e2417731d1604f3a2c0a9b766a2749b41d150e0217ed57c",
+    "packages/core/src/services/history/journalRowCodec.cyclic.test.ts": "ecd75356b997394ccf53d596577b632efdcb6eddbb8266d7102f810d5d81bc72",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts": "263c24c29a0cf02889fad433b25d25332e3416dc849d8fb83e4dde23f30b9a47",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts": "fd12c8db818f5f880d7153b743a8a7ee1887a041c3d4561f5e739a2ba555dfa6",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts": "7107aceb14a6fa175fc58e2c5e89a55174056a7b829925223109cb0972848334",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts": "9dabae81c220ffd1e9fa478bc6ab8154f264d2c2b766368a43109dc9be74e57b"
+  },
+  "sourceVerification": {
+    "checked": 55,
+    "allMatch": true,
+    "productionMatchesBackupAndHead": true,
+    "productionDiffEmpty": true
+  },
+  "census": {
+    "generation": "228ad4f6-129a-475b-adc9-ec6227da0203",
+    "before": {
+      "green": 773,
+      "red": 28,
+      "unverified": 5,
+      "unrun": 0
+    },
+    "after": {
+      "green": 787,
+      "red": 18,
+      "unverified": 1,
+      "unrun": 0
+    },
+    "pass": 6535,
+    "fail": 37,
+    "skip": 0,
+    "verifiedPass": 6528,
+    "classifications": {
+      "native-history": 328,
+      "journal-selected-shared-public": 311,
+      "explicit-old": 42,
+      "classification-pending": 5847,
+      "unclassified": 0
+    },
+    "attempts": 1224,
+    "historicalMissingAttempts": 26,
+    "latestMissingFiles": 0,
+    "changed": [
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-large-request.test.ts",
+        "prior": "unverified",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-lifecycle.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-publication-owners.test.ts",
+        "prior": "unverified",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-retry.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-splits.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-large-request.test.ts",
+        "prior": "unverified",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-publication-owners.test.ts",
+        "prior": "unverified",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-request-charge.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-retry.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-splits.test.ts",
+        "prior": "red",
+        "current": "green"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk.test.ts",
+        "prior": "red",
+        "current": "green"
+      }
+    ],
+    "remaining": [
+      {
+        "path": "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+        "state": "red",
+        "sourceHash": "5f8df711b4dcdd17d92570fcc0533ebd5b3e206b26ce9aa9a89d73dbfcf27ca6"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/childaccept-body.test.ts",
+        "state": "red",
+        "sourceHash": "1dc75e3b20a43ac52d295b49bf45f276cb0d6073128594fa762f09279d54bc3c"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/childaccept.test.ts",
+        "state": "red",
+        "sourceHash": "cb39afefcf176222a7e71a2e551e66300e03f17c786f0c0e3658f60a7e2a2a1a"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+        "state": "red",
+        "sourceHash": "06d60ae81ac93bec782b921e6ed6f230844ec338b5e1f0db1a767e5455d451ba"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+        "state": "red",
+        "sourceHash": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+        "state": "red",
+        "sourceHash": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+        "state": "red",
+        "sourceHash": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+        "state": "red",
+        "sourceHash": "700ab6548a4731503980ccad48298a4030de9a686d4b3145bb1ed32e1c52f579"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+        "state": "red",
+        "sourceHash": "013bb916b8a7d1b5a426dcb6748b784cb0ae54d4089bca8c449ae200dc6167c0"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+        "state": "red",
+        "sourceHash": "d6467cd30a7e33db708af25d2b8e3a03f3eaf97612009f9e636f66e9933ba1fd"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts",
+        "state": "red",
+        "sourceHash": "0ae76833ac5131283e438033a192a8f4d510a69fb0dd76aafd147b313de204bc"
+      },
+      {
+        "path": "packages/agents/src/core/chatSession.runtime.test.ts",
+        "state": "red",
+        "sourceHash": "7831d38e96b2158ebed4db82a8aae0a4744593b2606c89701b508b1d12847c3f"
+      },
+      {
+        "path": "packages/agents/src/core/deferred-history-source.test.ts",
+        "state": "red",
+        "sourceHash": "42736e4c5bdc53633266439b8da05f49f4c716fdd6fec525bb6d235f9ae98671"
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+        "state": "red",
+        "sourceHash": "d2e12850ff052e042b76a4c98133a48c4d199c5af789ad7470857788eb241704"
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+        "state": "red",
+        "sourceHash": "000d8449f48f193aff44b3f0e2cbc0179f11394f06138fec5ece692b3181b59b"
+      },
+      {
+        "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+        "state": "red",
+        "sourceHash": "2f03aad4c842bae51b14b88e8f4a5f5f0962ed5edcd014bdb782c24b0c4afa25"
+      },
+      {
+        "path": "packages/agents/src/core/streamRequestHelpers.test.ts",
+        "state": "red",
+        "sourceHash": "4ea5ae3f308aed41fcb15db61d04db73607850beb1a0c9f1be0a13ce9b1a6628"
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "state": "red",
+        "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965"
+      },
+      {
+        "path": "packages/agents/test-bun/run-bun-tests.issue3253.bun.ts",
+        "state": "unverified",
+        "sourceHash": "58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5"
+      }
+    ]
+  },
+  "targetMatrix": {
+    "files": 14,
+    "passPerBackend": 51,
+    "codecPassPerBackend": 40,
+    "originalPreservation": {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/original-preservation.json",
+      "sha256": "83f5f7e4b945ce3c494066d30466653709d61c524de88d0611c31acf902bdd02"
+    }
+  },
+  "effectiveMatrix": {
+    "journal": {
+      "files": 35,
+      "pass": 224,
+      "fail": 1,
+      "skip": 0
+    },
+    "old": {
+      "files": 35,
+      "pass": 225,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "batches": [
+    {
+      "name": "request-middle-final-journal-k-b",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-middle-final-journal-k-b/results.json",
+      "files": 8,
+      "pass": 69,
+      "fail": 0,
+      "sha256": "f06fe79741b174b8651355e7bc2316ff1c5faf60ea949ea22a7d8d03fbba80c3"
+    },
+    {
+      "name": "request-middle-final-old-k-b",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-middle-final-old-k-b/results.json",
+      "files": 8,
+      "pass": 69,
+      "fail": 0,
+      "sha256": "52c69005cf1895b8184df239c800e8336c4f9df19618b165ca0bf48bc4a612e6"
+    },
+    {
+      "name": "request-one-final-journal-k-b",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-one-final-journal-k-b/results.json",
+      "files": 7,
+      "pass": 22,
+      "fail": 0,
+      "sha256": "f3d1d70b8307027f399f7e6960d91cd4c78d8b0e3d3dff488f578f8f48282490"
+    },
+    {
+      "name": "request-one-final-old-k-b",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-one-final-old-k-b/results.json",
+      "files": 7,
+      "pass": 22,
+      "fail": 0,
+      "sha256": "3d98266ee2303c363b793abc182ca2eeb4b9e0cc5c60d3b5a37e7b0a8f07212a"
+    },
+    {
+      "name": "request-related-final-journal-k-b",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-related-final-journal-k-b/results.json",
+      "files": 11,
+      "pass": 90,
+      "fail": 1,
+      "sha256": "392710ee790c0625ec3a1bd9b040c534e7c41fe0d56f1c1a6121213fd4b884db"
+    },
+    {
+      "name": "request-related-completion-journal-k-e",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-related-completion-journal-k-e/results.json",
+      "files": 5,
+      "pass": 40,
+      "fail": 5,
+      "sha256": "9aa97758042115d50b11d121e80715abf1e2ac5b10c2d3c18a8dc4d9d259f66d"
+    },
+    {
+      "name": "request-media-final-journal-k-h",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-media-final-journal-k-h/results.json",
+      "files": 1,
+      "pass": 4,
+      "fail": 0,
+      "sha256": "cc6b9b4828143b772c0034b0690c41a99d71ca672dbef1944db2eb3a5fc4da8d"
+    },
+    {
+      "name": "request-related-final-old-k-f",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-related-final-old-k-f/results.json",
+      "files": 15,
+      "pass": 135,
+      "fail": 0,
+      "sha256": "b7e84cc842a0b62fcc0f0bb99c23aa02801b382ae4fe7c530cd4ccebf3dbbe93"
+    },
+    {
+      "name": "request-supplement-final-journal-k-f",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-supplement-final-journal-k-f/results.json",
+      "files": 6,
+      "pass": 39,
+      "fail": 0,
+      "sha256": "06f74249ea4d9bcbd3b34a291d21dfa5be8e3888ea8c3bfca72f5df6dd46ae1d"
+    },
+    {
+      "name": "request-supplement-final-old-k-f",
+      "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/request-supplement-final-old-k-f/results.json",
+      "files": 6,
+      "pass": 39,
+      "fail": 0,
+      "sha256": "a6ae1aec3f04f888b1cd63d980ff907a78b99706a4fe9c66b704f1c9ce70ab75"
+    }
+  ],
+  "controls": [
+    {
+      "name": "request-original-source-control-journal-k-b",
+      "receipt": {
+        "path": "tmp/854-notes/p4/w22/request-publication-run-k/request-original-source-control-journal-k-b/results.json",
+        "sha256": "983e74441b0e11b6b73182f665514ceaded5fdb9d4f8eaaa33ce8c3371560004"
+      },
+      "rows": [
+        {
+          "path": "packages/agents/src/compression/__tests__/summary-request-digest.journal.test.ts",
+          "pid": 30111,
+          "driverPid": 30110,
+          "backend": "journal",
+          "pass": 0,
+          "fail": 6,
+          "skip": 0,
+          "code": 1,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "26403bd799a5a70890c84d53173f86d59a48e39c9104e9aaaca05d115f4fae55",
+          "sourceAfter": "26403bd799a5a70890c84d53173f86d59a48e39c9104e9aaaca05d115f4fae55",
+          "failedCases": [
+            "middle-out streams the original 512 request bytes after early consumer cancellation",
+            "middle-out streams the original 8192 request bytes after early consumer cancellation",
+            "middle-out streams the original large request bytes after early consumer cancellation",
+            "one-shot streams the original 512 request bytes after early consumer cancellation",
+            "one-shot streams the original 8192 request bytes after early consumer cancellation",
+            "one-shot streams the original large request bytes after early consumer cancellation"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-original-source-control-journal-k-b/0806-summary-request-digest.journal.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-original-source-control-journal-k-b/0806-summary-request-digest.journal.test.ts.xml"
+        },
+        {
+          "path": "packages/core/src/services/history/journalRowCodec.test.ts",
+          "pid": 31160,
+          "driverPid": 30110,
+          "backend": "journal",
+          "pass": 39,
+          "fail": 1,
+          "skip": 0,
+          "code": 1,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "f666574a6f10890f9911f0968e703dc199a6d7f6ddd53c104c0cbbafd102810a",
+          "sourceAfter": "f666574a6f10890f9911f0968e703dc199a6d7f6ddd53c104c0cbbafd102810a",
+          "failedCases": [
+            "preserves serialized content field order across native conversion"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-original-source-control-journal-k-b/0807-journalRowCodec.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-original-source-control-journal-k-b/0807-journalRowCodec.test.ts.xml"
+        }
+      ]
+    },
+    {
+      "name": "request-source-restored-journal-k-b",
+      "receipt": {
+        "path": "tmp/854-notes/p4/w22/request-publication-run-k/request-source-restored-journal-k-b/results.json",
+        "sha256": "88c5001e05f428ad6ae0a80b69583fb62dc8cb6cab88aff2dc149f5f2831a8ea"
+      },
+      "rows": [
+        {
+          "path": "packages/agents/src/compression/__tests__/summary-request-digest.journal.test.ts",
+          "pid": 31173,
+          "driverPid": 31170,
+          "backend": "journal",
+          "pass": 6,
+          "fail": 0,
+          "skip": 0,
+          "code": 0,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "26403bd799a5a70890c84d53173f86d59a48e39c9104e9aaaca05d115f4fae55",
+          "sourceAfter": "26403bd799a5a70890c84d53173f86d59a48e39c9104e9aaaca05d115f4fae55",
+          "failedCases": [],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-source-restored-journal-k-b/0806-summary-request-digest.journal.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-source-restored-journal-k-b/0806-summary-request-digest.journal.test.ts.xml"
+        },
+        {
+          "path": "packages/core/src/services/history/journalRowCodec.test.ts",
+          "pid": 32273,
+          "driverPid": 31170,
+          "backend": "journal",
+          "pass": 40,
+          "fail": 0,
+          "skip": 0,
+          "code": 0,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "f666574a6f10890f9911f0968e703dc199a6d7f6ddd53c104c0cbbafd102810a",
+          "sourceAfter": "f666574a6f10890f9911f0968e703dc199a6d7f6ddd53c104c0cbbafd102810a",
+          "failedCases": [],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-source-restored-journal-k-b/0807-journalRowCodec.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-source-restored-journal-k-b/0807-journalRowCodec.test.ts.xml"
+        }
+      ]
+    },
+    {
+      "name": "request-middleout-retaining-k-f",
+      "receipt": {
+        "path": "tmp/854-notes/p4/w22/request-publication-run-k/request-middleout-retaining-k-f/results.json",
+        "sha256": "bb2d376560a57860c48d1ae1b2c9d432532076ac971a9d5fc7fb0aaab534901a"
+      },
+      "rows": [
+        {
+          "path": "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts",
+          "pid": 24132,
+          "driverPid": 24131,
+          "backend": "journal",
+          "pass": 2,
+          "fail": 4,
+          "skip": 0,
+          "code": 1,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "62d152168d24c56906fee4329f0d9b8c52406bc2d7f7d44f5cfac79c0730b2e8",
+          "sourceAfter": "62d152168d24c56906fee4329f0d9b8c52406bc2d7f7d44f5cfac79c0730b2e8",
+          "failedCases": [
+            "detects deliberately retained 512-row borrowed owners with unchanged bounds",
+            "detects deliberately retained 512-row copy owners with unchanged bounds",
+            "detects deliberately retained 8192-row borrowed owners with unchanged bounds",
+            "detects deliberately retained 8192-row copy owners with unchanged bounds"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-middleout-retaining-k-f/0308-middleout-disk-owners.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-middleout-retaining-k-f/0308-middleout-disk-owners.test.ts.xml"
+        }
+      ]
+    },
+    {
+      "name": "request-oneshot-retaining-k-f",
+      "receipt": {
+        "path": "tmp/854-notes/p4/w22/request-publication-run-k/request-oneshot-retaining-k-f/results.json",
+        "sha256": "1171fbca5d132cadc1c1f7ab7337efed243ede38fb19129a3ebe87ab1d8f93d9"
+      },
+      "rows": [
+        {
+          "path": "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts",
+          "pid": 25389,
+          "driverPid": 25388,
+          "backend": "journal",
+          "pass": 2,
+          "fail": 4,
+          "skip": 0,
+          "code": 1,
+          "timedOut": false,
+          "completeSummary": true,
+          "countsMatch": true,
+          "sourceHash": "ca3dfffe48a0970084f7b7c1e5e1b1e74e03e394bed6df0bd15debf4d11a6163",
+          "sourceAfter": "ca3dfffe48a0970084f7b7c1e5e1b1e74e03e394bed6df0bd15debf4d11a6163",
+          "failedCases": [
+            "detects deliberately retained 512-row borrowed owners with unchanged bounds",
+            "detects deliberately retained 512-row copy owners with unchanged bounds",
+            "detects deliberately retained 8192-row borrowed owners with unchanged bounds",
+            "detects deliberately retained 8192-row copy owners with unchanged bounds"
+          ],
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-oneshot-retaining-k-f/0318-oneshot-disk-owners.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/request-oneshot-retaining-k-f/0318-oneshot-disk-owners.test.ts.xml"
+        }
+      ]
+    }
+  ],
+  "originalSourceDigestRejections": [
+    {
+      "case": "middle-out streams the original 512 request bytes after early consumer cancellation",
+      "expected": "e2e5804382724f887e46744a2eeca40f31698e00be066b7b956fd4374ec935b1",
+      "received": "5adf11c24725b0728598c60ac0dcf77d6f7cec0e2b3265042bef8e6927068d1d"
+    },
+    {
+      "case": "middle-out streams the original 8192 request bytes after early consumer cancellation",
+      "expected": "23b23d2144a3f14703fc4de5f99b811b70b249aac32170622b143e2f178b4dfc",
+      "received": "80a646ac939af1fd64dcc55b8ceddd7229335455fc95e84e03aa0c42b4f7f075"
+    },
+    {
+      "case": "middle-out streams the original large request bytes after early consumer cancellation",
+      "expected": "895d0400eaa0e6d3ceac15158f402b588f5c8af3246fbbacb76a221ea2d33366",
+      "received": "eca306cf28b85fb2f393d4f72779eb7fa3453388e4afc9a5223bcd79a6a988e0"
+    },
+    {
+      "case": "one-shot streams the original 512 request bytes after early consumer cancellation",
+      "expected": "df79eeff8f71ade0cf1d60982eebcd86fe20d5d006b91c7b728488a110676214",
+      "received": "7d10a08130bf0357078ad2165b8dae5757c072d571c6d8bf7bafe585d0705eb6"
+    },
+    {
+      "case": "one-shot streams the original 8192 request bytes after early consumer cancellation",
+      "expected": "4e60ff30c4bb4bf9d93fc65698713b029914b6d645ba1df1ab031da2f93d483f",
+      "received": "2050359be0e1f4c03b4e006804d2efcf40fc075414ae63fd8e0c7eaa5b2af940"
+    },
+    {
+      "case": "one-shot streams the original large request bytes after early consumer cancellation",
+      "expected": "a0fe92d73a0804364afc5e785b5c78b8d50ffa582d057f3832425cfa7dac4a42",
+      "received": "0e4d63c0a14de66c10a326ccb69d8de26b2d75212c13b1259f946c41a0ba7c05"
+    }
+  ],
+  "sourceRestoration": {
+    "driverPid": 21362,
+    "restored": [
+      {
+        "path": "packages/core/src/services/history/journalRowCodec.ts",
+        "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/source-control-final-journalRowCodec.ts",
+        "original": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/source-control-original-journalRowCodec.ts",
+        "finalHash": "e85f21d09917c28a2b020af6d38789b47f22512f7ee38eb8a03bccf4016df03a",
+        "originalHash": "529fa03609cb6a95938b453c142fe0049af6099e73934b19655e84624e601150",
+        "cmp": 0,
+        "restoredHash": "e85f21d09917c28a2b020af6d38789b47f22512f7ee38eb8a03bccf4016df03a"
+      },
+      {
+        "path": "packages/core/src/services/history/historyCloneUtils.ts",
+        "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/source-control-final-historyCloneUtils.ts",
+        "original": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/source-control-original-historyCloneUtils.ts",
+        "finalHash": "be9827c9004eec3bae25703bbf8657e6a909a4e436b241ca16f65b20660c1dec",
+        "originalHash": "9c180e3adbb44d49cd3d150feda5a6404cfd5a77a72fd3a6402ec31795d881a7",
+        "cmp": 0,
+        "restoredHash": "be9827c9004eec3bae25703bbf8657e6a909a4e436b241ca16f65b20660c1dec"
+      }
+    ],
+    "ended": "2026-10-20T02:28:43.106Z"
+  },
+  "censusControls": {
+    "records": [
+      {
+        "name": "hash",
+        "code": 1,
+        "cmp": 0
+      },
+      {
+        "name": "counterpart",
+        "code": 1,
+        "cmp": 0
+      }
+    ],
+    "sourceHash": "263c24c29a0cf02889fad433b25d25332e3416dc849d8fb83e4dde23f30b9a47",
+    "ended": "2026-10-20T02:17:41.653Z"
+  },
+  "censusRestoration": {
+    "backup": {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/census-control-final-h.ts",
+      "sha256": "263c24c29a0cf02889fad433b25d25332e3416dc849d8fb83e4dde23f30b9a47"
+    },
+    "currentHash": "263c24c29a0cf02889fad433b25d25332e3416dc849d8fb83e4dde23f30b9a47",
+    "cmpExitCode": 0
+  },
+  "gates": {
+    "saved": [
+      {
+        "name": "d-api-surface",
+        "command": [
+          "bun",
+          "scripts/check-agents-api-surface.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-api-surface.log",
+        "pid": 95089,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:48:34.289Z",
+        "code": 0,
+        "ended": "2026-10-20T01:48:43.023Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-api-surface-result.json",
+          "sha256": "d5c67fd729bd63d8a637cd905fcdcd4b8d7079484e55a5d306bd46af1d7b2b55"
+        }
+      },
+      {
+        "name": "d-build-types",
+        "command": [
+          "bun",
+          "run",
+          "build:types"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-build-types.log",
+        "pid": 95246,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:48:43.023Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:09.609Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-build-types-result.json",
+          "sha256": "b897b8de989fbff8fa8fffd3d21084903026adcd6d32cbbf9148f4d9e1090525"
+        }
+      },
+      {
+        "name": "d-core-tsc",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-core-tsc.log",
+        "pid": 96281,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:09.609Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:16.358Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-core-tsc-result.json",
+          "sha256": "b6829a6b4f88e42893c90874fe7bcfe038690827ecbec5bd178be43d8771b936"
+        }
+      },
+      {
+        "name": "d-agents-tsc",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.noemit.json"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-agents-tsc.log",
+        "pid": 96401,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:16.359Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:26.144Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-agents-tsc-result.json",
+          "sha256": "cc8dcf5e93320c33b86d1a5d7cbda7f3c3e68c3deee6bb3ac8678523686189fe"
+        }
+      },
+      {
+        "name": "d-agents-bun-tsc",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.test-bun.json",
+          "--types",
+          "node,bun-types/test,bun-types/test-globals,bun-types"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-agents-bun-tsc.log",
+        "pid": 96519,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:26.144Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:31.319Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-agents-bun-tsc-result.json",
+          "sha256": "72d4bc7576d4aa2cd2e284049ddcc876a837a9d1f7b7bb1483ad35c95524d200"
+        }
+      },
+      {
+        "name": "d-touched-tsc",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/tsconfig.touched-d.json"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-touched-tsc.log",
+        "pid": 96581,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:31.319Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:35.890Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-touched-tsc-result.json",
+          "sha256": "847d0ad6d3822f103dee54744e44bcb74ae0a8ae1b5baeff0dffe98db416ae6c"
+        }
+      },
+      {
+        "name": "d-eslint",
+        "command": [
+          "bunx",
+          "eslint",
+          "--no-ignore",
+          "--max-warnings",
+          "0",
+          "packages/core/src/services/history/journalRowCodec.ts",
+          "packages/core/src/services/history/journalRowCodec.test.ts",
+          "packages/core/src/services/history/historyCloneUtils.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-helpers.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts",
+          "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-publication-owners.test.ts",
+          "packages/agents/src/compression/__tests__/oneshot-disk-publication-owners.test.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-lifecycle.test.ts",
+          "packages/agents/src/compression/__tests__/support/native-summary-publication.ts",
+          "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts",
+          "packages/agents/src/compression/__tests__/summary-media-publication.journal.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-eslint.log",
+        "pid": 96636,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:35.890Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:43.264Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-eslint-result.json",
+          "sha256": "f50d9de38bce125533af9ab7f64f9d767d817ea2187e26dc8a6c4ebff31369b0"
+        }
+      },
+      {
+        "name": "d-prettier",
+        "command": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/core/src/services/history/journalRowCodec.ts",
+          "packages/core/src/services/history/journalRowCodec.test.ts",
+          "packages/core/src/services/history/historyCloneUtils.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-helpers.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts",
+          "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-publication-owners.test.ts",
+          "packages/agents/src/compression/__tests__/oneshot-disk-publication-owners.test.ts",
+          "packages/agents/src/compression/__tests__/middleout-disk-lifecycle.test.ts",
+          "packages/agents/src/compression/__tests__/support/native-summary-publication.ts",
+          "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts",
+          "packages/agents/src/compression/__tests__/summary-media-publication.journal.test.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-prettier.log",
+        "pid": 96739,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:43.265Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:43.510Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-prettier-result.json",
+          "sha256": "8b54d415f455c1085b5e8fc3d862b6ff20bdd79f96a1ed8be1fc972419f156e3"
+        }
+      },
+      {
+        "name": "d-affected-graph",
+        "command": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-affected-graph.log",
+        "pid": 96744,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:43.511Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:46.521Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-affected-graph-result.json",
+          "sha256": "27ebaf89235c175367916807bce8b84d7a1e2a8df35ac86d0093665a81c89d86"
+        }
+      },
+      {
+        "name": "d-test-audit",
+        "command": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/audit"
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/d-test-audit.log",
+        "pid": 96815,
+        "driverPid": 95088,
+        "started": "2026-10-20T01:49:46.521Z",
+        "code": 0,
+        "ended": "2026-10-20T01:49:49.440Z",
+        "receipt": {
+          "path": "tmp/854-notes/p4/w22/request-publication-run-k/d-test-audit-result.json",
+          "sha256": "2ccf26e006a153385bc94feb02022aea8d3ed95166505dbf6bafd96cffcf946b"
+        }
+      }
+    ],
+    "final": [
+      {
+        "name": "h-affected-graph",
+        "command": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "pid": 32282,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/h-affected-graph.log"
+      },
+      {
+        "name": "h-test-audit",
+        "command": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/audit-final-h"
+        ],
+        "pid": 32352,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/h-test-audit.log"
+      }
+    ],
+    "delivery": [
+      {
+        "name": "touched-types",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "tmp/854-notes/p4/w22/request-publication-run-k/tsconfig.supplement-e.json"
+        ],
+        "pid": 33581,
+        "started": "2026-10-20T02:31:17.715Z",
+        "ended": "2026-10-20T02:31:23.099Z",
+        "code": 0,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-touched-types.log"
+      },
+      {
+        "name": "census-types",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "--strict",
+          "--target",
+          "es2022",
+          "--module",
+          "esnext",
+          "--moduleResolution",
+          "bundler",
+          "--allowImportingTsExtensions",
+          "--types",
+          "node,bun-types",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts"
+        ],
+        "pid": 33641,
+        "started": "2026-10-20T02:31:23.100Z",
+        "ended": "2026-10-20T02:31:24.164Z",
+        "code": 2,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-census-types.log"
+      },
+      {
+        "name": "census-project-types",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "tmp/854-notes/p4/w22/request-publication-run-k/tsconfig.delivery-census.json"
+        ],
+        "pid": 34085,
+        "started": "2026-10-20T02:31:53.447Z",
+        "ended": "2026-10-20T02:31:53.911Z",
+        "code": 2,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-census-project-types.log"
+      },
+      {
+        "name": "census-final-project-types",
+        "command": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "--allowImportingTsExtensions",
+          "-p",
+          "tmp/854-notes/p4/w22/request-publication-run-k/tsconfig.delivery-census.json"
+        ],
+        "pid": 34218,
+        "started": "2026-10-20T02:32:04.936Z",
+        "ended": "2026-10-20T02:32:05.426Z",
+        "code": 0,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-census-final-project-types.log"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "bunx",
+          "eslint",
+          "--no-ignore",
+          "--max-warnings",
+          "0",
+          "packages/agents/src/compression/__tests__/summary-media-publication.journal.test.ts",
+          "packages/agents/src/compression/__tests__/summary-request-digest.journal.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts"
+        ],
+        "pid": 34225,
+        "started": "2026-10-20T02:32:05.426Z",
+        "ended": "2026-10-20T02:32:11.003Z",
+        "code": 0,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-lint.log"
+      },
+      {
+        "name": "format",
+        "command": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/agents/src/compression/__tests__/summary-media-publication.journal.test.ts",
+          "packages/agents/src/compression/__tests__/summary-request-digest.journal.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts",
+          "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts"
+        ],
+        "pid": 34323,
+        "started": "2026-10-20T02:32:11.004Z",
+        "ended": "2026-10-20T02:32:11.156Z",
+        "code": 0,
+        "log": "tmp/854-notes/p4/w22/request-publication-run-k/delivery-format.log"
+      }
+    ],
+    "missingRequiredScoped": [],
+    "diagnosticFailures": "Two additional census tsc invocations used the wrong compiler context: one omitted inherited skipLibCheck and reached incompatible dependency declarations; the next omitted Bun .ts import support. Both logs remain. Final census invocation inherits unchanged repository strict options and enables .ts imports; exit 0. No repository rule changed."
+  },
+  "audit": {
+    "receipt": {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/h-test-audit.log",
+      "sha256": "9a3b6a92a4e9674c00e85d3785f079559d1893b1a57c1c1593ba1664eb3113df"
+    },
+    "findings": {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/audit-final-h/findings.tsv",
+      "sha256": "62c16fbedb5e414f78c6e937a7811d827a19f0af96362b0d34b380bf78648411"
+    },
+    "newPriorityFindingsOnScopedSources": 0,
+    "interpretation": "Existing SELF_CONFIRMING flags compare pre-operation public/durable state with post-cancellation or rejection state. Repeated assertions check different lifecycle phases; no assertions or scanner rules changed."
+  },
+  "knownRelatedRed": "addbatch-value-serialization.test.ts constructs an old SessionRecordingService for a journal HistoryService before its test body; unchanged, not repaired or silently green. Native codec cyclic and checkpoint suites run separately; they do not close this exact addBatch fixture gap.",
+  "frozenFiles": [
+    {
+      "path": "run-20261019-a/current-progress.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/current-progress.json",
+      "sha256": "477efef72d0725490639d817692265ad98e591231c7d91a38a29748f1ac3317a"
+    },
+    {
+      "path": "run-20261019-a/current-not-run.txt",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/current-not-run.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "run-20261019-a/current-files-table.md",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/current-files-table.md",
+      "sha256": "3567bd1353697b28cd39307b47f260a6fde2240a0ab52fe909e9843b4c6a6f7d"
+    },
+    {
+      "path": "instance-run-20261019-a/failure-table.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/failure-table.json",
+      "sha256": "d1253dbe16dfefbb759ae02e6cc6af19e20993bf13de781002211fdcf5a8b10f"
+    },
+    {
+      "path": "continuation-run-c/all-attempts.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/all-attempts.json",
+      "sha256": "2f22eaf3544958e8c96229d8dce21a799309f50b43da9fda4a28c0513e91e753"
+    },
+    {
+      "path": "continuation-run-c/missing-evidence.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/missing-evidence.json",
+      "sha256": "86aea0a0a9aeca2db882083d2e038a25de53d712ab0e51e64c0ecc801237d4aa"
+    },
+    {
+      "path": "continuation-run-c/census-counts-final.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/census-counts-final.json",
+      "sha256": "47fd1ca14041638c0c8eb2536d7da8a25c3e8f99f912de06836eadcee6ace860"
+    },
+    {
+      "path": "continuation-run-c/publication.json",
+      "destination": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/request-publication-run-k/frozen-final/publication.json",
+      "sha256": "5c349abda689625a960250dfb3e0925e98b377c3a33d362cf3b3fd01682d1c04"
+    }
+  ],
+  "processes": {
+    "observed": "2026-10-20T02:33:02.816Z",
+    "checkedPids": [
+      106,
+      1225,
+      1517,
+      1943,
+      1944,
+      1947,
+      1963,
+      2177,
+      2269,
+      2333,
+      2432,
+      2518,
+      2606,
+      2607,
+      2664,
+      3959,
+      4558,
+      4978,
+      6509,
+      6636,
+      7038,
+      7040,
+      7073,
+      7207,
+      7276,
+      7293,
+      7558,
+      7616,
+      7700,
+      7701,
+      8616,
+      9612,
+      10663,
+      11427,
+      11467,
+      12605,
+      12976,
+      13162,
+      13218,
+      13221,
+      14694,
+      14698,
+      14699,
+      14704,
+      14713,
+      14735,
+      14747,
+      17305,
+      17308,
+      17310,
+      19801,
+      19805,
+      19806,
+      21084,
+      21088,
+      21089,
+      21362,
+      21489,
+      21491,
+      21572,
+      21653,
+      21860,
+      21894,
+      21937,
+      22669,
+      23013,
+      23325,
+      23632,
+      23706,
+      23713,
+      23723,
+      23729,
+      23744,
+      23761,
+      24131,
+      24132,
+      25388,
+      25389,
+      26634,
+      26636,
+      27791,
+      28345,
+      28778,
+      28969,
+      29055,
+      29064,
+      29065,
+      29214,
+      29516,
+      29934,
+      30007,
+      30073,
+      30110,
+      30111,
+      31160,
+      31170,
+      31173,
+      32273,
+      32282,
+      32352,
+      33581,
+      33641,
+      34085,
+      34218,
+      34225,
+      34323,
+      83971,
+      83972,
+      84286,
+      84287,
+      84289,
+      84806,
+      84851,
+      84859,
+      86073,
+      87122,
+      87551,
+      88430,
+      88761,
+      89311,
+      89424,
+      90481,
+      90578,
+      90688,
+      90745,
+      90798,
+      91803,
+      91804,
+      91929,
+      92986,
+      93066,
+      93172,
+      93279,
+      93372,
+      95088,
+      95089,
+      95246,
+      96281,
+      96401,
+      96519,
+      96581,
+      96636,
+      96739,
+      96744,
+      96815,
+      96878,
+      96891,
+      96901,
+      96902,
+      96909,
+      96958,
+      98081,
+      99422
+    ],
+    "allAbsent": true,
+    "psExitCode": 1,
+    "psOutput": ""
+  },
+  "processReceipt": {
+    "path": "tmp/854-notes/p4/w22/request-publication-run-k/final-process-receipt.json",
+    "sha256": "cd524e828fd267f9272c1b5eaf4b68a67223de2328a8bdd101020dc9b2d15db7"
+  },
+  "openWork": "W22 remaining 19 paths, W23-W26, pending classifications and scratch removal. Old default unchanged. Review skipped per Andrew 2026-10-09.",
+  "censusPositiveTests": [
+    {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/w22-census.test.ts-final-h.log",
+      "sha256": "5ca8b32e02c1916ec466da9836ae981a33d7f5737c8f5b9209f3b74ea6cd082e",
+      "pass": 7,
+      "fail": 0
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/w22-request-census.test.ts-final-h.log",
+      "sha256": "28283148c9d088137636298bfe0efdf0b629fabf9e081cba53b936938b65c58e",
+      "pass": 1,
+      "fail": 0
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/request-publication-run-k/w22-request-counterparts.test.ts-final-h.log",
+      "sha256": "6d6ac1eb9b880f82557dea113885c512f5a88c6c52634bb343c1f4d2f5769720",
+      "pass": 2,
+      "fail": 0
+    }
+  ]
+}

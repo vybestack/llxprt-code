@@ -1,37 +1,44 @@
 # W22 agents sweep status
 
-Updated 2026-10-20T02:27:25.284Z. WIP finalization only, not review.
+**Request/publication finalization is complete. Production is restored, all owned processes have exited, and W22 remains incomplete.** No new repair family or review began. This supersedes the active-control handoff at `c33ca02a39f324d2a0f2b39aa8989fdc5ceda03c`.
 
-**The fourteen middle-out/one-shot request/publication targets are green and source changes are committed. Verification is still running. W22 remains incomplete.** Production `d7e78deae` is preserved. Commits: one-shot fixtures `6a8d4c944`, census source/API tests `f126215be`, media proof `ba487149d`, digest proof `95ca77b0d`.
+## Restoration and source boundary
 
-## Latest process observation, 2026-10-20T02:28:10Z
+Production remains `d7e78deae3cf17a9d4d4de11e4370d1ed67fe9df`. Finalization changed no production code. The supervisor restored both files at 2026-10-20T02:28:43.106Z; independent checks matched backups, production commit and current HEAD, with an empty production diff:
 
-Positive supervisor 21084 finished at 02:27:31Z, including both six-file supplemental comparisons. Source-control supervisor 21362 and child driver 30110 are running the original-source comparison; the middle-out large-request digest has rejected with different measured SHA-256 values. This is an observed partial RED, not a completed control receipt. Production worktree files `journalRowCodec.ts` and `historyCloneUtils.ts` are temporarily at the original source while that control runs. Restoration has not yet been observed. Supervisor 22669 waits to run final graph/audit and freeze the ledger. Do not overlap work or commit those temporary production changes. The committed WIP proof boundary before this observation is `70d609e4a9a9627699cde25d2ca944653e5cea22`.
+| Restored file | SHA-256 |
+| --- | --- |
+| `packages/core/src/services/history/journalRowCodec.ts` | `e85f21d09917c28a2b020af6d38789b47f22512f7ee38eb8a03bccf4016df03a` |
+| `packages/core/src/services/history/historyCloneUtils.ts` | `be9827c9004eec3bae25703bbf8657e6a909a4e436b241ca16f65b20660c1dec` |
 
-## Accepted target census
+All **55 final source hashes match**. Source commits remain fixture `6a8d4c944`, census/API `f126215be`, media proof `ba487149d` and digest proof `95ca77b0d`. Full SHAs, original-source hashes and raw receipt checksums are in W22-REQUEST-PUBLICATION-PROOF.json.
 
-**806 = 787 green + 18 red + one unverified**, zero unrun. Exactly ten red and four unverified target paths become green from 773/28/5. All fourteen original target files pass **51 cases per backend**, plus forty codec cases per backend. Their exact-source positive matrices are complete.
+## Completed controls and gates
 
-Verified cases: **6528 passes/37 failures/zero skips**. The recorded aggregate is 6535 passes, including seven inconsistent runner XML passes withheld from verified totals/classification. Classification: **328 native/311 shared-public/42 explicit-old/5847 pending**, separate unclassified zero. Generation `e38062ac-36d0-4fe8-8517-5f59ebd95068`; 1219 retained inventory attempts at this checkpoint. Further diagnostic/control attempts can increase that count without changing the accepted partition.
+Actual source from `31be71369f262f0c15d775b68d31aab8edab0b1b` rejected all **six request digests**, including both nine-MiB inputs. Each measured digest differed from its independent oracle. The original codec produced **39 passes/one field-order failure**. Both controls exited one, without timeout or skip. After byte-identical restoration, unchanged tests passed **6/6 request cases and 40/40 codec cases**, exiting zero.
 
-There are **26 historical missing attempts and zero latest missing files**. The four original missing target attempts remain missing historical evidence after new valid records supersede them. The fifth formerly unknown path remains unverified for runner-summary inconsistency, not missing XML. Original admission PID 98836 remains historically missing at its distinct source. No original missing evidence is reconstructed as green.
+Both retaining controls rejected **four original ownership predicates**, with two positive charge passes each, exit one, no timeout/skip. Census hash and counterpart guard mutations each rejected and restored with `cmp=0`; the current runner still matches its saved backup. The final census/API suites pass ten cases total: seven original reconciliation cases, one request-source case and two counterpart cases.
 
-Exact remaining **19 names**: W22-REMAINING-FAMILIES.tsv. There are eighteen measured red files across conversation observation/model stamps, child ownership/transport, retained growth/controls, send snapshot count, deferred acknowledgement, semantic purge, stream request demand and turn-media rollback, plus the inconsistent runner meta-suite. No new family repair began and no package sweep is pending. Group labels do not establish shared causes.
+The fourteen target files retain **51 passes per backend**, plus forty codec passes per backend. Their completed matrices were reused. All 162 original assertion expressions, domains, timeouts, 512/8192 scales, 440-row/8 MiB bounds and nine-MiB inputs remain; independent oracles and goldens are unchanged.
 
-## Completed proof and open verification
+**No scoped finalization gate is missing.** Ten saved product gates exited zero. Final touched and census strict types, zero-warning lint, format, affected-import graph and AST scan also exited zero. The scan reports 2490 corpus findings, with no new MOCK_MIRROR/ALWAYS_TRUE/SELF_CONFIRMING/NO_ASSERT findings on scoped sources relative to the saved scan. Existing rollback comparisons and repeated phase assertions remain documented; scanner enforcement was not changed. Graph validation does not establish shard-test execution.
 
-All 162 original assertions, parameter domains, timeouts, 512/8192 scales, 440-row/8 MiB bounds and nine-MiB inputs remain. Native request serialization preserves recognized-key order; exact codec RED is in codec-red.log. Snapshot prototype methods forward explicitly. Native publication/admission counterparts, real media reservations, complete public/durable rollback and identical retry actually run. The media suite passes four cases under both outer settings; native digest passes six including both large inputs. Independent oracles/goldens remain unchanged.
+Two additional census type-check invocations used incomplete compiler contexts and failed on dependency declarations, then `.ts` import configuration. Both logs remain. The completed invocation inherits the unchanged repository strict options and enables Bun `.ts` imports. No repository check was weakened.
 
-Both retaining controls reject four original predicates with two positive charge passes, exit one, no timeout/skip. All ten saved main product gates pass. New touched types/lint/format and ten census API tests pass. Missing exact request case coverage is unverified; explicit-old needs a distinct completed exact-source journal counterpart, outside-inventory evidence does not enlarge inventory. Removing each census guard fails and cmp restores exact bytes.
+The effective supplemental matrix is **35 files per outer setting: journal 224 passes/one failure; old 225 passes/zero failures**, no skips. The unchanged journal failure is `packages/core/src/services/history/addbatch-value-serialization.test.ts`, which constructs an old recorder before its assertions. It stays red outside the inventory. Its old pass and separate native cyclic-codec/checkpoint proof do not close that exact fixture gap.
 
-The effective final-source supplemental journal result includes **one known red**: core addbatch-value-serialization constructs an old recorder under journal selection before its assertions. It is unchanged and outside the inventory. Its old comparison passes; existing native cyclic-codec/checkpoint proofs pass separately and do not close the exact addBatch fixture gap. Failed poisoned-writer retry, blocked finalization-pause and first-use prompt-initialization attempts are retained as fixture authoring evidence. The media fixture now arms recoverable rejection after cancellation and initializes the prompt before comparing request bytes.
+## Accepted census and remaining work
 
-At this checkpoint, remaining outer-old supplemental files, original-source byte comparison/restoration, final graph/AST audit and final ledger aggregation are pending. Do not claim all scoped verification is complete. Main verification authority is request-publication-run-k/verify-f-current.json.
+**806 = 787 green + 18 red + one unverified**, zero unrun. Exactly ten red and four unverified target paths became green from 773/28/5. This is cumulative per-file evidence, not whole-package final-source green.
 
-## Owned process handoff
+Verified cases: **6528 passes/37 failures/zero skips**. The aggregate records 6535 passes; seven inconsistent runner XML passes remain withheld. Classifications: **328 native/311 shared-public/42 explicit-old/5847 pending**, separate unclassified zero. Frozen generation `228ad4f6-129a-475b-adc9-ec6227da0203`: **1224 retained attempts, 26 historical missing attempts, zero latest missing files**. Original admission PID 98836 remains historically missing at its distinct source.
 
-Supervisor **21084** runs only the remaining serial positive comparisons. Supervisor **21362** waits, then runs original-source request/codec controls; it temporarily replaces two production files and restores exact bytes in finally with cmp. Supervisor **22669** waits for that control, then runs final graph/audit and publishes the frozen ledger and W22-REQUEST-PUBLICATION-PROOF.json. Exact observed identities/current child/results/hashes are in W22-REQUEST-PUBLICATION-CHECKPOINT.json. **Do not edit production or start overlapping heavy tests while this chain runs.** Check both source-control-current.json.done and source-control-restoration.json before assuming restoration.
+The exact **19 remaining paths** are in W22-REMAINING-FAMILIES.tsv. Conversation observations/model stamps, child ownership/transport, retained growth/controls, send snapshot count, deferred acknowledgement, semantic purge, stream request demand and turn-media rollback remain red; runner-summary accounting remains unverified. Group labels do not establish shared causes. W22/W23-W26, pending classification and scratch removal remain open. The old default is unchanged.
 
-After ledger-current.json.done, run write-final-status.ts, inspect audit findings and the final source/process receipts, then commit compact proof only. Scripts/results live under tmp/854-notes/p4/w22/request-publication-run-k/. Preserve the known related red and remaining nineteen names.
+## Process closure and handoff
 
-W22/W23-W26, pending classification and scratch removal remain open; old default unchanged. Review skipped per Andrew 2026-10-09. No OCR, cleanup/deletion, .llxprt edit/staging, raw recovery bulk staging, skip, weaker assertions/bounds/timeouts, push or merge. The verified ignored test-utils declaration obstruction was preserved intact at its unique held path with 87 hashes/inode verified. Unrelated memory/recovery changes remain untouched.
+The final process receipt checked **153 specific recorded PIDs and found all absent**, including supervisors **95088, 21084, 21362, 22669**, original-source driver/children **30110, 30111, 31160**, restored-source driver/children **31170, 31173, 32273**, and final graph/audit **32282, 32352**. There is no active mutation, pending supervisor or handed-off test process. Exact PID list and observation timestamp: W22-REQUEST-PUBLICATION-PROOF.json and `request-publication-run-k/final-process-receipt.json`.
+
+Raw evidence and frozen ledger checksums remain under `tmp/854-notes/p4/w22/request-publication-run-k/`; compact proof/checkpoint documents refer to them by SHA-256. The verified ignored test-utils declaration obstruction remains intact at its unique held path, with its earlier 87 hashes/inode receipt preserved. Unrelated dirty memory/recovery files remain untouched.
+
+Review skipped per Andrew 2026-10-09. No OCR, cleanup/deletion, `.llxprt/` edit/staging, raw recovery bulk staging, push, merge, skip, assertion/bound/timeout weakening or default flip occurred. No further functional cluster starts before primary handoff.

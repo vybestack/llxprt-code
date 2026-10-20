@@ -1,5 +1,19 @@
 # Recovery chronology, reconstructed
 
+## W22 request/publication finalization, 2026-10-20T02:30:02.504Z
+
+Fourteen target files pass 51 cases per backend. Preserve production d7e78deae, early fixture commit 6a8d4c944 and census commit f126215be. Commit only green supplemental tests and compact proof; no further family work.
+
+Accept only the completed final journal target batches with exact source/case contracts. Explicit-old contracts require a distinct completed journal counterpart with matching source and consistent XML/raw summary. Do not substitute unknown/missing evidence, old/diagnostic/control runs or the same old case for native proof. Ten total census/API cases and restored rejecting hash/counterpart controls enforce this.
+
+Native codec and clone conversion preserve recognized field order because request JSON bytes are part of the existing contract. Keep default header encoding and independent original oracles unchanged. Snapshot prototype methods need explicit forwarding. Native publication uses reference/finalization participants, real writer gates, committed rows and compensation; physical failed writers remain poisoned. Arm the recoverable media-finalization rejection only after cancellation rollback completes. Initialize prompt files before comparing first/retried bytes, matching existing lifecycle fixtures. Preserve all failed authoring attempts.
+
+Reuse completed matching matrices/gates. The exact ignored test-utils declaration obstruction was preserved intact, not deleted. Keep the supplemental old-recorder addBatch mismatch red and outside the inventory delta; native cyclic/checkpoint coverage is separate and does not close its exact fixture gap. Effective matrix: journal 224/1, old 225/0, 35 files each, no skips.
+
+Accepted census: 787 green/18 red/1 unverified, 6528 verified passes/37 failures, seven inconsistent runner XML passes excluded. Exactly ten red and four unverified target paths become green. Retain 26 historical missing attempts, 0 latest missing files and the separate runner inconsistency. Exact remaining 19 names stay in W22-REMAINING-FAMILIES.tsv. This is not full-package final-source green/native proof.
+
+Detailed hashes, source comparisons, actual RED controls, cmp restoration, gates, processes and frozen generation 228ad4f6-129a-475b-adc9-ec6227da0203: W22-REQUEST-PUBLICATION-PROOF.json/.md. W22/W23-W26, pending classification, scratch removal and old default remain unchanged. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edits/staging, raw recovery staging, OCR, push, merge, skips or weaker checks.
+
 ## W22 request/publication checkpoint, 2026-10-20T02:27:25.284Z
 
 Fourteen targets pass 51 cases per backend. Green source commits are 6a8d4c944/f126215be/ba487149d/95ca77b0d, preserving production d7e78deae. Commit source early, do not begin another family.
