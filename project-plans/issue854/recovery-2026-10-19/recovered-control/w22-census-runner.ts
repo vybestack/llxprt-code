@@ -28,9 +28,11 @@ const CORE_FAULT_BATCHES = [
   'fault-deferred-final-journal-m-b',
   'fault-changed-final-journal-m-c',
 ];
+const CHILD_OWNERSHIP_BATCHES = ['child-final-journal-n-e'];
 const OBSERVATION_CONTRACT_BATCHES = [
   ...OBSERVATION_BATCHES,
   ...CORE_FAULT_BATCHES,
+  ...CHILD_OWNERSHIP_BATCHES,
 ];
 const REQUEST_BATCHES = [
   'request-middle-final-journal-k-b',
@@ -39,6 +41,7 @@ const REQUEST_BATCHES = [
 const REQUEST_NATIVE_BATCHES = [
   ...REQUEST_BATCHES,
   ...CORE_FAULT_BATCHES,
+  ...CHILD_OWNERSHIP_BATCHES,
   'request-related-final-journal-k-b',
   'request-related-completion-journal-k-e',
   'request-media-final-journal-k-h',
@@ -174,6 +177,10 @@ function acceptedBatches(
     {
       reference: 'core-fault-run-m/verify-current.json',
       batches: CORE_FAULT_BATCHES,
+    },
+    {
+      reference: 'childownership-run-n/verify-current.json',
+      batches: CHILD_OWNERSHIP_BATCHES,
     },
   ];
   return layers.flatMap((layer) =>
@@ -482,6 +489,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const observationContracts = classificationContracts(w22, [
     'core-observation-run-l/classification.json',
     'core-fault-run-m/classification.json',
+    'childownership-run-n/classification.json',
   ]);
   const checkpoints = [
     join(run, 'accounting.json'),
