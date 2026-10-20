@@ -1,0 +1,2111 @@
+{
+  "date": "2026-10-20T16:01:50.496Z",
+  "entryHead": "800390b4652b34a7de8cf641c352d3ffcdb36d7d",
+  "methodCommit": "800390b4652b34a7de8cf641c352d3ffcdb36d7d",
+  "status": "Qualified pinned-code raw heap green; original default-total-heap RED preserved; W24 partial",
+  "mode": {
+    "W24_MEASUREMENT_MODE": "pinned-code-v1",
+    "BUN_JSC_forceCodeBlockLiveness": "true",
+    "BUN_JSC_dumpOptions": "1"
+  },
+  "engine": "1.3.14",
+  "revision": "0d9b296af33f2b851fcbf4df3e9ec89751734ba4",
+  "fullPromptSha256": "16980b2d58863b37293d02d4ba330968947a732d30989b84a69a700d423af2d8",
+  "sourceCount": 7767,
+  "sourceRelocations": {
+    "packages/cli/src/ui/hooks/whole-product-heap.test.ts": "packages/cli/src/__tests__/heap-workers/whole-product-heap.diagnostic.ts",
+    "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts": "packages/cli/src/__tests__/heap-workers/whole-product-pinned-heap.fixture.ts"
+  },
+  "positive": {
+    "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-M7W6Mv/normal-heap-io.json",
+    "value": {
+      "pid": 70187,
+      "measurementMode": "pinned-code-v1",
+      "inputHash": "3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc",
+      "measuredTurns": 50,
+      "requests": 60,
+      "toolRounds": 5,
+      "transport": {
+        "inputHash": "78d5bdc2958847acb8cbb59b40930c035b02ec64cb4040639e00943fada37873",
+        "requests": 708,
+        "toolRounds": 59
+      },
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [31107, 74713, 174226, 242753, 283459],
+        "retainedBytes": 283459,
+        "lateFittedGrowthBytes": 208429.5,
+        "lateEndpointGrowthBytes": 208746
+      },
+      "observedRows": 165,
+      "aliveRows": 0,
+      "retainedRows": 0,
+      "warmupAliveRows": 0,
+      "observedWarmupRows": 1782,
+      "warmup": {
+        "turns": 530
+      },
+      "lifetime": {
+        "prepared": 55,
+        "closed": 55,
+        "outstanding": 0
+      }
+    }
+  },
+  "trap": {
+    "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-ORHGlV/trap-heap-io.json",
+    "value": {
+      "pid": 74829,
+      "measurementMode": "pinned-code-v1",
+      "inputHash": "3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc",
+      "measuredTurns": 50,
+      "requests": 60,
+      "toolRounds": 5,
+      "transport": {
+        "inputHash": "78d5bdc2958847acb8cbb59b40930c035b02ec64cb4040639e00943fada37873",
+        "requests": 708,
+        "toolRounds": 59
+      },
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 24814681 bytes at turn 10 exceeds allowance 1048576",
+          "retained 67838963 bytes at turn 20 exceeds allowance 1048576",
+          "retained 110914428 bytes at turn 30 exceeds allowance 1048576",
+          "retained 153957734 bytes at turn 40 exceeds allowance 1048576",
+          "retained 196975196 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 129135602 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 129136233 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [
+          24814681, 67838963, 110914428, 153957734, 196975196
+        ],
+        "retainedBytes": 196975196,
+        "lateFittedGrowthBytes": 129135601.5,
+        "lateEndpointGrowthBytes": 129136233
+      },
+      "observedRows": 165,
+      "aliveRows": 165,
+      "retainedRows": 8085,
+      "warmupAliveRows": 0,
+      "observedWarmupRows": 1782,
+      "warmup": {
+        "turns": 530
+      },
+      "lifetime": {
+        "prepared": 55,
+        "closed": 55,
+        "outstanding": 0
+      }
+    }
+  },
+  "defaultPositive": {
+    "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-5n7Yen/default-census-release.json",
+    "value": {
+      "pid": 68368,
+      "measurementMode": "default-jsc",
+      "inputHash": "6b26d2f3e311758adb0295594628a078b69470902a2fe34ea1af11d28e23eb96",
+      "measuredTurns": 20,
+      "requests": 24,
+      "toolRounds": 2,
+      "transport": {
+        "inputHash": "e528bb59e78474f3e5b82a21eeb8c011beb2693fdebdacdb01de5b77ad866bbd",
+        "requests": 48,
+        "toolRounds": 4
+      },
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [-7478055, -9381410],
+        "retainedBytes": -9381410,
+        "lateFittedGrowthBytes": -1903355,
+        "lateEndpointGrowthBytes": -1903355
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [70791, 86553],
+        "retainedBytes": 86553,
+        "lateFittedGrowthBytes": 15762,
+        "lateEndpointGrowthBytes": 15762
+      },
+      "observedRows": 2640,
+      "aliveRows": 0,
+      "retainedRows": 0,
+      "lifetime": {
+        "prepared": 22,
+        "closed": 22,
+        "outstanding": 0
+      }
+    }
+  },
+  "defaultTrap": {
+    "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-IzaIWA/default-census-retain.json",
+    "value": {
+      "pid": 69206,
+      "measurementMode": "default-jsc",
+      "inputHash": "6b26d2f3e311758adb0295594628a078b69470902a2fe34ea1af11d28e23eb96",
+      "measuredTurns": 20,
+      "requests": 24,
+      "toolRounds": 2,
+      "transport": {
+        "inputHash": "e528bb59e78474f3e5b82a21eeb8c011beb2693fdebdacdb01de5b77ad866bbd",
+        "requests": 48,
+        "toolRounds": 4
+      },
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 23438367 bytes at turn 10 exceeds allowance 1048576",
+          "retained 62667522 bytes at turn 20 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 39229155 bytes over turns 10 to 20 exceeds 262144 bytes of settle noise",
+          "heap grew 39229155 bytes from turn 10 to 20, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [23438367, 62667522],
+        "retainedBytes": 62667522,
+        "lateFittedGrowthBytes": 39229155,
+        "lateEndpointGrowthBytes": 39229155
+      },
+      "dataVerdict": {
+        "pass": false,
+        "failures": [
+          "retained 34061205 bytes at turn 10 exceeds allowance 1048576",
+          "retained 72572320 bytes at turn 20 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 38511115 bytes over turns 10 to 20 exceeds 262144 bytes of settle noise",
+          "heap grew 38511115 bytes from turn 10 to 20, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [34061205, 72572320],
+        "retainedBytes": 72572320,
+        "lateFittedGrowthBytes": 38511115,
+        "lateEndpointGrowthBytes": 38511115
+      },
+      "observedRows": 2640,
+      "aliveRows": 2640,
+      "retainedRows": 2640,
+      "lifetime": {
+        "prepared": 22,
+        "closed": 22,
+        "outstanding": 0
+      }
+    }
+  },
+  "launcher": {
+    "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-a7QxGd/normal-heap-io.json",
+    "value": {
+      "pid": 91928,
+      "measurementMode": "pinned-code-v1",
+      "inputHash": "3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc",
+      "measuredTurns": 50,
+      "requests": 60,
+      "toolRounds": 5,
+      "transport": {
+        "inputHash": "78d5bdc2958847acb8cbb59b40930c035b02ec64cb4040639e00943fada37873",
+        "requests": 708,
+        "toolRounds": 59
+      },
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [43323, 85663, 186192, 238313, 278581],
+        "retainedBytes": 278581,
+        "lateFittedGrowthBytes": 189262.5,
+        "lateEndpointGrowthBytes": 192918
+      },
+      "observedRows": 165,
+      "aliveRows": 0,
+      "retainedRows": 0,
+      "warmupAliveRows": 0,
+      "observedWarmupRows": 1782,
+      "warmup": {
+        "turns": 530
+      },
+      "lifetime": {
+        "prepared": 55,
+        "closed": 55,
+        "outstanding": 0
+      }
+    }
+  },
+  "primitiveControls": [
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-retain-jGsd2l/result.json",
+      "pid": 64649,
+      "mode": "default-jsc",
+      "kind": "offheap-media",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1637051 bytes at turn 20 exceeds allowance 1048576",
+          "retained 2313762 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2980138 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3635082 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1998141 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1998031 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [941919, 1637051, 2313762, 2980138, 3635082],
+        "retainedBytes": 3635082,
+        "lateFittedGrowthBytes": 1998140.7000000002,
+        "lateEndpointGrowthBytes": 1998031
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7906, 8450, 8989, 9533, 10013],
+        "retainedBytes": 10013,
+        "lateFittedGrowthBytes": 1569.8999999999999,
+        "lateEndpointGrowthBytes": 1563
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-release-UR4QpS/result.json",
+      "pid": 64727,
+      "mode": "default-jsc",
+      "kind": "id-map",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [289807, 319435, 333372, 335652, 336392],
+        "retainedBytes": 336392,
+        "lateFittedGrowthBytes": 15945.3,
+        "lateEndpointGrowthBytes": 16957
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7428, 7490, 7550, 7614, 7614],
+        "retainedBytes": 7614,
+        "lateFittedGrowthBytes": 130.8,
+        "lateEndpointGrowthBytes": 124
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-release-UCNyMN/result.json",
+      "pid": 64586,
+      "mode": "default-jsc",
+      "kind": "cloned-text",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [287487, 324843, 346186, 353534, 351370],
+        "retainedBytes": 351370,
+        "lateFittedGrowthBytes": 26078.699999999997,
+        "lateEndpointGrowthBytes": 26527
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7426, 7491, 7550, 7614, 7614],
+        "retainedBytes": 7614,
+        "lateFittedGrowthBytes": 129.9,
+        "lateEndpointGrowthBytes": 123
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-release-9YZq5z/result.json",
+      "pid": 65212,
+      "mode": "pinned-code-v1",
+      "kind": "id-map",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7314, 13598, 11178, 12226, 9572],
+        "retainedBytes": 9572,
+        "lateFittedGrowthBytes": -3309,
+        "lateEndpointGrowthBytes": -4026
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-retain-f9aLy7/result.json",
+      "pid": 64625,
+      "mode": "pinned-code-v1",
+      "kind": "cloned-text",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1335730 bytes at turn 20 exceeds allowance 1048576",
+          "retained 1992258 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2650371 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3303663 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1968574 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1967933 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [660930, 1335730, 1992258, 2650371, 3303663],
+        "retainedBytes": 3303663,
+        "lateFittedGrowthBytes": 1968573.5999999999,
+        "lateEndpointGrowthBytes": 1967933
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-release-nVEwo0/result.json",
+      "pid": 64568,
+      "mode": "pinned-code-v1",
+      "kind": "decoded-row",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [5298, 17154, 20930, 24766, 22570],
+        "retainedBytes": 22570,
+        "lateFittedGrowthBytes": 6025.2,
+        "lateEndpointGrowthBytes": 5416
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-release-v0p2sq/result.json",
+      "pid": 64546,
+      "mode": "default-jsc",
+      "kind": "decoded-row",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [288799, 321495, 338764, 343392, 344212],
+        "retainedBytes": 344212,
+        "lateFittedGrowthBytes": 21833.699999999997,
+        "lateEndpointGrowthBytes": 22717
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7428, 7492, 7550, 7614, 7614],
+        "retainedBytes": 7614,
+        "lateFittedGrowthBytes": 129,
+        "lateEndpointGrowthBytes": 122
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-retain-lNk0KJ/result.json",
+      "pid": 64721,
+      "mode": "pinned-code-v1",
+      "kind": "array",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1331162 bytes at turn 20 exceeds allowance 1048576",
+          "retained 1990202 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2649066 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3304778 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1973914 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1973616 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [663246, 1331162, 1990202, 2649066, 3304778],
+        "retainedBytes": 3304778,
+        "lateFittedGrowthBytes": 1973913.5999999999,
+        "lateEndpointGrowthBytes": 1973616
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-release-Tzs1qs/result.json",
+      "pid": 64684,
+      "mode": "default-jsc",
+      "kind": "array",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [289899, 319879, 339216, 346676, 347496],
+        "retainedBytes": 347496,
+        "lateFittedGrowthBytes": 27093.3,
+        "lateEndpointGrowthBytes": 27617
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7428, 7493, 7551, 7615, 7615],
+        "retainedBytes": 7615,
+        "lateFittedGrowthBytes": 129,
+        "lateEndpointGrowthBytes": 122
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-release-2kGWtd/result.json",
+      "pid": 64620,
+      "mode": "pinned-code-v1",
+      "kind": "cloned-text",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [5298, 23618, 26978, 32126, 29930],
+        "retainedBytes": 29930,
+        "lateFittedGrowthBytes": 7225.2,
+        "lateEndpointGrowthBytes": 6312
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-release-3jFLG5/result.json",
+      "pid": 64713,
+      "mode": "pinned-code-v1",
+      "kind": "array",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [5506, 17362, 21422, 24014, 24046],
+        "retainedBytes": 24046,
+        "lateFittedGrowthBytes": 6793.2,
+        "lateEndpointGrowthBytes": 6684
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-retain-9Q5csd/result.json",
+      "pid": 65222,
+      "mode": "pinned-code-v1",
+      "kind": "id-map",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 8900630 bytes at turn 10 exceeds allowance 1048576",
+          "retained 13601594 bytes at turn 20 exceeds allowance 1048576",
+          "retained 22496407 bytes at turn 30 exceeds allowance 1048576",
+          "retained 27198211 bytes at turn 40 exceeds allowance 1048576",
+          "retained 40286151 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 25426643 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 26684557 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [8900630, 13601594, 22496407, 27198211, 40286151],
+        "retainedBytes": 40286151,
+        "lateFittedGrowthBytes": 25426642.5,
+        "lateEndpointGrowthBytes": 26684557
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-retain-uL1MJf/result.json",
+      "pid": 64927,
+      "mode": "default-jsc",
+      "kind": "id-map",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 9177164 bytes at turn 10 exceeds allowance 1048576",
+          "retained 16251692 bytes at turn 20 exceeds allowance 1048576",
+          "retained 27497132 bytes at turn 30 exceeds allowance 1048576",
+          "retained 32199000 bytes at turn 40 exceeds allowance 1048576",
+          "retained 45286972 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 27542312 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 29035280 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [9177164, 16251692, 27497132, 32199000, 45286972],
+        "retainedBytes": 45286972,
+        "lateFittedGrowthBytes": 27542312.4,
+        "lateEndpointGrowthBytes": 29035280
+      },
+      "dataVerdict": {
+        "pass": false,
+        "failures": [
+          "retained 8901073 bytes at turn 10 exceeds allowance 1048576",
+          "retained 13600436 bytes at turn 20 exceeds allowance 1048576",
+          "retained 22494105 bytes at turn 30 exceeds allowance 1048576",
+          "retained 27193469 bytes at turn 40 exceeds allowance 1048576",
+          "retained 40281377 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 25422656 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 26680941 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [8901073, 13600436, 22494105, 27193469, 40281377],
+        "retainedBytes": 40281377,
+        "lateFittedGrowthBytes": 25422656.1,
+        "lateEndpointGrowthBytes": 26680941
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-release-MakouH/result.json",
+      "pid": 64672,
+      "mode": "pinned-code-v1",
+      "kind": "offheap-media",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [4994, 24114, 27890, 31390, 29194],
+        "retainedBytes": 29194,
+        "lateFittedGrowthBytes": 5622,
+        "lateEndpointGrowthBytes": 5080
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-retain-QFmyYI/result.json",
+      "pid": 64554,
+      "mode": "default-jsc",
+      "kind": "decoded-row",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1633214 bytes at turn 20 exceeds allowance 1048576",
+          "retained 2310602 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2977848 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3633102 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 2000073 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1999888 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [945233, 1633214, 2310602, 2977848, 3633102],
+        "retainedBytes": 3633102,
+        "lateFittedGrowthBytes": 2000073.0000000002,
+        "lateEndpointGrowthBytes": 1999888
+      },
+      "dataVerdict": {
+        "pass": false,
+        "failures": [
+          "retained 1321479 bytes at turn 20 exceeds allowance 1048576",
+          "retained 1978532 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2635586 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3292580 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1971107 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1971101 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [664422, 1321479, 1978532, 2635586, 3292580],
+        "retainedBytes": 3292580,
+        "lateFittedGrowthBytes": 1971107.1,
+        "lateEndpointGrowthBytes": 1971101
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-retain-aVnlMI/result.json",
+      "pid": 64699,
+      "mode": "default-jsc",
+      "kind": "array",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1651060 bytes at turn 20 exceeds allowance 1048576",
+          "retained 2307324 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2970640 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3626328 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1976736 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1975268 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [939255, 1651060, 2307324, 2970640, 3626328],
+        "retainedBytes": 3626328,
+        "lateFittedGrowthBytes": 1976736,
+        "lateEndpointGrowthBytes": 1975268
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7589, 7806, 8030, 8254, 8415],
+        "retainedBytes": 8415,
+        "lateFittedGrowthBytes": 615.3000000000001,
+        "lateEndpointGrowthBytes": 609
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-retain-xjaq7K/result.json",
+      "pid": 64607,
+      "mode": "default-jsc",
+      "kind": "cloned-text",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1655158 bytes at turn 20 exceeds allowance 1048576",
+          "retained 2311762 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2975942 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3629242 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1975930 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1974084 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [936763, 1655158, 2311762, 2975942, 3629242],
+        "retainedBytes": 3629242,
+        "lateFittedGrowthBytes": 1975929.6,
+        "lateEndpointGrowthBytes": 1974084
+      },
+      "dataVerdict": {
+        "pass": false,
+        "failures": [
+          "retained 1318526 bytes at turn 20 exceeds allowance 1048576",
+          "retained 1974111 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2629695 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3285215 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1966695 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1966689 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [662948, 1318526, 1974111, 2629695, 3285215],
+        "retainedBytes": 3285215,
+        "lateFittedGrowthBytes": 1966695.2999999998,
+        "lateEndpointGrowthBytes": 1966689
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-retain-hTNE1f/result.json",
+      "pid": 64674,
+      "mode": "pinned-code-v1",
+      "kind": "offheap-media",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1343710 bytes at turn 20 exceeds allowance 1048576",
+          "retained 2001066 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2660954 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3316990 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1973918 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1973280 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [664818, 1343710, 2001066, 2660954, 3316990],
+        "retainedBytes": 3316990,
+        "lateFittedGrowthBytes": 1973918.4,
+        "lateEndpointGrowthBytes": 1973280
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-retain-NRldGy/result.json",
+      "pid": 64576,
+      "mode": "pinned-code-v1",
+      "kind": "decoded-row",
+      "retaining": true,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 1331781 bytes at turn 20 exceeds allowance 1048576",
+          "retained 1993000 bytes at turn 30 exceeds allowance 1048576",
+          "retained 2655378 bytes at turn 40 exceeds allowance 1048576",
+          "retained 3310656 bytes at turn 50 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 1979701 bytes over turns 20 to 50 exceeds 262144 bytes of settle noise",
+          "heap grew 1978875 bytes from turn 20 to 50, above 262144 bytes of settle noise"
+        ],
+        "checkpointDeltas": [663220, 1331781, 1993000, 2655378, 3310656],
+        "retainedBytes": 3310656,
+        "lateFittedGrowthBytes": 1979700.9,
+        "lateEndpointGrowthBytes": 1978875
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-release-ZfbgMA/result.json",
+      "pid": 64634,
+      "mode": "default-jsc",
+      "kind": "offheap-media",
+      "retaining": false,
+      "inputHash": "a35b26e87ec9f3ae319d962b14e528e0655c947efb51156f80aa6847d22073bd",
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [287487, 322091, 342114, 351810, 349590],
+        "retainedBytes": 349590,
+        "lateFittedGrowthBytes": 27657.899999999998,
+        "lateEndpointGrowthBytes": 27499
+      },
+      "dataVerdict": {
+        "pass": true,
+        "failures": [],
+        "checkpointDeltas": [7426, 7490, 7549, 7613, 7613],
+        "retainedBytes": 7613,
+        "lateFittedGrowthBytes": 129.9,
+        "lateEndpointGrowthBytes": 123
+      }
+    }
+  ],
+  "frozenGates": [
+    {
+      "name": "format-frozen",
+      "pid": 67822,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap.ts",
+        "packages/cli/src/__tests__/support/whole-product-io.ts",
+        "packages/cli/src/__tests__/support/whole-product-retention.ts",
+        "packages/cli/src/__tests__/support/whole-product-transport.ts",
+        "packages/cli/src/__tests__/support/whole-product-measurement.ts",
+        "packages/cli/src/__tests__/support/whole-product-measurement.test.ts",
+        "packages/cli/src/__tests__/support/whole-product-meter-control.ts",
+        "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+        "packages/cli/src/__tests__/support/whole-product-warmup.ts",
+        "packages/cli/src/__tests__/support/whole-product-warmup.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-heap.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "expected": 0,
+      "wallMs": 220.3024170000001
+    },
+    {
+      "name": "lint-frozen",
+      "pid": 67861,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap.ts",
+        "packages/cli/src/__tests__/support/whole-product-io.ts",
+        "packages/cli/src/__tests__/support/whole-product-retention.ts",
+        "packages/cli/src/__tests__/support/whole-product-transport.ts",
+        "packages/cli/src/__tests__/support/whole-product-measurement.ts",
+        "packages/cli/src/__tests__/support/whole-product-measurement.test.ts",
+        "packages/cli/src/__tests__/support/whole-product-meter-control.ts",
+        "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+        "packages/cli/src/__tests__/support/whole-product-warmup.ts",
+        "packages/cli/src/__tests__/support/whole-product-warmup.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-heap.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+        "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "expected": 0,
+      "wallMs": 10732.026208000001
+    },
+    {
+      "name": "types-frozen",
+      "pid": 68069,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/cli/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "expected": 0,
+      "wallMs": 3198.746041999999
+    },
+    {
+      "name": "affected-graph",
+      "pid": 68140,
+      "exit": 0,
+      "args": ["bun", "scripts/check-affected-test-shards.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "expected": 0,
+      "wallMs": 2213.132291
+    },
+    {
+      "name": "audit",
+      "pid": 68197,
+      "exit": 0,
+      "args": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/heap-io-run-e/audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "expected": 0,
+      "wallMs": 3190.948916000001
+    },
+    {
+      "name": "old-lifecycle",
+      "pid": 68253,
+      "exit": 0,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-lifecycle.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "old"
+      },
+      "expected": 0,
+      "wallMs": 2473.447165999998
+    },
+    {
+      "name": "journal-lifecycle",
+      "pid": 68313,
+      "exit": 0,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-lifecycle.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "expected": 0,
+      "wallMs": 2346.873791000002
+    },
+    {
+      "name": "default-release-frozen",
+      "pid": 68368,
+      "exit": 0,
+      "args": [
+        "bun",
+        "test",
+        "src/ui/hooks/whole-product-default-census.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {},
+      "expected": 0,
+      "wallMs": 48419.049166
+    },
+    {
+      "name": "default-retain-frozen",
+      "pid": 69206,
+      "exit": 0,
+      "args": [
+        "bun",
+        "test",
+        "src/ui/hooks/whole-product-default-census.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {
+        "W24_RETAINING_TRAP": "1"
+      },
+      "expected": 0,
+      "wallMs": 58473.456167
+    },
+    {
+      "name": "pinned-positive",
+      "pid": 70187,
+      "exit": 0,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-pinned-heap.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {
+        "W24_MEASUREMENT_MODE": "pinned-code-v1",
+        "BUN_JSC_forceCodeBlockLiveness": "true",
+        "BUN_JSC_dumpOptions": "1"
+      },
+      "expected": null,
+      "wallMs": 257714.802667
+    },
+    {
+      "name": "pinned-trap",
+      "pid": 74829,
+      "exit": 1,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-pinned-heap.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "env": {
+        "W24_MEASUREMENT_MODE": "pinned-code-v1",
+        "BUN_JSC_forceCodeBlockLiveness": "true",
+        "BUN_JSC_dumpOptions": "1",
+        "W24_RETAINING_TRAP": "1"
+      },
+      "expected": 1,
+      "wallMs": 253916.137583
+    }
+  ],
+  "finalGates": [
+    {
+      "name": "build-types",
+      "pid": 9133,
+      "exit": 0,
+      "args": ["npm", "run", "build:types"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "types-cli",
+      "pid": 10755,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/cli/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "test-types-cli",
+      "pid": 11229,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/cli/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "lint",
+      "pid": 11427,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap.ts",
+        "packages/cli/src/__tests__/support/whole-product-io.ts",
+        "packages/cli/src/__tests__/support/whole-product-retention.ts",
+        "packages/cli/src/__tests__/support/whole-product-transport.ts",
+        "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+        "packages/cli/src/__tests__/heap-workers/whole-product-heap.diagnostic.ts",
+        "packages/cli/src/__tests__/heap-workers/whole-product-pinned-heap.fixture.ts",
+        "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "format",
+      "pid": 11793,
+      "exit": 0,
+      "args": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+        "packages/cli/src/__tests__/support/whole-product-heap.ts",
+        "packages/cli/src/__tests__/support/whole-product-io.ts",
+        "packages/cli/src/__tests__/support/whole-product-retention.ts",
+        "packages/cli/src/__tests__/support/whole-product-transport.ts",
+        "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+        "packages/cli/src/__tests__/heap-workers/whole-product-heap.diagnostic.ts",
+        "packages/cli/src/__tests__/heap-workers/whole-product-pinned-heap.fixture.ts",
+        "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "graph",
+      "pid": 11800,
+      "exit": 0,
+      "args": ["bun", "scripts/check-affected-test-shards.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "audit",
+      "pid": 11895,
+      "exit": 0,
+      "args": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/heap-io-run-e/final3-audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "discovery",
+      "pid": 11993,
+      "exit": 0,
+      "args": ["bun", "scripts/check-cli-test-discovery.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    }
+  ],
+  "failedGates": [
+    {
+      "name": "build-types",
+      "pid": 99933,
+      "exit": 1,
+      "args": ["npm", "run", "build:types"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    },
+    {
+      "name": "build-types",
+      "pid": 2785,
+      "exit": 1,
+      "args": ["npm", "run", "build:types"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code"
+    }
+  ],
+  "launcherSource": {
+    "path": "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts",
+    "sha256": "233d8e199d6c9ce9f278e6a7038e62e4d8da2a3ae85a95d8e94597dbf819c3a5",
+    "executionQualification": "The successful launcher execution preceded path-only worker relocation. Exact launcher reconstruction, byte-identical worker hashes and identical resolved imports are checked in layout-binding.json.",
+    "layoutBinding": {
+      "launcherPath": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts",
+      "executedLauncherSha256": "89a1dc545f00a8465ef0fc5d6907a93960238802c8fe9efba356fdaeccafba5c",
+      "currentLauncherSha256": "233d8e199d6c9ce9f278e6a7038e62e4d8da2a3ae85a95d8e94597dbf819c3a5",
+      "launcherChange": "Only worker path; exact string reconstruction checked",
+      "entries": [
+        {
+          "oldPath": "packages/cli/src/ui/hooks/whole-product-heap.test.ts",
+          "path": "packages/cli/src/__tests__/heap-workers/whole-product-heap.diagnostic.ts",
+          "sha256": "1978c14d1c6a03826cc9099d845fa86b7050835499519a67da0de64541da9058",
+          "imports": [
+            {
+              "specifier": "bun:test",
+              "resolved": "bun:test"
+            },
+            {
+              "specifier": "../../__tests__/support/whole-product-heap.js",
+              "resolved": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/src/__tests__/support/whole-product-heap.ts"
+            }
+          ]
+        },
+        {
+          "oldPath": "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts",
+          "path": "packages/cli/src/__tests__/heap-workers/whole-product-pinned-heap.fixture.ts",
+          "sha256": "d20452df3bd2762c2bf2f24e66eac65fba20c98c1fccea6e22e8e22d7c5a172b",
+          "imports": [
+            {
+              "specifier": "bun:test",
+              "resolved": "bun:test"
+            },
+            {
+              "specifier": "../../__tests__/support/whole-product-heap.js",
+              "resolved": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/src/__tests__/support/whole-product-heap.ts"
+            },
+            {
+              "specifier": "../../__tests__/support/whole-product-measurement.js",
+              "resolved": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli/src/__tests__/support/whole-product-measurement.ts"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-predicate.ts",
+      "executedPath": "packages/agents/src/core/__tests__/support/journal-retained-growth-predicate.ts",
+      "sha256": "99a10da628d2c1d74bbb486df7c1aa7c7464ce4235ae4d832bfe5d6d170f44e4"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-child.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-child.ts",
+      "sha256": "1fd575bc1d7ca559d6106af39b16a4061391b50ba072295fb144d9890d362418"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-default-census.ts",
+      "sha256": "b73730d51564d4fcd00f1d2a68cff6a8a8fd9d4b59279316b3763a1f61554f57"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+      "sha256": "642e77c9131389d55bd9939800dec403197260b9d853b017fad2f276e8c7277b"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-heap-turn.ts",
+      "sha256": "998f8def15df639ef6763764c600378ca6e2d2f36650975056199a18070b6ee5"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-heap-window.ts",
+      "sha256": "df8aff8a66ad3a7db58e7d0aa1214840dd3a16c568958994b1639c9a9a18a3c0"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-heap.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-heap.ts",
+      "sha256": "5026d2bd5ff1e40dce2c19347fa8df5f4decd415d0ce75439d50cf6e446759a6"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-io.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-io.ts",
+      "sha256": "19ffce4c6426700ee8fe9181faf1ae748155f5e389dcb1961d8b7ca1be450424"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-lifecycle.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-lifecycle.ts",
+      "sha256": "843aad8f8b3628662fed865a6b79be5fff3c5568b2b112245853547bc6c10f08"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-measurement.test.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-measurement.test.ts",
+      "sha256": "0aaeb6091e985cac3fce2569fcedf13024ecd0783e37785893e5d39981c59069"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-measurement.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-measurement.ts",
+      "sha256": "1876c7c49338d36a3f1fefa0914085480b96016ecc30ce699c6017b815543cf5"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-meter-control.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-meter-control.ts",
+      "sha256": "a77af0cf75b30acc4daf010706f831c96c63afcfa3cfb7a37bc94e2db62808e6"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-observer.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-observer.ts",
+      "sha256": "0748602d3aff1f130f74428544287dc763c28a4392cf3f65434f7746d255970c"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-retention.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-retention.ts",
+      "sha256": "ee3367b350a54fb49f95960b6c38d56c6f172e0fcb5342d8bf2e814093fa5f23"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-transport.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-transport.ts",
+      "sha256": "51286c3e2f560b9f76a87a6512d3cd8ee754d076953956834528a99ef832c56f"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-warmup.test.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-warmup.test.ts",
+      "sha256": "45f927320efbdf10fce5a7d8cbf4c675e6460f3213f6224a952b711f9bd0b107"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-warmup.ts",
+      "executedPath": "packages/cli/src/__tests__/support/whole-product-warmup.ts",
+      "sha256": "d2d5f78d6a613a0e25e26fa6f7efdf81d297ce1a60145900c4a6acfb94a41ac6"
+    },
+    {
+      "path": "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+      "executedPath": "packages/cli/src/ui/hooks/whole-product-default-census.test.ts",
+      "sha256": "0afa9c97a461d14f5cd6beca40fd4e20a800a3584c4ebf7e0bb28e84f717880c"
+    },
+    {
+      "path": "packages/cli/src/__tests__/heap-workers/whole-product-heap.diagnostic.ts",
+      "executedPath": "packages/cli/src/ui/hooks/whole-product-heap.test.ts",
+      "sha256": "1978c14d1c6a03826cc9099d845fa86b7050835499519a67da0de64541da9058"
+    },
+    {
+      "path": "packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts",
+      "executedPath": "packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts",
+      "sha256": "939b99c84587efb54e2252c499c0ceec78c305706dcbfee5aca9f77af6680d50"
+    },
+    {
+      "path": "packages/cli/src/__tests__/heap-workers/whole-product-pinned-heap.fixture.ts",
+      "executedPath": "packages/cli/src/ui/hooks/whole-product-pinned-heap.test.ts",
+      "sha256": "d20452df3bd2762c2bf2f24e66eac65fba20c98c1fccea6e22e8e22d7c5a172b"
+    },
+    {
+      "path": "packages/core/src/services/complexity-analyzer.ts",
+      "executedPath": "packages/core/src/services/complexity-analyzer.ts",
+      "sha256": "3c46fdbec14a270ed07620cb91db58968047441eb94a6b03990c09e3faad3e45"
+    },
+    {
+      "path": "packages/storage/src/conversation/__tests__/support/settled-heap.ts",
+      "executedPath": "packages/storage/src/conversation/__tests__/support/settled-heap.ts",
+      "sha256": "02266cce285e192c42ffd70638681af2c9399a743f92b22982e8c834133d7a7d"
+    },
+    {
+      "path": "packages/test-utils/src/core/settled-heap.ts",
+      "executedPath": "packages/test-utils/src/core/settled-heap.ts",
+      "sha256": "8c884f18a76af947fa4eca092cd2f237f33987652ee688f66dfa78fbfc6d5fe4"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/frozen.json",
+      "sha256": "2f685c283e8034b568c27cd16ea2484ab5b1212706787c9911e62fb0234e4125"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/source-after.json",
+      "sha256": "bf9a4950a80b6642fe26a66001bb54de201c0e4fe5619f903e96bb5718339f3f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/frozen-results.json",
+      "sha256": "332ec5941bbfb16753716a07ebfba5ad30b85edf57c87137945d60306d283e5a"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/bind-proof.ts",
+      "sha256": "53db27843ef072e4f5496cc991af536ecd0e8c24f6c35d5e676f4fa853e1b62d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/bind-proof-final.ts",
+      "sha256": "00419dab58d14aae9747614324182215e20b0dabdaa5342be6406326b56b51ab"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/bound-prelayout.json",
+      "sha256": "37969975afee0d57d53df2bb1a35000032ca46211d4616fe911b89cedee09861"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-proof.ts",
+      "sha256": "433ea5cf8bf5f5f3c85c6e3b1d646b081573ce527c5f3b43a8120258da0f9673"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-gates.ts",
+      "sha256": "445184f8c9588791463e50e037138521fc6e279c5064b585d41a8c2b56c4f90e"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-results.json",
+      "sha256": "61cb89eb280c863b190b3bfbe8c0859a18a15f5a15bcc8c0768da59019351051"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/method-final-package.log",
+      "sha256": "52bb70d02b9e0267c3a21523b539d822f033a563aa99f75fcc51e31789cebca8"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/warmup-final.log",
+      "sha256": "a8a2b97fcf341f720caedfbca0bb0abc0e547365ca99322ba7043fcf9a8fdafa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/probe-pinned-code.log",
+      "sha256": "62e35c88737359797b10b9c65421e34e9e9a65b9b41d556ee1e00c16f557555d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/jsc-options.log",
+      "sha256": "c3953f5ac645f53f13a47fbc079a3fc5c65cb0a4b2ae020dc63ec11641090cfe"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/layout-probe.fixture.ts",
+      "sha256": "ca517ba50a1844cc9dfe60e5739e18e75e45d4ac8fc127d60c379a2c8b3a4ec3"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/format-frozen.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/format-frozen.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/lint-frozen.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/lint-frozen.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/types-frozen.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/types-frozen.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/affected-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/affected-graph.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/audit.log",
+      "sha256": "cf818017918d1b63d21c640267b86636fe1358441aab3c33b99fd414d5d52ffb"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/audit.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/old-lifecycle.log",
+      "sha256": "55caa8ad9ef2ea4e6c55ea57808412119b2e1bf418df3896776ab8fc72f43654"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/old-lifecycle.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/journal-lifecycle.log",
+      "sha256": "8255e7e96b69ae85433fd3369556ea03c415c934302c8fa0c2f2de7b311b1c03"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/journal-lifecycle.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/default-release-frozen.log",
+      "sha256": "0287a39e22d8425732b999adbb09f6b755daa8c6b3e991d0a680a22de9ab922d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/default-release-frozen.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/default-retain-frozen.log",
+      "sha256": "41eed2f185fff43a8d4a33af2578cf2c218b76b157a4c3b336f7a8c481fcf078"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/default-retain-frozen.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/pinned-positive.log",
+      "sha256": "f3a5d819777082378019fb0361a4b00be7d4acb9a417cb865146900798ea2cb8"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/pinned-positive.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/pinned-trap.log",
+      "sha256": "63498a0fca8f2b4c9f5fcedb73297a5bcf980dc5cdec533ff5c455527698f82c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/pinned-trap.exit",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-build-types.log",
+      "sha256": "9e8c0ef0a2cda0482790d71350a5f6c4590599786dc17bf4c1f4b6a778519b77"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-build-types.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-types-cli.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-types-cli.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-test-types-cli.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-test-types-cli.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-lint.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-format.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-graph.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-audit.log",
+      "sha256": "16d87552112cf4f397e9233826196e9100654ef10ae9bc94941870144a2d3a90"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-audit.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-discovery.log",
+      "sha256": "cafc71e6fcfd0af5b03ab951845a4942dc3d0a0880e3065b4486ebf049edfb14"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-discovery.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-launcher.log",
+      "sha256": "897882cd8382f2d1824198b95d1be2107a018086636556470e368e94e5fb0ed9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-launcher.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-build-types.log",
+      "sha256": "2a7b019c80e7c67ff8482c3d5b76c552845f491312b25504b4c4c4838f1fb6d3"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/finalize-build-types.exit",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-M7W6Mv/normal-heap-io.json",
+      "sha256": "0c637ee0693e87bab39edc8fde6bcf0daf181363b4a4cecec703d4f7d8ae5595"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-ORHGlV/trap-heap-io.json",
+      "sha256": "0d478de634e8c60f9fe36b9e2177868e47c69a15a697cb3b2d8958d1d2231a4b"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-5n7Yen/default-census-release.json",
+      "sha256": "6ecb9aaa6410d69ee63f1c60c374115ccb6e3fe3f618157c21a941f337acff06"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-IzaIWA/default-census-retain.json",
+      "sha256": "14452c38b3404f80bd4fdd2b41b75ca50726f7676a98a1b81cda36d5f03f5fa8"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/fixtures/whole-product-a7QxGd/normal-heap-io.json",
+      "sha256": "93f5f2d0d408613e76e040b276641864e77cdf80c5692d6cc8379cc81da66b77"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-retain-jGsd2l/result.json",
+      "sha256": "0c7f599f48d8a73351326fb43c1e0042823478a61af44d83c991b460ffb7b71b"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-retain-jGsd2l/runtime.log",
+      "sha256": "d300e183238b4cb1054ea206f96b24f61b19f3a2f11d4487e6d224a313e298b7"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-release-UR4QpS/result.json",
+      "sha256": "c7aa606491d0c8e7924d3bcf4ca06b93893e73227abd76f08be0d82df37b4fb9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-release-UR4QpS/runtime.log",
+      "sha256": "091d37e6f8e5e799b83e81acef8cf79c386c8247c06387d85863368feab976b5"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-release-UCNyMN/result.json",
+      "sha256": "330f6f4021eb16683008a7d290198aa333a295041e464a9abe8e09a7fe5847fa"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-release-UCNyMN/runtime.log",
+      "sha256": "6e96e5249736c87b1bc76e42f1abd7eb5bc7114c965873cade3583961a59777a"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-release-9YZq5z/result.json",
+      "sha256": "579dec56ff2cef2cfd6e4d11e441560877d05b346f5592447400c9de2ecdc2d8"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-release-9YZq5z/runtime.log",
+      "sha256": "9dcab70f8b664357ef425869a0b13024fc5cd63624dccf4b67d75ee2ae725bbc"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-retain-f9aLy7/result.json",
+      "sha256": "8f7914618b4ac7522e895e51300e7ef52f5a7aa956e6959032b7076f0778b786"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-retain-f9aLy7/runtime.log",
+      "sha256": "3ef4e38560bbc7a74130c2a37b24d7ce6d17b3f0f468ac874555246f9a39d791"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-release-nVEwo0/result.json",
+      "sha256": "4e2e76f6f31140c21a2e1705b2b0b4bb2b58d4380ff095fe3d4591138b2528e1"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-release-nVEwo0/runtime.log",
+      "sha256": "affc6c121a0bfd544a64889d09d4dd3aba8b78142567e42856390ff9ca6cd445"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-release-v0p2sq/result.json",
+      "sha256": "113541db49f2db02c87b8e9eba510ffee596067fbca9f6861881f04175016be4"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-release-v0p2sq/runtime.log",
+      "sha256": "80abf8bdf7c2da9eafacb5e5498a02c1e659fe11b0ef515ee1fdd389d6af8244"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-retain-lNk0KJ/result.json",
+      "sha256": "f78ee98d380cbed1a3fe074a88071d463f13e0e46e3382ec9ead247ecea8b073"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-retain-lNk0KJ/runtime.log",
+      "sha256": "c21280d782058fe5724afc9a3a96b161834d0b9461aa3b496d7328ee0268f6e9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-release-Tzs1qs/result.json",
+      "sha256": "e717f7552a00d024f0eb9fe34f7dc78dc57801fa54bdb3065914e85db3c4226a"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-release-Tzs1qs/runtime.log",
+      "sha256": "63cee841391d1a765a130882237f5feb15d6df7de57af904e63380eda1aea3b0"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-release-2kGWtd/result.json",
+      "sha256": "e80c9407a9c54d1d39521c366bbc3a61f2eac810a47da610041162009aeee3b5"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-cloned-text-release-2kGWtd/runtime.log",
+      "sha256": "178510fb23d34986bfa6b916502a3d0899993b2d4c5a3fabc824e29857c7f707"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-release-3jFLG5/result.json",
+      "sha256": "012a92cd473603a5919c4c01153dd2975db3865ca1869059e2d1c1ad78f2a2fc"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-array-release-3jFLG5/runtime.log",
+      "sha256": "ec23b5875efeac84be28247aca96e54b01544294022d44d08ea649e2dac2bc26"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-retain-9Q5csd/result.json",
+      "sha256": "bed9f78c1f1c98485887ea9224c1321b235f8d7f66861b2ee93c25d86ab4b331"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-id-map-retain-9Q5csd/runtime.log",
+      "sha256": "d0486178484d87ef90b037ed961fce6d80b583dcdcc1e0c39e8cddea0ebd7419"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-retain-uL1MJf/result.json",
+      "sha256": "4ad2b60f4bff07216c37194ca1405c4df2b221fdaac122a133e2f3051b2d93ed"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-id-map-retain-uL1MJf/runtime.log",
+      "sha256": "926ca5fd997aced219979c4a62ff7197af0acdd2c5310b7955e2b2162150f3de"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-release-MakouH/result.json",
+      "sha256": "3c04607834019116ebc49a0df6ade70f2af96ee0c873e200d5ca0612020cea3c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-release-MakouH/runtime.log",
+      "sha256": "5a495b02e52a544e7172ca4dd51285c61b8717a72f4382a3f532c70370c0b576"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-retain-QFmyYI/result.json",
+      "sha256": "b396d66c77ef62e4b46406378b0cf4cd811ef901bdb72cbe40af0cbdab010cd4"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-decoded-row-retain-QFmyYI/runtime.log",
+      "sha256": "bd8a59c6d83a38c4520b15c34bfbf2889bed2f2aba323f60095a18e575f842a6"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-retain-aVnlMI/result.json",
+      "sha256": "8008a29c51596e83003169d34c41207785f45c6183066818f5c2c041105a0135"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-array-retain-aVnlMI/runtime.log",
+      "sha256": "6af7c3de634e4e054044339b6d1b417c95f62643bad471b45928dfb7ce604004"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-retain-xjaq7K/result.json",
+      "sha256": "257573c21ca80ddcae12754457709c80b780ecdb4c6b5566d46369bf334b9b9f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-cloned-text-retain-xjaq7K/runtime.log",
+      "sha256": "18930a54606d25409cda6a67850ba989778688d34d2475f398630896ce40c308"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-retain-hTNE1f/result.json",
+      "sha256": "875b91c0044b97261516f55e6ac9c14d2bebbb3f2301f5fe8015748fcaa1e9e6"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-offheap-media-retain-hTNE1f/runtime.log",
+      "sha256": "6cf3d59274e14b2bd44e68d755f24071764e28d6fcd5b9c2b4349dbb733b3674"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-retain-NRldGy/result.json",
+      "sha256": "622daf03e1d7071fe2d4413f53d1bba6e0707969ea9b07e8fb09f6762ff4046b"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/pinned-decoded-row-retain-NRldGy/runtime.log",
+      "sha256": "ee5bcc05bc6af6191878185c8979c5eedbdc23cb04c2d82e2958667a730f05f2"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-release-ZfbgMA/result.json",
+      "sha256": "45e469759b4f20a2ee0fd49d1d344af7ee4b15430cb57b99b7b1e640f1a4d9c9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/controls/default-offheap-media-release-ZfbgMA/runtime.log",
+      "sha256": "93fde5ba01e5bcd407d0c29f28fd65c03f45c1e75ac1c1658c2389426bb760d9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-audit/findings.tsv",
+      "sha256": "92711c7704570f9f146b4766471759505c27da21e2d4dcf93f299aa6bcfc2a42"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-audit/file-stats.tsv",
+      "sha256": "9c0e2e9b446404f9e9f1ef2104ba0244b99b609136faf499411d8ef6fd3765e3"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final2-results.json",
+      "sha256": "e9bfcc1da2ac667f36b8cd333c8f12e2f7871defd167b6d999f0fd76c85865a5"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final2-build-types.log",
+      "sha256": "33229121098ce8519aec29014e2242aa4568ce52c295bb148c28c76205d7fc39"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final2-build-types.exit",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final2-gates.ts",
+      "sha256": "91d14c67b015f51f4273e3e4d39144da8a70bfd9e0ae8be7eaf0949a1534c10e"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-gates.ts",
+      "sha256": "15fe09261d99a6c7caa970e8dcccb4e9ddd926d2bbe4041a225ecbf8e16226be"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/final3-results.json",
+      "sha256": "f55e2326e91394ebf2c78feed3a66388c7f68d2bcc5134830737b60c2e0cf7f6"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/launcher-executed.ts",
+      "sha256": "89a1dc545f00a8465ef0fc5d6907a93960238802c8fe9efba356fdaeccafba5c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/layout-binding.ts",
+      "sha256": "fcf72a6acaeb86ecb1e661239e0cd6c5f5f2b319eb0de464055628eefa9c7256"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/layout-binding.json",
+      "sha256": "ae02c8ca8b90ef3ae30a225fe1633a8598e8f37739b4c323d5786878f8fa470f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/layout-binding.log",
+      "sha256": "ae02c8ca8b90ef3ae30a225fe1633a8598e8f37739b4c323d5786878f8fa470f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/held-cli-dist-vcV3uN/manifest.json",
+      "sha256": "ee8507fb3a0e3c49b95c7d0d38105758973d6fe6fabb0feb83ecb35539c9797e"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-e/generated-declarations.json",
+      "sha256": "548dd72aa1a1995fa54607d558870f6ed505d523ca85449f8c56ada8b63b62bd"
+    }
+  ],
+  "protectedInheritedArtifacts": [
+    {
+      "path": "project-plans/issue854/recovery-2026-10-19/recovered-control/W24-HEAP-ROOT-C.json",
+      "sha256": "7e65a19b9638e8ea366a4e86afdd329645023544f7529d1b9fba020e6b9019e0"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-c/fixed-baseline.heapsnapshot",
+      "sha256": "56c7dc220c7fdb349ac18bc86e3f6abfe404d5fd7bd4ed252f6273121c21cc01"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-c/fixed-turn-10.heapsnapshot",
+      "sha256": "10f360632c651510e1a68ba360c403f2d70d8915c59a0e8fa6e9d05d93830496"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-c/fixed-turn-20.heapsnapshot",
+      "sha256": "b34f73154cc49e5167d986b124c5c8751f1508aa0eb405e7ae91e593f681e300"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-c/fixed-turn-30.heapsnapshot",
+      "sha256": "92b70dd4d771d0e1b684c4dbc59452df6c555fe95365dba5e06d8257c6c8b01c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-b/census-10.heapsnapshot",
+      "sha256": "2d2fbf7c14f2b877242cb04bf5a67e4ecc54252e31d63d7da19de3790883f05d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-b/census-60.heapsnapshot",
+      "sha256": "b749217cc8c40d0be45d482804d5ae3cb01c65e7746517b56ab824671f2aa7ca"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-b/fixtures/whole-product-Jklv6N/normal-heap-io.json",
+      "sha256": "b69830ba15363620cb7958d03f26c15165c439d260734025af10cd4c9d1dac17"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/heap-io-run-b/fixtures/whole-product-tJmodT/trap-heap-io.json",
+      "sha256": "59f5925210cdc7f3d72645a9f79cabafc1659e675eece541283b56085eb920c7"
+    }
+  ],
+  "pids": [
+    {
+      "pid": 51005,
+      "absent": true
+    },
+    {
+      "pid": 55151,
+      "absent": true
+    },
+    {
+      "pid": 56780,
+      "absent": true
+    },
+    {
+      "pid": 57028,
+      "absent": true
+    },
+    {
+      "pid": 57661,
+      "absent": true
+    },
+    {
+      "pid": 67783,
+      "absent": true
+    },
+    {
+      "pid": 67785,
+      "absent": true
+    },
+    {
+      "pid": 67822,
+      "absent": true
+    },
+    {
+      "pid": 67861,
+      "absent": true
+    },
+    {
+      "pid": 68069,
+      "absent": true
+    },
+    {
+      "pid": 68140,
+      "absent": true
+    },
+    {
+      "pid": 68197,
+      "absent": true
+    },
+    {
+      "pid": 68253,
+      "absent": true
+    },
+    {
+      "pid": 68313,
+      "absent": true
+    },
+    {
+      "pid": 68368,
+      "absent": true
+    },
+    {
+      "pid": 69206,
+      "absent": true
+    },
+    {
+      "pid": 70187,
+      "absent": true
+    },
+    {
+      "pid": 74829,
+      "absent": true
+    },
+    {
+      "pid": 64649,
+      "absent": true
+    },
+    {
+      "pid": 55231,
+      "absent": true
+    },
+    {
+      "pid": 56880,
+      "absent": true
+    },
+    {
+      "pid": 61884,
+      "absent": true
+    },
+    {
+      "pid": 56939,
+      "absent": true
+    },
+    {
+      "pid": 55274,
+      "absent": true
+    },
+    {
+      "pid": 64727,
+      "absent": true
+    },
+    {
+      "pid": 64586,
+      "absent": true
+    },
+    {
+      "pid": 56815,
+      "absent": true
+    },
+    {
+      "pid": 55304,
+      "absent": true
+    },
+    {
+      "pid": 55247,
+      "absent": true
+    },
+    {
+      "pid": 65212,
+      "absent": true
+    },
+    {
+      "pid": 64625,
+      "absent": true
+    },
+    {
+      "pid": 56884,
+      "absent": true
+    },
+    {
+      "pid": 61890,
+      "absent": true
+    },
+    {
+      "pid": 61888,
+      "absent": true
+    },
+    {
+      "pid": 56794,
+      "absent": true
+    },
+    {
+      "pid": 55205,
+      "absent": true
+    },
+    {
+      "pid": 56828,
+      "absent": true
+    },
+    {
+      "pid": 64568,
+      "absent": true
+    },
+    {
+      "pid": 64546,
+      "absent": true
+    },
+    {
+      "pid": 64721,
+      "absent": true
+    },
+    {
+      "pid": 56825,
+      "absent": true
+    },
+    {
+      "pid": 55241,
+      "absent": true
+    },
+    {
+      "pid": 56850,
+      "absent": true
+    },
+    {
+      "pid": 56906,
+      "absent": true
+    },
+    {
+      "pid": 56806,
+      "absent": true
+    },
+    {
+      "pid": 56921,
+      "absent": true
+    },
+    {
+      "pid": 55165,
+      "absent": true
+    },
+    {
+      "pid": 55183,
+      "absent": true
+    },
+    {
+      "pid": 55223,
+      "absent": true
+    },
+    {
+      "pid": 55211,
+      "absent": true
+    },
+    {
+      "pid": 57025,
+      "absent": true
+    },
+    {
+      "pid": 55293,
+      "absent": true
+    },
+    {
+      "pid": 64684,
+      "absent": true
+    },
+    {
+      "pid": 61891,
+      "absent": true
+    },
+    {
+      "pid": 56960,
+      "absent": true
+    },
+    {
+      "pid": 55192,
+      "absent": true
+    },
+    {
+      "pid": 64620,
+      "absent": true
+    },
+    {
+      "pid": 64713,
+      "absent": true
+    },
+    {
+      "pid": 65222,
+      "absent": true
+    },
+    {
+      "pid": 64927,
+      "absent": true
+    },
+    {
+      "pid": 55363,
+      "absent": true
+    },
+    {
+      "pid": 64672,
+      "absent": true
+    },
+    {
+      "pid": 56834,
+      "absent": true
+    },
+    {
+      "pid": 64554,
+      "absent": true
+    },
+    {
+      "pid": 55258,
+      "absent": true
+    },
+    {
+      "pid": 55248,
+      "absent": true
+    },
+    {
+      "pid": 64699,
+      "absent": true
+    },
+    {
+      "pid": 61887,
+      "absent": true
+    },
+    {
+      "pid": 55172,
+      "absent": true
+    },
+    {
+      "pid": 55371,
+      "absent": true
+    },
+    {
+      "pid": 55287,
+      "absent": true
+    },
+    {
+      "pid": 56856,
+      "absent": true
+    },
+    {
+      "pid": 64607,
+      "absent": true
+    },
+    {
+      "pid": 56930,
+      "absent": true
+    },
+    {
+      "pid": 55309,
+      "absent": true
+    },
+    {
+      "pid": 56891,
+      "absent": true
+    },
+    {
+      "pid": 64674,
+      "absent": true
+    },
+    {
+      "pid": 64576,
+      "absent": true
+    },
+    {
+      "pid": 55214,
+      "absent": true
+    },
+    {
+      "pid": 64634,
+      "absent": true
+    },
+    {
+      "pid": 56844,
+      "absent": true
+    },
+    {
+      "pid": 56863,
+      "absent": true
+    },
+    {
+      "pid": 57019,
+      "absent": true
+    },
+    {
+      "pid": 91886,
+      "absent": true
+    },
+    {
+      "pid": 99933,
+      "absent": true
+    },
+    {
+      "pid": 2785,
+      "absent": true
+    },
+    {
+      "pid": 9133,
+      "absent": true
+    },
+    {
+      "pid": 10755,
+      "absent": true
+    },
+    {
+      "pid": 11229,
+      "absent": true
+    },
+    {
+      "pid": 11427,
+      "absent": true
+    },
+    {
+      "pid": 11793,
+      "absent": true
+    },
+    {
+      "pid": 11800,
+      "absent": true
+    },
+    {
+      "pid": 11895,
+      "absent": true
+    },
+    {
+      "pid": 11993,
+      "absent": true
+    },
+    {
+      "pid": 91928,
+      "absent": true
+    },
+    {
+      "pid": 91884,
+      "absent": true
+    },
+    {
+      "pid": 2781,
+      "absent": true
+    },
+    {
+      "pid": 9131,
+      "absent": true
+    }
+  ],
+  "livePids": [],
+  "limitations": [
+    "Default original full-window result remains RED; no default-total-heap acceptance.",
+    "Pinning selects code-block liveness and may retain additional profile-held data; all bytes stay in the raw meter.",
+    "Default census is 20 warmup/20 measurement turns and Inspector omits most Buffer/numeric-array backing storage.",
+    "Full Agent workload is text/tool; independent native controls do not establish real Agent media conversion.",
+    "The only added full run verifies the new required launcher; the frozen matched pair and native controls were reused.",
+    "No production source/default, threshold, GC timing, sample, timeout, topology or enforcement change.",
+    "Recording-as-primary remains selected and unimplemented; W23 dependencies and W25/W26 remain open.",
+    "review skipped per Andrew 2026-10-09"
+  ]
+}

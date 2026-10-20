@@ -119,23 +119,35 @@ function dispatcher(
   };
 }
 
-export async function wholeProductFixture(): Promise<WholeProductFixture> {
+export async function wholeProductFixture(transport?: {
+  readonly url: string;
+  bind(root: string): void;
+}): Promise<WholeProductFixture> {
   const saved = { ...process.env };
   const base = resolve(
     import.meta.dir,
-    '../../../../../tmp/854-notes/p4/w24/lifecycle-run-a/fixtures',
+    transport === undefined
+      ? '../../../../../tmp/854-notes/p4/w24/lifecycle-run-a/fixtures'
+      : '../../../../../tmp/854-notes/p4/w24/heap-io-run-e/fixtures',
   );
   await mkdir(base, { recursive: true });
   const root = await mkdtemp(join(base, 'whole-product-'));
   const responses = await responseFixture(root);
   process.env.LLXPRT_HISTORY_BACKEND = 'journal';
-  process.env.LLXPRT_FAKE_RESPONSES = responses;
+  if (transport === undefined) process.env.LLXPRT_FAKE_RESPONSES = responses;
+  else {
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    transport.bind(root);
+  }
   process.env.LLXPRT_LOG_HOME = join(root, 'logs');
   const agents: Agent[] = [];
   const agent = async (sessionId: string): Promise<Agent> => {
     const created = await createAgent({
-      provider: 'fake',
-      model: 'fake-model',
+      provider: transport === undefined ? 'fake' : 'openai',
+      model: transport === undefined ? 'fake-model' : 'w24-heap-model',
+      ...(transport === undefined
+        ? {}
+        : { auth: { apiKey: 'local-test-key', baseUrl: transport.url } }),
       sessionId,
       workingDir: root,
       interactive: true,
