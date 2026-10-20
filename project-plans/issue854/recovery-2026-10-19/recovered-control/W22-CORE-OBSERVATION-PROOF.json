@@ -1,0 +1,1532 @@
+{
+  "task": "W22 core observation first subset, implementation not review",
+  "base": "ba4c3e8ca",
+  "sourceCommit": "9ad76c8a5c71d9cd6092e361dbc9cc9cc15b169e",
+  "productionChanged": false,
+  "mutationsStarted": 0,
+  "restorationRequired": false,
+  "raw": "tmp/854-notes/p4/w22/core-observation-run-l",
+  "matrices": [
+    {
+      "batch": "observation-final-journal-l-b",
+      "files": 6,
+      "pass": 59,
+      "fail": 0,
+      "skip": 0,
+      "results": "tmp/854-notes/p4/w22/core-observation-run-l/observation-final-journal-l-b/results.json",
+      "sha256": "19c08e219932dfb2669ffc17ac593c30c3ab6f6fbf20466fd05291238bad3dce",
+      "rows": [
+        {
+          "path": "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+          "sourceHash": "c80b1f3d01df16e2d7cbd0d58e573e3161938afa81044e7416d28237eeef2ede",
+          "pid": 43040,
+          "pass": 8,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0399-ConversationManager.modelStamp.test.ts.log",
+          "logSha256": "bb0f2615a5f52eeeb2e195311db1fec7c54418a43b803458db2e322cae55eef8",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0399-ConversationManager.modelStamp.test.ts.xml",
+          "junitSha256": "4926d97ded30faedc214917a6cc482109d0c0c364ffca3ab67f3075a32883ae2"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+          "sourceHash": "c6c0715f688108d025698dbaac112218021149196cbcc97b93ab55373e33225e",
+          "pid": 43063,
+          "pass": 12,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0451-directMessage.characterization.test.ts.log",
+          "logSha256": "83ba929587b4fb0abc4e8491d498e646fe3ecbf7db0722b1d563761506cdc1bd",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0451-directMessage.characterization.test.ts.xml",
+          "junitSha256": "4af0dceb4c127d269ceb6d63e8ba79442eb22e50a38d3c203c6c8266e32576d6"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+          "sourceHash": "7826f0db1fde7227b29453e1a9627c85615de27e41291becc2fd92e770e1addc",
+          "pid": 43082,
+          "pass": 14,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0465-structuralAccess.characterization.test.ts.log",
+          "logSha256": "8fa084047b5fcadf655abaa20d120bead303b537229649347fb1cc785f057d7f",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0465-structuralAccess.characterization.test.ts.xml",
+          "junitSha256": "202153b27689543a3276e84c416447dadbafdbbb5aa50a2f1cb855358366a66a"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+          "sourceHash": "65f6d40e9ac4c74814b180a39a16f1cba95137883abdb2d810025c63d5142332",
+          "pid": 43119,
+          "pass": 18,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0463-stream-structural-access.characterization.test.ts.log",
+          "logSha256": "40e1aac754ed440d084bb685c346bfcdd79f4798330ef382d30d17e4e5022303",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0463-stream-structural-access.characterization.test.ts.xml",
+          "junitSha256": "f68ec75aa38c16fdebe0151102efb495f50b5bcfc0741dc3a82013f6f2dfed80"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.test.ts",
+          "sourceHash": "a7870a955af729554c74ba0ef025361c45cf79b358e246b513f6fa4b3602d329",
+          "pid": 43124,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0519-chatSession.runtime.test.ts.log",
+          "logSha256": "fd5f0f1270fb59d48f39db66213a49638d754e7edcdaa0570e0117a9360b4a05",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0519-chatSession.runtime.test.ts.xml",
+          "junitSha256": "93038647ac1158b8f7d1a95eee546ff810799a79be822a91f0fa21e6d3f9866e"
+        },
+        {
+          "path": "packages/agents/src/core/streamRequestHelpers.test.ts",
+          "sourceHash": "ad9380e447ae84a58e49539c6cd02b0d9e67cc7f0bf68353220feb5a10c5637d",
+          "pid": 43139,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0686-streamRequestHelpers.test.ts.log",
+          "logSha256": "f2c937c6a8800a04c7e0b00bc05d60b9020318fec168a262a7e9e7018574238e",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-journal-l-b/0686-streamRequestHelpers.test.ts.xml",
+          "junitSha256": "8e2efab5973fd892b3c6d292acee534e8eba1bfb1a4c086bda9f97342714ae4a"
+        }
+      ]
+    },
+    {
+      "batch": "observation-final-old-l-b",
+      "files": 6,
+      "pass": 59,
+      "fail": 0,
+      "skip": 0,
+      "results": "tmp/854-notes/p4/w22/core-observation-run-l/observation-final-old-l-b/results.json",
+      "sha256": "c68235fb38cf454de64e6186b033a2b1e368a97b12cd1ad9cc670a95d56e03f4",
+      "rows": [
+        {
+          "path": "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+          "sourceHash": "c80b1f3d01df16e2d7cbd0d58e573e3161938afa81044e7416d28237eeef2ede",
+          "pid": 43153,
+          "pass": 8,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0399-ConversationManager.modelStamp.test.ts.log",
+          "logSha256": "2c2e49e169e9fb984eaee4dd9c0d0249f5edc4e098d1858f5e61fcc156c9ee92",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0399-ConversationManager.modelStamp.test.ts.xml",
+          "junitSha256": "6a8d58a71af05130f6658edd32e08ed78160d73d6ab4841c7b3d7f5e9152a813"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+          "sourceHash": "c6c0715f688108d025698dbaac112218021149196cbcc97b93ab55373e33225e",
+          "pid": 43161,
+          "pass": 12,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0451-directMessage.characterization.test.ts.log",
+          "logSha256": "50631581e1766a1417ff28abc03bc4e2a301ecbca16dcc65ac05fc8e772093e5",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0451-directMessage.characterization.test.ts.xml",
+          "junitSha256": "920100153e4c18aa1d1def1a5d5f8db24f925189eb7f1d1999e242bd19c15cb2"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+          "sourceHash": "7826f0db1fde7227b29453e1a9627c85615de27e41291becc2fd92e770e1addc",
+          "pid": 43170,
+          "pass": 14,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0465-structuralAccess.characterization.test.ts.log",
+          "logSha256": "072e96ad82a4ae63ba9658569549718b9169b31d694c630a2c8af420deca5a47",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0465-structuralAccess.characterization.test.ts.xml",
+          "junitSha256": "b1795aa464aac1ca1908db5e145c8fb90ebdbe5b342ed3ec8de99c32992eeae4"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+          "sourceHash": "65f6d40e9ac4c74814b180a39a16f1cba95137883abdb2d810025c63d5142332",
+          "pid": 43195,
+          "pass": 18,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0463-stream-structural-access.characterization.test.ts.log",
+          "logSha256": "ed5de8dc05a556940d321a5e0c93e57bbc6bbf1c757e132bdfcd7c0bdf43efc0",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0463-stream-structural-access.characterization.test.ts.xml",
+          "junitSha256": "75b179bb324869c0d0612c041f434f5da01fd6aca1d67f80d1b263200da72e3e"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.test.ts",
+          "sourceHash": "a7870a955af729554c74ba0ef025361c45cf79b358e246b513f6fa4b3602d329",
+          "pid": 43200,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0519-chatSession.runtime.test.ts.log",
+          "logSha256": "cd413523ad49388c5790fd4f2c103fc4edda59ad9980a4c3a6cb2b49b10f26e2",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0519-chatSession.runtime.test.ts.xml",
+          "junitSha256": "f378b50d09e3b147b34fd0426786721d7a494879018969f69d613c1a02f20c5f"
+        },
+        {
+          "path": "packages/agents/src/core/streamRequestHelpers.test.ts",
+          "sourceHash": "ad9380e447ae84a58e49539c6cd02b0d9e67cc7f0bf68353220feb5a10c5637d",
+          "pid": 43220,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0686-streamRequestHelpers.test.ts.log",
+          "logSha256": "23099b2a2045627670d19e271f8660cdbc904285e6fb0cb179945dc2497f90b7",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-final-old-l-b/0686-streamRequestHelpers.test.ts.xml",
+          "junitSha256": "54fd02e9f95b8b39792151329cd7f0c545c99e6031659d7a99aa2460efa6ac2d"
+        }
+      ]
+    },
+    {
+      "batch": "observation-related-journal-l-b",
+      "files": 8,
+      "pass": 67,
+      "fail": 0,
+      "skip": 0,
+      "results": "tmp/854-notes/p4/w22/core-observation-run-l/observation-related-journal-l-b/results.json",
+      "sha256": "c2c1d508f33a755c104a8fb924784625612d81ced2c8619a9618a63f51a79e1f",
+      "rows": [
+        {
+          "path": "packages/agents/src/core/next-request-variants.test.ts",
+          "sourceHash": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+          "pid": 44912,
+          "pass": 32,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0619-next-request-variants.test.ts.log",
+          "logSha256": "8da88a72d43b056de467b0f92d37a3d96f1b28faa039e34db96a59aea96f8964",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0619-next-request-variants.test.ts.xml",
+          "junitSha256": "71ac6f071b2b6f3e95d55ee518968458f599983bfb9825b47fa3a45aa50990b1"
+        },
+        {
+          "path": "packages/agents/src/core/source-model-hook-no-snapshot.test.ts",
+          "sourceHash": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+          "pid": 45623,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0670-source-model-hook-no-snapshot.test.ts.log",
+          "logSha256": "b1f0b30843eab08f87410afad76282bfafcb2f3025a97820e3a3ffd12a4db675",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0670-source-model-hook-no-snapshot.test.ts.xml",
+          "junitSha256": "fcab3fbaadcbb08a7e098975cb5ffe72d75b9d50b7333eafa8f6299fa22b4679"
+        },
+        {
+          "path": "packages/agents/src/core/source-preflight-request.test.ts",
+          "sourceHash": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+          "pid": 45648,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0678-source-preflight-request.test.ts.log",
+          "logSha256": "5bc2f527a0ff9c9915ad2680b299f95033ef08b291d73b4f09f8d71f37b44d5f",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0678-source-preflight-request.test.ts.xml",
+          "junitSha256": "72a4dff81b1fb9d9c735f23d4dae9cf38072203c72644dd9c5d85decd05bb319"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-boundary.test.ts",
+          "sourceHash": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+          "pid": 45680,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0656-semantic-purge-request-boundary.test.ts.log",
+          "logSha256": "61e2fd6b8e73dd4b67512a267cc92ca2c55b4ccaabc935a5e1992d80538ab83f",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0656-semantic-purge-request-boundary.test.ts.xml",
+          "junitSha256": "349ba5c323d2b013a256a9106e3ca7252321f2c79ce23727cdecc23572d7de0f"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts",
+          "sourceHash": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+          "pid": 45694,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0657-semantic-purge-request-lifecycle.test.ts.log",
+          "logSha256": "9a06d3eb471f98f9a9a3802e6e515b12c7152e8a9696b15fc801e5cf21649357",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0657-semantic-purge-request-lifecycle.test.ts.xml",
+          "junitSha256": "24ab12bc00547091907bad049fd2dbf14864838c83ecd6d1cba4bf6662bf100c"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.history.test.ts",
+          "sourceHash": "40da94bc43803f3057419718cb6f1adbd17e5e55dd045d0324a7bcf6d1f30e85",
+          "pid": 45703,
+          "pass": 8,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0517-chatSession.runtime.history.test.ts.log",
+          "logSha256": "504ad34709fc128e8d68df4e5ffcbf630c428741b609f9bf404bd57f25635512",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0517-chatSession.runtime.history.test.ts.xml",
+          "junitSha256": "103e21c4ca6deca2d56d804d274f1ead700c31ad2b8ee29d6061e6027c84c5a9"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.streaming.test.ts",
+          "sourceHash": "e63722c16f26ee34325635e661c4146ae3dc766a3bf5943acf7902127c342953",
+          "pid": 45711,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0518-chatSession.runtime.streaming.test.ts.log",
+          "logSha256": "b1267a1b0f167a000b3f41a83b949193acf068c50b35e3ccf7fd368797828b3b",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0518-chatSession.runtime.streaming.test.ts.xml",
+          "junitSha256": "e750886545b1743b727ae556679230d4bb401e7939d1574c172ec4464d7324fa"
+        },
+        {
+          "path": "packages/agents/src/core/streamRequestHelpers.issue2410.test.ts",
+          "sourceHash": "20c41aea0375371d42b0aac7dd475220899d06d5b3d980303a78a202561eb2c6",
+          "pid": 45725,
+          "pass": 13,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0685-streamRequestHelpers.issue2410.test.ts.log",
+          "logSha256": "95beca415f608ea28832871763817f9a9f42d1bed7ace1e7fdcf3ef4f39f583d",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-journal-l-b/0685-streamRequestHelpers.issue2410.test.ts.xml",
+          "junitSha256": "b39a6e230766a621fe679b019bef9a1dde2ab01afea0309612557cbd4c48f8d2"
+        }
+      ]
+    },
+    {
+      "batch": "observation-related-old-l-b",
+      "files": 8,
+      "pass": 67,
+      "fail": 0,
+      "skip": 0,
+      "results": "tmp/854-notes/p4/w22/core-observation-run-l/observation-related-old-l-b/results.json",
+      "sha256": "a219bc6093411c33ceecdcc24f3340540e7ff649c7f41f7149100a7f0bb8ad2d",
+      "rows": [
+        {
+          "path": "packages/agents/src/core/next-request-variants.test.ts",
+          "sourceHash": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+          "pid": 45736,
+          "pass": 32,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0619-next-request-variants.test.ts.log",
+          "logSha256": "2ef4fa69e43ac0bdb81c239695243dc534bafbee94bb85268a4ecabee89eefdd",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0619-next-request-variants.test.ts.xml",
+          "junitSha256": "fad0fa9bd30cb378d354354b0349105fd3e764f864ca789d5426d37ab41619d2"
+        },
+        {
+          "path": "packages/agents/src/core/source-model-hook-no-snapshot.test.ts",
+          "sourceHash": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+          "pid": 46466,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0670-source-model-hook-no-snapshot.test.ts.log",
+          "logSha256": "dda870a3d007c88b62de602e979bc844e49c37334266a906510920df49ae76ab",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0670-source-model-hook-no-snapshot.test.ts.xml",
+          "junitSha256": "6ee83bb4bce9d4f77f634995c338ca3f01f00b98808c0faa227d2790bf676c86"
+        },
+        {
+          "path": "packages/agents/src/core/source-preflight-request.test.ts",
+          "sourceHash": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+          "pid": 46481,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0678-source-preflight-request.test.ts.log",
+          "logSha256": "9a40e73f0117f7cbcd527898eab7703bfc08e725064857d07e5b12ebf27da514",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0678-source-preflight-request.test.ts.xml",
+          "junitSha256": "23006572c62b4a95b162e0651624c7155186d2926a362dbf979a71059a371f6f"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-boundary.test.ts",
+          "sourceHash": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+          "pid": 46499,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0656-semantic-purge-request-boundary.test.ts.log",
+          "logSha256": "029930068d0e19713e788049d97f681af2cc471ed48919c542ad8979775fe7ed",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0656-semantic-purge-request-boundary.test.ts.xml",
+          "junitSha256": "51c95388d42590e8a0d9208ed4d5d3130a5ad4098e2dfec84ef068efe675269c"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts",
+          "sourceHash": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+          "pid": 46513,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0657-semantic-purge-request-lifecycle.test.ts.log",
+          "logSha256": "57cf7b3c5d57980a1310b25199205b1cf05477ccbf781a93fb7bf471dbd4219f",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0657-semantic-purge-request-lifecycle.test.ts.xml",
+          "junitSha256": "7afc2e9e1a2632838e3e38ba16047b63d6cf2050d39549e6bb7c3b2b7a13cd7a"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.history.test.ts",
+          "sourceHash": "40da94bc43803f3057419718cb6f1adbd17e5e55dd045d0324a7bcf6d1f30e85",
+          "pid": 46530,
+          "pass": 8,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0517-chatSession.runtime.history.test.ts.log",
+          "logSha256": "d8bef946f7b95e4cee4d2de6e65ed0876e8e3e75dce337794aa1ce4dd243db09",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0517-chatSession.runtime.history.test.ts.xml",
+          "junitSha256": "dc5b99e381addeb311891ea6bc854006f8c9292901427fd98e6d101b9bab5ba7"
+        },
+        {
+          "path": "packages/agents/src/core/chatSession.runtime.streaming.test.ts",
+          "sourceHash": "e63722c16f26ee34325635e661c4146ae3dc766a3bf5943acf7902127c342953",
+          "pid": 46538,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0518-chatSession.runtime.streaming.test.ts.log",
+          "logSha256": "92c27b456989d0db6f0cd9cc1932762c4edeeb5a9cd7f41556aef6cc178c0891",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0518-chatSession.runtime.streaming.test.ts.xml",
+          "junitSha256": "646620d8cdf7b91a6d39635c4a85d2aa15e6e4e1c72f34367f749bc3b5a43a86"
+        },
+        {
+          "path": "packages/agents/src/core/streamRequestHelpers.issue2410.test.ts",
+          "sourceHash": "20c41aea0375371d42b0aac7dd475220899d06d5b3d980303a78a202561eb2c6",
+          "pid": 46545,
+          "pass": 13,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0685-streamRequestHelpers.issue2410.test.ts.log",
+          "logSha256": "4afbe8ef95e874e54a9c0b65768b8f0b8d52463561237532c152a3653fb6ab0e",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/observation-related-old-l-b/0685-streamRequestHelpers.issue2410.test.ts.xml",
+          "junitSha256": "d7baf0a6f719014f5ff799a689dfe2a01e86e2fe5e687d531ee8ad649cbaf392"
+        }
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "name": "api-surface-b",
+      "command": ["bun", "scripts/check-agents-api-surface.ts"],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/api-surface-b.log",
+      "pid": 43226,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:41:41.449Z",
+      "code": 0,
+      "ended": "2026-10-20T02:41:50.086Z",
+      "logSha256": "b523a7170bebef13c2475940d6543af549b81496a779fd63992d7ba1b3c2b615"
+    },
+    {
+      "name": "build-types-b",
+      "command": ["bun", "run", "build:types"],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/build-types-b.log",
+      "pid": 43331,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:41:50.087Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:15.890Z",
+      "logSha256": "1939dc7f2972cfc33589b0c3565a80afdfee4e864ac82503bea9564a4cc94d86"
+    },
+    {
+      "name": "core-tsc-b",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/core-tsc-b.log",
+      "pid": 44379,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:15.890Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:22.282Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-tsc-b",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/agents-tsc-b.log",
+      "pid": 44458,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:22.283Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:31.447Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-bun-tsc-b",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun-types/test,bun-types/test-globals,bun-types"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/agents-bun-tsc-b.log",
+      "pid": 44560,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:31.448Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:36.611Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "touched-tsc-b",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-observation-run-l/tsconfig.touched-b.json"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/touched-tsc-b.log",
+      "pid": 44653,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:36.612Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:41.129Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "eslint-b",
+      "command": [
+        "bunx",
+        "eslint",
+        "--no-ignore",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+        "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+        "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+        "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+        "packages/agents/src/core/chatSession.runtime.test.ts",
+        "packages/agents/src/core/streamRequestHelpers.test.ts",
+        "packages/agents/src/core/__tests__/helpers/directMessageObservers.ts",
+        "packages/agents/src/core/__tests__/structural-history-fixture.ts"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/eslint-b.log",
+      "pid": 44743,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:41.130Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:46.309Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "prettier-b",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+        "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+        "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+        "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+        "packages/agents/src/core/chatSession.runtime.test.ts",
+        "packages/agents/src/core/streamRequestHelpers.test.ts",
+        "packages/agents/src/core/__tests__/helpers/directMessageObservers.ts",
+        "packages/agents/src/core/__tests__/structural-history-fixture.ts"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/prettier-b.log",
+      "pid": 44825,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:46.310Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:46.548Z",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "affected-graph-b",
+      "command": ["bun", "scripts/check-affected-test-shards.ts"],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/affected-graph-b.log",
+      "pid": 44827,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:46.549Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:49.345Z",
+      "logSha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "test-audit-b",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-observation-run-l/audit-after-b"
+      ],
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/test-audit-b.log",
+      "pid": 44877,
+      "driverPid": 43034,
+      "started": "2026-10-20T02:42:49.346Z",
+      "code": 0,
+      "ended": "2026-10-20T02:42:52.272Z",
+      "logSha256": "55e86fd52878b6ec2287e0f6876cf4d1d21a4c4e182c2f64e9fbed6240329c6a"
+    },
+    {
+      "name": "w22-census.test.ts-final-c",
+      "command": [
+        "bun",
+        "test",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts"
+      ],
+      "pid": 49726,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/w22-census.test.ts-final-c.log",
+      "started": "2026-10-20T02:47:51.681Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:52.055Z",
+      "logSha256": "994b31958a3fb75b8ea5ac35b3c6feb676bcae09572ba24d4d2c95b5366db8f6"
+    },
+    {
+      "name": "w22-request-census.test.ts-final-c",
+      "command": [
+        "bun",
+        "test",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts"
+      ],
+      "pid": 49730,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/w22-request-census.test.ts-final-c.log",
+      "started": "2026-10-20T02:47:52.055Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:52.348Z",
+      "logSha256": "bbca127e28d6ad87abb8489a6e0d3884756b6b4f1824aec7673cc1221a353f8a"
+    },
+    {
+      "name": "w22-request-counterparts.test.ts-final-c",
+      "command": [
+        "bun",
+        "test",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts"
+      ],
+      "pid": 49736,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/w22-request-counterparts.test.ts-final-c.log",
+      "started": "2026-10-20T02:47:52.349Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:52.662Z",
+      "logSha256": "ae21dd9b5f0ca4874dccf975a3e055dd93e3dcbaecf4b8c513b07c9c077f5982"
+    },
+    {
+      "name": "w22-observation-census.test.ts-final-c",
+      "command": [
+        "bun",
+        "test",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-observation-census.test.ts"
+      ],
+      "pid": 49739,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/w22-observation-census.test.ts-final-c.log",
+      "started": "2026-10-20T02:47:52.662Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:52.977Z",
+      "logSha256": "c251335d193f5e0838e4db8f884374066192ae98acf0f36c8b25e2c659455bef"
+    },
+    {
+      "name": "final-census-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-observation-run-l/tsconfig.census-final.json"
+      ],
+      "pid": 49745,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/final-census-tsc.log",
+      "started": "2026-10-20T02:47:52.978Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:53.483Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-census-eslint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--no-ignore",
+        "--max-warnings",
+        "0",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-observation-census.test.ts"
+      ],
+      "pid": 49757,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/final-census-eslint.log",
+      "started": "2026-10-20T02:47:53.483Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:55.099Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-census-prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--ignore-path",
+        "/dev/null",
+        "--check",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-census.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-request-counterparts.test.ts",
+        "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-observation-census.test.ts"
+      ],
+      "pid": 49784,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/final-census-prettier.log",
+      "started": "2026-10-20T02:47:55.100Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:55.282Z",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "delivery-affected-graph",
+      "command": ["bun", "scripts/check-affected-test-shards.ts"],
+      "pid": 49786,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/delivery-affected-graph.log",
+      "started": "2026-10-20T02:47:55.282Z",
+      "code": 0,
+      "ended": "2026-10-20T02:47:57.371Z",
+      "logSha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "delivery-test-audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-observation-run-l/audit-delivery"
+      ],
+      "pid": 49828,
+      "driverPid": 49724,
+      "log": "tmp/854-notes/p4/w22/core-observation-run-l/delivery-test-audit.log",
+      "started": "2026-10-20T02:47:57.372Z",
+      "code": 0,
+      "ended": "2026-10-20T02:48:00.262Z",
+      "logSha256": "55e86fd52878b6ec2287e0f6876cf4d1d21a4c4e182c2f64e9fbed6240329c6a"
+    }
+  ],
+  "sourceHashes": {
+    "packages/agents/src/core/ConversationManager.modelStamp.test.ts": "c80b1f3d01df16e2d7cbd0d58e573e3161938afa81044e7416d28237eeef2ede",
+    "packages/agents/src/core/__tests__/directMessage.characterization.test.ts": "c6c0715f688108d025698dbaac112218021149196cbcc97b93ab55373e33225e",
+    "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts": "7826f0db1fde7227b29453e1a9627c85615de27e41291becc2fd92e770e1addc",
+    "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts": "65f6d40e9ac4c74814b180a39a16f1cba95137883abdb2d810025c63d5142332",
+    "packages/agents/src/core/chatSession.runtime.test.ts": "a7870a955af729554c74ba0ef025361c45cf79b358e246b513f6fa4b3602d329",
+    "packages/agents/src/core/streamRequestHelpers.test.ts": "ad9380e447ae84a58e49539c6cd02b0d9e67cc7f0bf68353220feb5a10c5637d",
+    "packages/agents/src/core/__tests__/helpers/directMessageObservers.ts": "705b1a2127e650431d82e077d8c1c02e61e9723ae34d41c996be3772f6d90157",
+    "packages/agents/src/core/__tests__/structural-history-fixture.ts": "f59c3de9eefc1df21ffc3ad6f9c32b4f322523d508b577e3650bcca2d5477e42",
+    "packages/agents/src/core/next-request-variants.test.ts": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+    "packages/agents/src/core/source-model-hook-no-snapshot.test.ts": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+    "packages/agents/src/core/source-preflight-request.test.ts": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+    "packages/agents/src/core/semantic-purge-request-boundary.test.ts": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+    "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+    "packages/agents/src/core/chatSession.runtime.history.test.ts": "40da94bc43803f3057419718cb6f1adbd17e5e55dd045d0324a7bcf6d1f30e85",
+    "packages/agents/src/core/chatSession.runtime.streaming.test.ts": "e63722c16f26ee34325635e661c4146ae3dc766a3bf5943acf7902127c342953",
+    "packages/agents/src/core/streamRequestHelpers.issue2410.test.ts": "20c41aea0375371d42b0aac7dd475220899d06d5b3d980303a78a202561eb2c6"
+  },
+  "preservation": {
+    "originalAssertions": 156,
+    "finalAssertions": 158,
+    "verbatim": 153,
+    "retained": 156
+  },
+  "audit": {
+    "before": [],
+    "after": [],
+    "new": []
+  },
+  "census": {
+    "generation": "067cf012-0657-40d0-b056-f493ee86a7f8",
+    "partition": {
+      "green": 793,
+      "red": 12,
+      "unverified": 1,
+      "unrun": 0
+    },
+    "verifiedPass": 6543,
+    "recordedPass": 6550,
+    "fail": 22,
+    "skip": 0,
+    "classifications": {
+      "native-history": 354,
+      "journal-selected-shared-public": 344,
+      "explicit-old": 42,
+      "classification-pending": 5803,
+      "unclassified": 0
+    },
+    "attempts": 1280,
+    "historicalMissingAttempts": 26,
+    "latestMissingFiles": 0,
+    "changed": [
+      {
+        "path": "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+        "pid": 43040,
+        "sourceHash": "c80b1f3d01df16e2d7cbd0d58e573e3161938afa81044e7416d28237eeef2ede",
+        "pass": 8,
+        "cases": [
+          {
+            "classname": "ConversationManager stamps model origin at recording boundary (issue #2335)",
+            "name": "stamps metadata.model on a freshly generated AI turn",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager stamps model origin at recording boundary (issue #2335)",
+            "name": "stamps metadata.model on an AI turn that carries a signed thinking block",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager AFC model stamps",
+            "name": "stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager AFC curated prefix",
+            "name": "deduplicates AFC against curated rows without materializing curated history",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager AFC curated prefix",
+            "name": "uses the scalar query for turn AFC offsets without an eager curated read",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "ConversationManager import/restore paths do NOT stamp (issue #2335)",
+            "name": "importInitialHistory does NOT stamp metadata.model on imported AI turns",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager import/restore paths do NOT stamp (issue #2335)",
+            "name": "setHistory does NOT stamp metadata.model on restored AI turns",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ConversationManager import/restore paths do NOT stamp (issue #2335)",
+            "name": "addHistory does NOT stamp metadata.model on externally-supplied turns",
+            "classification": "native-history"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+        "pid": 43063,
+        "sourceHash": "c6c0715f688108d025698dbaac112218021149196cbcc97b93ab55373e33225e",
+        "pass": 12,
+        "cases": [
+          {
+            "classname": "P12: blocking BeforeModel hook (characterization)",
+            "name": "visible text equals the hook block reason",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: blocking BeforeModel hook (characterization)",
+            "name": "committed history reflects the request was processed",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: blocking BeforeModel hook (characterization)",
+            "name": "visible text equals any arbitrary blocking reason (property)",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "visible text is the model text and usage is populated",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "aggregates text across multiple streamed chunks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "preserves thinking-block position when aggregating multi-chunk text",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "appends text at end when last chunk has no text blocks (tool-call only)",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "surfaces any arbitrary model text unchanged (property)",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: normal completion path (characterization)",
+            "name": "neutral usage counts round-trip provider-supplied numbers (property)",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: after-model hook filtering (characterization)",
+            "name": "hook-modified text is reflected in observable visible text",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: after-model hook filtering (characterization)",
+            "name": "preserves provider text when after-model hook does not modify",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "P12: after-model hook filtering (characterization)",
+            "name": "observable reflects any arbitrary hook-filtered text (property)",
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+        "pid": 43119,
+        "sourceHash": "65f6d40e9ac4c74814b180a39a16f1cba95137883abdb2d810025c63d5142332",
+        "pass": 18,
+        "cases": [
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks",
+            "name": "extracts visible text from text blocks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks",
+            "name": "excludes thinking blocks from text extraction",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks",
+            "name": "excludes tool call blocks from text extraction",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks",
+            "name": "returns empty string for empty blocks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks",
+            "name": "skips empty text blocks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: analyzeBlocksOutcome",
+            "name": "detects visible text in blocks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: analyzeBlocksOutcome",
+            "name": "detects tool calls in blocks",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: analyzeBlocksOutcome",
+            "name": "detects thinking blocks when includeThoughts=true",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: analyzeBlocksOutcome",
+            "name": "does NOT detect thinking blocks when includeThoughts=false",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: analyzeBlocksOutcome",
+            "name": "empty blocks yield no outcome flags",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "records accumulated text blocks to history",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "records usage metadata on the AI entry",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "filters thinking blocks from history when includeThoughts=false",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "syncs prompt token count to history service when usage provided",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "records AFC history atomically without duplicating the current user",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "does not replay an existing prefix from full AFC history",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks + analyzeBlocksOutcome (property)",
+            "name": "text extraction yields concatenation of all text blocks (property)",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.3: extractResponseTextFromBlocks + analyzeBlocksOutcome (property)",
+            "name": "hasToolCalls is true iff at least one tool_call block exists (property)",
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+        "pid": 43082,
+        "sourceHash": "7826f0db1fde7227b29453e1a9627c85615de27e41291becc2fd92e770e1addc",
+        "pass": 14,
+        "cases": [
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "consolidates adjacent text model outputs into single merged text",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "consolidates three adjacent text chunks into one continuous string",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "filters thoughts from recorded text when includeThoughts=false",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "drops thinking blocks and their signatures from history when includeThoughts=false",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "includes thinking blocks in history when includeThoughts=true",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "records usage metadata on the AI entry",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "consolidating N adjacent text chunks yields their concatenation (property)",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "thought text never appears in recorded history when includeThoughts=false (property)",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "recorded AI text is never empty when model output has visible text (property)",
+            "classification": "native-history"
+          },
+          {
+            "classname": "REQ-005.2: clientLlmUtilities next_speaker detection",
+            "name": "returns parsed next_speaker decision from JSON response",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.2: clientLlmUtilities next_speaker detection",
+            "name": "converts plain-text \"model\" fallback when next_speaker text is present",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.2: clientLlmUtilities next_speaker detection",
+            "name": "does NOT apply fallback when next_speaker text is absent",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.2: clientLlmUtilities next_speaker detection",
+            "name": "returns JSON object as-is when no fallback is needed",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "REQ-005.2: next_speaker fallback detection (property)",
+            "name": "fallback fires for any \"user\"/\"model\" plain-text when next_speaker keyword present (property)",
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/chatSession.runtime.test.ts",
+        "pid": 43124,
+        "sourceHash": "a7870a955af729554c74ba0ef025361c45cf79b358e246b513f6fa4b3602d329",
+        "pass": 3,
+        "cases": [
+          {
+            "classname": "ChatSession runtime context",
+            "name": "passes runtime context and tools to provider generateChatCompletion",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ChatSession runtime context",
+            "name": "filters hook-disallowed provider function calls from non-stream responses and history",
+            "classification": "native-history"
+          },
+          {
+            "classname": "ChatSession runtime context",
+            "name": "preserves direct response text when filtering hook-disallowed tool calls",
+            "classification": "journal-selected-shared-public"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/streamRequestHelpers.test.ts",
+        "pid": 43139,
+        "sourceHash": "ad9380e447ae84a58e49539c6cd02b0d9e67cc7f0bf68353220feb5a10c5637d",
+        "pass": 4,
+        "cases": [
+          {
+            "classname": "scoped repeatable request snapshot",
+            "name": "reopens estimation and body readers over disk history with reordered pending membership and releases on close or cancel",
+            "classification": "native-history"
+          },
+          {
+            "classname": "request cursor cancellation",
+            "name": "rejects a cancelled request before preparing any provider contents",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "request snapshot history override",
+            "name": "curates an isolated provider copy with complete adjacent tool responses",
+            "classification": "journal-selected-shared-public"
+          },
+          {
+            "classname": "request preparation from a journal cursor &gt; request snapshot history override",
+            "name": "prepares actual request rows without either eager history getter",
+            "classification": "native-history"
+          }
+        ]
+      }
+    ]
+  },
+  "processChecks": [
+    {
+      "pid": 39914,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 39915,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 39948,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 39972,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40021,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40028,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40040,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40767,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40768,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40769,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40780,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40805,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40823,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40835,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40849,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40855,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 40958,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 42015,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 42087,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 42192,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 42264,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43034,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43035,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43040,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43063,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43082,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43119,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43124,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43139,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43152,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43153,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43161,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43170,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43195,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43200,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43220,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43226,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 43331,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44379,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44458,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44560,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44653,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44743,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44825,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44827,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44877,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44911,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 44912,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45623,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45648,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45680,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45694,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45703,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45711,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45725,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45735,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 45736,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46466,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46481,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46499,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46513,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46530,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46538,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 46545,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47823,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47824,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47830,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47841,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47844,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47848,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47853,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47869,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47870,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 47894,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49724,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49726,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49730,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49736,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49739,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49745,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49757,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49784,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49786,
+      "absent": true,
+      "observation": ""
+    },
+    {
+      "pid": 49828,
+      "absent": true,
+      "observation": ""
+    }
+  ],
+  "processCheckTime": "2026-10-20T02:49:17.269Z",
+  "references": [
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/classification.json",
+      "sha256": "18c6924a0c8858cc3e9d4476da016df4312240de36b4a3130696db78183d9458"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/original-red-cases.json",
+      "sha256": "3f312cef4a44df2a87e853b87e7fb58d921ae8e42ac2df18fa81cefd9f0b7f13"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/original-preservation-final.json",
+      "sha256": "fde4f50d293c78cb1150c6e19835995a35a7d38c046b3ce3ab8c84b58bfce643"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/census-red.log",
+      "sha256": "98c4e100e0ee283fb421708ab635e5f629d21f2637cd580bdb4666dcfa97bff9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/census-explicit-format.log",
+      "sha256": "21aba3728f2b8ad3c7e932988233cced9d2a829b30fd368aed4bf687c1e3ad4f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/preservation-b.log",
+      "sha256": "6df72bc66eb57a075d44f1e6c86302b3e728d8f8455bca76cea4ac3b3ce192c9"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/preservation-c.log",
+      "sha256": "3ed2743766093dbb2d785605be2974443cb0b31483d24f919e2bfe33d6bf64e1"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/preservation-final.log",
+      "sha256": "4d3e5556992a9fab52c1f1839342b8173cbb376128c31b7ce411b7f1bdc0917c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/frozen-final/census.json",
+      "sha256": "5feb3fe0755a146d83f06fa8a59d77ae9b5b03cbdf96b34be4d15c175661c6e4"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-observation-run-l/frozen-final/all-attempts.json",
+      "sha256": "ff6ff90ca7c64f2b9d1bcfc3fef09f03db29c634576548ded51863b19eee1147"
+    }
+  ],
+  "remainingPaths": [
+    "packages/agents/src/core/__tests__/childaccept-body.test.ts",
+    "packages/agents/src/core/__tests__/childaccept.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+    "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+    "packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts",
+    "packages/agents/src/core/deferred-history-source.test.ts",
+    "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+    "packages/agents/src/core/semantic-purge-production.test.ts",
+    "packages/agents/src/core/stream-request-body-demand.test.ts",
+    "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+    "packages/agents/test-bun/run-bun-tests.issue3253.bun.ts"
+  ],
+  "limits": "Cumulative per-file source evidence, not full-package final-source green. Five requested target paths remain red. Supplemental addbatch-value-serialization remains red outside inventory. W22/W23-W26/classification/scratch removal open, old default unchanged. Review skipped per Andrew 2026-10-09.",
+  "censusSources": {
+    "w22-census-runner.ts": "7ee0817e133d2780d8e8507acc3bb3f1a898d19827ee4ff7e17b7912cf8d7d23",
+    "w22-observation-census.test.ts": "7ecccaf71c168a4f0875e428d365bf5c92734b054fe3ae045b1b8472e1d8f3e7"
+  }
+}

@@ -1,5 +1,17 @@
 # Recovered decision guidance
 
+## W22 core observation first subset, 2026-10-20T02:49:17.269Z
+
+**Six target files are green at 9ad76c8a5; W22 remains incomplete.** Base ba4c3e8ca verified. Production/default unchanged. Five observation suites now read committed native history through explicit awaited helpers. streamRequestHelpers receives deterministic historical chronology on input; exact JSON/ownership/cancellation assertions remain. All 156 original assertions/domains/timeouts/bounds remain, with two block checks added. No old blanket pin, production wrapper, whole-history array or duplicate count pass.
+
+Final matrix: fourteen files per backend, 126 passes each, 252 total/zero failures/skips. Reused W21 native transport/hook/purge/runtime counterparts actually ran. Ten product gates and final census types/lint/explicit-format/graph/audit pass; eleven census/API tests pass. Scoped audit has no findings. Graph validation is not shard execution. Source commit preceded census publication.
+
+**806 = 793 green + 12 red + 1 unverified**, zero unrun. Verified cases: **6543 passes/22 failures/zero skips**. Recorded 6550 passes include seven inconsistent runner XML passes withheld from verified totals. Passing classifications: **354 native/344 shared-public/42 explicit-old/5803 pending**. Separate unclassified zero. Only six accepted red paths changed state; thirteen paths remain in W22-REMAINING-FAMILIES.tsv. Historical missing attempts (26), latest missing files (0) and runner inconsistency remain separate. No whole-package final-source or full native-classification claim.
+
+Source-matched original RED and the new failing-before-layer census test establish rejection. Exact source/case contracts gate final journal acceptance; diagnostic/outer-old/unknown/wrong-source/missing-case/inconsistent evidence is excluded or unverified. No new mutation was started and no restoration is pending. Five requested target paths remain red, including native no-array snapshot and media error-finalizer gaps; supplemental core addBatch stays red outside census.
+
+Detailed case/hash/process/gate and frozen ledger proof: W22-CORE-OBSERVATION-PROOF.md/.json; raw `tmp/854-notes/p4/w22/core-observation-run-l/`. All sixteen package hashes match source commit/worktree. All 84 recorded owned PIDs are absent; no live handoff. W22/W23-W26/classification/scratch remain open. Review skipped per Andrew 2026-10-09. No cleanup/.llxprt/raw recovery bulk staging/OCR/push/merge/skips/weaker checks/default flip.
+
 ## W22 request/publication finalization, 2026-10-20T02:30:02.504Z
 
 Fourteen target files pass 51 cases per backend. Preserve production d7e78deae, early fixture commit 6a8d4c944 and census commit f126215be. Commit only green supplemental tests and compact proof; no further family work.

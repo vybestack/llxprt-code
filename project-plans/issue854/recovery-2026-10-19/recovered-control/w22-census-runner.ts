@@ -22,6 +22,7 @@ import {
 
 const BEFORE_SHA256 =
   '61780e2313d471bf6acf26568a53306ddfa1b17d90245d4b6193c93dad1029fc';
+const OBSERVATION_BATCHES = ['observation-final-journal-l-b'];
 const REQUEST_BATCHES = [
   'request-middle-final-journal-k-b',
   'request-one-final-journal-k-b',
@@ -156,6 +157,10 @@ function acceptedBatches(
       reference: 'request-publication-run-k/verify-f-current.json',
       batches: REQUEST_BATCHES,
     },
+    {
+      reference: 'core-observation-run-l/verify-current.json',
+      batches: OBSERVATION_BATCHES,
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -279,6 +284,7 @@ function classify(
   attemptContracts: ReturnType<typeof classificationContracts>,
   densityContracts: ReturnType<typeof classificationContracts>,
   requestContracts: ReturnType<typeof classificationContracts>,
+  observationContracts: ReturnType<typeof classificationContracts>,
   w22: string,
   evidence: readonly Attempt[],
 ): Attempt {
@@ -302,15 +308,23 @@ function classify(
         'request-one-final-journal-k-b',
       ].includes(row.batch) &&
       request?.sourceHash === row.sourceHash;
-    const known = requestMatches
-      ? request
-      : densityMatches
-        ? density
-        : row.accepted &&
-            row.batch === 'attempt-final-journal-i-a' &&
-            attempt?.sourceHash === row.sourceHash
-          ? attempt
-          : contracts.get(caseKey(row.path, test));
+    const observation = observationContracts.get(caseKey(row.path, test));
+    const observationMatches =
+      row.accepted &&
+      row.backend === 'journal' &&
+      OBSERVATION_BATCHES.includes(row.batch) &&
+      observation?.sourceHash === row.sourceHash;
+    const known = observationMatches
+      ? observation
+      : requestMatches
+        ? request
+        : densityMatches
+          ? density
+          : row.accepted &&
+              row.batch === 'attempt-final-journal-i-a' &&
+              attempt?.sourceHash === row.sourceHash
+            ? attempt
+            : contracts.get(caseKey(row.path, test));
     const instanceOverride =
       row.accepted &&
       /^instance-(?:run-final-journal-[ab]|nodefix-final-journal-a)$/.test(
@@ -347,11 +361,14 @@ function classify(
         contract?.provenance ?? 'no-exact-case-contract',
     };
   });
+  const coverageContracts = OBSERVATION_BATCHES.includes(row.batch)
+    ? observationContracts
+    : requestContracts;
   const missingCoverage =
     row.accepted &&
-    REQUEST_BATCHES.includes(row.batch) &&
+    [...REQUEST_BATCHES, ...OBSERVATION_BATCHES].includes(row.batch) &&
     row.cases.some((test) => {
-      const contract = requestContracts.get(caseKey(row.path, test));
+      const contract = coverageContracts.get(caseKey(row.path, test));
       if (
         contract?.sourceHash !== row.sourceHash ||
         ![
@@ -448,6 +465,9 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const requestContracts = classificationContracts(w22, [
     'request-publication-run-k/classification.json',
   ]);
+  const observationContracts = classificationContracts(w22, [
+    'core-observation-run-l/classification.json',
+  ]);
   const checkpoints = [
     join(run, 'accounting.json'),
     join(run, 'accounting-after-boundary.json'),
@@ -517,6 +537,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
         attemptContracts,
         densityContracts,
         requestContracts,
+        observationContracts,
         w22,
         evidence,
       ),
