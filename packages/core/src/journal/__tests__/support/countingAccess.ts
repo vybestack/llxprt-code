@@ -27,6 +27,8 @@ export function countingAccess(
       count(what);
       return access.readRecordStart(offset, what, prefetchBytes);
     },
+    readRecordRange: (head, offset, length) =>
+      access.readRecordRange(head, offset, length),
     readRecordBody: (head, chunkBytes, what) =>
       access.readRecordBody(head, chunkBytes, what),
   };

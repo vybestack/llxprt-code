@@ -13,8 +13,7 @@ import {
 } from './__tests__/support/normalization-oracle.js';
 import { JournalSession } from './journalSession.js';
 import { streamJournalOrphanUnits } from './journal-orphan-units.js';
-import { streamJournalResponseUnits } from './journal-response-units.js';
-import { UnsupportedJournalNormalizationError } from './journal-response-parts.js';
+import { streamJournalResponseUnitRecords } from './journal-response-units.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { IContent } from './IContent.js';
@@ -34,26 +33,30 @@ const fixture = new URL(
   import.meta.url,
 );
 
-function unsupportedReason(tailCount: number): string | undefined {
-  return tailCount !== 0 ? 'Tail normalization is not implemented' : undefined;
-}
-
 async function responseOutcome(
   session: JournalSession,
   tail: readonly IContent[],
-): Promise<
-  | { readonly hash: string; readonly count: number }
-  | { readonly reason: string }
-> {
+): Promise<{
+  readonly hash: string;
+  readonly count: number;
+  readonly pending: readonly boolean[];
+  readonly firstOutputIndex: number | undefined;
+}> {
   const snapshot = await session.store.snapshot();
   try {
-    const units = await collectUnits(
-      streamJournalResponseUnits(snapshot, tail),
-    );
-    return { hash: digest(units), count: units.length };
-  } catch (error) {
-    if (!(error instanceof UnsupportedJournalNormalizationError)) throw error;
-    return { reason: error.message };
+    const units: IContent[] = [];
+    const pending: boolean[] = [];
+    for await (const unit of streamJournalResponseUnitRecords(snapshot, tail)) {
+      units.push(unit.content);
+      pending.push(unit.pending);
+    }
+    const first = pending.indexOf(true);
+    return {
+      hash: digest(units),
+      count: units.length,
+      pending,
+      firstOutputIndex: first < 0 ? undefined : first,
+    };
   } finally {
     await snapshot.close();
   }
@@ -113,7 +116,7 @@ describe('immutable old-normalizer unit oracle', () => {
     }
   }, 120000);
 
-  it('accounts for all 5000 seeds as frozen matches or explicit unsupported response rules', async () => {
+  it('matches all 5000 indexed outputs, counts and pending origins without refusals', async () => {
     const lines = (await readFile(fixture, 'utf8')).trimEnd().split('\n');
     const session = await JournalSession.create(
       `${directory()}/responses.llxj`,
@@ -122,8 +125,6 @@ describe('immutable old-normalizer unit oracle', () => {
       },
     );
     let matched = 0;
-    let reconstruction = 0;
-    let tail = 0;
     try {
       for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
         const input = unitCase(seed);
@@ -133,22 +134,15 @@ describe('immutable old-normalizer unit oracle', () => {
           { kind: 'replace', rows: input.rows.map((row) => encode(row)) },
         ]);
         const result = await responseOutcome(session, input.tail);
-        const reason = unsupportedReason(input.tail.length);
-        expect(result).toStrictEqual(
-          reason === undefined
-            ? { hash: frozen.outputHash, count: frozen.count }
-            : { reason },
-        );
-        matched += reason === undefined ? 1 : 0;
-        reconstruction +=
-          reason === 'Reconstructed call units are not implemented' ? 1 : 0;
-        tail += reason === 'Tail normalization is not implemented' ? 1 : 0;
+        expect(result).toStrictEqual({
+          hash: frozen.outputHash,
+          count: frozen.count,
+          pending: frozen.pending,
+          firstOutputIndex: frozen.firstOutputIndex,
+        });
+        matched++;
       }
-      expect({ matched, reconstruction, tail }).toStrictEqual({
-        matched: 4285,
-        reconstruction: 0,
-        tail: 715,
-      });
+      expect(matched).toBe(5000);
     } finally {
       await session.close();
     }

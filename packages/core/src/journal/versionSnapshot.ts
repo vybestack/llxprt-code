@@ -12,6 +12,7 @@ import {
   type StoredRow,
 } from './rowReads.js';
 import { entryByLabel } from './rowTreeQueries.js';
+import { readStoredBlock, readStoredMetadata } from './rowRangeReads.js';
 import {
   entryAt,
   iterateRowEntries,
@@ -119,6 +120,18 @@ export class VersionSnapshot {
   /** The whole row an entry of this snapshot points at. */
   readRow(entry: RowEntry): Promise<StoredRow> {
     return readStoredRow(this.read.access, entry);
+  }
+
+  readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
+    return readStoredBlock(this.read.access, entry, index);
+  }
+
+  readMetadata(entry: RowEntry): Promise<StoredRow> {
+    return readStoredMetadata(this.read.access, entry);
+  }
+
+  requireOpen(): void {
+    this.read.requireOpen();
   }
 
   private rootRef(): RowTreeRootRef | undefined {

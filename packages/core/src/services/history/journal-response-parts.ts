@@ -8,12 +8,10 @@ import {
   ROW_FLAG,
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
-import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import { decodeStoredRow } from './journalRowCodec.js';
-import { HistoryToolNormalization } from './historyToolNormalization.js';
-import type { ContentBlock, IContent } from './IContent.js';
+import type { JournalResponseSource } from './journal-response-source.js';
+import { decodeStoredBlock, decodeStoredRow } from './journalRowCodec.js';
 
-export class UnsupportedJournalNormalizationError extends JournalFormatError {}
+import type { ContentBlock, IContent } from './IContent.js';
 
 export interface ResponsePart {
   readonly entry: RowEntry;
@@ -57,7 +55,7 @@ function parts(entry: RowEntry, ids: RowIds): readonly ResponsePart[] {
 }
 
 export async function* responseParts(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
 ): AsyncGenerator<ResponsePart> {
   for await (const entry of snapshot.entries()) {
     if ((entry.flags & ROW_FLAG.curated) === 0) continue;
@@ -66,7 +64,7 @@ export async function* responseParts(
 }
 
 export async function responsePartAt(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   at: BlockPosition,
 ): Promise<ResponsePart> {
   const entry = await snapshot.entryByLabel(at.label);
@@ -80,47 +78,47 @@ export async function responsePartAt(
   return part;
 }
 
-export async function responsePartContent(
-  snapshot: VersionSnapshot,
+export async function responsePartMetadata(
+  snapshot: JournalResponseSource,
   part: ResponsePart,
 ): Promise<IContent> {
-  const row = decodeStoredRow(await snapshot.readRow(part.entry));
-  if (part.reconstructed === true) {
+  if (part.reconstructed === true)
     return {
       speaker: 'ai',
-      blocks: part.indices.map((index) => {
-        const block = row.blocks[index];
-        if (block.type !== 'tool_response')
-          throw new JournalFormatError(
-            'Reconstruction source is not a response',
-          );
-        return {
-          type: 'tool_call',
-          id: block.callId,
-          name: block.toolName || 'unknown_tool',
-          parameters: { reconstructed: true },
-          description: 'Reconstructed tool call after compression',
-        };
-      }),
+      blocks: [],
       metadata: { synthetic: true, reason: 'reconstructed_tool_call' },
     };
-  }
-  return HistoryToolNormalization.splitToolCallsOutOfToolMessages([row])[
-    part.part
-  ];
+  if (
+    part.ids.header.speaker === ROW_SPEAKER.tool &&
+    part.speaker === ROW_SPEAKER.ai
+  )
+    return {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        synthetic: true,
+        reason: 'extracted_tool_call_from_tool_message',
+      },
+    };
+  return decodeStoredRow(await snapshot.readMetadata(part.entry));
 }
 
 export async function responseBlockAt(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   at: BlockPosition,
 ): Promise<ContentBlock> {
   const part = await responsePartAt(snapshot, at);
-  const block = (await responsePartContent(snapshot, part)).blocks.find(
-    (_, index) => index === at.block,
-  );
-  if (block === undefined)
+  if (
+    !Number.isInteger(at.block) ||
+    at.block < 0 ||
+    at.block >= part.indices.length
+  )
     throw new JournalFormatError('Response source block is absent');
-  return block;
+  const index = part.indices[at.block];
+  return decodeStoredBlock(
+    await snapshot.readBlock(part.entry, index),
+    part.ids.header.blocks[index].type,
+  );
 }
 
 export function partIds(part: ResponsePart): ReadonlyArray<{

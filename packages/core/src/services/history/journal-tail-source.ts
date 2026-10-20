@@ -1,0 +1,183 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalFormatError } from '../../journal/errors.js';
+import {
+  EMPTY_ID_FACT,
+  type BlockPosition,
+  type IdFact,
+} from '../../journal/idFactCodec.js';
+import { updateFact } from '../../journal/idFactUpdate.js';
+import { encodeRowDraft, entryForNewRow } from '../../journal/rowDraft.js';
+import type { RowEntry } from '../../journal/rowEntry.js';
+import type { RowIds, StoredRow } from '../../journal/rowReads.js';
+import {
+  ROW_BLOCK_TYPE,
+  ROW_FLAG,
+  ROW_SPEAKER,
+} from '../../journal/rowRecord.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { ContentBlock, IContent } from './IContent.js';
+import { encodeContentRow } from './journalRowCodec.js';
+import { planSourceRowOccurrences } from './source-fact-planner.js';
+import type { JournalResponseSource } from './journal-response-source.js';
+
+interface TailRow {
+  readonly entry: RowEntry;
+  readonly stored: StoredRow;
+  readonly origins: readonly number[];
+}
+
+function tailRow(
+  label: bigint,
+  row: IContent,
+  origins: WeakMap<ContentBlock, number>,
+  nextOrigin: () => number,
+): TailRow {
+  const draft = encodeContentRow(row, { owner: 0 });
+  const encoded = encodeRowDraft(label, {
+    ...draft,
+    flags: draft.flags | ROW_FLAG.curated,
+  });
+  return {
+    entry: entryForNewRow(encoded, 0),
+    stored: {
+      header: encoded.header,
+      rawIds: draft.ids.map((id) => id.rawId),
+      meta: draft.meta,
+      blocks: draft.blocks.map((block) => block.bytes),
+    },
+    origins: row.blocks.map((block) => {
+      let id = origins.get(block);
+      if (id === undefined) {
+        id = nextOrigin();
+        origins.set(block, id);
+      }
+      return id;
+    }),
+  };
+}
+
+export class JournalTailSource implements JournalResponseSource {
+  private readonly overlay = new Map<string, IdFact>();
+  private readonly tailRows: readonly TailRow[];
+  readonly facts = {
+    fact: async (rawId: string): Promise<IdFact | undefined> => {
+      this.snapshot.requireOpen();
+      return this.overlay.get(rawId) ?? this.snapshot.facts.fact(rawId);
+    },
+  };
+
+  private constructor(
+    private readonly snapshot: VersionSnapshot,
+    tail: readonly IContent[],
+    private readonly firstLabel: bigint,
+  ) {
+    const origins = new WeakMap<ContentBlock, number>();
+    let next = 0;
+    this.tailRows = tail.map((row, index) =>
+      tailRow(firstLabel + BigInt(index), row, origins, () => next++),
+    );
+  }
+
+  static async create(
+    snapshot: VersionSnapshot,
+    tail: readonly IContent[],
+  ): Promise<JournalTailSource> {
+    snapshot.requireOpen();
+    const source = new JournalTailSource(
+      snapshot,
+      tail,
+      snapshot.version?.nextLabel ?? 1n,
+    );
+    for (const row of source.tailRows) {
+      const { header, rawIds } = row.stored;
+      const occurrences = await planSourceRowOccurrences(
+        {
+          label: header.label,
+          speaker: header.speaker,
+          flags: header.flags,
+          blockTypes: header.blocks.map((block) => block.type),
+          ids: header.ids.map((id, index) => ({ ...id, rawId: rawIds[index] })),
+        },
+        snapshot.facts,
+      );
+      for (const occurrence of occurrences) {
+        const old =
+          (await source.facts.fact(occurrence.rawId)) ?? EMPTY_ID_FACT;
+        source.overlay.set(occurrence.rawId, updateFact(old, occurrence));
+      }
+    }
+    return source;
+  }
+
+  readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
+
+  private tailAt(label: bigint): TailRow {
+    this.snapshot.requireOpen();
+    const index = Number(label - this.firstLabel);
+    if (index < 0 || index >= this.tailRows.length)
+      throw new JournalFormatError('Tail source row is absent');
+    return this.tailRows[index];
+  }
+
+  async *entries(): AsyncGenerator<RowEntry> {
+    yield* this.snapshot.entries();
+    for (const row of this.tailRows) yield row.entry;
+  }
+
+  entryByLabel(label: bigint): Promise<RowEntry | undefined> {
+    return this.isTail(label)
+      ? Promise.resolve(this.tailAt(label).entry)
+      : this.snapshot.entryByLabel(label);
+  }
+
+  readIds(entry: RowEntry): Promise<RowIds> {
+    if (!this.isTail(entry.label)) return this.snapshot.readIds(entry);
+    const { header, rawIds } = this.tailAt(entry.label).stored;
+    return Promise.resolve({ header, rawIds });
+  }
+
+  readRow(entry: RowEntry): Promise<StoredRow> {
+    return this.isTail(entry.label)
+      ? Promise.resolve(this.tailAt(entry.label).stored)
+      : this.snapshot.readRow(entry);
+  }
+
+  async readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
+    if (!this.isTail(entry.label)) return this.snapshot.readBlock(entry, index);
+    const blocks = this.tailAt(entry.label).stored.blocks;
+    if (!Number.isInteger(index) || index < 0 || index >= blocks.length)
+      throw new JournalFormatError('Tail source block is absent');
+    return blocks[index];
+  }
+
+  async readMetadata(entry: RowEntry): Promise<StoredRow> {
+    if (!this.isTail(entry.label)) return this.snapshot.readMetadata(entry);
+    return { ...this.tailAt(entry.label).stored, blocks: [] };
+  }
+
+  private origin(at: BlockPosition): number {
+    const row = this.tailAt(at.label);
+    const split =
+      row.stored.header.speaker === ROW_SPEAKER.tool &&
+      row.stored.header.blocks.some(
+        (block) => block.type === ROW_BLOCK_TYPE.tool_call,
+      );
+    const indices = row.stored.header.blocks.flatMap((block, index) =>
+      !split || (at.part === 0) === (block.type === ROW_BLOCK_TYPE.tool_call)
+        ? [index]
+        : [],
+    );
+    if (
+      !Number.isInteger(at.block) ||
+      at.block < 0 ||
+      at.block >= indices.length
+    )
+      throw new JournalFormatError('Tail source block is absent');
+    return row.origins[indices[at.block]];
+  }
+
+  readonly sameBlock = (left: BlockPosition, right: BlockPosition): boolean =>
+    this.isTail(left.label) &&
+    this.isTail(right.label) &&
+    this.origin(left) === this.origin(right);
+}

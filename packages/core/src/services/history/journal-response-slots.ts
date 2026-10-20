@@ -7,24 +7,23 @@ import {
   ROW_ID_KIND,
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
-import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalResponseSource } from './journal-response-source.js';
+import {
+  responsePlan,
+  type JournalResponsePlan,
+  type JournalBlockReference,
+} from './journal-response-plan.js';
 import {
   callTarget,
   targetsPart,
   type CallTarget,
 } from './journal-reconstruction.js';
-import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
-import type {
-  ContentMetadata,
-  IContent,
-  ToolResponseBlock,
-} from './IContent.js';
+import type { ContentMetadata } from './IContent.js';
 import {
   partIds,
   partPosition,
-  responseBlockAt,
   responsePartAt,
-  responsePartContent,
+  responsePartMetadata,
   sameResponsePart,
   type ResponsePart,
 } from './journal-response-parts.js';
@@ -41,7 +40,7 @@ interface SelectedBlock {
 }
 
 async function slotsFor(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
 ): Promise<readonly ResponseSlot[]> {
   const seen = new Set<string>();
@@ -58,8 +57,11 @@ async function slotsFor(
     if (fact === undefined)
       throw new JournalFormatError('Missing call source fact');
     if (targetsPart(callTarget(fact), part)) {
-      const first = fact.firstResponse ?? fact.firstAiCall;
-      const selected = fact.best ?? fact.firstAiCall;
+      const orphan = fact.firstResponse === undefined;
+      if (!orphan && fact.best === undefined)
+        throw new JournalFormatError('Real response fact has no best pointer');
+      const first = orphan ? fact.firstAiCall : fact.firstResponse;
+      const selected = orphan ? fact.firstAiCall : fact.best;
       if (first !== undefined && selected !== undefined)
         slots.push({
           id: tuple.id,
@@ -80,7 +82,7 @@ async function slotsFor(
 }
 
 async function mediaOwner(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   source: ResponsePart,
 ): Promise<CallTarget | undefined> {
   for (const tuple of partIds(source)) {
@@ -103,7 +105,7 @@ async function mediaOwner(
 }
 
 async function mediaFor(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
   slots: readonly ResponseSlot[],
 ): Promise<readonly SelectedBlock[]> {
@@ -128,7 +130,7 @@ async function mediaFor(
 }
 
 async function orphanSuccessor(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
 ): Promise<readonly SelectedBlock[]> {
   if (part.speaker !== ROW_SPEAKER.ai || part.reconstructed === true) return [];
@@ -152,7 +154,7 @@ function sameSelected(left: SelectedBlock, right: SelectedBlock): boolean {
 }
 
 async function metadataFor(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
   next: ResponsePart | undefined,
   selected: readonly SelectedBlock[],
@@ -176,43 +178,20 @@ async function metadataFor(
     selected.every(
       (ref, index) =>
         !ref.orphan &&
-        comparePositions(ref.at, partPosition(next, index)) === 0,
+        (comparePositions(ref.at, partPosition(next, index)) === 0 ||
+          snapshot.sameBlock?.(ref.at, partPosition(next, index)) === true),
     )
   ) {
-    return (await responsePartContent(snapshot, next)).metadata;
+    return (await responsePartMetadata(snapshot, next)).metadata;
   }
   return { synthetic: true, reason: 'reordered_tool_responses' };
 }
 
-async function slotBlock(
-  snapshot: VersionSnapshot,
-  slot: ResponseSlot,
-): Promise<ToolResponseBlock> {
-  const block = await responseBlockAt(snapshot, slot.selected);
-  if (!slot.orphan) {
-    if (block.type !== 'tool_response' || block.callId !== slot.id)
-      throw new JournalFormatError(
-        'Response fact does not point to its response',
-      );
-    return block;
-  }
-  if (block.type !== 'tool_call' || block.id !== slot.id)
-    throw new JournalFormatError('Orphan fact does not point to its call');
-  return {
-    type: 'tool_response',
-    callId: slot.id,
-    toolName: block.name || 'unknown_tool',
-    result: null,
-    error: 'Tool call interrupted or cancelled',
-    isComplete: true,
-  };
-}
-
 export async function responseAdjacent(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
   next: ResponsePart | undefined,
-): Promise<IContent | undefined> {
+): Promise<JournalResponsePlan | undefined> {
   const slots = await slotsFor(snapshot, part);
   if (slots.length === 0) return undefined;
   const media = await mediaFor(snapshot, part, slots);
@@ -221,12 +200,23 @@ export async function responseAdjacent(
     ...media,
   ];
   const metadata = await metadataFor(snapshot, part, next, selected);
-  const blocks: IContent['blocks'] = [];
-  for (const slot of slots) blocks.push(await slotBlock(snapshot, slot));
-  for (const ref of media) blocks.push(await responseBlockAt(snapshot, ref.at));
-  return sanitizeProviderContentForSerialization({
-    speaker: 'tool',
-    blocks,
-    metadata,
-  });
+  return responsePlan(
+    snapshot,
+    { speaker: 'tool', blocks: [], metadata },
+    [
+      ...slots.map(
+        (slot) =>
+          ({
+            at: slot.selected,
+            kind: slot.orphan ? 'orphan' : 'response',
+            id: slot.id,
+          }) satisfies JournalBlockReference,
+      ),
+      ...media.map(
+        (ref) =>
+          ({ at: ref.at, kind: 'source' }) satisfies JournalBlockReference,
+      ),
+    ],
+    selected.some((ref) => snapshot.isTail?.(ref.at.label) === true),
+  );
 }

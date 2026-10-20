@@ -3,7 +3,7 @@ import { JournalFormatError } from '../../journal/errors.js';
 import type { BlockPosition, IdFact } from '../../journal/idFactCodec.js';
 import { comparePositions } from '../../journal/idFactUpdate.js';
 import { ROW_ID_KIND, ROW_SPEAKER } from '../../journal/rowRecord.js';
-import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalResponseSource } from './journal-response-source.js';
 import {
   partIds,
   partPosition,
@@ -40,7 +40,7 @@ export function targetsPart(
 }
 
 async function reconstructedIndices(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
   part: ResponsePart,
   emptyReconstructed: boolean,
 ): Promise<readonly number[]> {
@@ -68,7 +68,7 @@ async function reconstructedIndices(
 }
 
 export async function* completedResponseParts(
-  snapshot: VersionSnapshot,
+  snapshot: JournalResponseSource,
 ): AsyncGenerator<ResponsePart> {
   let emptyReconstructed = false;
   for await (const part of responseParts(snapshot)) {

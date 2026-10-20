@@ -2,43 +2,73 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { IContent } from './IContent.js';
-import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
-import { strippedSelf } from './journal-orphan-units.js';
 import { countDecodedRow } from './journalRowCounters.js';
-import {
-  responsePartContent,
-  UnsupportedJournalNormalizationError,
-  type ResponsePart,
-} from './journal-response-parts.js';
+import type { ResponsePart } from './journal-response-parts.js';
 import { responseAdjacent } from './journal-response-slots.js';
 import { completedResponseParts } from './journal-reconstruction.js';
+import { JournalTailSource } from './journal-tail-source.js';
+import { selfResponsePlan } from './journal-self-plan.js';
+import type { JournalResponsePlan } from './journal-response-plan.js';
+
+export interface JournalResponseUnitRecord {
+  readonly content: IContent;
+  readonly pending: boolean;
+}
+
+export async function* streamJournalResponsePlans(
+  snapshot: VersionSnapshot,
+  tail: readonly IContent[] = [],
+): AsyncGenerator<JournalResponsePlan> {
+  const release = snapshot.hold();
+  let parts: AsyncGenerator<ResponsePart> | undefined;
+  try {
+    const source = await JournalTailSource.create(snapshot, tail);
+    parts = completedResponseParts(source);
+    let current = await parts.next();
+    while (current.done !== true) {
+      const part = current.value;
+      const next = await parts.next();
+      const self = await selfResponsePlan(source, part);
+      if (self !== undefined) yield self;
+      const adjacent = await responseAdjacent(
+        source,
+        part,
+        next.done === true ? undefined : next.value,
+      );
+      if (adjacent !== undefined) yield adjacent;
+      current = next;
+    }
+  } finally {
+    try {
+      await parts?.return(undefined);
+    } finally {
+      await release();
+    }
+  }
+}
 
 async function* chargedUnit(
-  row: IContent | undefined,
+  plan: JournalResponsePlan,
   counters: JournalReadCounters | undefined,
-): AsyncGenerator<IContent> {
-  if (row === undefined) return;
-  const release = countDecodedRow(row, counters);
+): AsyncGenerator<JournalResponseUnitRecord> {
+  const blocks: IContent['blocks'] = [];
+  for await (const block of plan.openBlocks()) blocks.push(block);
+  const content = { ...plan.header, blocks };
+  const release = countDecodedRow(content, counters);
   try {
-    yield row;
+    yield { content, pending: plan.pending };
   } finally {
     release();
   }
 }
 
-async function* selfUnit(
+export async function* streamJournalResponseUnitRecords(
   snapshot: VersionSnapshot,
-  part: ResponsePart,
-  counters: JournalReadCounters | undefined,
-): AsyncGenerator<IContent> {
-  yield* chargedUnit(
-    strippedSelf(
-      sanitizeProviderContentForSerialization(
-        await responsePartContent(snapshot, part),
-      ),
-    ),
-    counters,
-  );
+  tail: readonly IContent[] = [],
+  counters?: JournalReadCounters,
+): AsyncGenerator<JournalResponseUnitRecord> {
+  for await (const plan of streamJournalResponsePlans(snapshot, tail))
+    yield* chargedUnit(plan, counters);
 }
 
 export async function* streamJournalResponseUnits(
@@ -46,33 +76,10 @@ export async function* streamJournalResponseUnits(
   tail: readonly IContent[] = [],
   counters?: JournalReadCounters,
 ): AsyncGenerator<IContent> {
-  if (tail.length !== 0)
-    throw new UnsupportedJournalNormalizationError(
-      'Tail normalization is not implemented',
-    );
-  const release = snapshot.hold();
-  const parts = completedResponseParts(snapshot);
-  try {
-    let current = await parts.next();
-    while (current.done !== true) {
-      const part = current.value;
-      const next = await parts.next();
-      yield* selfUnit(snapshot, part, counters);
-      yield* chargedUnit(
-        await responseAdjacent(
-          snapshot,
-          part,
-          next.done === true ? undefined : next.value,
-        ),
-        counters,
-      );
-      current = next;
-    }
-  } finally {
-    try {
-      await parts.return(undefined);
-    } finally {
-      await release();
-    }
-  }
+  for await (const unit of streamJournalResponseUnitRecords(
+    snapshot,
+    tail,
+    counters,
+  ))
+    yield unit.content;
 }

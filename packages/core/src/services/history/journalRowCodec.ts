@@ -311,7 +311,10 @@ function decodedMetadata(
   return Object.fromEntries(entries);
 }
 
-function decodeBlock(bytes: Uint8Array, type: number): ContentBlock {
+export function decodeStoredBlock(
+  bytes: Uint8Array,
+  type: number,
+): ContentBlock {
   const block = JSON.parse(DECODER.decode(bytes)) as ContentBlock;
   if (BLOCK_TYPE_NAME[type] !== block.type) {
     throw new JournalFormatError(
@@ -339,7 +342,7 @@ export function decodeStoredRow(
   const content: IContent = {
     speaker: piece.speaker,
     blocks: row.blocks.map((bytes, index) =>
-      decodeBlock(bytes, header.blocks[index].type),
+      decodeStoredBlock(bytes, header.blocks[index].type),
     ),
   };
   const metadata = decodedMetadata(piece, header);

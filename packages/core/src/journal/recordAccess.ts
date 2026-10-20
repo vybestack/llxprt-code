@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalCorruptionError, JournalFrameError } from './errors.js';
+import {
+  JournalCorruptionError,
+  JournalFormatError,
+  JournalFrameError,
+} from './errors.js';
 import {
   readFrameBody,
   readFrameStart,
@@ -38,6 +42,12 @@ export interface RecordAccess {
     what: string,
     prefetchBytes: number,
   ): Promise<FrameStart>;
+  /** Reads one range within a validated frame body; the whole-body CRC is not checked. */
+  readRecordRange(
+    head: FrameHead,
+    offset: number,
+    length: number,
+  ): Promise<Uint8Array>;
   /** Streams the body; the CRC is checked after the last chunk, so consume it to the end. */
   readRecordBody(
     head: FrameHead,
@@ -96,6 +106,19 @@ export function createRecordAccess(
     },
     readRecordStart: (offset, what, prefetchBytes) =>
       readStart(offset, what, prefetchBytes),
+    readRecordRange(head, offset, length) {
+      const invalidOffset = !Number.isSafeInteger(offset) || offset < 0;
+      const invalidLength = !Number.isSafeInteger(length) || length < 0;
+      const outsideBody = offset + length > head.bodyLen;
+      if (
+        invalidOffset ||
+        invalidLength ||
+        outsideBody ||
+        head.endOffset > trailer.durableEnd
+      )
+        throw new JournalFormatError('Record body range is out of bounds');
+      return reader.readAt(head.bodyOffset + offset, length);
+    },
     async *readRecordBody(head, chunkBytes, what = DEFAULT_WHAT) {
       try {
         yield* readFrameBody(reader, head, chunkBytes);

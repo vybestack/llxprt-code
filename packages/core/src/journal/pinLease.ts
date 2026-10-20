@@ -76,6 +76,10 @@ function leased(raw: RecordAccess, lease: PinLease): RecordAccess {
       lease.require();
       return raw.readRecordStart(offset, what, prefetchBytes);
     },
+    readRecordRange(head, offset, length) {
+      lease.require();
+      return raw.readRecordRange(head, offset, length);
+    },
     async *readRecordBody(head, chunkBytes, what) {
       lease.require();
       for await (const chunk of raw.readRecordBody(head, chunkBytes, what)) {

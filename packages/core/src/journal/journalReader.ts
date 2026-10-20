@@ -50,6 +50,7 @@ export async function openJournalReadOnly(
         ? {
             readRecordHead: (): Promise<FrameHead> => noCommittedState(),
             readRecordStart: (): Promise<FrameStart> => noCommittedState(),
+            readRecordRange: (): Promise<Uint8Array> => noCommittedState(),
             readRecordBody: (): AsyncGenerator<Uint8Array> =>
               noCommittedState(),
           }
@@ -62,6 +63,7 @@ export async function openJournalReadOnly(
       readRecordHead: access.readRecordHead,
       readRecordStart: access.readRecordStart,
       readRecordBody: access.readRecordBody,
+      readRecordRange: access.readRecordRange,
       close: () => handle.close(),
     };
   } catch (error) {
