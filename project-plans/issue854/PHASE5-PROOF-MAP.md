@@ -1,6 +1,16 @@
-# Phase 5 response proof map
+# Phase 5 proof map
 
-## Current reconstruction/tail increment
+## Current indexed metadata increment
+
+Starting HEAD `01c30ba7e`; native contributions/rank `055ca8b30`; indexed snapshot implementation `3a921873d56bc6ac6a3d6a52f34a8f5683245fb6`. [PHASE5-METADATA-PROOF.json](PHASE5-METADATA-PROOF.json) binds 27 source paths to committed blobs. Final acceptance is **98 isolated serial processes over 49 files, 696 passes, 817434 assertions, no failures or skips**, under both outer backend settings. Six scoped gates pass. All 124 recorded matrix/control/gate PIDs are absent. Raw receipts: `tmp/854-notes/p5/metadata-run-d/`.
+
+The frozen 5000-case differential now checks indexed count, every indexed `readAt`, every `isPending` result and first pending output, in addition to existing streamed hashes. Native mutation tests cover append, pop, owner, fill, purge, density, compression, clone and compaction. The 40/4000/100000-row metadata tests bound preparation to fewer than 120 heads with zero block/body reads, rank/select to fewer than 20 heads, and one selected text unit to exactly one block read with no whole body. One response appended after 40 or 4000 distinct calls stays below 150 positional reads. The full retained-heap acceptance is still open.
+
+Two controls inject a journal-prefix rescan or retain per-row counts; each fails the unchanged metadata-read bound and restores byte-for-byte. The audit has two `DUP_ASSERT` reports for repeated assertions across different mutation/measurement boundaries. Both remain; there are no touched `MOCK_MIRROR`, `ALWAYS_TRUE`, `SELF_CONFIRMING` or `NO_ASSERT` findings. The file header requires version 4 to reject entries without persisted contributions. No fixture regeneration or provider routing/default change.
+
+Normalized occurrence placement/counts, Kimi/Mistral native bookkeeping, format/settings summaries, full mutation/heap acceptance and CRC closure remain open. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [PHASE5-METADATA-DECISIONS.md](PHASE5-METADATA-DECISIONS.md). Review skipped per Andrew 2026-10-09.
+
+## Historical reconstruction/tail increment
 
 Starting HEAD `29bcdd89f`; first green R1 `57d30e894`; tail/range implementation `abfd39888d71a069f8dbc89182e833138328b028`. [PHASE5-TAIL-PROOF.json](PHASE5-TAIL-PROOF.json) supersedes the response-only coverage counts below while preserving those receipts as historical evidence. Current acceptance: **80 isolated serial processes, 40 files, both outer backends, 588 passes, 205292 assertions, no failures/skips; six scoped gates; zero touched audit findings**. All 22 source paths match their actual implementation blobs. All 189 recorded job PIDs are absent.
 

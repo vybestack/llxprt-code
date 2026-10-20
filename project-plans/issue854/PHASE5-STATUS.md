@@ -31,7 +31,9 @@ The indexed differential compares count, every selected unit, pending membership
 
 Two negative controls add a prefix rescan or retain all historical counts during snapshot preparation. Both must fail the unchanged metadata read budget. Sources are restored byte-for-byte after each control. These are read-budget controls, not a completed retained-heap proof.
 
-Raw REDs, controls, serial acceptance logs, JUnit and gate receipts are under `tmp/854-notes/p5/metadata-run-d/`. Final counts and committed-source bindings belong in `PHASE5-METADATA-PROOF.json`. Earlier lazy-stream receipts remain in `PHASE5-TAIL-PROOF.json`.
+Implementation `3a921873d56bc6ac6a3d6a52f34a8f5683245fb6` passes **98 isolated serial processes over 49 files: 696 passes, 817434 assertions, zero failures or skips**. All six scoped gates pass: declaration-only core build, strict test-inclusive core types, zero-warning scoped ESLint, Prettier, affected-shard graph and AST test audit. The audit's two duplicate-assertion reports concern distinct state/measurement boundaries; no touched `MOCK_MIRROR`, `ALWAYS_TRUE`, `SELF_CONFIRMING` or `NO_ASSERT` findings remain. Graph validation is not a claim that all affected shards ran.
+
+Raw REDs, controls, serial acceptance logs, JUnit and gate receipts are under `tmp/854-notes/p5/metadata-run-d/`. [PHASE5-METADATA-PROOF.json](PHASE5-METADATA-PROOF.json) binds 27 source paths to committed blobs and verifies all 124 recorded matrix/control/gate PIDs absent, with none live. Earlier lazy-stream receipts remain in `PHASE5-TAIL-PROOF.json`.
 
 ## Remaining work
 

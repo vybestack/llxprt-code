@@ -1,0 +1,3174 @@
+{
+  "created": "2026-10-20T20:25:42.027Z",
+  "startingHead": "01c30ba7e95b506a3a0e6580315ff75997fec98e",
+  "firstIncrement": "055ca8b30",
+  "implementationCommit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6",
+  "sources": {
+    "packages/core/src/journal/__tests__/support/idHistoryModel.ts": {
+      "sha256": "e1461570b1f7a9f36805c150c9cb7d8764cfd9c096f24d84cd2e45d2f05a291e",
+      "committed": "e1461570b1f7a9f36805c150c9cb7d8764cfd9c096f24d84cd2e45d2f05a291e",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/__tests__/support/storeModel.ts": {
+      "sha256": "1a78cc66190f645dffb77d0f2db919d5efef0ce92db37b64fd2277634f2ab823",
+      "committed": "1a78cc66190f645dffb77d0f2db919d5efef0ce92db37b64fd2277634f2ab823",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/contributionChanges.ts": {
+      "sha256": "8038845b1d2c1fa4934b90357c4a0fccf1b5be303f614e98ab79e7827823680d",
+      "committed": "8038845b1d2c1fa4934b90357c4a0fccf1b5be303f614e98ab79e7827823680d",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/contributionRebuild.ts": {
+      "sha256": "54e8a8841b511630d16099d7733b20ae97071c3d597b87863f0adcfa0bf1b2f0",
+      "committed": "54e8a8841b511630d16099d7733b20ae97071c3d597b87863f0adcfa0bf1b2f0",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/fileHeader.test.ts": {
+      "sha256": "08850499d9e0f8cfdd101d6c7e13b9168dde80b36463ef4e5e3eb69dce9ab7ec",
+      "committed": "08850499d9e0f8cfdd101d6c7e13b9168dde80b36463ef4e5e3eb69dce9ab7ec",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/fileHeader.ts": {
+      "sha256": "121739c1c312bb0b4fb15533f6329804873af06f30e2afeea37628ec259bde49",
+      "committed": "121739c1c312bb0b4fb15533f6329804873af06f30e2afeea37628ec259bde49",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/groupBuild.ts": {
+      "sha256": "9cb87880b76c7b14092c4e47d98fb34a45bf6683ed578544390088ddb1d463f0",
+      "committed": "9cb87880b76c7b14092c4e47d98fb34a45bf6683ed578544390088ddb1d463f0",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/groupIncremental.ts": {
+      "sha256": "a7ecea005469fed971d943042b609fc69885f10580f6d2a95adce701db922676",
+      "committed": "a7ecea005469fed971d943042b609fc69885f10580f6d2a95adce701db922676",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/groupRebuild.ts": {
+      "sha256": "91a3c3a9f65026a678a0ea4d372b5348bbb10e7e9ea836edcb99a7f11e79e059",
+      "committed": "91a3c3a9f65026a678a0ea4d372b5348bbb10e7e9ea836edcb99a7f11e79e059",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/idFactUpdate.ts": {
+      "sha256": "84f4e539bfd43d682a02cb4d041bfe272c9cde089b4922c668c2c503e923e53c",
+      "committed": "84f4e539bfd43d682a02cb4d041bfe272c9cde089b4922c668c2c503e923e53c",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/rowAlgebra.ts": {
+      "sha256": "536222addd18e1cf3474e654ca7ae02f01940466c9346c3583aa8f12e0278433",
+      "committed": "536222addd18e1cf3474e654ca7ae02f01940466c9346c3583aa8f12e0278433",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/rowEntry.ts": {
+      "sha256": "de9dba4de4f137a025bd58b8bab83452d09247661212d19233de1200b55ffcb0",
+      "committed": "de9dba4de4f137a025bd58b8bab83452d09247661212d19233de1200b55ffcb0",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/rowTreeQueries.ts": {
+      "sha256": "b9f541586daeb6b4cc1437bae76270f50ce009deddb7d33e65f0e5e951024726",
+      "committed": "b9f541586daeb6b4cc1437bae76270f50ce009deddb7d33e65f0e5e951024726",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/unitContributions.ts": {
+      "sha256": "3b5713088c014b0d6c5ea3551ee4da280761f1ca754282ed0a3c2cefa911936d",
+      "committed": "3b5713088c014b0d6c5ea3551ee4da280761f1ca754282ed0a3c2cefa911936d",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/versionSnapshot.ts": {
+      "sha256": "20db650b3b15c85556d96d1f97499491ed0f301dbf5ca7fa587df2c92959b2f0",
+      "committed": "20db650b3b15c85556d96d1f97499491ed0f301dbf5ca7fa587df2c92959b2f0",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-reconstruction-units.test.ts": {
+      "sha256": "eec0a2617bdd7323c312e4bca88f8b90e369812e7a3846502aa701b468cb11db",
+      "committed": "eec0a2617bdd7323c312e4bca88f8b90e369812e7a3846502aa701b468cb11db",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-reconstruction.ts": {
+      "sha256": "682a597eb026e3c7c0ba182f688f221e57726234491fdddef833abcf5f643a5d",
+      "committed": "682a597eb026e3c7c0ba182f688f221e57726234491fdddef833abcf5f643a5d",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-response-parts.ts": {
+      "sha256": "8b4344bd7740e466907ffcbd1f8a45bf793254c40902d82c48e53062f7665b41",
+      "committed": "8b4344bd7740e466907ffcbd1f8a45bf793254c40902d82c48e53062f7665b41",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-response-units.ts": {
+      "sha256": "1dd504432b14aaba565df88c29bbc1982e6f2d50b77fb283f53011a39f50140e",
+      "committed": "1dd504432b14aaba565df88c29bbc1982e6f2d50b77fb283f53011a39f50140e",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-tail-source.ts": {
+      "sha256": "5b64de04a687f63bb50bbbf1ee1c4120fb625bd8b8821ab8b3ac388ecf8e0e1e",
+      "committed": "5b64de04a687f63bb50bbbf1ee1c4120fb625bd8b8821ab8b3ac388ecf8e0e1e",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-unit-metadata.test.ts": {
+      "sha256": "195b76e3cc0204ee22ceb17ff7408ffb62015aa84ccf12366513d74cc6763afd",
+      "committed": "195b76e3cc0204ee22ceb17ff7408ffb62015aa84ccf12366513d74cc6763afd",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/normalization-unit-oracle.test.ts": {
+      "sha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+      "committed": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/journal/curatedQueries.ts": {
+      "sha256": "c10ced030dfc604a6eba44a74cd7f4bffe3b047749b4fc3ce9c4a1410b4e47cc",
+      "committed": "c10ced030dfc604a6eba44a74cd7f4bffe3b047749b4fc3ce9c4a1410b4e47cc",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/indexed-journal-request-snapshot.ts": {
+      "sha256": "e6f89a83f86ba3bc9965bec07be2e4faf9c6ecc590857bea22e1946367442a4e",
+      "committed": "e6f89a83f86ba3bc9965bec07be2e4faf9c6ecc590857bea22e1946367442a4e",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-entry-plans.ts": {
+      "sha256": "27ba1831828db708eb552d3da6c213a12dd88d3bfda0862448ca95dd24f2093c",
+      "committed": "27ba1831828db708eb552d3da6c213a12dd88d3bfda0862448ca95dd24f2093c",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts": {
+      "sha256": "6fea1d8737baff7f27933d5d503be4c10eceac09713fc6cbf442bc9999142a3a",
+      "committed": "6fea1d8737baff7f27933d5d503be4c10eceac09713fc6cbf442bc9999142a3a",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    },
+    "packages/core/src/services/history/journal-indexed-overlay.ts": {
+      "sha256": "9e48647f2b22ae722d43bffea956fdad24804e2d795534ef772d20359250a00a",
+      "committed": "9e48647f2b22ae722d43bffea956fdad24804e2d795534ef772d20359250a00a",
+      "commit": "3a921873d56bc6ac6a3d6a52f34a8f5683245fb6"
+    }
+  },
+  "totals": {
+    "processes": 98,
+    "files": 49,
+    "pass": 696,
+    "assertions": 817434,
+    "fail": 0,
+    "skips": 0
+  },
+  "accepted": [
+    {
+      "name": "old-0",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/fileHeader.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41381,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:20:59.153Z",
+      "code": 0,
+      "finished": "2026-10-20T20:20:59.271Z",
+      "logHash": "4b3a3af67adc51766664a33134accce50f3b08b4a27581b0e86ec3d3af792f41",
+      "junitHash": "58cfe84ca617a77785c24f62d27b801d0720a35e504d2ef7c91868203aa500d5",
+      "sourceFile": "packages/core/src/journal/fileHeader.test.ts"
+    },
+    {
+      "name": "old-1",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-indexed-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41384,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:20:59.272Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:05.693Z",
+      "logHash": "d0ce3fa0511bf1f1d78134c74269da62cf763c0d7117e1ff98a21e3b93606050",
+      "junitHash": "837689da670328a272804d8479d10bb11863f43b042cde8e6a943ec598d91e8c",
+      "sourceFile": "packages/core/src/services/history/journal-indexed-metadata.test.ts"
+    },
+    {
+      "name": "old-2",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-unit-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-2.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41537,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:05.693Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:06.006Z",
+      "logHash": "df2e023b249106e997d21bcb5cab4abfe046d3c5657b2766b13719639fcb15ec",
+      "junitHash": "41bad449b3f5298d5b96500ea388111dd3aaaac5a14bfba83df29c15b45003a9",
+      "sourceFile": "packages/core/src/services/history/journal-unit-metadata.test.ts"
+    },
+    {
+      "name": "old-3",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactIndex.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41548,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:06.006Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:06.773Z",
+      "logHash": "81fe457565514ec4d5f5f6cf8c91fe5c20fc057bbe850822466e0db71718dfcc",
+      "junitHash": "d3b3919b9e548a241d27e3f45f2aaf3d75614f1d5de1eab36f1cf10d14e8f46b",
+      "sourceFile": "packages/core/src/journal/idFactIndex.test.ts"
+    },
+    {
+      "name": "old-4",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41570,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:06.774Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:06.896Z",
+      "logHash": "870ded8c50dd74e1a02954ccf00b77d421ccc8deecde78d1c8cb617aff79f58d",
+      "junitHash": "2ae1ae7258173771daa710199a50824674fb241ec51ffad433da80a9e6b1b685",
+      "sourceFile": "packages/core/src/journal/idFactCodec.test.ts"
+    },
+    {
+      "name": "old-5",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idTrie.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41573,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:06.897Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:09.087Z",
+      "logHash": "05d7563ce14ab4cafd35aa197592602c3a9e6d7a296977c29d8f5a01ec4ab090",
+      "junitHash": "e6c31ed068d034ef258814f75e1ebee2c9d55cc5c53d9edd5b430c1f4a91fde6",
+      "sourceFile": "packages/core/src/journal/idTrie.test.ts"
+    },
+    {
+      "name": "old-6",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/rowEntry.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41639,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:09.088Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:09.220Z",
+      "logHash": "bb00d048bb26c992d79526ae2ddb2f161b55c4d139e421f1547d190b9c4fbbcc",
+      "junitHash": "ec2202b3b95f163b64c45a794522db0713c16db6b713dd12afea2ef42689ac4d",
+      "sourceFile": "packages/core/src/journal/rowEntry.test.ts"
+    },
+    {
+      "name": "old-7",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/rowAlgebra.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41642,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:09.220Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:09.358Z",
+      "logHash": "96544becc5045c4a0013d88ccbb0c2f16cb20afaa1e7dba0c67a9562b6dc4a9b",
+      "junitHash": "22afc57311f73dce475a876cc85f43fb657c93b8253fd255d6269bb6998ce11c",
+      "sourceFile": "packages/core/src/journal/rowAlgebra.test.ts"
+    },
+    {
+      "name": "old-8",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.commit.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41649,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:09.359Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:09.745Z",
+      "logHash": "1b8a3c259fd5595c3bd899582ca6f743a60eb85aedab88ad76156246baf27214",
+      "junitHash": "def01864c533c5a4e59f35257063392c9bffb21f437d296144bc33ffec592f90",
+      "sourceFile": "packages/core/src/journal/journalStore.commit.test.ts"
+    },
+    {
+      "name": "old-9",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.pop.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41662,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:09.746Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:10.119Z",
+      "logHash": "463b9fce4ff33eb58f888507cdc9464c493859b6f850fc9e1fec8a53b90a49b1",
+      "junitHash": "6e6b7300656988b6d84a7bcef25c7f2d07c530a639598da31aa8d8c37c3e2b74",
+      "sourceFile": "packages/core/src/journal/journalStore.pop.test.ts"
+    },
+    {
+      "name": "old-10",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.model.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41673,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:10.119Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:13.789Z",
+      "logHash": "106e99bd9ca20a4a493dd22e8b09b829a65ade91aaf30d22ccd03cda9a441399",
+      "junitHash": "771c989913df03b578b3abea2db475064df18e8ce9db7e03efe1822825749224",
+      "sourceFile": "packages/core/src/journal/journalStore.model.test.ts"
+    },
+    {
+      "name": "old-11",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionSnapshot.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41769,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:13.790Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:14.097Z",
+      "logHash": "b0451c05948f054479c4f54c419a189bba8cde70a42ee4ec9885b776f751b0e3",
+      "junitHash": "9ec759c6df681571f4fda9ff45ad48fb1646aeb012b774f1ce4e3aa2be0f9963",
+      "sourceFile": "packages/core/src/journal/versionSnapshot.test.ts"
+    },
+    {
+      "name": "old-12",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-reconstruction-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41786,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:14.098Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:14.468Z",
+      "logHash": "bb36390110f5f945068610e5cf5189776737b2b66b5bfeed206fc84eda3e4535",
+      "junitHash": "3e05be4c0c762cb76d8e0a5ad6b18e7132681db619a415f9248ec7781c10a2fb",
+      "sourceFile": "packages/core/src/services/history/journal-reconstruction-units.test.ts"
+    },
+    {
+      "name": "old-13",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-tail-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41795,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:14.469Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:14.847Z",
+      "logHash": "e14fe6097f489983f23ee304eb133fbcdef68c659ee76e7802fb4543ad87edcb",
+      "junitHash": "09eadc783a9028bf327feb4a0fa1d6a0f5928b809e46db6f5e7079594e30eaf8",
+      "sourceFile": "packages/core/src/services/history/journal-tail-units.test.ts"
+    },
+    {
+      "name": "old-14",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-fact-errors.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41805,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:14.848Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:15.140Z",
+      "logHash": "38a2306b76ad98c6aefa4e10e79dc9be78eba70839ee7e6fac68a138776f1f75",
+      "junitHash": "1716fa96a5abda189112126ac2b925a2cdc58d8a9873f1be1d549fe1c47aa1f8",
+      "sourceFile": "packages/core/src/services/history/journal-response-fact-errors.test.ts"
+    },
+    {
+      "name": "old-15",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-tail-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41817,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:15.140Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:15.538Z",
+      "logHash": "8a4591298fbb863065852255a5e57a385b5f93893ea0d31fb57971720e931262",
+      "junitHash": "9c4a4e2c71136f06a6e41130fac16cbdb00ebea4158aad6e51d242e95e8fc88f",
+      "sourceFile": "packages/core/src/services/history/journal-tail-resources.test.ts"
+    },
+    {
+      "name": "old-16",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-block-ranges.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41829,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:15.539Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:15.834Z",
+      "logHash": "adc113d13f23e38cdf83eadd2601b18e8694225e9ef42ae1173d5793c31ef885",
+      "junitHash": "99d1741a296c8d7006aa0493d4b5cb9d7ba46aa34f7e896d8f99f54754c5775c",
+      "sourceFile": "packages/core/src/services/history/journal-block-ranges.test.ts"
+    },
+    {
+      "name": "old-17",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-lazy-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41840,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:15.834Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:16.137Z",
+      "logHash": "08db5087cc25f7302a1784b1a18db7f3df927be87649f0319c8ce9033ccc9824",
+      "junitHash": "14bdc418e0cb7a0dbae2fa29a9649c60753323f7125bd952811f588febc08e55",
+      "sourceFile": "packages/core/src/services/history/journal-lazy-units.test.ts"
+    },
+    {
+      "name": "old-18",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.readerLifetime.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41855,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:16.137Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:16.444Z",
+      "logHash": "888db5904b8ad3afb7ab84872012cc692db7a666de041c75a5705cfbc0aa7e2b",
+      "junitHash": "433f0a9e3e058266e720a632e4ad12f2ad1c5a76fb4ceada305f3f4582f6b94a",
+      "sourceFile": "packages/core/src/journal/journalStore.readerLifetime.test.ts"
+    },
+    {
+      "name": "old-19",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalOpen.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41860,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:16.445Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:16.585Z",
+      "logHash": "498b13944e24ac19ff7b502555033da2a534e4a7578f3645b5a86bce1f58fe7c",
+      "junitHash": "705d75134ade0731e71d6b1b3c4f7383ddf5dc8a5c780da2846844e714e85790",
+      "sourceFile": "packages/core/src/journal/journalOpen.test.ts"
+    },
+    {
+      "name": "old-20",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalRefusal.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41863,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:16.586Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:16.711Z",
+      "logHash": "c383595b02d821e2c6a39511717eeac486fa6d41edde19031381d208b2da4580",
+      "junitHash": "659c5073c1807978757089d24ff0648e2c77756b30dad083aac04445f04c1590",
+      "sourceFile": "packages/core/src/journal/journalRefusal.test.ts"
+    },
+    {
+      "name": "old-21",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalLargeRows.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41866,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:16.711Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:17.708Z",
+      "logHash": "570828afa3f34a7e29d5a5aa1ba2730223a175ee523f2ccd1b43c65614024d8b",
+      "junitHash": "e0b58543c3d460ce17d5389a4efbb9a0e878fca6e8ed1c13fa9811a19752ad01",
+      "sourceFile": "packages/core/src/journal/journalLargeRows.test.ts"
+    },
+    {
+      "name": "old-22",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalTornTail.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-22.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41888,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:17.709Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:20.420Z",
+      "logHash": "04e9bfbb93c5ee7138171eba6f6013e9096942d13772d58a4f3763dd65cd57c9",
+      "junitHash": "774b76b548e63991b09ea796bc80a5602c54ba306ad0ee543ea19b4329cacf2c",
+      "sourceFile": "packages/core/src/journal/journalTornTail.test.ts"
+    },
+    {
+      "name": "old-23",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-lifecycle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-23.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41964,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:20.421Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:20.837Z",
+      "logHash": "29fa52697a4bf5058947030dce549397f1f1df8f5800761861f5b81220c6f1f6",
+      "junitHash": "e418367be53124f2490dca6de04627897fac7326827904a9d1ab78c93820da00",
+      "sourceFile": "packages/core/src/services/history/journal-response-lifecycle.test.ts"
+    },
+    {
+      "name": "old-24",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-24.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41976,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:20.838Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:21.362Z",
+      "logHash": "d0cf7376a77265607f6f27f36417847d3fa4bb10e183d5d8c61355111b932be5",
+      "junitHash": "b58ebdac7b94aff3e6051158e76332691184b50d7a82e17923c25e47345f176d",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.test.ts"
+    },
+    {
+      "name": "old-25",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.identity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-25.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41984,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:21.362Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:21.691Z",
+      "logHash": "4a9b9e1fff53c0fa11bd3cc9f1403bc7c26bde2399ff7a244d248e2e9cade6e1",
+      "junitHash": "91ec02dc56251ead97e893e122228068e9e11037de581247763e6bf7272baecb",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.identity.test.ts"
+    },
+    {
+      "name": "old-26",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.unlinked.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-26.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 41998,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:21.692Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:22.004Z",
+      "logHash": "8d8a62f5792cef391f5089858e0e1ce5d9dfacba095c79f072bc8474b44cb3c0",
+      "junitHash": "80106e96faeaee9e723658d9d97ef6e052dbadea7b4afc07293d94668d6e2bd4",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.unlinked.test.ts"
+    },
+    {
+      "name": "old-27",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.owner.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-27.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42005,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:22.004Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:22.345Z",
+      "logHash": "aea44f648d7e6d2cdf2cfcf94e557ae3251e75b841ebd87144bc1fc026fafe31",
+      "junitHash": "ce8e5321a4854c458876b95659a4a45cfb361a536c3b469ebd8703798f477361",
+      "sourceFile": "packages/core/src/journal/journalStore.owner.test.ts"
+    },
+    {
+      "name": "old-28",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.ownerRules.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-28.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42008,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:22.346Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:22.661Z",
+      "logHash": "0421a46677e7800ead5f8352f3218d6f1bc7f2caa6441117c640ecb994b1f9ac",
+      "junitHash": "f8b084e18e3bd8541318bd7eeca7c3aa1b830b0e653ac4cee18039f75ad3c104",
+      "sourceFile": "packages/core/src/journal/journalStore.ownerRules.test.ts"
+    },
+    {
+      "name": "old-29",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionCopy.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-29.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42015,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:22.661Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:26.808Z",
+      "logHash": "3f9460568111e4b5249f723ed5185acc8a83ebf8e8de3193a50d1a40ef375217",
+      "junitHash": "215209fd396a534f988ab5dc50582ab4d7b1f5d7cefc26e1ed894c62a344e0d6",
+      "sourceFile": "packages/core/src/journal/versionCopy.compaction.test.ts"
+    },
+    {
+      "name": "old-30",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-30.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42098,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:26.809Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:27.255Z",
+      "logHash": "6a0b4eaf9ae270b2bf4a03fc3372184bb7fc1edbbe841983ee0a7f600492ed43",
+      "junitHash": "06054abb63c08792e264e779c020592eb7c7b8019a349e1dd74886e7170884bd",
+      "sourceFile": "packages/core/src/services/history/journal-response-units.test.ts"
+    },
+    {
+      "name": "old-31",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-normalization-facts.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-31.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42125,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:27.264Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:27.564Z",
+      "logHash": "f942840de573e09ec66da7a3fe157241bb48b496407668e172457257ab87b865",
+      "junitHash": "69242da568277e19563fb9b79a1c9e13f36bcf08dac93d6226e02500fbbeb26c",
+      "sourceFile": "packages/core/src/services/history/journal-normalization-facts.test.ts"
+    },
+    {
+      "name": "old-32",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-orphan-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-32.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42132,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:27.565Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:27.920Z",
+      "logHash": "c2b9bd6f4a308f6a036cee76c9fd9203613e57060939a89dae5f817a71885edf",
+      "junitHash": "5cb5f7d4e27a15d4f64f3f056ae9f31972029680530c195f63c73837d4f29878",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-units.test.ts"
+    },
+    {
+      "name": "old-33",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-orphan-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-33.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42139,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:27.921Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:33.126Z",
+      "logHash": "c8fdd6c7746114073746658a8348c747a00bd6acf1bce3a73841747a7ea5c132",
+      "junitHash": "76e86e23c76c6bc96056f8b144613ef25a55ad97acaec8d148c4f5650ab933cb",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-resources.test.ts"
+    },
+    {
+      "name": "old-34",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/normalization-unit-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-34.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42256,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:33.127Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:46.193Z",
+      "logHash": "ab2b12b95dac58e8d58727a0651291c079dde5e94c16abcbefdcb1dbf5de1420",
+      "junitHash": "34f0f11a18851c4f68600e43fb2566dddc16e38625a977ef6920b74e586db1f6",
+      "sourceFile": "packages/core/src/services/history/normalization-unit-oracle.test.ts"
+    },
+    {
+      "name": "old-35",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalRowCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-35.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42569,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:46.194Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:46.411Z",
+      "logHash": "9bb21f7b33541c079e7c053b03daa3f430de37d428106dfa33a9c76bd6fefb7f",
+      "junitHash": "4a0decbf7b3e9258b0d089b2ce53e99f8ce41eb5d01874d8659ed4f22b9ed4d5",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.test.ts"
+    },
+    {
+      "name": "old-36",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalRowCodec.cyclic.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-36.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42573,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:46.411Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:46.528Z",
+      "logHash": "fdaebb21b382c98833b09516b1475d66ed0fa8be586f619323f5a6b02a417450",
+      "junitHash": "2f5062769543b909ff21966482c04ea68b59bef1c28b0a1497b3d0ef9862788c",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.cyclic.test.ts"
+    },
+    {
+      "name": "old-37",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalSession.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-37.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42575,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:46.528Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:46.842Z",
+      "logHash": "8713079c970d400d7566919059e6ae738d400afc97fe18bd7980c68fd51fd659",
+      "junitHash": "2718b1616a3bf7fc2575cbca97de503d00a04192f7bf0b4995bdfbf27a02e52f",
+      "sourceFile": "packages/core/src/services/history/journalSession.test.ts"
+    },
+    {
+      "name": "old-38",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalSession.rowRead.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-38.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42582,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:46.843Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:47.128Z",
+      "logHash": "79b8aa4e6da98b562c5ac24dbf71f0d79db63234c4fcc5fbe4b81001fecd7264",
+      "junitHash": "d727335f833eff08d81857c828b9f57c6933c3a75f15581f5e65c78ad8686c79",
+      "sourceFile": "packages/core/src/services/history/journalSession.rowRead.test.ts"
+    },
+    {
+      "name": "old-39",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.repair.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-39.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42589,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:47.128Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:47.516Z",
+      "logHash": "094f81ede6bfae937b0558765426e1e65e84e0ac58315a82195bb74e9bd0e2eb",
+      "junitHash": "2af41323dd0e8ca50a35c83319cc71c9210f639571e6b6cfa7770a4fac21d52d",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.repair.test.ts"
+    },
+    {
+      "name": "old-40",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.mutations.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-40.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42597,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:47.516Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:51.359Z",
+      "logHash": "873cd245451b27647b02aa1fd0cab49acc14c8d10b2a425a0153734a0f93030d",
+      "junitHash": "62b6a76b13151a329a227b743c187942be82d69d7fd82ff5a0b427025a7d2a1d",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.mutations.test.ts"
+    },
+    {
+      "name": "old-41",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-41.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42710,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:51.360Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:54.589Z",
+      "logHash": "7e7272342d2bdb87f50036ddf9237d7cab36b54168b1f3cd615c67a4741b03ac",
+      "junitHash": "283e4e32dbb72f262d52930e13f314af319822dc8a64d70c7b0359e69cdaceb8",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedOwners.test.ts"
+    },
+    {
+      "name": "old-42",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.detachedMedia.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-42.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42794,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:54.589Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:55.259Z",
+      "logHash": "e0fa2b825cc9802dec50167555da6c4c0cc7c313a40a6561494838558967075b",
+      "junitHash": "b0792560a261a56608608a6d381504f25e60b69bb26e544f9b471636b445788c",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedMedia.test.ts"
+    },
+    {
+      "name": "old-43",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/provider-curated-stream.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-43.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42823,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:55.260Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:57.064Z",
+      "logHash": "393c046f3f03156327f39665d943e824b61fcdeebc610c00b3f9b7e2df085e6d",
+      "junitHash": "1a4175eadf8d618b3ef922a67fea6e23c6284fa6e704875c93f400cc70e57638",
+      "sourceFile": "packages/core/src/services/history/provider-curated-stream.test.ts"
+    },
+    {
+      "name": "old-44",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/provider-curated-structure.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-44.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42848,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:57.065Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:57.197Z",
+      "logHash": "3f0f014a0a881b8e939e5b2c2f9184c8244ecafd1a08a31e5b55069446b2e333",
+      "junitHash": "7d1c5193fa225b129cc1a4405a9e9fd3adb0ce6a587c4822167f4d4f53eff677",
+      "sourceFile": "packages/core/src/services/history/provider-curated-structure.test.ts"
+    },
+    {
+      "name": "old-45",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactMistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-45.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42858,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:57.198Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:57.532Z",
+      "logHash": "ebb379c09692db53ba6d2d21ad3ece329c9f43acbaab5f5a9646f481323506c7",
+      "junitHash": "bb7f0391aa21442e73a91119125c8a5dbb4291f76cbf895e5d56592b1a62838f",
+      "sourceFile": "packages/core/src/journal/idFactMistral.test.ts"
+    },
+    {
+      "name": "old-46",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactBatch.spill.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-46.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42874,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:57.533Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:58.376Z",
+      "logHash": "b6abe2083f3714852ff16c04249d4c93c2567c1d06df715d9a1d92bb52330b5a",
+      "junitHash": "05debd5bc335c8e4b508670c0fd2698f3a4629f7f7b247c825bc0e2a579a28a2",
+      "sourceFile": "packages/core/src/journal/idFactBatch.spill.test.ts"
+    },
+    {
+      "name": "old-47",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.pins.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-47.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42903,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:58.377Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:58.686Z",
+      "logHash": "5b9e8b367957f0d279a15f913129f92e0ee03af8c06b0f409430f42571e90d6e",
+      "junitHash": "bbf33dd8b7e335d2e2e2862205b9577134f8f2b4a48cad91e325efac668afbb8",
+      "sourceFile": "packages/core/src/journal/journalStore.pins.test.ts"
+    },
+    {
+      "name": "old-48",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionCopy.mistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-old-48.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 42906,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:58.687Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:58.986Z",
+      "logHash": "770f18d633e9478cd19b384e52143b098b8f99ae692c7518e9520fa0b4289dba",
+      "junitHash": "a86af19e723cbe1111c245794d8f05ff4f6b088c305947510bc0803d2aaab935",
+      "sourceFile": "packages/core/src/journal/versionCopy.mistral.test.ts"
+    },
+    {
+      "name": "journal-0",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/fileHeader.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 42907,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:58.987Z",
+      "code": 0,
+      "finished": "2026-10-20T20:21:59.103Z",
+      "logHash": "1ec93f784d8e3e9aed25005f4a6beb539a0fefe82a84a1cb34cfc7d180ad4e56",
+      "junitHash": "7423227c1a7f427ba7babf3acc3930ec6d7cc62e487b18d08ed9580db8a115bf",
+      "sourceFile": "packages/core/src/journal/fileHeader.test.ts"
+    },
+    {
+      "name": "journal-1",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-indexed-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 42908,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:21:59.103Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:05.452Z",
+      "logHash": "5ff30781ee365b2d42b8a1d468c07bcc1d7f8235c2d4195f759773133dc5d18c",
+      "junitHash": "b628140f17e527d148e11844a509b644aa5c81822e636a6e3377b4283aa2edf9",
+      "sourceFile": "packages/core/src/services/history/journal-indexed-metadata.test.ts"
+    },
+    {
+      "name": "journal-2",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-unit-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-2.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43084,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:05.453Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:05.746Z",
+      "logHash": "319d5ecf271e3ef03aeeebf7c7b5f9dd8ff2a161e0871d43f2844e3b696fc269",
+      "junitHash": "2d448e8d5b52fad3734c40491cb0d5dc5a4e29f07606cf6b389001de0b903221",
+      "sourceFile": "packages/core/src/services/history/journal-unit-metadata.test.ts"
+    },
+    {
+      "name": "journal-3",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactIndex.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43099,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:05.747Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:06.469Z",
+      "logHash": "42090414ef8e40afe41c68b2764ceb796c63ab935fde57c691ccc71c731bb3c9",
+      "junitHash": "b94a9dd82ca96e35b64de2da4b1d00b50f4277347314a7ed6500b434f068d703",
+      "sourceFile": "packages/core/src/journal/idFactIndex.test.ts"
+    },
+    {
+      "name": "journal-4",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43120,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:06.470Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:06.591Z",
+      "logHash": "21326d98be70780689d13fef8bc63a356ce699ae4243767d8c2af5f5dae4d3b8",
+      "junitHash": "bd3b17d729c4f88e5e8cd509c2b64e01b86185c94f24dae94e2864655a6a11ed",
+      "sourceFile": "packages/core/src/journal/idFactCodec.test.ts"
+    },
+    {
+      "name": "journal-5",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idTrie.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43123,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:06.592Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:07.805Z",
+      "logHash": "c4bbb146ca1a47e138daf61d0ef61a245fd845f7aa0c481bb5bb51f7a59c3fd8",
+      "junitHash": "a322c8ca176d18f65e450e8009cbafe4dc93cba6ef0fa36482441e5579f68029",
+      "sourceFile": "packages/core/src/journal/idTrie.test.ts"
+    },
+    {
+      "name": "journal-6",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/rowEntry.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43156,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:07.805Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:07.928Z",
+      "logHash": "77c7e194299fb9e01962c8ed5991e6d1d99cd93ef77928c816d4eac30d907237",
+      "junitHash": "d10605529dce132285c0f960b56a19cd1d7347fd390962fa931d82ec2c208549",
+      "sourceFile": "packages/core/src/journal/rowEntry.test.ts"
+    },
+    {
+      "name": "journal-7",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/rowAlgebra.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43159,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:07.929Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:08.049Z",
+      "logHash": "79fe6d856811d8564a587470b7cc2a01c4f27f8058ff9e442d9ad2e80b827843",
+      "junitHash": "adc00042e73f8a76f41f22380493545a3605dd25cd0da89211c38c5f91c8075d",
+      "sourceFile": "packages/core/src/journal/rowAlgebra.test.ts"
+    },
+    {
+      "name": "journal-8",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.commit.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43161,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:08.050Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:08.373Z",
+      "logHash": "37f45e2778abd10c60761f855d54a6ababdabead4963adf41bac92dbe3dd3c69",
+      "junitHash": "891503c3d1a570e061aaf16a5aad5ceccc76482e9682d4dc3608de18322e8189",
+      "sourceFile": "packages/core/src/journal/journalStore.commit.test.ts"
+    },
+    {
+      "name": "journal-9",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.pop.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43167,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:08.374Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:08.685Z",
+      "logHash": "a4d50c7826e3c4014ec1fe82dd64667df03e21d5449554a2d35464f940f8b6b0",
+      "junitHash": "ed453e288d53e6d767df39914116c18eb68bbce7e1a1a31e8964f39e0e77161c",
+      "sourceFile": "packages/core/src/journal/journalStore.pop.test.ts"
+    },
+    {
+      "name": "journal-10",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.model.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43174,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:08.686Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:11.738Z",
+      "logHash": "bb8bcbcf80c5fd5c48c4c0b4a299f4bbda6f75cdc1829305d93fc91447e147e8",
+      "junitHash": "797aa661b9d8857393d7d442b7d3849534084dcfc42919c9064f64cf776f3a33",
+      "sourceFile": "packages/core/src/journal/journalStore.model.test.ts"
+    },
+    {
+      "name": "journal-11",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionSnapshot.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43249,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:11.739Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:12.037Z",
+      "logHash": "2025831fd57ea362fadf7081cc3ccb44675a84f73242382eba6000ee577b2fa8",
+      "junitHash": "2939d3c366efbe1b7a3b3403846e0053bab9b36922519ca8ddb5137a1d007bc2",
+      "sourceFile": "packages/core/src/journal/versionSnapshot.test.ts"
+    },
+    {
+      "name": "journal-12",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-reconstruction-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43257,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:12.037Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:12.400Z",
+      "logHash": "819d7f03622f9f3d41f471e6238e7510339a89c3c2ce1aa65386658586bf8731",
+      "junitHash": "236069170498c175e311c7a09b6de2f10c10eb3fd35e6fac0d55f82d96a938b9",
+      "sourceFile": "packages/core/src/services/history/journal-reconstruction-units.test.ts"
+    },
+    {
+      "name": "journal-13",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-tail-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43268,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:12.400Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:12.765Z",
+      "logHash": "9996148f13d1c3503148cc6a1680708383fa2504f7e7f587c2003a21a102223d",
+      "junitHash": "dd6f2bc51f5a9e96ed8179e66929bdcf1c077cf7f67187e036b5273358ea7297",
+      "sourceFile": "packages/core/src/services/history/journal-tail-units.test.ts"
+    },
+    {
+      "name": "journal-14",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-fact-errors.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43275,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:12.766Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:13.057Z",
+      "logHash": "aaaa86c6ffb028016c2904d7dd1cff17b279e61c4d63cebe0b1f9465dc10a709",
+      "junitHash": "58655b42bafcb1f1a65966e18ca74685f83c4d6753c0aa4e60a8d7059ad9abbf",
+      "sourceFile": "packages/core/src/services/history/journal-response-fact-errors.test.ts"
+    },
+    {
+      "name": "journal-15",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-tail-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43284,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:13.057Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:13.446Z",
+      "logHash": "f2bc2d1e2877765554b394d69db52852ee39f545823d87ad329d078f2d7e4fae",
+      "junitHash": "0571b80fda64f28810edaf25ffea0c9189e16c74627b734032f5ec77990a8ff4",
+      "sourceFile": "packages/core/src/services/history/journal-tail-resources.test.ts"
+    },
+    {
+      "name": "journal-16",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-block-ranges.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43292,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:13.446Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:13.730Z",
+      "logHash": "f6aef00f889b062f8f3767423f3f4c8bb82127b51d37468b22ffcc1fe3d371a7",
+      "junitHash": "15c33c49788ceadb579b29dfbce8fe055ae28814d5ec67c93f157655873d8637",
+      "sourceFile": "packages/core/src/services/history/journal-block-ranges.test.ts"
+    },
+    {
+      "name": "journal-17",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-lazy-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43298,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:13.731Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:14.026Z",
+      "logHash": "1363b7620ca5d25953a613e61fe6da8435c0e7307cd2072f7691577b0821669c",
+      "junitHash": "ced0578c530a169a5417d17397eafdfab4b955f760e130edb3561d3cdf4870de",
+      "sourceFile": "packages/core/src/services/history/journal-lazy-units.test.ts"
+    },
+    {
+      "name": "journal-18",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.readerLifetime.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43305,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:14.027Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:14.330Z",
+      "logHash": "14faf1fa3ca895a9d7f29dd5490c1a22ebd3246ad4cfaf3f5d00bdd7a1c4d0da",
+      "junitHash": "08fc9075962cd6936a2a0c1334b4425cf244122797652dbb3b72ff6fca329934",
+      "sourceFile": "packages/core/src/journal/journalStore.readerLifetime.test.ts"
+    },
+    {
+      "name": "journal-19",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalOpen.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43309,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:14.331Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:14.484Z",
+      "logHash": "d8433d4aa296f6bfef799389f33af710760ea20e6961cf0a1fe81642498adbe7",
+      "junitHash": "6736c75267d93828ecf3642487050af46613f48c6e98e8a5751fa8392ac95492",
+      "sourceFile": "packages/core/src/journal/journalOpen.test.ts"
+    },
+    {
+      "name": "journal-20",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalRefusal.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43313,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:14.484Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:14.606Z",
+      "logHash": "5d806fcbfda008076166bffeed98a3fe1b2c7b37842573312d80c8796dc4f030",
+      "junitHash": "6af01890a9043382972d1f5978a4bf66d60a243e5b9c1f2a6fd7ca4f6b999b86",
+      "sourceFile": "packages/core/src/journal/journalRefusal.test.ts"
+    },
+    {
+      "name": "journal-21",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalLargeRows.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43316,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:14.607Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:15.578Z",
+      "logHash": "8c40962eaa98c9103385d7bf5d6e8a64cb0ebe3630abd435ef8a43783e144d21",
+      "junitHash": "bc33155ca58b91c0d4c03c093ff2ec16a6afeb9df06245d4cc4b7bab591e0b0f",
+      "sourceFile": "packages/core/src/journal/journalLargeRows.test.ts"
+    },
+    {
+      "name": "journal-22",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalTornTail.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-22.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43348,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:15.579Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:18.065Z",
+      "logHash": "ff56f1db86858355cd7f5a796bd97beb1693f0f09b17c2067c68c1c1f7fed36a",
+      "junitHash": "2b32bdd1b7d9f6182801d2925106042d0063b205cbe3de39678dba4450ea9a56",
+      "sourceFile": "packages/core/src/journal/journalTornTail.test.ts"
+    },
+    {
+      "name": "journal-23",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-lifecycle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-23.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43410,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:18.066Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:18.475Z",
+      "logHash": "72ac1964ef1bf5da6ff3554952640499f6dbc3d9c658969443868114aa634772",
+      "junitHash": "195b009e87d85979896540e847fa20dbab820edec9c388e13379a35f1bac44e1",
+      "sourceFile": "packages/core/src/services/history/journal-response-lifecycle.test.ts"
+    },
+    {
+      "name": "journal-24",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-24.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43423,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:18.476Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:18.989Z",
+      "logHash": "c46e16328ef2c0e80f605be5a29c39a251f2b2d7d61ccd669a85dcb0167789ca",
+      "junitHash": "73a351c7ff25dc41b6a849f313230797421d48387a43028ba1b082f51924a872",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.test.ts"
+    },
+    {
+      "name": "journal-25",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.identity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-25.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43436,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:18.989Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:19.321Z",
+      "logHash": "90e4058cfc02c3848516c1fc096fd330a0238c272ce145563d4b0eac700a832d",
+      "junitHash": "03c66a7b26d2885880bd523fdec8cbdb65fe5c5ef597be8083b85ff88f5deb59",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.identity.test.ts"
+    },
+    {
+      "name": "journal-26",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.compaction.unlinked.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-26.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43443,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:19.322Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:19.641Z",
+      "logHash": "d27ff53a674270bf21d75d5cb64cc159989a0032e1c79735ce15dbdb49598ece",
+      "junitHash": "7182c3d93746334057b69715486ba251dcabe89136381629821100ee724e43c9",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.unlinked.test.ts"
+    },
+    {
+      "name": "journal-27",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.owner.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-27.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43453,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:19.642Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:19.983Z",
+      "logHash": "0156c5e7c1869fce5372a77c6778dac416da5ca0ead7d94128050d4ecafac6b3",
+      "junitHash": "14bce8ed585b092997286180f8a10c2adf424a6ce915710e4bdbc29af9249fac",
+      "sourceFile": "packages/core/src/journal/journalStore.owner.test.ts"
+    },
+    {
+      "name": "journal-28",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.ownerRules.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-28.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43461,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:19.983Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:20.290Z",
+      "logHash": "2a8ae1a17517eb3e2e0d8951216a09763181ba45bbb448bbe5766d47c8910735",
+      "junitHash": "414a2548f92a82d34556ee0c7088acdbd2069d21a70f37ea16ca4a6c3833e63f",
+      "sourceFile": "packages/core/src/journal/journalStore.ownerRules.test.ts"
+    },
+    {
+      "name": "journal-29",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionCopy.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-29.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43466,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:20.290Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:24.337Z",
+      "logHash": "4493b46f346fdb1e39fa4d8cdcba78693b450f7804cf18f30e6242c2e47d34f9",
+      "junitHash": "5cadf42ebdf6dd4074640cbd59d963cc801ffee5546d5f1addfaa82a0d487d51",
+      "sourceFile": "packages/core/src/journal/versionCopy.compaction.test.ts"
+    },
+    {
+      "name": "journal-30",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-response-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-30.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43556,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:24.338Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:24.740Z",
+      "logHash": "2caeb1e275bf6749c9946820a5ba334159e98c1e8dcaf23e683f25e2b8e94436",
+      "junitHash": "99b8b072ddb64c8ff747a1790b1911d7cd43e46d863af41850401d721811c0da",
+      "sourceFile": "packages/core/src/services/history/journal-response-units.test.ts"
+    },
+    {
+      "name": "journal-31",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-normalization-facts.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-31.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43566,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:24.741Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:25.036Z",
+      "logHash": "a5181d171b0445ed4c11da77b5e328dc5ee051df6f88b4b90981a53ae4b5a41c",
+      "junitHash": "fc92fe1a2714aa12d535abf0ca496c1d07d99afadf44fb722ff9191d1aa4b050",
+      "sourceFile": "packages/core/src/services/history/journal-normalization-facts.test.ts"
+    },
+    {
+      "name": "journal-32",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-orphan-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-32.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43574,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:25.036Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:25.385Z",
+      "logHash": "8b1b73f75a16118f3b970a2fa5749af04db84accab4701e58b6daa9a2a1e2795",
+      "junitHash": "4d0586d06184d1488e3bc7e4323c3dc2c66c6035f7d1ca09a6681f64b083c57b",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-units.test.ts"
+    },
+    {
+      "name": "journal-33",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journal-orphan-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-33.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43587,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:25.386Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:30.494Z",
+      "logHash": "1ca13e10f6942792e832b5f7f29210632750dd08eebfd169e37b603935208b4d",
+      "junitHash": "ab67f6a7bc6a437b81db15a2eca5dbdc015e7c9a8525bd399d16a8ca539b8ce8",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-resources.test.ts"
+    },
+    {
+      "name": "journal-34",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/normalization-unit-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-34.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 43736,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:30.495Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:43.635Z",
+      "logHash": "c14f3d158d6647b81904980ca78a3c18e64e168d0ac62e766cdd277d4671aec9",
+      "junitHash": "3e9898fdb45ad9e3b7ad7cfb5da40fc6d137adc4a1342e532c59d93e1dfe08e2",
+      "sourceFile": "packages/core/src/services/history/normalization-unit-oracle.test.ts"
+    },
+    {
+      "name": "journal-35",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalRowCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-35.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44132,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:43.636Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:43.796Z",
+      "logHash": "3a0bafb77bdfa7e87dea2817b1e1061e9d28b4a7438cf66d2288dbbee85bef03",
+      "junitHash": "6467aff3adb1a34ab07efba33e0b16dc7b8f5ae862e7f715b2f1da241691d641",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.test.ts"
+    },
+    {
+      "name": "journal-36",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalRowCodec.cyclic.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-36.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44135,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:43.797Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:43.916Z",
+      "logHash": "1f4358c1b2da238fe2945412b96a18ac1c94511c518269ab34e64919da24e4fa",
+      "junitHash": "85cff421a58b1f9a8f5908c4d13e046ea6ed9244550c5bb54fd1a47377e8e5d1",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.cyclic.test.ts"
+    },
+    {
+      "name": "journal-37",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalSession.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-37.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44144,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:43.916Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:44.226Z",
+      "logHash": "07c56c378086aefae215061f97a2a39cc0890ce4f88503d9bf54aa8f80e880d6",
+      "junitHash": "18ec091e1168ffc045bff7a914a2e794ceb730b518f312592488e5f0a063c057",
+      "sourceFile": "packages/core/src/services/history/journalSession.test.ts"
+    },
+    {
+      "name": "journal-38",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalSession.rowRead.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-38.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44148,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:44.227Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:44.512Z",
+      "logHash": "519eda944ed9d92d1980cfadabe4399e630387555b8db26f7a6ce10f9a665740",
+      "junitHash": "f7c632748c9f94222c0f498665145bb530e3e0fe8ad9a62840493a2c0c6067cd",
+      "sourceFile": "packages/core/src/services/history/journalSession.rowRead.test.ts"
+    },
+    {
+      "name": "journal-39",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.repair.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-39.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44153,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:44.513Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:44.910Z",
+      "logHash": "a3b802abdeda208e203375db8974401401bf2d55ae30d237b0ea4874d6518702",
+      "junitHash": "1678d19a0dafe7c8681324440b10944f5c9e75cf30b54f0faa253fa2aacc15d8",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.repair.test.ts"
+    },
+    {
+      "name": "journal-40",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.mutations.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-40.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44172,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:44.911Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:48.708Z",
+      "logHash": "8844b85bba16a6defeb3a532483c9d19366bcbdab5c8e6e34bed27842dc6b121",
+      "junitHash": "1a23dc8bb75e8c041e0807365ea7a1fdab91e8e3bca1c7742a68f3c25d1ef4b8",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.mutations.test.ts"
+    },
+    {
+      "name": "journal-41",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-41.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44263,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:48.709Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:52.003Z",
+      "logHash": "4e2a235f9dcc2c2a3d9c7382c2e031ec2927a85798bd407fca9a8dbcbc245ed8",
+      "junitHash": "322f57802046566d424fef593d9284f8de4dc4bd0c19850c7c7a4a445b374569",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedOwners.test.ts"
+    },
+    {
+      "name": "journal-42",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/journalHistoryStore.detachedMedia.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-42.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44341,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:52.004Z",
+      "code": 0,
+      "finished": "2026-10-20T20:22:52.628Z",
+      "logHash": "2681bb1348b3fc78a81434c79a87866065852d7083ec9ab879da0d72f451afa4",
+      "junitHash": "eb3661c9b819695550af62835a49cad225088a1b2bd5b96a3e1a63a302ff7997",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedMedia.test.ts"
+    },
+    {
+      "name": "journal-43",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/provider-curated-stream.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-43.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44352,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:22:52.629Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:05.388Z",
+      "logHash": "e28802fe2dd1f39fa889cbfe56bec75de3f520bafc8e6d53db33b2b08b434293",
+      "junitHash": "9d2ae5056290422eb2f78e7af987bd8a8cc8f60cf7f0bc36596d7690d009f533",
+      "sourceFile": "packages/core/src/services/history/provider-curated-stream.test.ts"
+    },
+    {
+      "name": "journal-44",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/services/history/provider-curated-structure.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-44.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44655,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:05.389Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:05.518Z",
+      "logHash": "fa5e0fff1ad21f87611f0a25b4a7e4a222c2c418d61ff8dede63c5b3f0ecaa0b",
+      "junitHash": "ef2e5f63be03ec3c68a74e10c0cbd24c01a346aad94f97a52dddb60abb64289a",
+      "sourceFile": "packages/core/src/services/history/provider-curated-structure.test.ts"
+    },
+    {
+      "name": "journal-45",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactMistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-45.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44657,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:05.519Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:05.828Z",
+      "logHash": "7e8108f6601a98c7a6931c16e4f7d55cf9e6260a903c11caf9113c7ed33eb788",
+      "junitHash": "0d36684fbc03b861f21bbea5b18db754e7e4529eb88569bf9780d3d6579086ad",
+      "sourceFile": "packages/core/src/journal/idFactMistral.test.ts"
+    },
+    {
+      "name": "journal-46",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/idFactBatch.spill.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-46.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44665,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:05.828Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:06.625Z",
+      "logHash": "93cf587d979ca2d788e488a32dbfdc71ba535353fa00e5c3595faec559f33693",
+      "junitHash": "c521b5ce556f57429448c90cda4e3dcd5a61e92a62407905a5b00208641e8714",
+      "sourceFile": "packages/core/src/journal/idFactBatch.spill.test.ts"
+    },
+    {
+      "name": "journal-47",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/journalStore.pins.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-47.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44686,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:06.625Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:06.946Z",
+      "logHash": "ecda518221597fb82e6d37fb41cade8f7c71fbaeeddf79a99fd33510f99ebca1",
+      "junitHash": "716f7d3febf8070163d43ca31efa7012c7826cabc73a093ae31056538e32e435",
+      "sourceFile": "packages/core/src/journal/journalStore.pins.test.ts"
+    },
+    {
+      "name": "journal-48",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "./src/journal/versionCopy.mistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/metadata-run-d/final3-journal-48.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 44697,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:06.947Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:07.254Z",
+      "logHash": "b13e311b6764b3a7f096559acdf59fd0e55d94a6173559637fcee0d5987dd20f",
+      "junitHash": "445ed7c1d458fb77523c70acd3106972b552ffd59fb52867aba1af8a69ca7aca",
+      "sourceFile": "packages/core/src/journal/versionCopy.mistral.test.ts"
+    }
+  ],
+  "gates": [
+    {
+      "name": "declarations",
+      "cmd": "bun",
+      "args": [
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 44704,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:07.260Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:11.214Z",
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "types",
+      "cmd": "bunx",
+      "args": [
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 44809,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:11.216Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:17.776Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "lint",
+      "cmd": "bunx",
+      "args": [
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/__tests__/support/idHistoryModel.ts",
+        "packages/core/src/journal/__tests__/support/storeModel.ts",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupBuild.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/groupRebuild.ts",
+        "packages/core/src/journal/idFactUpdate.ts",
+        "packages/core/src/journal/rowAlgebra.ts",
+        "packages/core/src/journal/rowEntry.ts",
+        "packages/core/src/journal/rowTreeQueries.ts",
+        "packages/core/src/journal/unitContributions.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/journal-reconstruction-units.test.ts",
+        "packages/core/src/services/history/journal-reconstruction.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-units.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/core/src/services/history/journal-unit-metadata.test.ts",
+        "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+        "packages/core/src/journal/curatedQueries.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-entry-plans.ts",
+        "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+        "packages/core/src/services/history/journal-indexed-overlay.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 45003,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:17.776Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:22.188Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "prettier",
+      "cmd": "bunx",
+      "args": [
+        "prettier",
+        "--check",
+        "packages/core/src/journal/__tests__/support/idHistoryModel.ts",
+        "packages/core/src/journal/__tests__/support/storeModel.ts",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupBuild.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/groupRebuild.ts",
+        "packages/core/src/journal/idFactUpdate.ts",
+        "packages/core/src/journal/rowAlgebra.ts",
+        "packages/core/src/journal/rowEntry.ts",
+        "packages/core/src/journal/rowTreeQueries.ts",
+        "packages/core/src/journal/unitContributions.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/journal-reconstruction-units.test.ts",
+        "packages/core/src/services/history/journal-reconstruction.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-units.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/core/src/services/history/journal-unit-metadata.test.ts",
+        "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+        "packages/core/src/journal/curatedQueries.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-entry-plans.ts",
+        "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+        "packages/core/src/services/history/journal-indexed-overlay.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 45139,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:22.189Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:22.486Z",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph",
+      "cmd": "bun",
+      "args": [
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 45145,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:22.487Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:24.687Z",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "audit",
+      "cmd": "bun",
+      "args": [
+        "scripts/test-audit/scan.ts",
+        "tmp/854-notes/p5/metadata-run-d/audit-final3"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 45201,
+      "driverPid": 41375,
+      "started": "2026-10-20T20:23:24.688Z",
+      "code": 0,
+      "finished": "2026-10-20T20:23:27.639Z",
+      "logHash": "c4778126292453646bfd04cf3bbdf4f876cd0d7a2d195722187d85a67bdd34ab"
+    }
+  ],
+  "controls": {
+    "driverPid": 33484,
+    "restoredHash": "e6f89a83f86ba3bc9965bec07be2e4faf9c6ecc590857bea22e1946367442a4e",
+    "results": [
+      {
+        "name": "rescan",
+        "code": 1,
+        "pid": 33486,
+        "sourceHash": "cf4708ab20b06328a383b5a1f3f7482bc56f433c890af16dd16deea0011232db",
+        "logHash": "5119803e1ed78a4a6e53be9e9cec62d3dcdf67eebbb40281228a279b6b3ed385"
+      },
+      {
+        "name": "keepAllCounts",
+        "code": 1,
+        "pid": 33838,
+        "sourceHash": "c54ac14910708750dd93446f61438bf451a9bf4d245f5bd5b1de70dcbd326299",
+        "logHash": "ae0c6215f888077f3a27a6efde855c0aa06fe1f3d537ca6eafc7780c9a5c33f6"
+      }
+    ]
+  },
+  "preservation": {
+    "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl": {
+      "sha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e",
+      "startingSha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e"
+    },
+    "packages/core/src/services/history/provider-curated-stream.ts": {
+      "sha256": "a0cfae8c168746a641d0c853334cb5b4950ee91e609c8034defedce8a1554f80",
+      "startingSha256": "a0cfae8c168746a641d0c853334cb5b4950ee91e609c8034defedce8a1554f80"
+    },
+    "packages/core/src/services/history/historyToolNormalization.ts": {
+      "sha256": "0fe5e4d43070769e5494cff5ff675f69cf0255e5f1ff562e311de35612850001",
+      "startingSha256": "0fe5e4d43070769e5494cff5ff675f69cf0255e5f1ff562e311de35612850001"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json": {
+      "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+      "startingSha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json": {
+      "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+      "startingSha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json": {
+      "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+      "startingSha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json": {
+      "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+      "startingSha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json": {
+      "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+      "startingSha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json": {
+      "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+      "startingSha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json": {
+      "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+      "startingSha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535"
+    },
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json": {
+      "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d",
+      "startingSha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d"
+    }
+  },
+  "fixture": {
+    "cases": 5000,
+    "indexedCountMatches": 5000,
+    "indexedReadAtMatches": 5000,
+    "pendingMembershipMatches": 5000,
+    "firstOutputIndexMatches": 5000,
+    "sha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e"
+  },
+  "readBounds": {
+    "preludeRows": [
+      40,
+      4000,
+      100000
+    ],
+    "preludeHeadLimitExclusive": 120,
+    "preludeBlockReads": 0,
+    "preludeBodyReads": 0,
+    "rankSelectHeadLimitExclusive": 20,
+    "selectedUnitBlockReads": 1,
+    "selectedUnitBodyReads": 0,
+    "appendDistinctIds": [
+      40,
+      4000
+    ],
+    "appendReadLimitExclusive": 150
+  },
+  "touchedAuditFindings": [
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts\t160\tindexed metadata native mutation and read bounds > preserves counts across append, pop, owner, fill, purge, density, compression, clone and compaction\tDUP_ASSERT\t2x identical assertion: expect(pinned.units).toBe(1)\tcore",
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts\t266\tindexed metadata native mutation and read bounds > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect({ blocks: stats.blocks, bodies: stats.bodies }).toStrictEqual({ blocks: 0, bodies: \tcore"
+  ],
+  "absentPids": [
+    41375,
+    41381,
+    41384,
+    41537,
+    41548,
+    41570,
+    41573,
+    41639,
+    41642,
+    41649,
+    41662,
+    41673,
+    41769,
+    41786,
+    41795,
+    41805,
+    41817,
+    41829,
+    41840,
+    41855,
+    41860,
+    41863,
+    41866,
+    41888,
+    41964,
+    41976,
+    41984,
+    41998,
+    42005,
+    42008,
+    42015,
+    42098,
+    42125,
+    42132,
+    42139,
+    42256,
+    42569,
+    42573,
+    42575,
+    42582,
+    42589,
+    42597,
+    42710,
+    42794,
+    42823,
+    42848,
+    42858,
+    42874,
+    42903,
+    42906,
+    42907,
+    42908,
+    43084,
+    43099,
+    43120,
+    43123,
+    43156,
+    43159,
+    43161,
+    43167,
+    43174,
+    43249,
+    43257,
+    43268,
+    43275,
+    43284,
+    43292,
+    43298,
+    43305,
+    43309,
+    43313,
+    43316,
+    43348,
+    43410,
+    43423,
+    43436,
+    43443,
+    43453,
+    43461,
+    43466,
+    43556,
+    43566,
+    43574,
+    43587,
+    43736,
+    44132,
+    44135,
+    44144,
+    44148,
+    44153,
+    44172,
+    44263,
+    44341,
+    44352,
+    44655,
+    44657,
+    44665,
+    44686,
+    44697,
+    44704,
+    44809,
+    45003,
+    45139,
+    45145,
+    45201,
+    33486,
+    33838,
+    33484,
+    38152,
+    38146,
+    38162,
+    38390,
+    38398,
+    38418,
+    38422,
+    38454,
+    38457,
+    38459,
+    38465,
+    38473,
+    35395,
+    35389,
+    35622,
+    35632
+  ],
+  "livePids": [],
+  "receipts": [
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-16.log",
+      "sha256": "f6aef00f889b062f8f3767423f3f4c8bb82127b51d37468b22ffcc1fe3d371a7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/red-format.log",
+      "sha256": "2b7ecf466b238f90215e860daafcc15be954ad7bcdec355e6bc31ebe37351ac5"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-19.log",
+      "sha256": "498b13944e24ac19ff7b502555033da2a534e4a7578f3645b5a86bce1f58fe7c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-25.log",
+      "sha256": "4a9b9e1fff53c0fa11bd3cc9f1403bc7c26bde2399ff7a244d248e2e9cade6e1"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-31.log",
+      "sha256": "f942840de573e09ec66da7a3fe157241bb48b496407668e172457257ab87b865"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-30.log",
+      "sha256": "6a0b4eaf9ae270b2bf4a03fc3372184bb7fc1edbbe841983ee0a7f600492ed43"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-24.log",
+      "sha256": "d0cf7376a77265607f6f27f36417847d3fa4bb10e183d5d8c61355111b932be5"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-18.log",
+      "sha256": "888db5904b8ad3afb7ab84872012cc692db7a666de041c75a5705cfbc0aa7e2b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-17.log",
+      "sha256": "1363b7620ca5d25953a613e61fe6da8435c0e7307cd2072f7691577b0821669c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-29.log",
+      "sha256": "4493b46f346fdb1e39fa4d8cdcba78693b450f7804cf18f30e6242c2e47d34f9"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-15.log",
+      "sha256": "f2bc2d1e2877765554b394d69db52852ee39f545823d87ad329d078f2d7e4fae"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-32.log",
+      "sha256": "c2b9bd6f4a308f6a036cee76c9fd9203613e57060939a89dae5f817a71885edf"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-26.log",
+      "sha256": "8d8a62f5792cef391f5089858e0e1ce5d9dfacba095c79f072bc8474b44cb3c0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-27.log",
+      "sha256": "aea44f648d7e6d2cdf2cfcf94e557ae3251e75b841ebd87144bc1fc026fafe31"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/increment2-journalStore.pop.test.ts.log",
+      "sha256": "c584c10d9934f92864339e9f5466716e46c6a82dbc4933ec7464b95d81d5592c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-33.log",
+      "sha256": "c8fdd6c7746114073746658a8348c747a00bd6acf1bce3a73841747a7ea5c132"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-14.log",
+      "sha256": "aaaa86c6ffb028016c2904d7dd1cff17b279e61c4d63cebe0b1f9465dc10a709"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-28.log",
+      "sha256": "2a8ae1a17517eb3e2e0d8951216a09763181ba45bbb448bbe5766d47c8910735"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-journalStore.pop.test.ts.log",
+      "sha256": "7ac0d38b68bbaf1d773c9318a0dabd96ba97f05f6a755bcf7f2390c64c8a99fb"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-increment.log",
+      "sha256": "a602279c4c1367eda168e81ac601084b41f9f4a7278a5e7241ed69ded04bbf9f"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/snapshot-journal-reconstruction-units.log",
+      "sha256": "bac7a5bed925e58b2cd846aeb5c4dba73d777515440cb83b9b20f93afc4ec7a0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/types-snapshot.log",
+      "sha256": "403b148a1ee4e3575252c91d6f9c52ef0a3cb8189b4abe8a4397f5ff0e0aa958"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/increment2-journalStore.commit.test.ts.log",
+      "sha256": "af2d5acc4f8c02949b8ea0a727333c6f408c199ab334bc095b1bc210916c9a3b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-9.log",
+      "sha256": "a4d50c7826e3c4014ec1fe82dd64667df03e21d5449554a2d35464f940f8b6b0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-10.log",
+      "sha256": "bb8bcbcf80c5fd5c48c4c0b4a299f4bbda6f75cdc1829305d93fc91447e147e8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-38.log",
+      "sha256": "519eda944ed9d92d1980cfadabe4399e630387555b8db26f7a6ce10f9a665740"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-37.log",
+      "sha256": "8713079c970d400d7566919059e6ae738d400afc97fe18bd7980c68fd51fd659"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-23.log",
+      "sha256": "29fa52697a4bf5058947030dce549397f1f1df8f5800761861f5b81220c6f1f6"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/early-rowEntry.test.ts.log",
+      "sha256": "77faadbd487fe7bccce5b8d1b80e3625fd9e5bf505bf082c9512f878c67bceb1"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-22.log",
+      "sha256": "04e9bfbb93c5ee7138171eba6f6013e9096942d13772d58a4f3763dd65cd57c9"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-36.log",
+      "sha256": "fdaebb21b382c98833b09516b1475d66ed0fa8be586f619323f5a6b02a417450"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-39.log",
+      "sha256": "a3b802abdeda208e203375db8974401401bf2d55ae30d237b0ea4874d6518702"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-11.log",
+      "sha256": "2025831fd57ea362fadf7081cc3ccb44675a84f73242382eba6000ee577b2fa8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-8.log",
+      "sha256": "37f45e2778abd10c60761f855d54a6ababdabead4963adf41bac92dbe3dd3c69"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-journal-normalization-facts.test.ts.log",
+      "sha256": "4eeafe4a1b7808e0970896f36faac44750ffcaef70b7beb1b5636d040c783384"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/snapshot-journal-unit-metadata.log",
+      "sha256": "fadd659daf4f826055a393b77e852cbbd5e3e7e1f6a9bc97171544b872be0089"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-13.log",
+      "sha256": "9996148f13d1c3503148cc6a1680708383fa2504f7e7f587c2003a21a102223d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/fix-fileHeader.log",
+      "sha256": "88ea7e70a065e450cb07b4c2a48babd8075cf887dbd15fe22962ff4744fe3eca"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-20.log",
+      "sha256": "c383595b02d821e2c6a39511717eeac486fa6d41edde19031381d208b2da4580"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-34.log",
+      "sha256": "ab2b12b95dac58e8d58727a0651291c079dde5e94c16abcbefdcb1dbf5de1420"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-9.log",
+      "sha256": "463b9fce4ff33eb58f888507cdc9464c493859b6f850fc9e1fec8a53b90a49b1"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-8.log",
+      "sha256": "1b8a3c259fd5595c3bd899582ca6f743a60eb85aedab88ad76156246baf27214"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-35.log",
+      "sha256": "9bb21f7b33541c079e7c053b03daa3f430de37d428106dfa33a9c76bd6fefb7f"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-21.log",
+      "sha256": "570828afa3f34a7e29d5a5aa1ba2730223a175ee523f2ccd1b43c65614024d8b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/red-indexed-snapshot.log",
+      "sha256": "e72649ee0f51d1f35b2a668f814b0d40a031e0df4f82456bdf185f07b9847ae1"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/fix-idFactIndex.log",
+      "sha256": "1c52546da23175828b76d4d80fd1148c2ba4c9960ec1dce9231c7e2fa2a7fdd9"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-12.log",
+      "sha256": "819d7f03622f9f3d41f471e6238e7510339a89c3c2ce1aa65386658586bf8731"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/types-initial.log",
+      "sha256": "60685b70b781e6e77579782814dc19208f2ba008f79bddb08bde30ae19f97eb6"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/green-units-initial.log",
+      "sha256": "843ee494b108eb8186336712f327a08f5c018e97d2efddd56b9f6c291aabddb3"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-46.log",
+      "sha256": "b6abe2083f3714852ff16c04249d4c93c2567c1d06df715d9a1d92bb52330b5a"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-47.log",
+      "sha256": "5b9e8b367957f0d279a15f913129f92e0ee03af8c06b0f409430f42571e90d6e"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/red-units.log",
+      "sha256": "7bbe5bb8e24d16a4845d2c82e773b587377ea060cd23204847e193a104fa758e"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-48.log",
+      "sha256": "b13e311b6764b3a7f096559acdf59fd0e55d94a6173559637fcee0d5987dd20f"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final-driver.log",
+      "sha256": "b7f90d6e2e3f2f4434bcf80efdeecf97fe6c12468122833f38081d973a1b67e0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/red-empty-metadata.log",
+      "sha256": "1a4e163d29aa13a39efb6e814ace47939eacaf7175de55681599765e60dcc06a"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-driver.log",
+      "sha256": "8dedfca725978cfee7c6128561299fd0073138905cc26e5e46a0dc8fff2a194a"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/types-scoped.log",
+      "sha256": "cf167ce97cc0f1b271844cdaf36c06c8ea20b1203a8347409b7d387f6c494e4f"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-journal-unit-metadata.test.ts.log",
+      "sha256": "28d9b09efb88507ea55add2a7dd94d3f88aa5c70b820375fc7f1753171f4c0ec"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-model.log",
+      "sha256": "bc4266b1103b66ddb7da7152ec3eca2e3398b80af600fd92998dfdacd6aa155d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-45.log",
+      "sha256": "ebb379c09692db53ba6d2d21ad3ece329c9f43acbaab5f5a9646f481323506c7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-44.log",
+      "sha256": "3f0f014a0a881b8e939e5b2c2f9184c8244ecafd1a08a31e5b55069446b2e333"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-increment2.log",
+      "sha256": "34e520edb57a95d7f968243659027ceabda78a308b41e4184332e0abfa8e8170"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-10.log",
+      "sha256": "aaeaeea1cd425fd61a3e5596545d0526f9755b07a2028d248c5f677673605fe0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-40.log",
+      "sha256": "873cd245451b27647b02aa1fd0cab49acc14c8d10b2a425a0153734a0f93030d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-41.log",
+      "sha256": "7e7272342d2bdb87f50036ddf9237d7cab36b54168b1f3cd615c67a4741b03ac"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/early-idFactIndex.test.ts.log",
+      "sha256": "67085389027f77453732968870bf2b0627f9b1e2a59326bc9b51b97209881375"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/early-journalStore.pop.test.ts.log",
+      "sha256": "6127cdb1e979c07cc5393191661d7a6fd89b5b8f012c197de5078e5867d406de"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/early-rowAlgebra.test.ts.log",
+      "sha256": "3be98e0e139350b9e60a59e2f277b4c9c4b6a82f75f3259addd99afaf2707f38"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-9.log",
+      "sha256": "f1789dc763917bf843b32c6efc0b782ec4a20a831171466724d648e50a9a2243"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/lint-increment.log",
+      "sha256": "37148af7bec782bd38bd8f108a6e0569a6215643a5b1eb5c02139964430955b8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-43.log",
+      "sha256": "393c046f3f03156327f39665d943e824b61fcdeebc610c00b3f9b7e2df085e6d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/early-journalStore.commit.test.ts.log",
+      "sha256": "d0fc9c7ff8dccc314bb4cdb3513f77d0feb5ce5038ef04d6cba0c8aefdf28fbb"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-42.log",
+      "sha256": "e0fa2b825cc9802dec50167555da6c4c0cc7c313a40a6561494838558967075b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-8.log",
+      "sha256": "4e3bfc3b3999057aea9bc943e88da6e295eec4a13ccf20722a4d0ea37e1ddd1d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-5.log",
+      "sha256": "3cc7f064d77a9f4d380fbcecb5d846c5d2c3da3d870c8f4699a63a54533105d7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-40.log",
+      "sha256": "8844b85bba16a6defeb3a532483c9d19366bcbdab5c8e6e34bed27842dc6b121"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final-old-2.log",
+      "sha256": "9ac094df8cfe36a384c0794d36dd153e4c68d14e023fe7162bf11304f949fde2"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-41.log",
+      "sha256": "4e2a235f9dcc2c2a3d9c7382c2e031ec2927a85798bd407fca9a8dbcbc245ed8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-4.log",
+      "sha256": "35b6e075a35d3c379659a1315d66f3f24f4f2e47e5ace51b284bcbf84b207f31"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/oracle.log",
+      "sha256": "2b39d093e12100c132789f5e24c644bbc11d4330bd2e7dfb79235b914031306c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-6.log",
+      "sha256": "aabf0c2b65deae84166a4a7e18e1a6bc66d6e1683f2aa645da088f053c1e31ab"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-43.log",
+      "sha256": "e28802fe2dd1f39fa889cbfe56bec75de3f520bafc8e6d53db33b2b08b434293"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-audit.log",
+      "sha256": "c4778126292453646bfd04cf3bbdf4f876cd0d7a2d195722187d85a67bdd34ab"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/controls-driver.log",
+      "sha256": "6e65db0e2731faa76bf8578c5bc26980a5fb0ebf856153da9a2695202d5d9f56"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final-old-0.log",
+      "sha256": "603fa8cad8ef142dc7d3d2d0810f70ec9a5481f809dd49bca90e87fa56946f0c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-journalStore.commit.test.ts.log",
+      "sha256": "435d4f3a19a7e6e2dbff3d99fc61d836e34f475dcd6cd77cdde89da9f343c7b0"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final-old-1.log",
+      "sha256": "a25a67747860df96ef3b2669a83dc058489770b647aa88220ff4aeedf38b9e53"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-42.log",
+      "sha256": "2681bb1348b3fc78a81434c79a87866065852d7083ec9ab879da0d72f451afa4"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-rowAlgebra.test.ts.log",
+      "sha256": "46955460198b34c82970608a2bd613761330076a1eeae5fa08c0c49221066b31"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/snapshot-journal-tail-units.log",
+      "sha256": "6a394a795de0e0289d28e8a5660a1dcd9a57991a950e5bcadae9800b47dfb408"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-7.log",
+      "sha256": "6cf0a63204d82dfb2794e7f0b25832dc6ec3ff3776a50cbb238f31ac3f7b5e35"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-3.log",
+      "sha256": "9c454f6cfbde5d2dfd83109d275377d1c071c1934f2fa52c3409ec15b3fbbcc3"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-46.log",
+      "sha256": "93cf587d979ca2d788e488a32dbfdc71ba535353fa00e5c3595faec559f33693"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/increment2-journal-unit-metadata.test.ts.log",
+      "sha256": "0bccfa816d3d8f863a1336cbba7ffaf51aac168ce61910ff4ed5af4c47e18ff7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-snapshot2.log",
+      "sha256": "76ba78d956c40e118c3410994721faf81784ecb5eccba1d82d149d467d75b9f7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-failfast.log",
+      "sha256": "6e3c9398290b44e312120db531328e52cf3990a224e09b0871f03e7ede4e4c1d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-48.log",
+      "sha256": "770f18d633e9478cd19b384e52143b098b8f99ae692c7518e9520fa0b4289dba"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-snapshot3.log",
+      "sha256": "4c2a3de2dfa6041c7625005ec9a3b754faf4841f11dc9ace69ae98528fd1ab9c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-47.log",
+      "sha256": "ecda518221597fb82e6d37fb41cade8f7c71fbaeeddf79a99fd33510f99ebca1"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/doc-format2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-2.log",
+      "sha256": "cad3ce9a6959cb7a4fdf39db244b19ccc379a5f8ca1f303530eac979866e09ca"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-0.log",
+      "sha256": "8cd5733518c984ce7da6b5f0e6477b0b4008e541ec24ca0ce0145ff6348f9aea"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-45.log",
+      "sha256": "7e8108f6601a98c7a6931c16e4f7d55cf9e6260a903c11caf9113c7ed33eb788"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/doc-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/check-rowEntry.test.ts.log",
+      "sha256": "86be316d1a4046cb8b81402fce0ce3cbafba967ac3e74bb5187065d83f32f302"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-44.log",
+      "sha256": "fa5e0fff1ad21f87611f0a25b4a7e4a222c2c418d61ff8dede63c5b3f0ecaa0b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final2-old-1.log",
+      "sha256": "bdbf12f94b95896834987201198d7b4b77a6b69c2d799a00656c44bb27390b49"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-6.log",
+      "sha256": "77c7e194299fb9e01962c8ed5991e6d1d99cd93ef77928c816d4eac30d907237"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-initial.log",
+      "sha256": "1344f77bf0791964f4569930592efc1f9359397ec63a4bbb37837e547cb34449"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-23.log",
+      "sha256": "72ac1964ef1bf5da6ff3554952640499f6dbc3d9c658969443868114aa634772"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-37.log",
+      "sha256": "07c56c378086aefae215061f97a2a39cc0890ce4f88503d9bf54aa8f80e880d6"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-38.log",
+      "sha256": "79b8aa4e6da98b562c5ac24dbf71f0d79db63234c4fcc5fbe4b81001fecd7264"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-10.log",
+      "sha256": "106e99bd9ca20a4a493dd22e8b09b829a65ade91aaf30d22ccd03cda9a441399"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-5.log",
+      "sha256": "05d7563ce14ab4cafd35aa197592602c3a9e6d7a296977c29d8f5a01ec4ab090"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-4.log",
+      "sha256": "870ded8c50dd74e1a02954ccf00b77d421ccc8deecde78d1c8cb617aff79f58d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-11.log",
+      "sha256": "b0451c05948f054479c4f54c419a189bba8cde70a42ee4ec9885b776f751b0e3"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/lint-snapshot2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-39.log",
+      "sha256": "094f81ede6bfae937b0558765426e1e65e84e0ac58315a82195bb74e9bd0e2eb"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-36.log",
+      "sha256": "1f4358c1b2da238fe2945412b96a18ac1c94511c518269ab34e64919da24e4fa"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-22.log",
+      "sha256": "ff56f1db86858355cd7f5a796bd97beb1693f0f09b17c2067c68c1c1f7fed36a"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-7.log",
+      "sha256": "79fe6d856811d8564a587470b7cc2a01c4f27f8058ff9e442d9ad2e80b827843"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/lint-snapshot.log",
+      "sha256": "6b0262bae120a79f32eac8f876ffeefd28f91e5e037239ba2ad147df3b17cc33"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-5.log",
+      "sha256": "c4bbb146ca1a47e138daf61d0ef61a245fd845f7aa0c481bb5bb51f7a59c3fd8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-34.log",
+      "sha256": "c14f3d158d6647b81904980ca78a3c18e64e168d0ac62e766cdd277d4671aec9"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-20.log",
+      "sha256": "5d806fcbfda008076166bffeed98a3fe1b2c7b37842573312d80c8796dc4f030"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-13.log",
+      "sha256": "e14fe6097f489983f23ee304eb133fbcdef68c659ee76e7802fb4543ad87edcb"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-6.log",
+      "sha256": "bb00d048bb26c992d79526ae2ddb2f161b55c4d139e421f1547d190b9c4fbbcc"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/fix-journalStore.model.log",
+      "sha256": "f899cf922016bd4b7b11d2544a1c91f78acacdbd5f0dfeaf014faac600b3169b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-7.log",
+      "sha256": "96544becc5045c4a0013d88ccbb0c2f16cb20afaa1e7dba0c67a9562b6dc4a9b"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-12.log",
+      "sha256": "bb36390110f5f945068610e5cf5189776737b2b66b5bfeed206fc84eda3e4535"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/lint-increment2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-21.log",
+      "sha256": "8c40962eaa98c9103385d7bf5d6e8a64cb0ebe3630abd435ef8a43783e144d21"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/control-keepAllCounts.log",
+      "sha256": "ae0c6215f888077f3a27a6efde855c0aa06fe1f3d537ca6eafc7780c9a5c33f6"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-35.log",
+      "sha256": "3a0bafb77bdfa7e87dea2817b1e1061e9d28b4a7438cf66d2288dbbee85bef03"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/increment2-journal-reconstruction-units.test.ts.log",
+      "sha256": "9e8c57d377c82e26f1d9820d5b15ca7b04c4c1350c5ea04bf353249b5a4cc04a"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-4.log",
+      "sha256": "21326d98be70780689d13fef8bc63a356ce699ae4243767d8c2af5f5dae4d3b8"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-0.log",
+      "sha256": "1ec93f784d8e3e9aed25005f4a6beb539a0fefe82a84a1cb34cfc7d180ad4e56"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-31.log",
+      "sha256": "a5181d171b0445ed4c11da77b5e328dc5ee051df6f88b4b90981a53ae4b5a41c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-25.log",
+      "sha256": "90e4058cfc02c3848516c1fc096fd330a0238c272ce145563d4b0eac700a832d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-19.log",
+      "sha256": "d8433d4aa296f6bfef799389f33af710760ea20e6961cf0a1fe81642498adbe7"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/control-rescan.log",
+      "sha256": "5119803e1ed78a4a6e53be9e9cec62d3dcdf67eebbb40281228a279b6b3ed385"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-16.log",
+      "sha256": "adc113d13f23e38cdf83eadd2601b18e8694225e9ef42ae1173d5793c31ef885"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-3.log",
+      "sha256": "81fe457565514ec4d5f5f6cf8c91fe5c20fc057bbe850822466e0db71718dfcc"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-2.log",
+      "sha256": "df2e023b249106e997d21bcb5cab4abfe046d3c5657b2766b13719639fcb15ec"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-17.log",
+      "sha256": "08db5087cc25f7302a1784b1a18db7f3df927be87649f0319c8ce9033ccc9824"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-18.log",
+      "sha256": "14faf1fa3ca895a9d7f29dd5490c1a22ebd3246ad4cfaf3f5d00bdd7a1c4d0da"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-24.log",
+      "sha256": "c46e16328ef2c0e80f605be5a29c39a251f2b2d7d61ccd669a85dcb0167789ca"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-30.log",
+      "sha256": "2caeb1e275bf6749c9946820a5ba334159e98c1e8dcaf23e683f25e2b8e94436"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-1.log",
+      "sha256": "5ff30781ee365b2d42b8a1d468c07bcc1d7f8235c2d4195f759773133dc5d18c"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/indexed-matrix.log",
+      "sha256": "d9211b7c96bf028c4407847b5772cb43fceb266f7005330aa30a85c7200d203f"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/lint-initial.log",
+      "sha256": "be7ef86fe10036c07787b0bccabba30216200c9b6626ed7f2f807b73b788c264"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-refactor.log",
+      "sha256": "6ab597f4acd724917afb4323aeceef49aa38b1b1e95034cf11c50285e7bbcc82"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-3.log",
+      "sha256": "42090414ef8e40afe41c68b2764ceb796c63ab935fde57c691ccc71c731bb3c9"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-26.log",
+      "sha256": "d27ff53a674270bf21d75d5cb64cc159989a0032e1c79735ce15dbdb49598ece"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-32.log",
+      "sha256": "8b1b73f75a16118f3b970a2fa5749af04db84accab4701e58b6daa9a2a1e2795"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-driver.log",
+      "sha256": "778ad40b4c401c25c8014ef2d42ef84dbc7431130e40e00ee5c81d14f67e4d8e"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/types-increment2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-15.log",
+      "sha256": "8a4591298fbb863065852255a5e57a385b5f93893ea0d31fb57971720e931262"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-29.log",
+      "sha256": "3f9460568111e4b5249f723ed5185acc8a83ebf8e8de3193a50d1a40ef375217"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-0.log",
+      "sha256": "4b3a3af67adc51766664a33134accce50f3b08b4a27581b0e86ec3d3af792f41"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/format-snapshot.log",
+      "sha256": "abe30930e5e9d6a28bedf2284bab66c90f54c8a11c20ed73c64e86e646357d81"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-1.log",
+      "sha256": "d0ce3fa0511bf1f1d78134c74269da62cf763c0d7117e1ff98a21e3b93606050"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-28.log",
+      "sha256": "0421a46677e7800ead5f8352f3218d6f1bc7f2caa6441117c640ecb994b1f9ac"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-old-14.log",
+      "sha256": "38a2306b76ad98c6aefa4e10e79dc9be78eba70839ee7e6fac68a138776f1f75"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-33.log",
+      "sha256": "1ca13e10f6942792e832b5f7f29210632750dd08eebfd169e37b603935208b4d"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-27.log",
+      "sha256": "0156c5e7c1869fce5372a77c6778dac416da5ca0ead7d94128050d4ecafac6b3"
+    },
+    {
+      "path": "tmp/854-notes/p5/metadata-run-d/final3-journal-2.log",
+      "sha256": "319d5ecf271e3ef03aeeebf7c7b5f9dd8ff2a161e0871d43f2844e3b696fc269"
+    }
+  ],
+  "limits": "Native contribution/count/rank and tail-only indexed count/readAt/pending metadata are implemented. Provider routing/default unchanged. Normalized namespace placement/counts, Kimi/Mistral native bookkeeping, format/settings summaries, full mutation retained-heap acceptance and CRC closure remain open. Two controls fail read budgets, not a completed heap census. Independent fact and mutation models now include empty-id Rt and contribution flags; frozen normalizer and wire fixtures remain unchanged. File format 4 rejects version 3 without migration. Range reads still do not verify unselected whole-body bytes. Review skipped per Andrew 2026-10-09."
+}
