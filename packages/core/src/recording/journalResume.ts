@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { applyResumeBoundary } from '../services/history/journalRowCodec.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import type {
   JournalSession,
   JournalSessionOptions,
@@ -36,6 +37,7 @@ export interface JournalResumeRequest {
   currentProvider: string;
   currentModel: string;
   workspaceDirs: string[];
+  mediaStore?: LocalMediaStore;
   /** File seams and the occurrence planner of the journal (tests, phase 5). */
   journal?: JournalSessionOptions;
 }
@@ -70,7 +72,10 @@ export class JournalResumeBoot implements ResumePoint {
   /** The restored history, one decoded row at a time (see {@link resumedRows}). */
   async *streamRows(): AsyncGenerator<IContent> {
     const session = await this.recording.session();
-    for await (const row of resumedRows(session, this)) yield row.content;
+    for await (const row of resumedRows(session, this)) {
+      await this.recording.hydrateMedia(row.content);
+      yield row.content;
+    }
   }
 
   close(): Promise<void> {
@@ -121,6 +126,7 @@ function recordingConfig(
     workspaceDirs: request.workspaceDirs,
     provider: request.currentProvider,
     model: request.currentModel,
+    mediaStore: request.mediaStore,
     ...(request.journal === undefined ? {} : { journal: request.journal }),
   };
 }

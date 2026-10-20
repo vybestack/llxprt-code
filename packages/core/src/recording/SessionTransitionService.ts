@@ -219,6 +219,7 @@ export class SessionTransitionService {
   ): Promise<ForkResult | ForkError> {
     if (selectBackend() === 'journal') {
       return forkJournalFromCheckpoint({
+        mediaStore: this.options.mediaStore,
         target,
         chatsDir,
         projectHash,

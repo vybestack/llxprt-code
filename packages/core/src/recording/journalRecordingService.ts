@@ -38,6 +38,13 @@ import type {
   SessionStartKind,
 } from './types.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import {
+  recordingMediaEffect,
+  type RecordingMediaOwner,
+} from './journalRecordingMedia.js';
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
+import type { IContent } from '../services/history/IContent.js';
 
 export interface JournalRecordingConfig {
   readonly sessionId: string;
@@ -47,6 +54,7 @@ export interface JournalRecordingConfig {
   readonly cwd?: string;
   readonly provider: string;
   readonly model: string;
+  readonly mediaStore?: LocalMediaStore;
   readonly kind?: SessionStartKind;
   readonly parentSessionId?: string;
   /** Read once, when the file is created, so the header carries the provider in effect then (#3732). */
@@ -74,6 +82,7 @@ function ignore(): void {
  */
 export class JournalRecordingService implements SessionRecordingPort {
   private journalSession: JournalSession | undefined;
+  private mediaOwner: RecordingMediaOwner | undefined;
   private materialization: Promise<JournalSession> | undefined;
   private tail: Promise<void> = Promise.resolve();
   private failure: { readonly error: unknown } | undefined;
@@ -155,8 +164,16 @@ export class JournalRecordingService implements SessionRecordingPort {
     }
     const preview = await store.getState(SESSION_KEYS.preview);
     if (preview !== undefined) this.preview = decodePreviewFact(preview);
+    this.installMediaPublication(session);
     this.journalSession = session;
     this.materialization = Promise.resolve(session);
+  }
+
+  hydrateMedia(content: IContent): Promise<void> {
+    return hydrateRecordedMedia(
+      this.config.mediaStore,
+      content.blocks.filter((block) => block.type === 'media'),
+    );
   }
 
   // Lifecycle, identity and the lock.
@@ -238,6 +255,12 @@ export class JournalRecordingService implements SessionRecordingPort {
     }
     this.disposed = true;
     this.ackListeners.clear();
+    try {
+      if (this.journalSession !== undefined)
+        await this.mediaOwner?.close(this.journalSession.store);
+    } catch (error) {
+      failures.push(error);
+    }
     try {
       await this.journalSession?.close();
     } catch (error) {
@@ -472,9 +495,16 @@ export class JournalRecordingService implements SessionRecordingPort {
       if (allocation.owned) await rm(filePath, { force: true });
       throw error;
     }
+    this.installMediaPublication(session);
     this.filePath = filePath;
     this.journalSession = session;
     return session;
+  }
+
+  private installMediaPublication(session: JournalSession): void {
+    this.mediaOwner = recordingMediaEffect(this.config.mediaStore);
+    if (this.mediaOwner !== undefined)
+      session.store.setCommitEffect(this.mediaOwner.effect);
   }
 
   private async commitStart(session: JournalSession): Promise<void> {

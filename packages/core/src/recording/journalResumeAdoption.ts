@@ -43,6 +43,7 @@ export async function deriveJournalResumeState(
   let lastSeq = 0;
   let totalEntries = 0;
   for await (const { content: row } of resumedRows(session, point)) {
+    await recording.hydrateMedia(row);
     const marker = row.metadata?.chronology;
     if (marker !== undefined) chronology.stamp(row);
     if (totalEntries === 0) firstSeq = marker?.seq ?? 0;

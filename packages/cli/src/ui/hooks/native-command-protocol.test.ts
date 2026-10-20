@@ -1,0 +1,292 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  DebugLogger,
+  LocalMediaStore,
+  getProjectHash,
+  type MediaReferenceBlock,
+} from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import {
+  decodeSessionFact,
+  SESSION_KEYS,
+} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { chatOwnerCommand } from '../commands/chatOwnerCommand.js';
+import { continueCommand } from '../commands/continueCommand.js';
+import type { HistoryItemWithoutId, Message } from '../types.js';
+import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+import {
+  processSlashCommand,
+  type SlashCommandHandlerDeps,
+} from './slashCommandHandlers.js';
+
+const actions: SlashCommandProcessorActions = {
+  openAuthDialog: () => {},
+  openThemeDialog: () => {},
+  openEditorDialog: () => {},
+  openPrivacyNotice: () => {},
+  openSettingsDialog: () => {},
+  openLoggingDialog: () => {},
+  openSubagentDialog: () => {},
+  openModelsDialog: () => {},
+  openPermissionsDialog: () => {},
+  openPoliciesDialog: () => {},
+  openProviderDialog: () => {},
+  openLoadProfileDialog: () => {},
+  openCreateProfileDialog: () => {},
+  openProfileListDialog: () => {},
+  viewProfileDetail: () => {},
+  openProfileEditor: () => {},
+  quit: () => {},
+  setDebugMessage: () => {},
+  toggleCorgiMode: () => {},
+  toggleDebugProfiler: () => {},
+  dispatchExtensionStateUpdate: () => {},
+  addConfirmUpdateExtensionRequest: () => {},
+  openWelcomeDialog: () => {},
+  openSessionBrowserDialog: () => {},
+};
+
+async function durable(path: string): Promise<{
+  count: number;
+  digest: string;
+  media: MediaReferenceBlock | undefined;
+}> {
+  const journal = await JournalSession.open(path);
+  const hash = createHash('sha256');
+  let count = 0;
+  let media: MediaReferenceBlock | undefined;
+  try {
+    for await (const row of journal.rows()) {
+      count++;
+      hash.update(JSON.stringify(row.content));
+      const reference = row.content.blocks.find(
+        (block) => block.type === 'media' && block.encoding === 'reference',
+      );
+      if (reference !== undefined) media = reference;
+    }
+    return { count, digest: hash.digest('hex'), media };
+  } finally {
+    await journal.close();
+  }
+}
+
+async function recording(agent: Agent): Promise<string> {
+  await agent.session.flushRecording();
+  const path = agent.session.getRecording().path;
+  if (path === undefined) throw new Error('Missing native CLI recording');
+  return path;
+}
+
+async function turn(agent: Agent, text: string): Promise<void> {
+  let done = false;
+  for await (const event of agent.stream(text)) {
+    if (event.type === 'error') throw new Error(event.error.message);
+    if (event.type === 'done') done = event.reason === 'stop';
+  }
+  expect(done).toBe(true);
+}
+
+describe('native CLI command protocol', () => {
+  it('dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback', async () => {
+    const saved = { ...process.env };
+    const root = await mkdtemp(join(tmpdir(), 'w23-cli-native-protocol-'));
+    const fixture = join(root, 'turns.jsonl');
+    await writeFile(
+      fixture,
+      (
+        JSON.stringify({
+          chunks: [
+            {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'A recorded reply.' }],
+            },
+          ],
+        }) + '\n'
+      ).repeat(3),
+    );
+    process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+    process.env.LLXPRT_FAKE_RESPONSES = fixture;
+    process.env.LLXPRT_LOG_HOME = join(root, 'logs');
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: 'cli-native-source',
+      workingDir: root,
+      interactive: true,
+      folderTrust: true,
+      coreTools: [],
+    });
+    let displayed: readonly HistoryItemWithoutId[] = [];
+    const errors: Message[] = [];
+    const context = createMockCommandContext({
+      recordingOwner: 'agent',
+      services: { agent },
+      ui: {
+        loadHistory: (items: readonly HistoryItemWithoutId[]): void => {
+          displayed = items;
+        },
+        clear: () => {
+          displayed = [];
+        },
+      },
+    });
+    const deps: SlashCommandHandlerDeps = {
+      commands: [chatOwnerCommand, continueCommand],
+      config: context.services.config,
+      commandContext: context,
+      actions,
+      addItem: context.ui.addItem,
+      addMessage: (message) => {
+        errors.push(message);
+      },
+      setIsProcessing: () => {},
+      setLocalIsProcessing: () => {},
+      setPendingItem: () => {},
+      setSessionShellAllowlist: () => {},
+      setConfirmationRequest: () => {},
+      confirmationLogger: new DebugLogger('native-cli-confirmation'),
+      slashCommandLogger: new DebugLogger('native-cli-protocol'),
+      beginSlashCommandAction: () => new AbortController(),
+      endSlashCommandAction: () => {},
+    };
+    async function command(text: string): Promise<void> {
+      expect(
+        await processSlashCommand(deps, text, undefined, undefined, false),
+      ).toStrictEqual({ type: 'handled' });
+    }
+    try {
+      await agent.session.setRecording({ enabled: true });
+      const image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
+      for await (const event of agent.stream([
+        { type: 'text', text: 'question one' },
+        {
+          type: 'media',
+          encoding: 'base64',
+          mimeType: 'image/png',
+          data: image,
+        },
+      ]))
+        if (event.type === 'error') throw new Error(event.error.message);
+      const source = await recording(agent);
+      const initial = await durable(source);
+      expect(initial.count).toBe(2);
+      if (initial.media === undefined)
+        throw new Error('Missing admitted image');
+      const media = initial.media;
+      const store = agent.agentClient.mediaStore;
+      if (store === undefined) throw new Error('Missing CLI media store');
+      expect(
+        Buffer.from(await store.readVerified(media)).toString('base64'),
+      ).toBe(image);
+      await command('/chat save milestone');
+      expect(
+        (await agent.session.listCheckpoints()).map(
+          (checkpoint) => checkpoint.name,
+        ),
+      ).toStrictEqual(['milestone']);
+      await turn(agent, 'question two');
+      expect((await durable(await recording(agent))).count).toBe(4);
+      await command('/chat restore 1');
+      expect(displayed).toHaveLength(2);
+      expect(await durable(await recording(agent))).toStrictEqual({
+        ...initial,
+      });
+      await command('/continue milestone');
+      const childId = agent.session.getSessionId();
+      expect(childId).not.toBe('cli-native-source');
+      expect(displayed).toHaveLength(2);
+      const child = await recording(agent);
+      expect(child).not.toBe(source);
+      expect(await durable(child)).toStrictEqual({ ...initial });
+      const journal = await JournalSession.open(child);
+      try {
+        const id = await journal.store.getState(SESSION_KEYS.id);
+        const start = await journal.store.getState(SESSION_KEYS.start);
+        if (id === undefined || start === undefined)
+          throw new Error('Missing native identity facts');
+        expect({ sessionId: decodeSessionFact(id) }).toStrictEqual({
+          sessionId: childId,
+        });
+        expect(decodeSessionFact(start)).toMatchObject({
+          projectHash: getProjectHash(root),
+        });
+        const fork = await journal.store.getState(SESSION_KEYS.fork);
+        if (fork === undefined) throw new Error('Missing checkpoint ancestry');
+        expect(decodeSessionFact(fork)).toMatchObject({
+          parentSessionId: 'cli-native-source',
+          checkpointName: 'milestone',
+        });
+      } finally {
+        await journal.close();
+      }
+      await turn(agent, 'child question');
+      expect((await durable(await recording(agent))).count).toBe(4);
+      expect(await durable(source)).toStrictEqual({ ...initial });
+      await command('/chat resume milestone');
+      expect({ sessionId: agent.session.getSessionId() }).not.toStrictEqual({
+        sessionId: childId,
+      });
+      expect(await durable(await recording(agent))).toStrictEqual({
+        ...initial,
+      });
+      const stableId = agent.session.getSessionId();
+      const stablePath = await recording(agent);
+      await command('/continue nonexistent-native-session');
+      expect(errors).toHaveLength(1);
+      expect({ sessionId: agent.session.getSessionId() }).toStrictEqual({
+        sessionId: stableId,
+      });
+      expect(await durable(stablePath)).toStrictEqual({ ...initial });
+      expect(
+        (await readdir(join(stablePath, '..'))).filter((file) =>
+          file.endsWith('.lock'),
+        ),
+      ).toHaveLength(1);
+      expect(await store.hasReservations(media.contentId)).toBe(true);
+      await agent.dispose();
+      expect(
+        (await readdir(join(stablePath, '..'))).filter((file) =>
+          file.endsWith('.lock'),
+        ),
+      ).toStrictEqual([]);
+      const archiveRoot = store.recordingArchive?.rootDirectory;
+      if (archiveRoot === undefined)
+        throw new Error('Missing recording archive');
+      const observer = new LocalMediaStore({
+        rootDirectory: store.rootDirectory,
+        quotaBytes: 1024 * 1024,
+      });
+      const archive = new LocalMediaStore({
+        rootDirectory: archiveRoot,
+        quotaBytes: 1024 * 1024,
+      });
+      try {
+        expect(await observer.hasReservations(media.contentId)).toBe(false);
+        expect(
+          Buffer.from(await archive.readVerified(media)).toString('base64'),
+        ).toBe(image);
+      } finally {
+        await observer.close();
+        await archive.close();
+      }
+    } finally {
+      await agent.dispose();
+      for (const key of [
+        'LLXPRT_HISTORY_BACKEND',
+        'LLXPRT_FAKE_RESPONSES',
+        'LLXPRT_LOG_HOME',
+      ]) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
+    }
+  }, 30000);
+});

@@ -2,6 +2,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { VersionEdit } from '../journal/groupEdits.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { sha256KeyHash } from '../journal/idKeys.js';
 import type { JournalStore } from '../journal/journalStore.js';
 import { resolveJournalDependencies } from '../journal/journalWriterOpen.js';
@@ -39,6 +40,7 @@ export interface JournalForkRequest {
   readonly workspaceDirs: string[];
   /** The recorder of the running session, when the checkpoint is in the session that is running. */
   readonly activeSource?: JournalRecordingService | null;
+  readonly mediaStore?: LocalMediaStore;
   readonly journal?: JournalSessionOptions;
 }
 
@@ -243,6 +245,7 @@ async function createChild(
       workspaceDirs: metadata.workspaceDirs,
       provider: metadata.provider,
       model: metadata.model,
+      mediaStore: request.mediaStore,
       kind: 'main',
       ...(request.journal === undefined ? {} : { journal: request.journal }),
     };

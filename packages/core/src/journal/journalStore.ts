@@ -7,6 +7,11 @@ import {
 import { listCheckpoints, type ListedCheckpoint } from './checkpointList.js';
 import { JournalFormatError } from './errors.js';
 import {
+  effectAppender,
+  rollbackEffect,
+  type CommitEffectFactory,
+} from './commitEffect.js';
+import {
   COMPACTION_REARM_BYTES,
   compactionDue,
   removeStaleCompaction,
@@ -122,6 +127,12 @@ interface SpineEntry {
  * (design 4.1), so a version is never readable before it is durable.
  */
 export class JournalStore {
+  private commitEffect: CommitEffectFactory | undefined;
+
+  setCommitEffect(factory: CommitEffectFactory): void {
+    this.commitEffect = factory;
+  }
+
   private currentVersion: Version | undefined;
   private access: RecordAccess | undefined;
   private chain: LineageChain | undefined;
@@ -550,10 +561,37 @@ export class JournalStore {
     const before = this.currentVersion;
     const plan = await planGroup(this.planContext(), edits);
     let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
-    const ack = await this.writer.commitStreamedGroup(async (appender) => {
-      built = await buildGroup(this.buildContext(), plan, mutation, appender);
-      return built.state;
+    const effect = this.commitEffect?.({
+      read: this.buildContext().readGroup,
+      getState: (key) => this.getState(key),
     });
+    let ack: CommitAck;
+    try {
+      ack = await this.writer.commitStreamedGroup(async (appender) => {
+        try {
+          built = await buildGroup(
+            this.buildContext(),
+            plan,
+            mutation,
+            effect === undefined ? appender : effectAppender(appender, effect),
+          );
+          if (effect !== undefined) {
+            built = {
+              ...built,
+              state: {
+                ...built.state,
+                stateRoot: await effect.finish(built.state.stateRoot, appender),
+              },
+            };
+          }
+          return built.state;
+        } catch (error) {
+          return rollbackEffect(effect, error);
+        }
+      });
+    } catch (error) {
+      return rollbackEffect(effect, error);
+    }
     const trailer = this.writer.published?.trailer;
     if (built === undefined || trailer === undefined) {
       throw new JournalFormatError('A committed group left no trailer');
@@ -563,6 +601,7 @@ export class JournalStore {
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };
     }
+    await effect?.settle(true);
     // Pinned before anything else can run, so no compaction separates the ack from its reader.
     const read = this.readOfPublished();
     return {

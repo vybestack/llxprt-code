@@ -13,8 +13,8 @@ import type { SessionRecordingServiceConfig } from './types.js';
  * result as the session surface and never convert it to the other kind; the
  * history store checks the kind it is given.
  *
- * The journal recorder has no use for the JSONL writer's queue bound, media
- * store or I/O seams, so those fields of the shared config are not passed on.
+ * The journal recorder has no use for the JSONL writer's queue bound or I/O
+ * seams, so those fields of the shared config are not passed on.
  */
 function journalConfig(
   config: SessionRecordingServiceConfig,
@@ -27,6 +27,7 @@ function journalConfig(
     cwd: config.cwd,
     provider: config.provider,
     model: config.model,
+    mediaStore: config.mediaStore,
     kind: config.kind,
     parentSessionId: config.parentSessionId,
     resolveProviderModel: config.resolveProviderModel,

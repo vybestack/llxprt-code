@@ -269,6 +269,7 @@ export async function resumeSession(
 ): Promise<ResumeResult | ResumeError> {
   if (selectBackend(env) === 'old') return resumeJsonlSession(request);
   const result = await resumeJournalSession({
+    mediaStore: request.mediaStore,
     continueRef: request.continueRef,
     projectHash: request.projectHash,
     chatsDir: request.chatsDir,
