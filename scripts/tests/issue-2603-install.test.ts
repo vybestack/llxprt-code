@@ -204,11 +204,13 @@ describe.skipIf(IS_WINDOWS)(
       expect(files).toContain('package/package.json');
     }, 120_000);
 
-    it('includes the installer script', () => {
+    it('does not ship a consumer installer script', () => {
       const tarball = packCliWorkspace();
       const { stdout } = spawnTarList(tarball);
       const files = stdout.split(/\r?\n/);
-      expect(files).toContain('package/scripts/install-native-launchers.cjs');
+      expect(files).not.toContain(
+        'package/scripts/install-native-launchers.cjs',
+      );
     }, 120_000);
 
     it('does NOT include the old Node launcher (llxprt.cjs)', () => {
@@ -220,11 +222,11 @@ describe.skipIf(IS_WINDOWS)(
       );
     }, 120_000);
 
-    it('declares a postinstall script in the CLI workspace package.json', () => {
+    it('owns its public bin without a consumer postinstall script', () => {
       const cliPkg = JSON.parse(
         readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
       ) as { scripts: Record<string, string>; bin?: Record<string, string> };
-      expect(cliPkg.scripts.postinstall).toContain('install-native-launchers');
+      expect(cliPkg.scripts.postinstall).toBeUndefined();
       // #2978: packages/cli MUST declare its own bin so a global install links
       // the `llxprt` command (npm links only the installed package's own bins).
       // The target is a node-shebang shim (not the POSIX #!/bin/sh launcher) so
@@ -355,9 +357,9 @@ describe('install-native-launchers module (CLI workspace)', () => {
       try {
         const npmCliJs = resolveNpmCliJs();
         const npmPkgDir = dirname(dirname(npmCliJs));
-        const candidate = join(npmPkgDir, 'node_modules', 'cmd-shim');
-        nodeRequire.resolve(candidate);
-        return candidate;
+        return nodeRequire.resolve('cmd-shim', {
+          paths: [join(npmPkgDir, 'node_modules', 'bin-links')],
+        });
       } catch {
         // not resolvable here; fall through to spawn-based discovery
       }
@@ -370,10 +372,10 @@ describe('install-native-launchers module (CLI workspace)', () => {
         // spawn error; fall through to alternative discovery.
       } else if (npmRoot.status === 0) {
         const globalRoot = npmRoot.stdout.trim();
-        const candidate = join(globalRoot, 'npm', 'node_modules', 'cmd-shim');
         try {
-          nodeRequire.resolve(candidate);
-          return candidate;
+          return nodeRequire.resolve('cmd-shim', {
+            paths: [join(globalRoot, 'npm', 'node_modules', 'bin-links')],
+          });
         } catch {
           // try npm's own location
         }
@@ -400,10 +402,10 @@ describe('install-native-launchers module (CLI workspace)', () => {
         }
       }
       if (npmDir) {
-        const candidate = join(npmDir, 'node_modules', 'cmd-shim');
         try {
-          nodeRequire.resolve(candidate);
-          return candidate;
+          return nodeRequire.resolve('cmd-shim', {
+            paths: [join(npmDir, 'node_modules', 'bin-links')],
+          });
         } catch {
           // not there
         }
@@ -437,9 +439,9 @@ describe('install-native-launchers module (CLI workspace)', () => {
             'try { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(' +
               JSON.stringify(launcherSource) +
               ', target); fs.chmodSync(target, 0o755); } catch {}',
-            'cmdShim(target, link, function(err) {',
-            '  if (err) { console.error(err.message); process.exit(1); }',
-            '  process.exit(0);',
+            'cmdShim(target, link).catch(err => {',
+            '  console.error(err.message);',
+            '  process.exitCode = 1;',
             '});',
           ].join(''),
         ],

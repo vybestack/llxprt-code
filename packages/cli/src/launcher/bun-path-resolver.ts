@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { dirname, join, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { access, constants } from 'node:fs/promises';
@@ -303,15 +304,58 @@ export async function resolveBunPath(
     return fromNodeModules;
   }
 
-  return resolveFromPath(platform, pathCommand, pathChecker);
+  return resolveFromPath(
+    platform,
+    pathCommand,
+    options.pathChecker ?? ((target) => defaultPathChecker(target, false)),
+  );
 }
 
-async function defaultPathChecker(targetPath: string): Promise<boolean> {
+async function defaultPathChecker(
+  targetPath: string,
+  requireNativeHeader = true,
+): Promise<boolean> {
+  if (
+    process.platform === 'win32' &&
+    targetPath.toLowerCase().endsWith('.cmd')
+  ) {
+    try {
+      await access(targetPath, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  let descriptor: number | undefined;
   try {
+    if (!statSync(targetPath).isFile()) return false;
     await access(targetPath, constants.X_OK);
-    return true;
+    if (!requireNativeHeader) return true;
+    descriptor = openSync(targetPath, 'r');
+    const header = Buffer.alloc(4);
+    if (readSync(descriptor, header, 0, header.length, 0) !== header.length) {
+      return false;
+    }
+    if (process.platform === 'win32') {
+      return header[0] === 0x4d && header[1] === 0x5a;
+    }
+    if (process.platform === 'darwin') {
+      return [
+        'feedface',
+        'cefaedfe',
+        'feedfacf',
+        'cffaedfe',
+        'cafebabe',
+        'bebafeca',
+        'cafebabf',
+        'bfbafeca',
+      ].includes(header.toString('hex'));
+    }
+    return header[0] === 0x7f && header.toString('ascii', 1, 4) === 'ELF';
   } catch {
     return false;
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 
