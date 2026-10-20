@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +32,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -35,13 +41,9 @@ import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
-import { fromConfig } from '../fromConfig.js';
 
 const intent = { provider: 'fake', authMode: 'auto' } as const;
 
@@ -174,7 +176,7 @@ describe('activation bootstrap ownership and queued work', () => {
       built_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const built_builtCallerOwner = await SessionClientOwner.create(
+    const built_builtCallerOwner = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -239,7 +241,7 @@ describe('activation bootstrap ownership and queued work', () => {
       );
       requireCallerActivation(built_activation);
       await built_builtCallerOwner.initializeTools();
-      await built_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(built_builtCallerOwner).startChat();
     } catch (built_primary) {
       await cleanupAfterFailure(built_primary, built_builtCallerClose);
     }
@@ -252,7 +254,7 @@ describe('activation bootstrap ownership and queued work', () => {
       null,
       () => undefined,
       'borrowed',
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerMcp,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,
@@ -262,19 +264,22 @@ describe('activation bootstrap ownership and queued work', () => {
       const result = await built_operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
       const forged = {
-        workspaceDefinitions: built_operation.workspaceDefinitions,
-        workspaceTrust: built_operation.workspaceTrust,
-        trustCleanup: built_operation.trustCleanup,
-        workspaceMemory: built_operation.workspaceMemory,
-        workspaceMemoryOwnership: built_operation.workspaceMemoryOwnership,
-        workspaceFilesystem: built_operation.workspaceFilesystem,
+        get oauthManager(): undefined {
+          throw new Error('Unvalidated operation inventory was accessed');
+        },
+        workspaceDefinitions:
+          capturedActivation(built_operation).workspaceDefinitions,
+        workspaceTrust: capturedActivation(built_operation).workspaceTrust,
+        trustCleanup: capturedActivation(built_operation).trustCleanup,
+        workspaceMemory: capturedActivation(built_operation).workspaceMemory,
+        workspaceMemoryOwnership:
+          capturedActivation(built_operation).workspaceMemoryOwnership,
+        workspaceFilesystem:
+          capturedActivation(built_operation).workspaceFilesystem,
         sessionClient: built_operation.sessionClient,
-        takeSessionClient:
-          built_operation.takeSessionClient.bind(built_operation),
-        takeMediaOwner: built_operation.takeMediaOwner.bind(built_operation),
-        settingsOwnerOwnership: built_operation.settingsOwnerOwnership,
-        takeSettingsOwner:
-          built_operation.takeSettingsOwner.bind(built_operation),
+        readHistory: built_operation.readHistory.bind(built_operation),
+        settingsOwnerOwnership:
+          capturedActivation(built_operation).settingsOwnerOwnership,
         preflight: built_operation.preflight.bind(built_operation),
         dispose: () => {},
         consume: () => result,
@@ -290,7 +295,7 @@ describe('activation bootstrap ownership and queued work', () => {
           undefined,
           built_builtCallerMcp,
           { operation: forged, token: result.token },
-          built_builtCallerOwner.getAgentClient(),
+          capturedSessionClient(built_builtCallerOwner),
         ),
       ).rejects.toThrow('Invalid activation bootstrap');
     } finally {

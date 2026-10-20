@@ -1,3 +1,10 @@
+import {
+  createCapturedSessionOwner,
+  acquireCapturedSessionClient,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -29,7 +36,6 @@ import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 /**
  * @license
@@ -37,7 +43,6 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { createIsolatedSessionClient } from '../agentRuntimeAssembly.js';
 
 describe('Isolated session client collaborators', () => {
   const credentials = useOwnedCredentials();
@@ -129,7 +134,7 @@ describe('Isolated session client collaborators', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -173,13 +178,52 @@ describe('Isolated session client collaborators', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
 
     try {
-      const owner = await createIsolatedSessionClient(
+      const captured: AgentClientContract[] = [];
+      const factory = buildAgentClientFactory();
+      const imageFailure = new Error('External image composition failed');
+      try {
+        await expect(
+          acquireCapturedSessionClient(
+            builtConfig,
+            builtSettings,
+            builtSettingsOwner,
+            builtManager,
+            builtOAuth,
+            builtContent,
+            builtTokenizer,
+            builtFiles,
+            builtMedia.store,
+            (...args) => {
+              const client = factory(...args);
+              captured.push(client);
+              return client;
+            },
+            builtMcp.readInstructions,
+            builtMcp.workspacePaths,
+            builtMessageBus,
+            {
+              get run(): ImageOperationRunner {
+                throw imageFailure;
+              },
+            },
+          ),
+        ).rejects.toThrow(imageFailure);
+        expect(captured).toHaveLength(1);
+        await expect(captured[0].generateEmbedding([])).rejects.toThrow(
+          'Auxiliary generation is closed',
+        );
+        expect(builtManager.getActiveProviderName()).toBe('fake');
+        expect(await builtMedia.store.getStoredByteLength()).toBe(0);
+      } finally {
+        for (const client of captured) await client.dispose();
+      }
+      const owner = await acquireCapturedSessionClient(
         builtConfig,
         builtSettings,
         builtSettingsOwner,
@@ -188,7 +232,7 @@ describe('Isolated session client collaborators', () => {
         builtContent,
         builtTokenizer,
         builtFiles,
-        builtMedia,
+        builtMedia.store,
         undefined,
         builtMcp.readInstructions,
         builtMcp.workspacePaths,
@@ -199,7 +243,7 @@ describe('Isolated session client collaborators', () => {
         owner.bindHooks();
         await owner.initializeTools();
         await owner.refreshAuth();
-        const client = owner.getAgentClient();
+        const client = capturedSessionClient(owner);
         await client.startChat();
         await client.addHistory({
           speaker: 'human',
@@ -211,13 +255,13 @@ describe('Isolated session client collaborators', () => {
           ),
         ).toHaveLength(1);
         expect(
-          (await builtOwner.getAgentClient().getHistory()).filter(
+          (await capturedSessionClient(builtOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(0);
         await owner.dispose();
         await builtOwner.refreshAuth();
-        await builtOwner.getAgentClient().startChat();
+        await capturedSessionClient(builtOwner).startChat();
         expect(builtManager.getActiveProviderName()).toBe('fake');
         expect(await builtMedia.store.getStoredByteLength()).toBe(0);
       } finally {

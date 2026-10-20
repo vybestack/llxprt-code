@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -49,7 +54,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { createAgent, fromConfig, type Agent } from '../index.js';
+import { createAgent, type Agent } from '../index.js';
 
 /**
  * @license
@@ -154,7 +159,7 @@ describe('explicit profile persistence', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -274,7 +279,7 @@ describe('explicit profile persistence', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('captures and persists same-label owners outside ALS without borrowing the foreground state', async () => {
@@ -313,7 +318,7 @@ describe('explicit profile persistence', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       try {
         agents.push(second);

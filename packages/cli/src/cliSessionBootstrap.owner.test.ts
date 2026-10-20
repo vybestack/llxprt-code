@@ -34,7 +34,7 @@ function setupOwnerSessionRecording(
   return setupOwnerSessionRecordingCore(
     config,
     agent.session,
-    () => agent.agentClient.mediaStore,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
     argv,
     selection,
     warnings,

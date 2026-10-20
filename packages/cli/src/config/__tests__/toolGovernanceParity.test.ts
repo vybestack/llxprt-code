@@ -173,7 +173,6 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     new CredentialAuthority(),
     await loadPrecedenceProviderContributions(),
     (operation) => {
-      operation.takeSettingsOwner(runtimeSettingsService);
       retainedActivationOperations.push(operation);
     },
   );

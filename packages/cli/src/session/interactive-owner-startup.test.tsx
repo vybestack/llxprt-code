@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +10,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   getProjectHash,
@@ -52,7 +53,7 @@ function setupOwnerSessionRecording(
   return setupOwnerSessionRecordingCore(
     config,
     agent.session,
-    () => agent.agentClient.mediaStore,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
     argv,
     selection,
     warnings,

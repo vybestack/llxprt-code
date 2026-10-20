@@ -1,3 +1,11 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -49,8 +57,11 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
-import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import {
+  setup,
+  deferred,
+  installIdeCleanup,
+} from './helpers/ide-lifecycle-companion.js';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 
 /**
@@ -60,6 +71,7 @@ import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
  */
 
 describe('profile-chat-preparation', () => {
+  installIdeCleanup();
   let promptDirectory: string;
   const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
   beforeAll(async () => {
@@ -156,7 +168,7 @@ describe('profile-chat-preparation', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -276,7 +288,7 @@ describe('profile-chat-preparation', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const otherCredentials = useOwnedCredentials();
@@ -362,7 +374,7 @@ describe('profile-chat-preparation', () => {
       otherCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    otherCallerOwner = await SessionClientOwner.create(
+    otherCallerOwner = await createCapturedSessionOwner(
       otherCallerConfig,
       assembleTaskSchemaPolicy(otherCallerSettings),
       otherCallerManager,
@@ -482,15 +494,16 @@ describe('profile-chat-preparation', () => {
     );
     requireCallerActivation(activation);
     await otherCallerOwner.initializeTools();
-    await otherCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(otherCallerOwner).startChat();
   }
 
   it.each([false, true])(
     'preserves chat, history and IDE view after failed replacement (initialized: %s)',
     async (initialized) => {
+      const host = await setup();
       await openbuiltCaller('multi-turn-text.jsonl');
       await openotherCaller('multi-turn-text.jsonl');
-      const agent = await fromConfig(
+      const agent = await captureAgentAdoption(
         builtCallerConfig,
         builtCallerSettings,
         {},
@@ -500,9 +513,9 @@ describe('profile-chat-preparation', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        initialized ? builtCallerOwner.getAgentClient() : undefined,
+        initialized ? capturedSessionClient(builtCallerOwner) : undefined,
       );
-      const ownerB = await fromConfig(
+      const ownerB = await captureAgentAdoption(
         otherCallerConfig,
         otherCallerSettings,
         {},
@@ -520,22 +533,26 @@ describe('profile-chat-preparation', () => {
       );
       provider.name = 'replacement';
       builtCallerManager.registerProvider(provider);
-      const { agentClient: client } = agent;
-      const priorIde = ideContext.getIdeContext();
-      const ownedClient = agent.ide.getIdeClient();
-      if (ownedClient === undefined)
-        throw new Error('Workspace IDE client missing');
-      const contextReader = vi
-        .spyOn(ownedClient, 'getIdeContext')
-        .mockImplementation(() => ideContext.getIdeContext());
+      const client = fixtureAgentResources(agent).publishedClient(agent);
       agent.ide.setIdeMode(true);
-      ideContext.setIdeContext({
+      await agent.ide.setIdeClientConnected();
+      const contextArrived = deferred();
+      const unsubscribe = agent.ide.subscribeContext((context) => {
+        if (
+          context?.workspaceState?.openFiles?.[0]?.path ===
+          '/workspace/kept-editor.ts'
+        )
+          contextArrived.resolve();
+      });
+      await host.updateContext(0, {
         workspaceState: {
           openFiles: [
             { path: '/workspace/kept-editor.ts', timestamp: 1, isActive: true },
           ],
         },
       });
+      await contextArrived.promise;
+      unsubscribe();
       if (initialized) {
         for await (const event of agent.stream('carried context')) {
           if (event.type === 'error') throw new Error(event.error.message);
@@ -575,7 +592,11 @@ describe('profile-chat-preparation', () => {
         );
         boundary.mockRestore();
         expect(reads).toBe(2);
-        expect(agent.agentClient).toBe(client);
+        await fixtureAgentResources(agent).readObservedHistory(agent);
+        expect(
+          fixtureAgentResources(agent).historyReaders.slice(-1).values().next()
+            .value,
+        ).toBe(client);
         expect(client.hasChatInitialized()).toBe(initialized);
         expect(client.getHistoryService()).toBe(visibleHistory);
         expect(
@@ -602,13 +623,10 @@ describe('profile-chat-preparation', () => {
         expect(agent.getProvider()).toBe('replacement');
         expect(agent.getModel()).toBe('candidate');
       } finally {
-        if (priorIde) ideContext.setIdeContext(priorIde);
-        else ideContext.clearIdeContext();
         boundary.mockRestore();
         await ownerB.dispose();
         await agent.dispose();
         await otherCallerClose();
-        contextReader.mockRestore();
         await builtCallerClose();
       }
     },
@@ -617,7 +635,7 @@ describe('profile-chat-preparation', () => {
 
   it('disposal after candidate chat creation discards the owned candidate and retains the borrowed client', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
-    const agent = await fromConfig(
+    const agent = await captureAgentAdoption(
       builtCallerConfig,
       builtCallerSettings,
       {},
@@ -627,9 +645,9 @@ describe('profile-chat-preparation', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
-    const client = builtCallerOwner.getAgentClient();
+    const client = capturedSessionClient(builtCallerOwner);
     const provider = new FakeProvider(
       fileURLToPath(
         new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
@@ -669,7 +687,9 @@ describe('profile-chat-preparation', () => {
       boundary.mockRestore();
       expect(disposal).toBeDefined();
       await disposal;
-      expect(new Set([client, builtCallerOwner.getAgentClient()]).size).toBe(1);
+      expect(
+        new Set([client, capturedSessionClient(builtCallerOwner)]).size,
+      ).toBe(1);
       expect(client.hasChatInitialized()).toBe(true);
       expect(await client.getHistory()).toStrictEqual(history);
       expect(
@@ -677,7 +697,7 @@ describe('profile-chat-preparation', () => {
           CoreEvent.ModelChanged,
         ),
       ).toStrictEqual(listeners);
-      const nextOwner = await fromConfig(
+      const nextOwner = await captureAgentAdoption(
         builtCallerConfig,
         builtCallerSettings,
         {},
@@ -687,7 +707,7 @@ describe('profile-chat-preparation', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       try {
         const events = [];

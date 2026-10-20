@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +16,7 @@ import { z } from 'zod';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { fromConfig } from '../fromConfig.js';
+
 import type { Agent } from '../agent.js';
 
 import { createAgent } from '../createAgent.js';

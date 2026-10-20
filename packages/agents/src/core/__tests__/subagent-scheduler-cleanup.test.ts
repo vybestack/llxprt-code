@@ -1,17 +1,17 @@
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { describe, expect, it, vi } from 'bun:test';
-import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { ChatSession } from '../chatSession.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { AggregateDisposeError } from '../../api/disposeErrors.js';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
+import { AggregateDisposeError } from '../../api/disposeErrors.js';
+import { ChatSession } from '../chatSession.js';
 
 describe('subagent cleanup error retention', () => {
   it.each([false, true])(
@@ -22,6 +22,7 @@ describe('subagent cleanup error retention', () => {
           config,
           settingsOwner,
           agent,
+          client,
           workspaceTrust,
           workspacePaths,
           instructionReads,
@@ -39,12 +40,12 @@ describe('subagent cleanup error retention', () => {
                 yield* [];
               })(),
             );
-          const orchestrator = new SubagentOrchestrator({
+          const orchestrator = createTestChildOrchestrator({
             credentialAuthority: new CredentialAuthority(),
             workspaceTrust,
             createChildSettings: () => settingsOwner.createChildStore(),
             readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: agent.agentClient.tools,
+            toolRegistry: client.tools,
             workspacePaths,
             instructions: instructionReads,
             foregroundConfig: config,

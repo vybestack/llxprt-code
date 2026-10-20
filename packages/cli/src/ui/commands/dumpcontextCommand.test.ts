@@ -1,3 +1,4 @@
+import type { IContent } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -52,15 +53,8 @@ function createDumpCommand(context: CommandOwnerFixture): SlashCommand {
       readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
       writeMode: (mode) =>
         context.runtimeApi.setSessionSetting('dumpcontext', mode),
-      readHistory: () => {
-        const history = context.services.agent?.agentClient.getHistoryService();
-        return history == null
-          ? null
-          : {
-              messages: history.getAll(),
-              chronology: history.getChronologyTrace(),
-            };
-      },
+      readHistory: () =>
+        context.services.agent?.session.readHistorySnapshot() ?? null,
       readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
       readOutputSettings: () =>
         context.services.config?.getEphemeralSettings() ?? {},
@@ -218,13 +212,10 @@ describe('dumpcontextCommand', () => {
         setSessionSetting: mockSetSessionSetting,
       } as never);
 
-      const mockGetHistoryService = vi.fn().mockReturnValue({
-        getAll: vi.fn().mockReturnValue([
-          { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
-          { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there' }] },
-        ]),
-        getChronologyTrace: vi.fn().mockReturnValue([]),
-      });
+      const history: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there' }] },
+      ];
       const mockGetProviderManager = vi.fn().mockReturnValue({
         getActiveProvider: () => undefined,
         getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
@@ -233,8 +224,11 @@ describe('dumpcontextCommand', () => {
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: mockGetHistoryService,
+            session: {
+              readHistorySnapshot: () => ({
+                messages: history,
+                chronology: [],
+              }),
             },
           },
           config: {} as unknown as CommandOwnerFixture['services']['config'],
@@ -284,8 +278,15 @@ describe('dumpcontextCommand', () => {
 
       const configWithReceiverDependentMethod = {
         getEphemeralSettings: () => ({}),
-        agentClient: {
-          getHistoryService: () => historyService,
+        session: {
+          readHistorySnapshot: () =>
+            (() => {
+              const history = (() => historyService)();
+              return {
+                messages: history.getAll(),
+                chronology: history.getChronologyTrace(),
+              };
+            })(),
         },
       };
 
@@ -325,9 +326,9 @@ describe('dumpcontextCommand', () => {
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue([
+            session: {
+              readHistorySnapshot: () => ({
+                messages: [
                   {
                     speaker: 'human',
                     blocks: [
@@ -363,8 +364,8 @@ describe('dumpcontextCommand', () => {
                       },
                     ],
                   },
-                ]),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+                ],
+                chronology: [],
               }),
             },
           },
@@ -418,16 +419,16 @@ describe('dumpcontextCommand', () => {
         setSessionSetting: vi.fn(),
       } as never);
 
-      const history = [
+      const history: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello alias' }] },
       ];
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue(history),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+            session: {
+              readHistorySnapshot: () => ({
+                messages: history,
+                chronology: [],
               }),
             },
           },
@@ -462,9 +463,9 @@ describe('dumpcontextCommand', () => {
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue([
+            session: {
+              readHistorySnapshot: () => ({
+                messages: [
                   {
                     speaker: 'human',
                     blocks: [
@@ -500,8 +501,8 @@ describe('dumpcontextCommand', () => {
                       },
                     ],
                   },
-                ]),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+                ],
+                chronology: [],
               }),
             },
           },
@@ -587,15 +588,15 @@ describe('dumpcontextCommand', () => {
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue([
+            session: {
+              readHistorySnapshot: () => ({
+                messages: [
                   {
                     speaker: 'human',
                     blocks: [{ type: 'text', text: 'Ping' }],
                   },
-                ]),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+                ],
+                chronology: [],
               }),
             },
           },
@@ -623,7 +624,7 @@ describe('dumpcontextCommand', () => {
         setSessionSetting: vi.fn(),
       } as never);
 
-      const history = [
+      const history: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
       ];
       const config = createMockCommandContext().services.config;
@@ -631,10 +632,10 @@ describe('dumpcontextCommand', () => {
         services: {
           config,
           agent: {
-            agentClient: {
-              getHistoryService: () => ({
-                getAll: () => history,
-                getChronologyTrace: () => [],
+            session: {
+              readHistorySnapshot: () => ({
+                messages: history,
+                chronology: [],
               }),
             },
           },
@@ -687,15 +688,15 @@ describe('dumpcontextCommand', () => {
       const ctxWithoutPlugin = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue([
+            session: {
+              readHistorySnapshot: () => ({
+                messages: [
                   {
                     speaker: 'human',
                     blocks: [{ type: 'text', text: 'Hi' }],
                   },
-                ]),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+                ],
+                chronology: [],
               }),
             },
           },
@@ -722,7 +723,7 @@ describe('dumpcontextCommand', () => {
       });
     });
     it('should keep raw history for unknown providers', async () => {
-      const history = [
+      const history: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
       ];
       (getRuntimeApi as Mock<typeof getRuntimeApi>).mockReturnValue({
@@ -733,10 +734,10 @@ describe('dumpcontextCommand', () => {
       const ctxWithHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue({
-                getAll: vi.fn().mockReturnValue(history),
-                getChronologyTrace: vi.fn().mockReturnValue([]),
+            session: {
+              readHistorySnapshot: () => ({
+                messages: history,
+                chronology: [],
               }),
             },
           },
@@ -808,20 +809,18 @@ describe('dumpcontextCommand', () => {
         setSessionSetting: mockSetSessionSetting,
       } as never);
 
-      const mockGetHistoryService = vi.fn().mockReturnValue({
-        getAll: vi
-          .fn()
-          .mockReturnValue([
-            { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
-          ]),
-        getChronologyTrace: vi.fn().mockReturnValue([]),
-      });
+      const history: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+      ];
 
       const ctxNoProviderManager = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: mockGetHistoryService,
+            session: {
+              readHistorySnapshot: () => ({
+                messages: history,
+                chronology: [],
+              }),
             },
           },
           config: {} as unknown as CommandOwnerFixture['services']['config'],
@@ -851,9 +850,7 @@ describe('dumpcontextCommand', () => {
       const ctxWithNullHistory = createOwnedCommandContext({
         services: {
           agent: {
-            agentClient: {
-              getHistoryService: vi.fn().mockReturnValue(null),
-            },
+            session: { readHistorySnapshot: () => null },
           },
           config: {} as unknown as CommandOwnerFixture['services']['config'],
         },

@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -47,7 +52,6 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -191,7 +195,7 @@ describe('production filesystem roots', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -313,7 +317,7 @@ describe('production filesystem roots', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -414,7 +418,7 @@ describe('production filesystem roots', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -536,7 +540,7 @@ describe('production filesystem roots', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
   useOwnedCredentials();
 
@@ -598,7 +602,7 @@ describe('production filesystem roots', () => {
       undefined,
       firstCallerMcp,
       undefined,
-      firstCallerOwner.getAgentClient(),
+      capturedSessionClient(firstCallerOwner),
     );
     try {
       const originalSibling = await waitForRoots(secondLog, (value) =>

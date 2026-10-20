@@ -1,7 +1,11 @@
-import { createTestMergedSettings } from '../settings.js';
-import * as agents from '@vybestack/llxprt-code-agents';
 import {
-  spyOn,
+  observeActivationPreparation,
+  capturedActivation,
+} from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { createTestMergedSettings } from '../settings.js';
+
+import {
   afterEach,
   afterEach as afterFixtureTest,
   describe,
@@ -9,14 +13,16 @@ import {
   it,
 } from 'bun:test';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
-import {
-  createProviderInspection,
-  SessionProviderReads,
-} from '@vybestack/llxprt-code-agents';
+import { createProviderInspection } from '@vybestack/llxprt-code-agents';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
 import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -175,14 +181,9 @@ describe('CLI provider bootstrap across owners', () => {
           targetDir: item.root,
           model: item.model,
         });
-        const assemble = agents.assembleAgentActivationBootstrap;
-        const observation = spyOn(
-          agents,
-          'assembleAgentActivationBootstrap',
-        ).mockImplementation(async (...args) => {
-          const operation = await assemble(...args);
-          item.foreground.manager = args[2];
-          return operation;
+
+        const observation = observeActivationPreparation((operation, state) => {
+          item.foreground.manager = state.manager;
         });
         await finalizeConfig(
           {
@@ -266,11 +267,19 @@ describe('CLI provider bootstrap across owners', () => {
             assembleToolFormatControl(
               item.settingsOwner.readToolFormat.bind(item.settingsOwner),
               item.settingsOwner.writeToolFormat.bind(item.settingsOwner),
-              () => manager.getActiveProvider(),
+              () => {
+                const provider = manager.getActiveProvider();
+                return provider === undefined
+                  ? undefined
+                  : {
+                      name: provider.name,
+                      toolFormat: provider.getToolFormat?.() ?? null,
+                    };
+              },
               () => {},
               () => {},
             ),
-            new SessionProviderReads(
+            new ProviderReadFixture(
               item.settingsOwner,
               manager,
               () => config.getModel(),
@@ -282,7 +291,7 @@ describe('CLI provider bootstrap across owners', () => {
               },
             },
             () =>
-              new SessionProviderReads(
+              new ProviderReadFixture(
                 item.settingsOwner,
                 manager,
                 () => config.getModel(),
@@ -303,8 +312,12 @@ describe('CLI provider bootstrap across owners', () => {
           'auth-key'
         ],
       ).toBe('second-key');
-      expect(bootstraps[0].foreground.activation?.messageBus).not.toBe(
-        bootstraps[1].foreground.activation?.messageBus,
+      const first = bootstraps[0].foreground.activation;
+      const second = bootstraps[1].foreground.activation;
+      if (first === undefined || second === undefined)
+        throw new Error('Expected both actual activation acquisitions');
+      expect(capturedActivation(first).messageBus).not.toBe(
+        capturedActivation(second).messageBus,
       );
     } finally {
       for (const item of bootstraps) {

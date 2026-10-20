@@ -11,11 +11,8 @@ import { createServer, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import { tmpdir } from 'node:os';
-import {
-  createAgent,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 
 function barrier(): { readonly promise: Promise<void>; release(): void } {
   let release = (): void => {
@@ -58,7 +55,11 @@ function wireRequest(value: unknown): WireRequest {
   };
 }
 
-function sseChunk(captured: WireRequest, callTool: boolean): object {
+function sseChunk(
+  captured: WireRequest,
+  callTool: boolean,
+  responseText: string,
+): object {
   return {
     id: 'same-completion',
     object: 'chat.completion.chunk',
@@ -84,7 +85,7 @@ function sseChunk(captured: WireRequest, callTool: boolean): object {
                 },
               ],
             }
-          : { role: 'assistant', content: 'Transport completed.' },
+          : { role: 'assistant', content: responseText },
         finish_reason: callTool ? 'tool_calls' : 'stop',
       },
     ],
@@ -101,12 +102,25 @@ function respondWithFailure(reply: ServerResponse, status: number): void {
   );
 }
 
+function respondWithCompletion(
+  reply: ServerResponse,
+  captured: WireRequest,
+  callTool: boolean,
+  responseText: string,
+): void {
+  const chunk = sseChunk(captured, callTool, responseText);
+  reply
+    .writeHead(200, { 'content-type': 'text/event-stream' })
+    .end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+}
+
 async function transport(
   holdRequest: number,
   failFirst = false,
   toolFirst = false,
   failRequest = 0,
   failStatus = 413,
+  responseText = 'Transport completed.',
 ): Promise<{
   readonly url: string;
   readonly entered: Promise<void>;
@@ -145,10 +159,12 @@ async function transport(
             .end(JSON.stringify({ error: { message: 'Unavailable member' } }));
           return;
         }
-        const chunk = sseChunk(captured, toolFirst && requests.length === 1);
-        reply
-          .writeHead(200, { 'content-type': 'text/event-stream' })
-          .end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        respondWithCompletion(
+          reply,
+          captured,
+          toolFirst && requests.length === 1,
+          responseText,
+        );
       })
       .catch((cause: unknown) => {
         reply.destroy(new Error('Invalid loopback chat request', { cause }));
@@ -259,6 +275,7 @@ export async function withOwners(
   failRequest = 0,
   continueOnFailedApiCall = failRequest > 0,
   failStatus = 413,
+  responseText = 'Transport completed.',
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'turn-capture-'));
   const environment = Object.fromEntries(
@@ -275,6 +292,7 @@ export async function withOwners(
     toolFirst,
     failRequest,
     failStatus,
+    responseText,
   );
   const endpointB = await transport(0);
   let agents: readonly Agent[] = [];

@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  IdeClient,
-  IdeContext,
-} from '@vybestack/llxprt-code-ide-integration';
+import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
 import type { WorkspaceIdeConnection } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
 import type { IdeInfo, IdeStatus, Unsubscribe } from './agent.js';
 
@@ -32,7 +29,6 @@ export interface AgentIdeControl {
   getIdeTrust(): boolean | undefined;
   setTrustedFolderLive(trusted: boolean): Promise<void>;
   whenTrustTransitionSettled(): Promise<void>;
-  getIdeClient(): IdeClient | undefined;
   getIdeMode(): boolean;
   setIdeMode(enabled: boolean): void;
   setIdeClientConnected(): Promise<void>;

@@ -1,3 +1,9 @@
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { bindTurnModel } from '../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
+import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
+import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import {
   useConsumerPromptDirectory,
   acquireConsumerPolicy,
@@ -49,7 +55,6 @@ import {
 import { withFixtureAgent, drain } from './helpers/agentHarness.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import {
-  fromConfig,
   createAgenticLoop,
   mapLoopStream,
   type AgentEvent,
@@ -126,7 +131,7 @@ async function driveReferenceLoop(
   config: Config,
   settingsOwner: SessionSettingsOwner,
   settingsService: SettingsService,
-  agentClient: Agent['agentClient'],
+  agentClient: ReturnType<typeof capturedSessionClient>,
   messageBus: MessageBus,
   input: string,
 ): Promise<readonly AgentEvent[]> {
@@ -135,18 +140,29 @@ async function driveReferenceLoop(
   });
   const taskLaunchOwner = new TaskLaunchOwner(new AsyncTaskManager());
   const loop = createAgenticLoop({
-    taskLaunchOwner,
-    telemetry: settingsOwner.telemetry,
-    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-    getToolGovernance: () =>
-      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     readShellJobSettings: () => resolveShellJobSettings(settingsService),
-    agentClient,
     config,
-    messageBus,
     interactiveMode: false,
-    approvalHandler,
     displayCallbacks: {},
+    ...bindTurnModel(agentClient),
+    taskLaunchOwner,
+    acquireTools: (decorateScheduler) =>
+      new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          false,
+          agentClient.tools,
+          decorateScheduler((options) => new CoreToolScheduler(options)),
+          () => settingsOwner.readToolExecutionPolicy(),
+          () =>
+            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+          undefined,
+          settingsOwner.telemetry,
+        ),
+      ),
   });
   const controller = new AbortController();
   const loopEvents = loop.run(input, controller.signal);
@@ -333,7 +349,7 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -352,7 +368,7 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         undefined,
         undefined,
@@ -538,7 +554,7 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
           );
           requireCallerActivation(activation);
           await builtRefCallerOwner.initializeTools();
-          await builtRefCallerOwner.getAgentClient().startChat();
+          await capturedSessionClient(builtRefCallerOwner).startChat();
         } catch (primary) {
           await cleanupAfterFailure(primary, builtRefCallerClose);
         }
@@ -548,7 +564,7 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
             builtRefCallerConfig,
             builtRefCallerSettingsOwner,
             builtRefCallerSettings,
-            builtRefCallerOwner.getAgentClient(),
+            capturedSessionClient(builtRefCallerOwner),
             builtRefCallerPolicy.session.messageBus,
             'hello',
           );

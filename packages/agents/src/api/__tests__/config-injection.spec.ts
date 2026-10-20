@@ -1,3 +1,5 @@
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import {
   useConsumerPromptDirectory,
   acquireConsumerRelease,
@@ -42,11 +44,7 @@ import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import {
-  fromConfig,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   drain,
@@ -251,7 +249,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('T1 fromConfig adopts the external Config: internalConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
@@ -270,7 +268,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -327,7 +325,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         // The agent's provider/model reflect the ADOPTED Config's active runtime.
@@ -362,7 +360,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       await agent.dispose();
 
@@ -416,7 +414,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           undefined,
           callerMcp,
           undefined,
-          callerOwner.getAgentClient(),
+          capturedSessionClient(callerOwner),
         );
         try {
           return (
@@ -449,7 +447,7 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           try {
             return internalConfig(agent) === callerConfig;

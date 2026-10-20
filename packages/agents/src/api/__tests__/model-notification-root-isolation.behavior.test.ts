@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -58,7 +64,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
 import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -147,7 +152,7 @@ describe('session-owned model notifications', () => {
       aCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    aCallerOwner = await SessionClientOwner.create(
+    aCallerOwner = await createCapturedSessionOwner(
       aCallerConfig,
       assembleTaskSchemaPolicy(aCallerSettings),
       aCallerManager,
@@ -260,7 +265,7 @@ describe('session-owned model notifications', () => {
     );
     requireCallerActivation(activation);
     await aCallerOwner.initializeTools();
-    await aCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(aCallerOwner).startChat();
   }
 
   let aProfileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
@@ -377,7 +382,7 @@ describe('session-owned model notifications', () => {
       bCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    bCallerOwner = await SessionClientOwner.create(
+    bCallerOwner = await createCapturedSessionOwner(
       bCallerConfig,
       assembleTaskSchemaPolicy(bCallerSettings),
       bCallerManager,
@@ -490,7 +495,7 @@ describe('session-owned model notifications', () => {
     );
     requireCallerActivation(activation);
     await bCallerOwner.initializeTools();
-    await bCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(bCallerOwner).startChat();
   }
 
   let bProfileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
@@ -551,9 +556,9 @@ describe('session-owned model notifications', () => {
   });
 
   it('changes A without invalidating B chat, history or admitted model selection', async () => {
-    await aCallerOwner.getAgentClient().startChat();
-    await bCallerOwner.getAgentClient().startChat();
-    const bClient = bCallerOwner.getAgentClient();
+    await capturedSessionClient(aCallerOwner).startChat();
+    await capturedSessionClient(bCallerOwner).startChat();
+    const bClient = capturedSessionClient(bCallerOwner);
     const bChat = bClient.getChat();
     const bHistory = bClient.getHistory();
     const bModel = bCallerSettingsOwner.readSelectedModel();
@@ -622,8 +627,10 @@ describe('session-owned model notifications', () => {
       bCallerPolicy.session.messageBus,
       bCallerMcp,
     );
-    await agentB.agentClient.startChat();
-    const chat = agentB.agentClient.getChat();
+    await fixtureAgentResources(agentB).publishedClient(agentB).startChat();
+    const chat = fixtureAgentResources(agentB)
+      .publishedClient(agentB)
+      .getChat();
     const model = bCallerSettingsOwner.readSelectedModel();
     const completion = (async () => {
       const events = [];
@@ -636,7 +643,9 @@ describe('session-owned model notifications', () => {
     try {
       await entered.promise;
       await aProfileSwitch('anthropic');
-      expect(agentB.agentClient.getChat()).toBe(chat);
+      expect(
+        fixtureAgentResources(agentB).publishedClient(agentB).getChat(),
+      ).toBe(chat);
       releaseResponse.resolve();
       const events = await completion;
       expect(events.filter((event) => event.type === 'error')).toStrictEqual(
@@ -644,8 +653,14 @@ describe('session-owned model notifications', () => {
       );
       expect(events.some((event) => event.type === 'done')).toBe(true);
       expect(admittedModels).toStrictEqual([model]);
-      expect(agentB.agentClient.hasChatInitialized()).toBe(true);
-      expect(agentB.agentClient.getChat()).toBe(chat);
+      expect(
+        fixtureAgentResources(agentB)
+          .publishedClient(agentB)
+          .hasChatInitialized(),
+      ).toBe(true);
+      expect(
+        fixtureAgentResources(agentB).publishedClient(agentB).getChat(),
+      ).toBe(chat);
       expect(
         (await agentB.getHistory()).some(
           (message) => message.speaker === 'human',

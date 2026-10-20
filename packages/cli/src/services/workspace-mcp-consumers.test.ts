@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +30,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
+
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -38,8 +43,8 @@ import { assembleProviderSwitch } from '../../../agents/src/api/providerSwitchAs
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 import { AgentConfig } from '../../../agents/src/api/config-types.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   startCatalogFixture,
   waitForFixtureFile,
@@ -188,7 +193,7 @@ describe('production CLI workspace MCP consumers', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -251,7 +256,7 @@ describe('production CLI workspace MCP consumers', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -267,7 +272,7 @@ describe('production CLI workspace MCP consumers', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     workspaceDirectory = directory;
     workspaceAgent = agent;

@@ -1,3 +1,9 @@
+import { captureAgentAdoption as fromConfig } from './agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './session-client-capture.js';
+import { fixtureAgentResources } from './agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,7 +32,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { fileURLToPath } from 'node:url';
@@ -40,7 +46,6 @@ import { assembleModelSelection } from '../../model-selection.js';
 import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
 
 /**
  * @license
@@ -89,15 +94,6 @@ function asRecord(v: unknown): RecordLike | null {
   return typeof v === 'object' && v !== null ? (v as RecordLike) : null;
 }
 
-/**
- * Narrows the opaque public `Agent` to its AgentImpl internals WITHOUT
- * exporting a cast. This narrowing lives ONLY in this helper; specs receive
- * {@link Agent} and pass it to {@link captureProbe}.
- */
-function agentInternals(agent: Agent): RecordLike {
-  return agent as unknown as RecordLike;
-}
-
 // ─── Probe: the captured resource-reference snapshot ────────────────────────
 
 /**
@@ -128,41 +124,17 @@ export interface DisposalProbe {
    */
   readonly ownership: unknown;
 }
-
-/**
- * Captures the disposal probe snapshot from a built agent. Call BEFORE
- * `agent.dispose()`. Every field is read via a guarded structural probe of the
- * AgentImpl internals; absent fields yield `null`. The captured references are
- * what the post-dispose flag reads observe.
- */
 export function captureProbe(agent: Agent): DisposalProbe {
-  const impl = agentInternals(agent);
+  const captured = fixtureAgentResources(agent);
+  const handles = captured.ownership.injectedSchedulerHandles;
+  const injected = handles[0];
   return {
-    agentClient: readField(impl, 'agentClient'),
-    scheduler:
-      readField(impl, 'injectedFactoryScheduler') ??
-      readField(impl, 'scheduler'),
-    confirmationCoordinator:
-      readField(impl, 'injectedFactoryCoordinator') ??
-      readField(impl, 'confirmationCoordinator'),
-    messageBus: readField(impl, 'messageBus') ?? readField(impl, 'bus'),
-    // dispose.md §Interface Contracts: `dispose(ownership: OwnershipRecord)`.
-    // The ownership record is recorded at createAgent line 141 (per dispose.md)
-    // and held by the facade. P24's dispose() receives it and sets per-resource
-    // teardown completion markers for the NET-NEW steps. Captured pre-dispose so
-    // the post-dispose reads observe the markers set on the SAME record.
-    ownership: readField(impl, 'ownership'),
+    agentClient: captured.publishedClient(agent),
+    scheduler: injected,
+    confirmationCoordinator: injected,
+    messageBus: captured.messageBus,
+    ownership: captured.ownership,
   };
-}
-
-function readField(rec: RecordLike, key: string): unknown {
-  if (key in rec) {
-    const v = rec[key];
-    if (v !== undefined && v !== null) {
-      return v;
-    }
-  }
-  return null;
 }
 
 // ─── Disposed-flag readers (capture-before-dispose) ─────────────────────────
@@ -193,6 +165,8 @@ export function agentClientDisposed(probe: DisposalProbe): boolean {
  * `disposed = true` on the captured handle.
  */
 export function schedulerDisposed(probe: DisposalProbe): boolean {
+  if (probe.scheduler === undefined)
+    throw new Error('No scheduler reached actual injected acquisition');
   return flagOf(probe.scheduler);
 }
 
@@ -201,6 +175,8 @@ export function schedulerDisposed(probe: DisposalProbe): boolean {
  * calls `injectedFactoryCoordinator.dispose()`.
  */
 export function confirmationCoordinatorDisposed(probe: DisposalProbe): boolean {
+  if (probe.confirmationCoordinator === undefined)
+    throw new Error('No coordinator reached actual injected acquisition');
   return flagOf(probe.confirmationCoordinator);
 }
 
@@ -477,7 +453,7 @@ class ExtensionDisposalOwner {
         undefined,
         this.mcp,
         undefined,
-        this.owner.getAgentClient(),
+        capturedSessionClient(this.owner),
       );
     } catch (primary) {
       await cleanupAfterFailure(primary, () =>
@@ -571,7 +547,7 @@ class ExtensionDisposalOwner {
       1024 * 1024 * 1024,
     );
     this.rollbackSteps.push(() => this.media.dispose());
-    this.owner = await SessionClientOwner.create(
+    this.owner = await createCapturedSessionOwner(
       this.config,
       assembleTaskSchemaPolicy(this.settings),
       this.manager,
@@ -621,7 +597,7 @@ class ExtensionDisposalOwner {
     );
     requireCallerActivation(activation);
     await this.owner.initializeTools();
-    await this.owner.getAgentClient().startChat();
+    await capturedSessionClient(this.owner).startChat();
   }
   private closing: Promise<void> | undefined;
   close(): Promise<void> {

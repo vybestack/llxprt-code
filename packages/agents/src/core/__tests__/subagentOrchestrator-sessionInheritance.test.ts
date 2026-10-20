@@ -1,5 +1,6 @@
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,16 +26,15 @@ const fixturePaths = installTestWorkspacePaths({
  * the live policy and provider invocation through the loader boundary.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
 import type { SubAgentScope } from '../subagent.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
 
 const subagentConfig: SubagentConfig = {
@@ -78,6 +78,7 @@ async function launchSubagent(
   const scope = {
     runtimeContext: createRuntimeBundle('sess').runtimeContext,
     getAgentId: () => 'helper-1',
+    dispose: async () => {},
   } as unknown as SubAgentScope;
   const scopeFactory = vi
     .fn<typeof SubAgentScope.create>()
@@ -89,7 +90,7 @@ async function launchSubagent(
     foregroundSettings,
   );
   const isolatedSettings = foregroundSettings1.settingsOwner.createChildStore();
-  const orchestrator = new SubagentOrchestrator({
+  const orchestrator = createTestChildOrchestrator({
     credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
     createChildSettings: () => isolatedSettings,
@@ -311,6 +312,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
     const lbScope = {
       runtimeContext: createRuntimeBundle('lb').runtimeContext,
       getAgentId: () => 'lb-helper-1',
+      dispose: async () => {},
     } as unknown as SubAgentScope;
     const scopeFactory = vi
       .fn<typeof SubAgentScope.create>()
@@ -324,7 +326,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
       );
       const isolatedSettings =
         foregroundSettings2.settingsOwner.createChildStore();
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
         credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings2.workspaceTrust,
         createChildSettings: () => isolatedSettings,

@@ -1,5 +1,11 @@
+import type { ToolInfo, AgentToolHandle } from '../api/agent.js';
+import { wrapToolHandle } from '../api/control/toolControl.js';
+import {
+  buildToolInfos,
+  projectRegistryTool,
+  readOptionalStringProp,
+} from '../api/agentBootstrap.js';
 import { summarizeToolOutput } from '@vybestack/llxprt-code-core/utils/summarizer.js';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -8,55 +14,52 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  */
 
 import { CoreShellToolHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreShellToolHostAdapter.js';
-import { ShellTool } from '@vybestack/llxprt-code-tools';
 import type { IShellToolHost } from '@vybestack/llxprt-code-tools';
+import { bindChildToolRegistry } from './childToolAssembly.js';
+import type { ChildToolDisplay } from './childToolDisplay.js';
+import type { TaskLaunchOwner } from './task-launch-owner.js';
+import type { ShellJobOwner } from './shell-job-owner.js';
+import { ShellTool } from '@vybestack/llxprt-code-tools';
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
 
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import type {
   ProfileDefinitionReads,
   SubagentDefinitionReads,
 } from '@vybestack/llxprt-code-core';
-import type {
-  TaskExecutionPolicy,
-  SubagentRunPolicy,
-} from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
-import type { RegistryPolicy } from '@vybestack/llxprt-code-tools';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import {
-  ToolRegistry,
-  type AnyDeclarativeTool,
-  type ToolSelection,
-  type ToolPublication,
-} from '@vybestack/llxprt-code-tools';
-import {
-  isToolBlocked,
-  applyTaskSchemaPolicy,
-} from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import { ToolDispatchAdmission } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type {
+  WorkspaceIgnoreOperations,
+  WorkspacePathOperations,
+  WorkspaceScanOperations,
+  WorkspaceTextOperations,
+} from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { WorkspaceIdePort } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core/services/workspace-trust-ports.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
+import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 import {
   DiscoveredMCPTool,
   type McpApprovalPolicy,
 } from '@vybestack/llxprt-code-mcp';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 import type {
-  WorkspacePathOperations,
-  WorkspaceTextOperations,
-  WorkspaceIgnoreOperations,
-  WorkspaceScanOperations,
-} from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { WorkspaceIdePort } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
-import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core/services/workspace-trust-ports.js';
-import type { ILspService } from '@vybestack/llxprt-code-tools';
+  ILspService,
+  RegistryPolicy,
+  ToolExecutionPolicy,
+} from '@vybestack/llxprt-code-tools';
+import {
+  ToolRegistry,
+  applyTaskSchemaPolicy,
+  isToolBlocked,
+  type AnyDeclarativeTool,
+  type ToolPublication,
+  type ToolSelection,
+} from '@vybestack/llxprt-code-tools';
 
 type ConfigurationEntry = {
   readonly displayName: string;
@@ -74,6 +77,50 @@ export class SessionToolCatalogOwner {
   private configuration: readonly ConfigurationEntry[] = [];
   private sessionApproval: McpApprovalPolicy | undefined;
   private sessionBus: CoreMessageBusAdapter | undefined;
+  listToolInfos(): readonly ToolInfo[] {
+    const registry = this.selection;
+    const allTools = registry.getAllTools().map((t) =>
+      projectRegistryTool({
+        name: t.name,
+        displayName: t.displayName,
+        description: t.description,
+        schema: t.schema,
+        serverName: readOptionalStringProp(t, 'serverName'),
+        serverToolName: readOptionalStringProp(t, 'serverToolName'),
+      }),
+    );
+    const enabledNames = new Set(registry.getEnabledTools().map((t) => t.name));
+    return Object.freeze(buildToolInfos(allTools, enabledNames));
+  }
+  getToolHandle(name: string): AgentToolHandle | undefined {
+    const tool = this.acquireChildTools().getTool(name);
+    return tool === undefined ? undefined : wrapToolHandle(tool);
+  }
+  private childTools: ToolSelection | undefined;
+
+  bindChildExecution(
+    display: ChildToolDisplay,
+    tasks: TaskLaunchOwner,
+    shell: ShellJobOwner,
+  ): void {
+    this.admission.assertOpen();
+    if (this.childTools !== undefined)
+      throw new Error('Child execution ownership is already bound');
+    this.childTools = bindChildToolRegistry(
+      this.selection,
+      display,
+      tasks,
+      shell,
+    );
+  }
+
+  acquireChildTools(): ToolSelection {
+    this.admission.assertOpen();
+    if (this.childTools === undefined)
+      throw new Error('Child launch requires its admitted execution owner');
+    return this.childTools;
+  }
+
   readonly selection: ToolSelection = {
     getTool: (name, context) => {
       const tool = this.resolve(name, context);
@@ -161,15 +208,9 @@ export class SessionToolCatalogOwner {
     registration: TaskToolRegistration,
     summarize: Parameters<typeof createToolRegistry>[9],
     approval: McpApprovalPolicy,
-    instructions: InstructionReadOperations,
-    createChildSettings: () => SettingsService,
-    readTaskPolicy: () => TaskExecutionPolicy,
-    readRunPolicy: () => SubagentRunPolicy,
     profiles: ProfileDefinitionReads,
     subagents: SubagentDefinitionReads,
-    hookOwner?: SessionHookOwner,
     telemetry?: RootTelemetry,
-    requestInteractiveAuth?: InteractiveAuthPromptOperation,
   ): Promise<void> {
     this.admission.assertOpen();
     this.workspaceStopped = isWorkspaceStopped;
@@ -187,17 +228,7 @@ export class SessionToolCatalogOwner {
       scans,
       summarize,
       diagnostics,
-      this.bindTaskRegistration(
-        registration,
-        instructions,
-        createChildSettings,
-        readTaskPolicy,
-        readRunPolicy,
-        hookOwner,
-        trust,
-        telemetry,
-        requestInteractiveAuth,
-      ),
+      registration,
       readMcpInstructions,
       false,
       profiles,
@@ -240,48 +271,6 @@ export class SessionToolCatalogOwner {
         bus,
       ),
     );
-  }
-
-  private bindTaskRegistration(
-    registration: TaskToolRegistration,
-    instructions: InstructionReadOperations,
-    createChildSettings: () => SettingsService,
-    readTaskPolicy: () => TaskExecutionPolicy,
-    readRunPolicy: () => SubagentRunPolicy,
-    hookOwner: SessionHookOwner | undefined,
-    trust: WorkspaceTrustControlPort,
-    telemetry: RootTelemetry | undefined,
-    requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
-  ): TaskToolRegistration {
-    return {
-      ...registration,
-      create: (
-        config,
-        profiles,
-        subagents,
-        messageBus,
-        paths,
-        readMcpInstructions,
-      ) =>
-        registration.create(
-          config,
-          profiles,
-          subagents,
-          messageBus,
-          paths,
-          readMcpInstructions,
-          instructions,
-          createChildSettings,
-          readTaskPolicy,
-          readRunPolicy,
-          () => this.readGovernance(),
-          this.selection,
-          hookOwner,
-          trust,
-          telemetry,
-          requestInteractiveAuth,
-        ),
-    };
   }
 
   private publishRegistry(

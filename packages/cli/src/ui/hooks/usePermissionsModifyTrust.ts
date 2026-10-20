@@ -26,14 +26,9 @@ export type PermissionsTrustRuntime = Pick<
   CliUiRuntime,
   | 'getWorkingDir'
   | 'getFolderTrust'
-  | 'getIdeClient'
   | 'isTrustedFolder'
   | 'setTrustedFolderLive'
 >;
-
-const emptyIdeState: Pick<PermissionsTrustRuntime, 'getIdeClient'> = {
-  getIdeClient: () => undefined,
-};
 
 function useMountedRef() {
   const mountedRef = useRef(true);
@@ -374,10 +369,15 @@ function useDerivedTrustState(
   trustedFolders: LoadedTrustedFolders,
   targetPath: string,
   isTargetCwd: boolean,
+  readIdeWorkspaceTrust: () => boolean | undefined,
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void,
 ): DerivedTrustState {
   const winningRule = trustedFolders.resolvePathTrust(targetPath);
   const { isIdeTrusted: workspaceIdeTrust } = useIdeTrustListener(
-    config ?? emptyIdeState,
+    readIdeWorkspaceTrust,
+    subscribeIdeWorkspaceTrust,
   );
   const isIdeTrusted = isTargetCwd ? workspaceIdeTrust : undefined;
   const currentEffectiveTrust = isTargetCwd
@@ -462,14 +462,25 @@ function useTrustSessionState(
  * from the working directory.
  */
 export function usePermissionsModifyTrust(
-  config?: PermissionsTrustRuntime,
+  config: PermissionsTrustRuntime | undefined,
+  readIdeWorkspaceTrust: () => boolean | undefined,
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void,
 ): UsePermissionsModifyTrustReturn {
   const normalizedCwd = path.resolve(config?.getWorkingDir() ?? process.cwd());
   const trustedFolders = useMemo(() => loadTrustedFolders(), []);
   const { targetPath, setTargetPath, isTargetCwd } =
     useTargetPath(normalizedCwd);
   const { winningRule, currentEffectiveTrust, isIdeTrusted, isParentTrusted } =
-    useDerivedTrustState(config, trustedFolders, targetPath, isTargetCwd);
+    useDerivedTrustState(
+      config,
+      trustedFolders,
+      targetPath,
+      isTargetCwd,
+      readIdeWorkspaceTrust,
+      subscribeIdeWorkspaceTrust,
+    );
   const {
     pendingTrustLevel,
     setPendingTrustLevel,

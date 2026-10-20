@@ -62,6 +62,26 @@ export function rethrowAfterClientCleanup(
  */
 export class OwnedClientLedger {
   private readonly scopes = new Map<AgentClientContract, string>();
+  private readonly uses = new Map<AgentClientContract, Set<Promise<void>>>();
+
+  retain(client: AgentClientContract): () => void {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const accepted = this.uses.get(client) ?? new Set<Promise<void>>();
+    accepted.add(pending);
+    this.uses.set(client, accepted);
+    return () => {
+      accepted.delete(pending);
+      if (accepted.size === 0) this.uses.delete(client);
+      release();
+    };
+  }
+
+  async join(client: AgentClientContract): Promise<void> {
+    await Promise.all(this.uses.get(client) ?? []);
+  }
 
   constructor(
     private readonly releaseScope: (scope: string) => Promise<void>,
@@ -83,6 +103,7 @@ export class OwnedClientLedger {
   }
 
   async dispose(client: AgentClientContract): Promise<void> {
+    await this.join(client);
     const scope = this.scopes.get(client);
     if (scope === undefined) return;
     await disposeClientAndFiles(client, () => this.release(client, scope));
@@ -170,5 +191,17 @@ export class SessionClientWorkQueue {
   }
   join(): Promise<void> {
     return this.tail;
+  }
+}
+
+export async function initializeClientBinding(
+  bind: () => void,
+  dispose: () => Promise<void>,
+  release: () => Promise<void>,
+): Promise<void> {
+  try {
+    bind();
+  } catch (primary) {
+    await rethrowAfterClientCleanup(primary, dispose, release);
   }
 }

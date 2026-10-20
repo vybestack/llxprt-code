@@ -1,60 +1,67 @@
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import {
   Config,
   ConfigParameters,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-  createTaskRegistration,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { SessionToolCatalogOwner } from '../../session/session-tool-catalog-owner.js';
-import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   CheckAsyncTasksTool,
   ReadFileTool,
 } from '@vybestack/llxprt-code-tools';
-import { fromConfig } from '../fromConfig.js';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { SessionToolCatalogOwner } from '../../session/session-tool-catalog-owner.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
+import type { Agent } from '../agent.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import {
+  AgentRuntimeFactoryBindings,
+  createAgentRuntimeFactoryBindings,
+  createTaskRegistration,
+} from '../runtimeFactories.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -157,7 +164,7 @@ describe('session executable tool ownership', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -272,7 +279,7 @@ describe('session executable tool ownership', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   let directory: string;
@@ -293,8 +300,16 @@ describe('session executable tool ownership', () => {
       () => rm(directory, { recursive: true, force: true }),
     ]);
   }
-  function adopt() {
-    return fromConfig(
+  const adoptedClients = new WeakMap<Agent, AgentClientContract>();
+  function capturedAdoptedClient(agent: Agent): AgentClientContract {
+    const client = adoptedClients.get(agent);
+    if (client === undefined)
+      throw new Error('Missing actual adopted client capture');
+    return client;
+  }
+  async function adopt() {
+    const capture = new AgentResourceCapture();
+    const agent = await fromConfig(
       callerConfig,
       callerSettings,
       {},
@@ -303,7 +318,18 @@ describe('session executable tool ownership', () => {
       undefined,
       undefined,
       callerMcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      capture.factories(undefined),
     );
+    const client = capture.clients.slice(-1).values().next().value;
+    if (client === undefined)
+      throw new Error('Adoption did not acquire a client');
+    adoptedClients.set(agent, client);
+    return agent;
   }
 
   it('publishes executable tooling from independent workspace ports', async () => {
@@ -335,16 +361,18 @@ describe('session executable tool ownership', () => {
         mcpRuntime.toolSelection,
         mcpRuntime.readInstructions,
         policy.messageBus,
-        createTaskRegistration(),
+        createTaskRegistration(config, {
+          messageBus: policy.messageBus,
+          readTaskPolicy: () => settingsOwner.readTaskPolicy(),
+          readGovernance: () => settingsOwner.readToolGovernance([]),
+          launchChild: async () => {
+            throw new Error('Reader-only scenario');
+          },
+        }),
         undefined,
         approval,
-        emptyInstructionReads,
-        () => settingsOwner.createChildStore(),
-        () => settingsOwner.readTaskPolicy(),
-        () => settingsOwner.readSubagentRunPolicy(),
         mcpRuntime.profileDefinitions,
         mcpRuntime.subagentDefinitions,
-        undefined,
         settingsOwner.telemetry,
       );
       const read = catalog.selection.getTool('read_file');
@@ -502,7 +530,7 @@ describe('session executable tool ownership', () => {
     await openWorkspace();
     const agent = await adopt();
     const signal = new AbortController().signal;
-    const tool = agent.agentClient.tools.getTool('write_file');
+    const tool = capturedAdoptedClient(agent).tools.getTool('write_file');
     if (!tool) throw new Error('Missing executable writer');
     const file = join(directory, 'validated-retained.txt');
     try {
@@ -539,7 +567,8 @@ describe('session executable tool ownership', () => {
   it('denies direct retained asynchronous-status dispatch after session closure', async () => {
     await openWorkspace();
     const agent = await adopt();
-    const status = agent.agentClient.tools.getTool('check_async_tasks');
+    const status =
+      capturedAdoptedClient(agent).tools.getTool('check_async_tasks');
     if (!(status instanceof CheckAsyncTasksTool))
       throw new Error('Missing status tool');
     try {
@@ -576,7 +605,7 @@ describe('session executable tool ownership', () => {
     await openWorkspace();
     const agent = await adopt();
     try {
-      const tool = agent.agentClient.tools.getTool('read_file');
+      const tool = capturedAdoptedClient(agent).tools.getTool('read_file');
       if (!(tool instanceof ReadFileTool)) throw new Error('Missing reader');
       const cancelled = new AbortController();
       const failure = new Error('Caller cancelled physical read');

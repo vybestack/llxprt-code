@@ -69,7 +69,6 @@ export function createSessionDispatch(
       suppressStartupWelcome,
     } = options;
     const input = config.getQuestion();
-    const sessionMessageBus = agent.getMessageBus();
     await executeSessionDispatch(
       input,
       () =>
@@ -89,7 +88,6 @@ export function createSessionDispatch(
             runtimeSettings,
             skillOperations,
             restartExtension,
-            runtimeMessageBus: sessionMessageBus,
             resumedHistory: resumedHistory ?? undefined,
             suppressStartupWelcome,
           },
@@ -121,7 +119,7 @@ async function validateRun(
     config,
     settings,
     runExitCleanup,
-    agent.providerManager,
+    agent.hasActiveProvider,
     (key, value) => agent.setEphemeralSetting(key, value),
   );
   return {

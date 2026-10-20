@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -47,7 +52,6 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -164,7 +168,7 @@ describe('failed production skill publication', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -284,7 +288,7 @@ describe('failed production skill publication', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('does not grant newly discovered resource access after model publication rejects', async () => {
@@ -311,9 +315,9 @@ describe('failed production skill publication', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
-    const publish = spyOn(builtCallerOwner.getAgentClient(), 'setTools');
+    const publish = spyOn(capturedSessionClient(builtCallerOwner), 'setTools');
     publish.mockRejectedValueOnce(new Error('Model publication rejected'));
     try {
       builtCallerConfig.setExtensions([

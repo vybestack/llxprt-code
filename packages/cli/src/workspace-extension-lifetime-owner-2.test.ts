@@ -1,3 +1,12 @@
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,7 +35,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import type { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -42,7 +51,7 @@ import {
   WorkspaceDefinitionOwner,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { loadExtension } from './config/extension.js';
 
 /**
@@ -55,8 +64,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
-function visibleSkills(agent: Pick<Agent, 'agentClient'>): string[] {
-  const chat: unknown = agent.agentClient.getChat();
+function visibleSkills(client: AgentClientContract): string[] {
+  const chat: unknown = client.getChat();
   if (!isRecord(chat) || !isRecord(chat.generationConfig))
     throw new Error('Missing real chat declarations');
   const tools = chat.generationConfig.tools;
@@ -295,7 +304,7 @@ describe('filesystem workspace extension ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -358,7 +367,7 @@ describe('filesystem workspace extension ownership', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -373,7 +382,7 @@ describe('filesystem workspace extension ownership', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       for await (const event of agent.stream('hello')) void event;
@@ -381,7 +390,7 @@ describe('filesystem workspace extension ownership', () => {
       const adopted = builtCallerMcp.extensionOperations.list()[0];
       extensionMcp = builtCallerMcp;
 
-      extensionClient = builtCallerOwner.getAgentClient();
+      extensionClient = capturedSessionClient(builtCallerOwner);
       initial = adopted;
       await run();
     } finally {
@@ -397,9 +406,11 @@ describe('filesystem workspace extension ownership', () => {
       const beta = await filesystemExtension(workspace, 'beta');
       const entered = gate();
       const release = gate();
-      const publish = agent.agentClient.setTools.bind(agent.agentClient);
+      const publish = fixtureAgentResources(agent)
+        .publishedClient(agent)
+        .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
       const fault = vi
-        .spyOn(agent.agentClient, 'setTools')
+        .spyOn(fixtureAgentResources(agent).publishedClient(agent), 'setTools')
         .mockImplementationOnce(async () => {
           await publish();
           entered.release();
@@ -425,9 +436,7 @@ describe('filesystem workspace extension ownership', () => {
         expect(
           await definitionOwner.subagentReads.listSubagents(),
         ).toStrictEqual([]);
-        expect(visibleSkills({ agentClient: extensionClient })).toStrictEqual(
-          [],
-        );
+        expect(visibleSkills(extensionClient)).toStrictEqual([]);
       } finally {
         release.release();
         fault.mockRestore();

@@ -1,3 +1,4 @@
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -145,7 +146,10 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
       .sessionStart?.(SessionStartSource.Startup);
     const control = new HookControl({
       hookOperations: system,
-      messageBus: bus,
+      observeRequests: (listener) =>
+        bus.subscribe(MessageBusType.HOOK_EXECUTION_REQUEST, listener),
+      observeResponses: (listener) =>
+        bus.subscribe(MessageBusType.HOOK_EXECUTION_RESPONSE, listener),
       sessionId: () => 'hooks-admin-test',
       cwd: () => '/tmp',
     });

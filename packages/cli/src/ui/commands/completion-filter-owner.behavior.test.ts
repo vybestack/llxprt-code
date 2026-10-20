@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -110,6 +113,6 @@ describe('registered completion filtering owner', () => {
     expect(fuzzyResult.suggestions.map((entry) => entry.value)).toContain(
       'production',
     );
-    expect(await sibling.agentClient.getHistory()).toStrictEqual([]);
+    expect(await commandOwnerClient(sibling).getHistory()).toStrictEqual([]);
   });
 });

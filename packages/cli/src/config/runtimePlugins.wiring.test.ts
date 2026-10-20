@@ -1,5 +1,6 @@
-import * as agents from '@vybestack/llxprt-code-agents';
-import { spyOn, afterEach, describe, expect, it } from 'bun:test';
+import { observeActivationPreparation } from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+import { afterEach, describe, expect, it } from 'bun:test';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   prepareAgentPreflight,
@@ -37,6 +38,26 @@ import { join } from 'node:path';
  * helper, and ProviderManager are all real.
  */
 
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/**
+ * Behavioral coverage for issue #2758: an installed plugin package is
+ * discovered, loaded once, and the resulting registry actually reaches
+ * provider composition through the same `prepareAgentPreflight` seam the
+ * CLI uses for its pre-Config acquisition and post-Config attachment.
+ *
+ * Without this, the `providerContributions` threading through
+ * cliSessionBootstrap -> loadCliConfig -> profileBootstrap /
+ * postConfigRuntime -> prepareAgentPreflight could be deleted and every
+ * other runtime-plugin test would still pass.
+ *
+ * The only stubbed boundaries are the filesystem (discovery) and module
+ * resolution (loading). The discovery logic, loader, registry, assembly
+ * helper, and ProviderManager are all real.
+ */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   discoverRuntimePluginPackages,
@@ -182,14 +203,9 @@ describe('runtime plugin startup wiring', () => {
       await rm(root, { recursive: true, force: true });
     });
     let manager: RuntimeProviderManager | undefined;
-    const assemble = agents.assembleAgentActivationBootstrap;
-    const observation = spyOn(
-      agents,
-      'assembleAgentActivationBootstrap',
-    ).mockImplementation(async (...args) => {
-      const activation = await assemble(...args);
-      manager = args[2];
-      return activation;
+
+    const observation = observeActivationPreparation((activation, state) => {
+      manager = state.manager;
     });
     try {
       await operation.preparePostConfiguration(

@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,7 +24,6 @@ import { join, resolve } from 'node:path';
 import {
   buildAgent,
   internalConfig,
-  internalSettingsOwner,
 } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import { LoadedSettings } from '../config/settings.js';
@@ -110,7 +110,7 @@ describe('headless selected telemetry export cleanup', () => {
       },
     });
     const config = internalConfig(built.agent);
-    const owner = internalSettingsOwner(built.agent);
+    const telemetry = fixtureAgentResources(built.agent).telemetry;
     const outfile = join(directory, 'headless-failure.jsonl');
     const marker = join(directory, 'cleanup-joined.txt');
     const settingsFile = {
@@ -145,12 +145,12 @@ describe('headless selected telemetry export cleanup', () => {
           workspaceRoot: directory,
           hasPipedInput: true,
           readStdinData: () => Promise.resolve('local fake response'),
-          runtimeSettings: owner,
+          runtimeSettings: fixtureAgentResources(built.agent).settingsOwner,
         }),
       ]);
       expect(outcomes[0].status).toBe('rejected');
       expect(existsSync(marker)).toBe(true);
-      expect(owner.telemetry.isEnabled()).toBe(false);
+      expect(telemetry.isEnabled()).toBe(false);
     } finally {
       exit.mockRestore();
       rmSync(outfile, { recursive: true, force: true });

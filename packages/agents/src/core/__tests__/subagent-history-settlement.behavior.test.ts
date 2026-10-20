@@ -1,21 +1,21 @@
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { describe, expect, it } from 'bun:test';
 import { link } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { SubAgentScope } from '../subagent.js';
-import { AggregateDisposeError } from '../../api/disposeErrors.js';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
+import { AggregateDisposeError } from '../../api/disposeErrors.js';
+import { SubAgentScope } from '../subagent.js';
 
 function flatten(error: unknown): unknown[] {
   return error instanceof AggregateDisposeError ||
@@ -52,12 +52,12 @@ describe('subagent history ownership settlement', () => {
           },
         });
         try {
-          const orchestrator = new SubagentOrchestrator({
+          const orchestrator = createTestChildOrchestrator({
             credentialAuthority: credentials().authority,
             workspaceTrust: fixture.workspaceTrust,
             createChildSettings: () => fixture.settingsOwner.createChildStore(),
             readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: fixture.agent.agentClient.tools,
+            toolRegistry: fixture.client.tools,
             workspacePaths: fixture.workspacePaths,
             instructions: fixture.instructionReads,
             foregroundConfig: fixture.config,

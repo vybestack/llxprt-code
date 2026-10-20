@@ -11,10 +11,10 @@ import type { TextBuffer } from './shared/text-buffer.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
-import type { PromptContentGenerator } from '../hooks/usePromptCompletion.js';
+import type { PromptTextGenerator } from '../hooks/usePromptCompletion.js';
 
 export interface InputPromptProps {
-  generatePromptContent: PromptContentGenerator | null;
+  generatePromptContent: PromptTextGenerator | null;
   enableFuzzyFiltering: boolean;
   buffer: TextBuffer;
   onSubmit: (value: string) => void;

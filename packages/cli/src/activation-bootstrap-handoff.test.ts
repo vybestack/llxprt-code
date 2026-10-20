@@ -1,3 +1,9 @@
+import { AgentResourceCapture } from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import { capturedSessionClient } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   parseBootstrapArgs,
@@ -81,12 +87,14 @@ describe('CLI activation operation handoff', () => {
       undefined,
       undefined,
     );
-    const config = await bootstrapRuntimeAndConfig(
-      settings,
-      argv,
-      directory,
-      credentialAuthority,
-      preflight,
+    const config = await captureActivationConstruction(() =>
+      bootstrapRuntimeAndConfig(
+        settings,
+        argv,
+        directory,
+        credentialAuthority,
+        preflight,
+      ),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
@@ -99,7 +107,7 @@ describe('CLI activation operation handoff', () => {
     try {
       await writeFile(join(directory, 'discovery.txt'), 'workspace discovery');
       await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
-      const root = activationOperation.workspaceFilesystem;
+      const root = capturedActivation(activationOperation).workspaceFilesystem;
       expect(await root.search.search(directory, '*.txt')).toStrictEqual([]);
       expect(preflight.getActiveProviderName()).toBe('fake');
       const manager = preflight;
@@ -111,7 +119,11 @@ describe('CLI activation operation handoff', () => {
         activationOperation,
       );
       expect(activation.authFailed).toBe(false);
-      const expectedClient = activationOperation.sessionClient.getAgentClient();
+      const expectedClient = capturedSessionClient(
+        capturedActivation(activationOperation).owner,
+      );
+      const capture = new AgentResourceCapture();
+      capture.observe(expectedClient);
       const contentConfig = config.getContentGeneratorConfig();
       const agent = await createForegroundAgent(
         preflight,
@@ -120,7 +132,7 @@ describe('CLI activation operation handoff', () => {
         credentialAuthority,
         {},
       );
-      expect(agent.agentClient).toBe(expectedClient);
+      expect(capture.publishedClient(agent)).toBe(expectedClient);
       await writeFile(join(directory, '.llxprtignore'), '');
       expect(await agent.workspace.search(directory, '*.txt')).toStrictEqual([
         'discovery.txt',
@@ -174,12 +186,14 @@ describe('CLI activation operation handoff', () => {
       undefined,
       undefined,
     );
-    const config = await bootstrapRuntimeAndConfig(
-      settings,
-      argv,
-      directory,
-      credentialAuthority,
-      preflight,
+    const config = await captureActivationConstruction(() =>
+      bootstrapRuntimeAndConfig(
+        settings,
+        argv,
+        directory,
+        credentialAuthority,
+        preflight,
+      ),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {
@@ -251,12 +265,14 @@ describe('CLI activation operation handoff', () => {
       undefined,
       undefined,
     );
-    const config = await bootstrapRuntimeAndConfig(
-      settings,
-      argv,
-      directory,
-      credentialAuthority,
-      preflight,
+    const config = await captureActivationConstruction(() =>
+      bootstrapRuntimeAndConfig(
+        settings,
+        argv,
+        directory,
+        credentialAuthority,
+        preflight,
+      ),
     );
     let transferredActivation: AgentActivationOperation | undefined;
     preflight.transferActivation((operation) => {

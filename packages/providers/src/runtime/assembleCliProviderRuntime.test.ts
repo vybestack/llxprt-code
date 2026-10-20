@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,8 +22,11 @@ import { OAuthManager } from '../auth/index.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { createAgent } from '../../../agents/src/api/createAgent.js';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+import {
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   acquirePreferredProviderManager,
@@ -149,8 +153,12 @@ describe('explicit provider primitives under the owning Agent assembly', () => {
       credentialAuthority: credentials().authority,
     });
     try {
-      expect(first.getMessageBus()).not.toBe(second.getMessageBus());
-      expect(first.providerManager).not.toBe(second.providerManager);
+      expect(fixtureAgentResources(first).messageBus).not.toBe(
+        fixtureAgentResources(second).messageBus,
+      );
+      expect(fixtureAgentResources(first).manager).not.toBe(
+        fixtureAgentResources(second).manager,
+      );
       const retained = await first.retainProviderFile({
         cacheKey: 'same-cache',
         fileId: 'first-file',
@@ -174,10 +182,10 @@ describe('explicit provider primitives under the owning Agent assembly', () => {
         first.captureProviderFiles().retainedFiles,
         second.captureProviderFiles().retainedFiles,
       ]).toStrictEqual([1, 0]);
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
     } finally {

@@ -15,7 +15,7 @@ import type { CommandHandlerFixture } from '../ui/hooks/slash-command-handler-de
 
 export function installFixtureRawResume(
   deps: CommandHandlerFixture,
-  persistence: CliSessionPersistencePort,
+  persistence: Pick<CliSessionPersistencePort, 'resumeRecording'>,
   callbacks: RecordingSwapCallbacks,
   resume: typeof performResume = performResume,
 ): void {
@@ -24,10 +24,7 @@ export function installFixtureRawResume(
   deps.resumeRawSession = bindCommandRawResume(
     config,
     persistence,
-    () => {
-      if (!agent) throw new Error('Session agent is unavailable');
-      return agent.agentClient.getHistoryService();
-    },
+    agent?.session,
     callbacks,
     deps.slashCommandLogger,
     resume,

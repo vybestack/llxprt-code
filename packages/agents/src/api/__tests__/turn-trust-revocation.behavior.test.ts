@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,7 +16,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import {
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentEvent,
@@ -149,12 +150,10 @@ async function collect(
       ) {
         answered.add(event.confirmation.confirmationId);
         markerAtConfirmation = [...markerAtConfirmation, existsSync(marker)];
-        agent
-          .getMessageBus()
-          .respondToConfirmation(
-            event.confirmation.confirmationId,
-            ToolConfirmationOutcome.Cancel,
-          );
+        fixtureAgentResources(agent).messageBus.respondToConfirmation(
+          event.confirmation.confirmationId,
+          ToolConfirmationOutcome.Cancel,
+        );
       }
     }
     return { events, markerAtConfirmation };
@@ -255,9 +254,17 @@ describe('Live workspace authority in captured turns', () => {
         const a = await owner('a');
         const b = await owner('b');
         expect(a.agent.getRuntimeId()).toBe(b.agent.getRuntimeId());
-        expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
-        expect(a.agent.agentClient.tools).not.toBe(b.agent.agentClient.tools);
-        expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
+        expect(fixtureAgentResources(a.agent).messageBus).not.toBe(
+          fixtureAgentResources(b.agent).messageBus,
+        );
+        expect(
+          fixtureAgentResources(a.agent).publishedClient(a.agent).tools,
+        ).not.toBe(
+          fixtureAgentResources(b.agent).publishedClient(b.agent).tools,
+        );
+        expect(fixtureAgentResources(a.agent).messageBus).not.toBe(
+          fixtureAgentResources(b.agent).messageBus,
+        );
         expect(a.agent.ide.isTrustedFolder()).toBe(true);
         expect(a.agent.getApprovalMode()).toBe(approvalMode);
 

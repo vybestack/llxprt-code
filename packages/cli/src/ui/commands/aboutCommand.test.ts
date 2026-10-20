@@ -22,7 +22,6 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
 
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 const runtimeMocks = {
@@ -33,6 +32,7 @@ void vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
+let ideDisplayName: string | undefined;
 describe('aboutCommand', () => {
   const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
   let mockContext: CommandOwnerFixture;
@@ -59,8 +59,6 @@ describe('aboutCommand', () => {
       services: {
         config: {
           getModel: vi.fn(),
-          getIdeClient: vi.fn(),
-          getIdeMode: vi.fn().mockReturnValue(true),
         },
         settings: {
           merged: {},
@@ -86,12 +84,7 @@ describe('aboutCommand', () => {
         () => mockContext.services.config?.getModel(),
         (key) => mockContext.services.config?.getEphemeralSetting(key),
         () => mockContext.services.config?.getProvider(),
-        () =>
-          mockContext.services.config?.getIdeMode() === true
-            ? (mockContext.services.config
-                .getIdeClient()
-                ?.getDetectedIdeDisplayName() ?? '')
-            : '',
+        () => ideDisplayName ?? '',
         () => mockContext.runtimeApi.providerStatus(),
         (provider) =>
           mockContext.services.settings.getProviderKeyfile(provider),
@@ -102,9 +95,7 @@ describe('aboutCommand', () => {
     Object.defineProperty(process, 'platform', {
       value: 'test-os',
     });
-    vi.spyOn(mockContext.services.config!, 'getIdeClient').mockReturnValue({
-      getDetectedIdeDisplayName: vi.fn().mockReturnValue('test-ide'),
-    } as Partial<IdeClient> as IdeClient);
+    ideDisplayName = 'test-ide';
   });
 
   afterEach(() => {
@@ -170,9 +161,7 @@ describe('aboutCommand', () => {
   });
 
   it('should not show ide client when it is not detected', async () => {
-    vi.spyOn(mockContext.services.config!, 'getIdeClient').mockReturnValue({
-      getDetectedIdeDisplayName: vi.fn().mockReturnValue(undefined),
-    } as Partial<IdeClient> as IdeClient);
+    ideDisplayName = undefined;
 
     process.env.SANDBOX = '';
     assertDefined(aboutCommand.action);

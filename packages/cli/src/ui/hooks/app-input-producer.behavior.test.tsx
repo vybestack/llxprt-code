@@ -10,7 +10,10 @@ import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockSettings, render, waitFor } from '../../__tests__/render.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { SettingsContext } from '../contexts/SettingsContext.js';
@@ -24,7 +27,7 @@ describe('application input producer', () => {
   const makeOwner = useCommandOwners();
   it('submits the startup question through the application composition', async () => {
     const owner = await makeOwner('app-producer-owner');
-    await owner.agentClient.startChat(await owner.getHistory());
+    await commandOwnerClient(owner).startChat(await owner.getHistory());
     const root = owner.workspace.getWorkingDirectory();
     const request = join(root, 'request.txt');
     await writeFile(request, 'actual application captured request');

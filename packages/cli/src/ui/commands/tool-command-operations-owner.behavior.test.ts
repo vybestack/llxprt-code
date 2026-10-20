@@ -5,7 +5,10 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { canonicalizeToolName } from '@vybestack/llxprt-code-tools';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -21,7 +24,7 @@ describe('tool command independent operations', () => {
     if (!target) throw new Error('Missing fixture tool');
     const listTools = Object.assign(() => owner.tools.list(), {
       tools: sibling.tools,
-      agentClient: sibling.agentClient,
+      agentClient: commandOwnerClient(sibling),
       getEphemeralSetting: sibling.getEphemeralSetting.bind(sibling),
       setEphemeralSetting: sibling.setEphemeralSetting.bind(sibling),
     });
@@ -30,7 +33,9 @@ describe('tool command independent operations', () => {
         listTools,
         readSetting: owner.getEphemeralSetting.bind(owner),
         writeSetting: owner.setEphemeralSetting.bind(owner),
-        refreshToolSchema: owner.agentClient.setTools.bind(owner.agentClient),
+        refreshToolSchema: commandOwnerClient(owner).setTools.bind(
+          commandOwnerClient(owner),
+        ),
       },
       () => 0,
     );
@@ -61,8 +66,8 @@ describe('tool command independent operations', () => {
         listTools: () => sibling.tools.list(),
         readSetting: sibling.getEphemeralSetting.bind(sibling),
         writeSetting: sibling.setEphemeralSetting.bind(sibling),
-        refreshToolSchema: sibling.agentClient.setTools.bind(
-          sibling.agentClient,
+        refreshToolSchema: commandOwnerClient(sibling).setTools.bind(
+          commandOwnerClient(sibling),
         ),
       },
       () => 0,

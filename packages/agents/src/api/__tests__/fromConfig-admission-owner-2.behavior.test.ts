@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -16,7 +18,7 @@ import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { MemoryTokenStore } from './helpers/provider-auth-fixtures.js';
 
 describe('fromConfig admission before resource effects', () => {
@@ -137,7 +139,7 @@ describe('fromConfig admission before resource effects', () => {
       builtFactorylessPolicy,
     );
     cleanups.push(() => agent.dispose());
-    expect(agent.getMessageBus()).toBe(
+    expect(fixtureAgentResources(agent).messageBus).toBe(
       builtFactorylessPolicy.session.messageBus,
     );
     expect(oauth.runtimeMessageBus).toBe(

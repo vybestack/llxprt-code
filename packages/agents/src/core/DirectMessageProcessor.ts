@@ -60,6 +60,7 @@ interface ToolSelectionHookResult {
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
+  accumulateDirectResponse,
   ensureResponseText,
   extractResponseText,
 } from './directResponseText.js';
@@ -182,7 +183,12 @@ export class DirectMessageProcessor {
     prompt_id: string,
     execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
-    const provider = this.providerResolver('DirectMessageProcessor');
+    params.config?.abortSignal?.throwIfAborted();
+    const provider =
+      params.modelParameters?.route?.provider ??
+      this.providerResolver('DirectMessageProcessor');
+    const model =
+      params.modelParameters?.route?.model ?? this.runtimeContext.state.model;
     const providerRuntime: unknown = provider;
     if (providerRuntime === undefined || providerRuntime === null) {
       throw new Error('No active provider configured');
@@ -207,11 +213,19 @@ export class DirectMessageProcessor {
       return emptyModelOutput();
     }
 
+    params.config?.abortSignal?.throwIfAborted();
+    const contents =
+      params.historyPrefix === undefined
+        ? userIContents
+        : this.historyService.getCuratedForProvider(
+            userIContents,
+            params.historyPrefix,
+          );
     logApiRequest(
       this.runtimeContext,
       this.runtimeContext.state,
-      userIContents,
-      this.runtimeContext.state.model,
+      contents,
+      model,
       prompt_id,
     );
 
@@ -221,15 +235,17 @@ export class DirectMessageProcessor {
       const response = await this._executeWithRetry(
         provider,
         params,
-        userIContents,
+        contents,
+        prompt_id,
         params.hookOwner ?? execution?.hookOwner,
       );
+      params.config?.abortSignal?.throwIfAborted();
 
       const durationMs = Date.now() - startTime;
       logApiResponse(
         this.runtimeContext,
         this.runtimeContext.state,
-        this.runtimeContext.state.model,
+        model,
         prompt_id,
         durationMs,
         response.usage,
@@ -242,7 +258,7 @@ export class DirectMessageProcessor {
       logApiError(
         this.runtimeContext,
         this.runtimeContext.state,
-        this.runtimeContext.state.model,
+        model,
         prompt_id,
         durationMs,
         error,
@@ -268,7 +284,7 @@ export class DirectMessageProcessor {
         id: idGen(),
         turnId: turnKey,
       };
-      if (promptId !== undefined && promptId.length > 0) {
+      if (promptId !== undefined) {
         metadata.promptId = promptId;
       }
       return {
@@ -286,6 +302,7 @@ export class DirectMessageProcessor {
     provider: IProvider,
     params: SendMessageParams,
     userIContents: IContent[],
+    promptId: string,
     owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
     const requestParams: SendMessageParams = {
@@ -301,6 +318,7 @@ export class DirectMessageProcessor {
           provider,
           requestParams,
           userIContents,
+          promptId,
           owner,
         ),
       {
@@ -372,7 +390,7 @@ export class DirectMessageProcessor {
           iContent,
           allowedFunctionNames,
         );
-        lastResponse = response;
+        lastResponse = accumulateDirectResponse(lastResponse, response);
 
         const result = aggregateTextWithSpacing(
           filteredIContent.blocks,
@@ -436,6 +454,7 @@ export class DirectMessageProcessor {
     provider: IProvider,
     params: SendMessageParams,
     userIContents: IContent[],
+    promptId: string,
     owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
     params.config?.abortSignal?.throwIfAborted();
@@ -446,6 +465,7 @@ export class DirectMessageProcessor {
       allowedFunctionNames,
     } = await this._applyPreSendHooks(params, userIContents, owner);
 
+    params.config?.abortSignal?.throwIfAborted();
     if (blockedOutput) {
       return blockedOutput;
     }
@@ -463,7 +483,8 @@ export class DirectMessageProcessor {
       effectiveToolsFromConfig,
       runtimeContext,
       timeoutSignal,
-      params.config?.providerRequestContext,
+      params,
+      promptId,
     );
     const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
       streamResponse,
@@ -481,6 +502,7 @@ export class DirectMessageProcessor {
       {
         contents: contentsForApi,
         tools: effectiveToolsFromConfig,
+        model: params.modelParameters?.route?.model,
       },
       allowedFunctionNames,
       owner,
@@ -504,7 +526,8 @@ export class DirectMessageProcessor {
     effectiveToolsFromConfig: ToolDeclaration[] | undefined,
     runtimeContext: ProviderRequestCollaborators,
     timeoutSignal: AbortSignal,
-    requestContext: Record<string, unknown> | undefined,
+    params: SendMessageParams,
+    promptId: string,
   ): AsyncIterable<IContent> {
     this.logger.debug(
       () =>
@@ -527,17 +550,36 @@ export class DirectMessageProcessor {
     ).generateChatCompletion({
       contents: contentsForApi,
       tools: effectiveToolsFromConfig,
-      invocation: this.runtimeContext.prepareProviderInvocation(
-        provider.name,
-        undefined,
-        timeoutSignal,
-      ),
+      invocation:
+        params.invocation === undefined
+          ? this.runtimeContext.prepareProviderInvocation(
+              provider.name,
+              params.modelParameters,
+              timeoutSignal,
+            )
+          : {
+              ...params.invocation,
+              runtimeId: this.runtimeContext.state.runtimeId,
+              signal: timeoutSignal,
+            },
+      modelParameters: params.modelParameters,
+      requestDiagnostics: this.runtimeContext.requestDiagnostics,
+      ...(params.modelParameters?.route === undefined
+        ? {}
+        : {
+            resolved: {
+              model: params.modelParameters.route.model,
+              baseURL: params.modelParameters.route.baseURL,
+            },
+          }),
       metadata: {
         ...runtimeContext.metadata,
-        _retryRequestContext: requestContext,
+        _retryRequestContext: params.config?.providerRequestContext,
+        __logicalRequestId: promptId,
       },
       systemInstruction: extractSystemInstructionText(
-        this.generationConfig.systemInstruction,
+        params.config?.systemInstruction ??
+          this.generationConfig.systemInstruction,
       ),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     });
@@ -563,6 +605,8 @@ export class DirectMessageProcessor {
     blockedOutput: ModelOutput | undefined;
     allowedFunctionNames: string[] | undefined;
   }> {
+    const model =
+      params.modelParameters?.route?.model ?? this.runtimeContext.state.model;
     const requestTools = this._selectRequestTools(params);
     const toolsFromConfig = Array.isArray(requestTools) ? requestTools : [];
 
@@ -570,7 +614,7 @@ export class DirectMessageProcessor {
     let contentsForApi: IContent[] = userIContents;
     const toolSelection =
       configForHooks !== undefined
-        ? await this._applyToolSelectionHook(toolsFromConfig, owner)
+        ? await this._applyToolSelectionHook(toolsFromConfig, owner, model)
         : { tools: toolsFromConfig, allowedFunctionNames: undefined };
     const effectiveToolsFromConfig =
       requestTools === undefined ||
@@ -579,11 +623,13 @@ export class DirectMessageProcessor {
         ? undefined
         : toolSelection.tools;
 
+    params.config?.abortSignal?.throwIfAborted();
     if (configForHooks) {
       const hookResult = await this._handleBeforeModelHook(
         userIContents,
         effectiveToolsFromConfig,
         owner,
+        model,
       );
       if (hookResult.blockedOutput) {
         return {
@@ -609,11 +655,12 @@ export class DirectMessageProcessor {
   private async _applyToolSelectionHook(
     toolsFromConfig: ToolDeclaration[],
     owner?: HookExecutionOwner,
+    model = this.runtimeContext.state.model,
   ): Promise<ToolSelectionHookResult> {
     if (owner?.beforeToolSelection === undefined)
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
     const toolSelectionResult = await owner.beforeToolSelection(
-      toolSelectionRequest(this.runtimeContext.state.model, toolsFromConfig),
+      toolSelectionRequest(model, toolsFromConfig),
       owner.signal,
     );
     const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
@@ -648,12 +695,13 @@ export class DirectMessageProcessor {
     userIContents: IContent[],
     effectiveToolsFromConfig: ToolDeclaration[] | undefined,
     owner?: HookExecutionOwner,
+    model = this.runtimeContext.state.model,
   ): Promise<{
     blockedOutput?: ModelOutput;
     modifiedContents?: IContent[];
   }> {
     const requestForHook = beforeModelRequestEnvelope(
-      this.runtimeContext.state.model,
+      model,
       userIContents,
       effectiveToolsFromConfig,
     );
@@ -683,6 +731,7 @@ export class DirectMessageProcessor {
       const modifiedContents = this._applyHookRequestModifications(
         beforeModelResult,
         userIContents,
+        model,
       );
       if (modifiedContents !== undefined) {
         return { modifiedContents };
@@ -710,11 +759,12 @@ export class DirectMessageProcessor {
   private _applyHookRequestModifications(
     beforeModelResult: BeforeModelHookOutput,
     userIContents: IContent[],
+    model = this.runtimeContext.state.model,
   ): IContent[] | undefined {
     const result = applyRequestModifications(
       beforeModelResult,
       userIContents,
-      this.runtimeContext.state.model || '',
+      model || '',
     );
     if (result === userIContents) {
       return undefined;
@@ -730,7 +780,11 @@ export class DirectMessageProcessor {
   private async _processDirectResponse(
     lastResponse: IContent,
     aggregatedText: string,
-    llmRequest?: { contents: IContent[]; tools?: ToolDeclaration[] },
+    llmRequest?: {
+      contents: IContent[];
+      tools?: ToolDeclaration[];
+      model?: string;
+    },
     allowedFunctionNames?: string[],
     owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
@@ -787,7 +841,9 @@ export class DirectMessageProcessor {
    */
   private async _fireAfterModelAndApply(
     directOutput: ModelOutput,
-    llmRequest: { contents: IContent[]; tools?: ToolDeclaration[] } | undefined,
+    llmRequest:
+      | { contents: IContent[]; tools?: ToolDeclaration[]; model?: string }
+      | undefined,
     allowedFunctionNames: string[] | undefined,
     owner?: HookExecutionOwner,
   ): Promise<{
@@ -808,7 +864,7 @@ export class DirectMessageProcessor {
     const filteredIContent = iContentFromBlocks(filteredBlocks, 'ai');
     const afterModelResult = await owner.afterModel(
       afterModelRequestEnvelope(
-        this.runtimeContext.state.model,
+        llmRequest?.model ?? this.runtimeContext.state.model,
         llmRequest?.contents,
         llmRequest?.tools,
       ),

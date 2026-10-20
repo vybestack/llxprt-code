@@ -25,7 +25,6 @@ import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
-import type { useAutoPromptOperation } from '../../../hooks/useAutoPromptOperation.js';
 import type { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
 import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
@@ -74,6 +73,10 @@ import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
+  readIdeContext: Parameters<typeof useIdeContextBridge>[0]['readIdeContext'];
+  subscribeIdeContext: Parameters<
+    typeof useIdeContextBridge
+  >[0]['subscribeIdeContext'];
   config: SlashCommandRuntime;
   recordRecordingEvent: NonNullable<
     Parameters<typeof bindModelSwitchRecording>[1]
@@ -82,7 +85,7 @@ export interface AppDialogsParams {
     typeof useWelcomeOnboarding
   >[0]['switchProviderAfterAuth'];
   listTools: Parameters<typeof useToolsDialog>[0]['listTools'];
-  generatePrompt: ReturnType<typeof useAutoPromptOperation>;
+  generatePrompt: (description: string) => Promise<string>;
   readPolicyRules: ReturnType<typeof bindPolicyRulesReader>;
   subagentDefinitions: Parameters<typeof useSubagentDialogCommands>[0];
   subagentWrites: Parameters<typeof useSubagentDialogCommands>[1];
@@ -170,7 +173,8 @@ function useDialogsCore(
   const displayPrefs = useDisplayPreferences(p.terminalStore, settingsStore);
   const workspace = useWorkspaceMigration(settings, dialogs);
   useIdeContextBridge({
-    ide: config,
+    readIdeContext: p.readIdeContext,
+    subscribeIdeContext: p.subscribeIdeContext,
     setIdeContextState: st.setIdeContextState,
   });
   const errorCount = useMemo(

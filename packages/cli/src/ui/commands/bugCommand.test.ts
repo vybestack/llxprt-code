@@ -89,8 +89,6 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => undefined,
-          getIdeClient: () => undefined,
-          getIdeMode: () => false,
         },
       },
     });
@@ -136,8 +134,6 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => ({ urlTemplate: customTemplate }),
-          getIdeClient: () => undefined,
-          getIdeMode: () => false,
         },
       },
     });
@@ -181,8 +177,6 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => undefined,
-          getIdeClient: () => undefined,
-          getIdeMode: () => false,
         },
       },
     });

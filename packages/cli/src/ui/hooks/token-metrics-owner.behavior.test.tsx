@@ -8,7 +8,10 @@ import { useMemo, useState } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { bindHistoryTokenSubscription } from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { buildUiRuntimeFromSource } from '../cliUiRuntime.js';
@@ -29,10 +32,14 @@ describe('token metrics captured history ownership', () => {
     await peer.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'peer' }] },
     ]);
-    await owner.agentClient.startChat(await owner.agentClient.getHistory());
-    await peer.agentClient.startChat(await peer.agentClient.getHistory());
-    const ownedHistory = owner.agentClient.getHistoryService();
-    const peerHistory = peer.agentClient.getHistoryService();
+    await commandOwnerClient(owner).startChat(
+      await commandOwnerClient(owner).getHistory(),
+    );
+    await commandOwnerClient(peer).startChat(
+      await commandOwnerClient(peer).getHistory(),
+    );
+    const ownedHistory = commandOwnerClient(owner).getHistoryService();
+    const peerHistory = commandOwnerClient(peer).getHistoryService();
     if (!ownedHistory || !peerHistory)
       throw new Error('Missing initialized token history');
     await ownedHistory.waitForTokenUpdates();
@@ -52,7 +59,7 @@ describe('token metrics captured history ownership', () => {
         const subscribeHistoryTokens = useMemo(
           () =>
             bindHistoryTokenSubscription(
-              () => active.agentClient.getHistoryService(),
+              () => commandOwnerClient(active).getHistoryService(),
               new DebugLogger('llxprt:ui:tokentracking'),
             ),
           [active],

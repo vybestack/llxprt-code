@@ -1,3 +1,10 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,15 +33,13 @@ import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { createAgent } from '../createAgent.js';
 
 import { fileURLToPath } from 'node:url';
-import { fromConfig } from '../fromConfig.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -143,7 +148,7 @@ describe('Explicit session client lifetime', () => {
         builtConfig.projectTempDir,
         1024 * 1024,
       );
-      const builtOwner = await SessionClientOwner.create(
+      const builtOwner = await createCapturedSessionOwner(
         builtConfig,
         assembleTaskSchemaPolicy(builtSettings),
         builtManager,
@@ -183,12 +188,12 @@ describe('Explicit session client lifetime', () => {
         await builtMcp.initialize();
         await builtOwner.initializeTools();
         await builtOwner.refreshAuth();
-        await builtOwner.getAgentClient().startChat();
+        await capturedSessionClient(builtOwner).startChat();
       } catch (primary) {
         await cleanupAfterFailure(primary, builtClose);
       }
 
-      const caller = builtOwner.getAgentClient();
+      const caller = capturedSessionClient(builtOwner);
       const optionsSettingsService: Parameters<typeof fromConfig>[1] =
         builtSettings;
       const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
@@ -347,7 +352,7 @@ describe('Explicit session client lifetime', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -387,12 +392,12 @@ describe('Explicit session client lifetime', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
 
-    const caller = builtOwner.getAgentClient();
+    const caller = capturedSessionClient(builtOwner);
     const optionsSettingsService: Parameters<typeof fromConfig>[1] =
       builtSettings;
     const optionsConfig: Parameters<typeof fromConfig>[0] = builtConfig;
@@ -467,7 +472,7 @@ describe('Explicit session client lifetime', () => {
         workingDir: directory,
         credentialAuthority: credentials().authority,
       });
-      const client = agent.agentClient;
+      const client = fixtureAgentResources(agent).publishedClient(agent);
       const store = client.mediaStore;
       if (store === undefined) throw new Error('Missing owned media');
       try {
@@ -481,7 +486,9 @@ describe('Explicit session client lifetime', () => {
           (await agent.getHistory()).filter((item) => item.speaker === 'human'),
         ).toHaveLength(1);
         await agent.dispose();
-        expect(() => agent.agentClient).toThrow(/disposed/i);
+        expect(() =>
+          fixtureAgentResources(agent).publishedClient(agent),
+        ).toThrow(/disposed/i);
         await expect(store.getStoredByteLength()).rejects.toThrow(/closed/i);
       } finally {
         await agent.dispose();

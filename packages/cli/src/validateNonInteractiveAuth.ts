@@ -10,10 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from './config/settings.js';
 import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 
@@ -43,7 +40,7 @@ export async function validateNonInteractiveAuth<
   nonInteractiveConfig: C,
   settings: LoadedSettings | undefined,
   runCleanup: () => Promise<void> = () => Promise.resolve(),
-  providerState: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
+  hasActiveProvider: (() => boolean) | undefined,
   applyCompressionSetting: (
     key: 'compression-threshold' | 'context-limit',
     value: number,
@@ -58,7 +55,7 @@ export async function validateNonInteractiveAuth<
   await guardUnconfiguredProvider(
     nonInteractiveConfig,
     runCleanup,
-    providerState,
+    hasActiveProvider,
   );
 
   // Apply compression settings after the provider gate

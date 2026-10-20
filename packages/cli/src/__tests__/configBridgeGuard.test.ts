@@ -152,7 +152,8 @@ describe('#2373 config boundary guard', () => {
     const text = readFileSync(join(UI_ROOT, 'cliUiRuntime.ts'), 'utf8');
 
     // The narrow boundaries that decompose the former Config-shaped catch-all.
-    expect(text).toMatch(/export\s+interface\s+AgentClientSource\s*\{/);
+    expect(text).not.toMatch(/\bAgentClientSource\b|\bagentClientSource\b/);
+    expect(text).not.toMatch(/\bgetAgentClient\b|\bagentClient\b/);
     expect(text).toMatch(/export\s+interface\s+SessionIdentity\s*\{/);
     expect(text).toMatch(/export\s+interface\s+ModelState\s*\{/);
     expect(text).toMatch(/export\s+interface\s+StreamRuntime\s*\{/);

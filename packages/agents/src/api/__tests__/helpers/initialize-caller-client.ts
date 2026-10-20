@@ -1,3 +1,4 @@
+import { capturedSessionClient } from './session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -64,7 +65,7 @@ export async function initializeCallerClient(
     );
     if (activation.authFailed) throw activation.authError;
     await owner.initializeTools();
-    await owner.getAgentClient().startChat();
+    await capturedSessionClient(owner).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, close);
   }

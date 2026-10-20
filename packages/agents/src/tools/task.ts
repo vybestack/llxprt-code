@@ -1,6 +1,3 @@
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,63 +8,45 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type {
-  TaskExecutionPolicy,
-  SubagentRunPolicy,
-} from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
+import type { TaskExecutionPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
 import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  type ToolResult,
-  type LiveOutputUpdate,
   type IToolMessageBus,
+  type LiveOutputUpdate,
+  type ToolResult,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  SubagentOrchestrator,
-  type SubagentLaunchRequest,
-} from '../core/subagentOrchestrator.js';
-import type { SubAgentScope } from '../core/subagent.js';
-import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { AgentDisplayCallbacks } from '../api/agent.js';
-import type {
-  ProfileDefinitionReads,
-  SubagentDefinitionReads,
-} from '@vybestack/llxprt-code-core';
-import type { ToolSelection, ToolLookup } from '@vybestack/llxprt-code-tools';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   requireEffectiveTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
+import type {
+  ChildTaskRun,
+  SubagentOrchestrator,
+} from '../core/subagentOrchestrator.js';
+import { type SubagentLaunchRequest } from '../core/subagentOrchestrator.js';
 import {
+  TASK_TIMEOUT_DEFAULT_SETTING,
+  TASK_TIMEOUT_MAX_SETTING,
   createAbortState,
   createTimeoutControllers,
   isAbortError as isAbortErrorHelper,
   isTimeoutError as isTimeoutErrorHelper,
-  TASK_TIMEOUT_DEFAULT_SETTING,
-  TASK_TIMEOUT_MAX_SETTING,
   type TimeoutControllers,
 } from './taskAbortHelpers.js';
-import {
-  buildGovernedToolWhitelist,
-  filterExcludedFromWhitelist,
-  normalizeTaskParams,
-  validateCanonicalTaskParamSpellings,
-  validateTaskParamValues,
-  type TaskToolInvocationParams,
-} from './taskToolGovernance.js';
+import { executeAsyncTask } from './taskAsyncExecution.js';
+import { startTaskHeartbeat, type TaskHeartbeat } from './taskHeartbeat.js';
 import {
   attachTimeoutMetadata,
   createCancelledResult,
@@ -76,10 +55,16 @@ import {
   formatSuccessContent,
   formatSuccessDisplay,
 } from './taskResultHelpers.js';
-import { executeAsyncTask } from './taskAsyncExecution.js';
-import { startTaskHeartbeat, type TaskHeartbeat } from './taskHeartbeat.js';
-import { setupTaskStreaming } from './taskStreaming.js';
 import { taskToolSchema } from './taskSchema.js';
+import { setupTaskStreaming } from './taskStreaming.js';
+import {
+  buildGovernedToolWhitelist,
+  filterExcludedFromWhitelist,
+  normalizeTaskParams,
+  validateCanonicalTaskParamSpellings,
+  validateTaskParamValues,
+  type TaskToolInvocationParams,
+} from './taskToolGovernance.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
@@ -97,35 +82,14 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
-  readonly credentialAuthority?: CredentialAuthority;
-  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
-  readonly hookOwner?: SessionHookOwner;
-  readonly workspaceTrust?: WorkspaceTrustControlPort;
-  readRunPolicy: () => SubagentRunPolicy;
-  createChildSettings: () => SettingsService;
-  readonly telemetry?: RootTelemetry;
-  readTaskPolicy: () => TaskExecutionPolicy;
-  readGovernance: () => ToolGovernance;
-  instructions: InstructionReadOperations;
-  toolRegistry?: ToolSelection;
-  readMcpInstructions: () => string | undefined;
-  workspacePaths: WorkspacePathOperations;
-  /**
-   * Required session/runtime MessageBus threaded into the
-   * SubagentOrchestrator so non-interactive subagent tool execution can satisfy
-   * the child scheduler owner’s explicit MessageBus dependency
-   * (Issue #2312).
-   */
-  messageBus: MessageBus;
-  orchestratorFactory?: (messageBus: MessageBus) => SubagentOrchestrator;
-  profileManager?: Pick<ProfileDefinitionReads, 'loadProfile'>;
-  subagentManager?: Pick<
-    SubagentDefinitionReads,
-    'loadSubagent' | 'listSubagents'
-  >;
-  openChildDisplay?: () => AgentDisplayCallbacks;
-  isInteractiveEnvironment?: () => boolean;
-  taskLaunchOwner?: TaskLaunchOwner;
+  readonly launchChild: SubagentOrchestrator['launch'];
+  readonly readTaskPolicy: () => TaskExecutionPolicy;
+  readonly readGovernance: () => ToolGovernance;
+  readonly toolRegistry?: ToolSelection;
+  readonly messageBus: MessageBus;
+  readonly openChildDisplay?: () => AgentDisplayCallbacks;
+  readonly isInteractiveEnvironment?: () => boolean;
+  readonly taskLaunchOwner?: TaskLaunchOwner;
 }
 function launchRequestName(
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
@@ -136,7 +100,7 @@ function launchRequestName(
 interface TaskToolInvocationDeps {
   readTaskPolicy: () => TaskExecutionPolicy;
   readGovernance: () => ToolGovernance;
-  createOrchestrator: () => SubagentOrchestrator;
+  launchChild: SubagentOrchestrator['launch'];
   getToolRegistry?: () => ToolSelection | undefined;
   openChildDisplay?: () => AgentDisplayCallbacks;
   isInteractiveEnvironment?: () => boolean;
@@ -309,29 +273,11 @@ class TaskToolInvocation extends BaseToolInvocation<
       return createCancelledResult('Task execution aborted before launch.');
     }
 
-    let orchestrator: SubagentOrchestrator;
-    try {
-      orchestrator = this.deps.createOrchestrator();
-    } catch (error) {
-      taskLogger.warn(
-        () =>
-          `Failed to create orchestrator for '${this.normalized.subagentName}': ${error instanceof Error ? error.message : String(error)}`,
-      );
-      signal.removeEventListener('abort', onUserAbort);
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-      return createErrorResult(
-        error,
-        'Task tool could not initialize subagent orchestrator.',
-      );
-    }
-
     const launchRequest = this.createLaunchRequest(timeoutMs);
     taskLogger.debug(() => `Launching subagent '${launchRequest.name}'`);
 
     return this.launchSubagent(
-      orchestrator,
+      this.deps.launchChild,
       launchRequest,
       signal,
       timeoutController,
@@ -343,7 +289,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async launchSubagent(
-    orchestrator: SubagentOrchestrator,
+    launchChild: SubagentOrchestrator['launch'],
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
@@ -367,7 +313,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     const launchResult = await this.attemptLaunch(
-      orchestrator,
+      launchChild,
       launchRequest,
       signal,
       timeoutController,
@@ -411,7 +357,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async attemptLaunch(
-    orchestrator: SubagentOrchestrator,
+    launchChild: SubagentOrchestrator['launch'],
     launchRequest: SubagentLaunchRequest,
     signal: AbortSignal,
     timeoutController: AbortController,
@@ -430,10 +376,7 @@ class TaskToolInvocation extends BaseToolInvocation<
       | Awaited<ReturnType<SubagentOrchestrator['launch']>>
       | undefined;
     try {
-      launchResult = await orchestrator.launch(
-        launchRequest,
-        timeoutController.signal,
-      );
+      launchResult = await launchChild(launchRequest, timeoutController.signal);
       abortState.setLaunchResult(launchResult);
       if (signal.aborted) {
         const scopeCandidate = launchResult.scope as
@@ -579,7 +522,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   private setupStreaming(
     launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
     agentId: string,
-    scope: SubAgentScope,
+    scope: ChildTaskRun,
     updateOutput?: (update: LiveOutputUpdate) => void,
   ): { emitClosingSubagentTag: () => void; heartbeat: TaskHeartbeat } {
     const subagentName =
@@ -594,7 +537,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async runSubagent(
-    scope: SubAgentScope,
+    scope: ChildTaskRun,
     contextState: ContextState,
   ): Promise<void> {
     const environmentInteractive =
@@ -616,7 +559,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     timeoutController: AbortController,
     resolution: TimeoutResolution,
     agentId: string,
-    scope: SubAgentScope,
+    scope: ChildTaskRun,
     teardown: () => Promise<void>,
     abortedState: { aborted: boolean; timedOut: boolean },
   ): Promise<ToolResult> {
@@ -652,7 +595,7 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private async handleExecutionResult(
-    scope: SubAgentScope,
+    scope: ChildTaskRun,
     agentId: string,
     signal: AbortSignal,
     timeoutController: AbortController,
@@ -729,7 +672,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         readTaskPolicy: this.deps.readTaskPolicy,
         normalized: this.normalized,
         params: this.params,
-        createOrchestrator: () => this.deps.createOrchestrator(),
+        launchChild: this.deps.launchChild,
         taskLaunchOwner: this.deps.taskLaunchOwner,
         isInteractiveEnvironment: this.deps.isInteractiveEnvironment,
         openChildDisplay: this.deps.openChildDisplay,
@@ -782,26 +725,19 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       messageBus,
     );
     this.config = config;
-    const readMcpInstructions = dependencies?.readMcpInstructions;
-    if (!readMcpInstructions) {
-      throw new Error('Task tool requires an explicit MCP instruction reader.');
-    }
-    this.dependencies = { ...dependencies, messageBus, readMcpInstructions };
+    if (dependencies?.launchChild === undefined)
+      throw new Error('Task tool requires a bound child launch operation.');
+    this.dependencies = { ...dependencies, messageBus };
   }
 
   withChildDisplay(
     openChildDisplay: () => AgentDisplayCallbacks,
     taskLaunchOwner?: TaskLaunchOwner,
-    lookup?: ToolLookup,
   ): TaskTool {
     return new TaskTool(this.config, {
       ...this.dependencies,
       openChildDisplay,
       taskLaunchOwner,
-      toolRegistry:
-        this.dependencies.toolRegistry === undefined || lookup === undefined
-          ? this.dependencies.toolRegistry
-          : { ...this.dependencies.toolRegistry, ...lookup },
     });
   }
 
@@ -834,8 +770,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       params,
       normalized,
       {
-        createOrchestrator: () =>
-          this.ensureOrchestrator(this.dependencies.messageBus),
+        launchChild: this.dependencies.launchChild,
         readTaskPolicy: this.dependencies.readTaskPolicy,
         readGovernance: this.dependencies.readGovernance,
         getToolRegistry: () => this.dependencies.toolRegistry,
@@ -851,38 +786,5 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
   private normalizeParams(params: TaskToolParams): TaskToolInvocationParams {
     return normalizeTaskParams(params);
-  }
-
-  private ensureOrchestrator(messageBus: MessageBus): SubagentOrchestrator {
-    if (this.dependencies.orchestratorFactory) {
-      return this.dependencies.orchestratorFactory(messageBus);
-    }
-
-    const profileManager = this.dependencies.profileManager;
-    const subagentManager = this.dependencies.subagentManager;
-
-    if (!profileManager || !subagentManager) {
-      throw new Error(
-        'Task tool requires profile and subagent managers to be configured.',
-      );
-    }
-
-    return new SubagentOrchestrator({
-      credentialAuthority: this.dependencies.credentialAuthority,
-      subagentManager,
-      profileManager,
-      foregroundConfig: this.config,
-      requestInteractiveAuth: this.dependencies.requestInteractiveAuth,
-      hookOwner: this.dependencies.hookOwner,
-      workspaceTrust: this.dependencies.workspaceTrust,
-      createChildSettings: this.dependencies.createChildSettings,
-      telemetry: this.dependencies.telemetry,
-      readRunPolicy: this.dependencies.readRunPolicy,
-      toolRegistry: this.dependencies.toolRegistry,
-      readMcpInstructions: this.dependencies.readMcpInstructions,
-      workspacePaths: this.dependencies.workspacePaths,
-      instructions: this.dependencies.instructions,
-      messageBus,
-    });
   }
 }

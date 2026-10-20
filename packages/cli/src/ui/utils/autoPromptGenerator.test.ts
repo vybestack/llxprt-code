@@ -1,246 +1,223 @@
+import { fixtureAgentResources } from '../../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
-import type {
-  AgentClientContract,
-  ContentGeneratorConfig,
-} from '@vybestack/llxprt-code-core';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { describe, expect, it } from 'bun:test';
+import { withOwners } from '../../../../agents/src/api/__tests__/turn-revision-capture.fixture.js';
+import { useRecordingPrompts } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { withGenerationOwner } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import {
+  useCliGenerationEnvironment,
+  servePromptChunks,
+} from '../../__tests__/utility-generation-fixture.js';
+import { generateAutoPrompt } from './autoPromptGenerator.js';
 
-const createDetachedAutoPromptClientMock = vi.fn();
-
-void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
-  createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
-}));
-
-const { bindAutoPromptOperation } = await import(
-  '../commands/subagentCommandHost.js'
-);
-type PromptOwner = {
-  readonly getProvider: () => string;
-  readonly agentClient: AgentClientContract | null | undefined;
-  readonly createDetached: () => Promise<AgentClientContract>;
-};
-const generateAutoPrompt = (
-  owner: PromptOwner,
-  description: string,
-  config: ContentGeneratorConfig | undefined,
-): Promise<string> =>
-  bindAutoPromptOperation(
-    owner.getProvider,
-    () => owner.agentClient,
-    owner.createDetached,
-    () => config,
-  )(description);
-
-async function makeClient(
-  text = 'generated prompt',
-): Promise<AgentClientContract> {
-  const client = (await createUiSessionOwner()).agentClient;
-  vi.spyOn(client, 'generateDirectMessage').mockImplementation(async () => ({
-    content: { speaker: 'ai', blocks: [{ type: 'text', text }] },
-  }));
-  vi.spyOn(client, 'dispose');
-  return client;
-}
-
-async function makeRuntime(
-  provider: string,
-  client: AgentClientContract | null | undefined,
-): Promise<PromptOwner> {
-  const session = await createUiSessionOwner();
-  return {
-    createDetached: () => session.sessionClient.createDetachedAgentClient(),
-    getProvider: () => provider,
-    agentClient: client,
-  };
-}
+const expectedInstruction = (description: string): string =>
+  `Generate a detailed system prompt for a subagent with the following purpose:\n\n${description}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
 describe('generateAutoPrompt', () => {
-  beforeEach(() => {
-    createDetachedAutoPromptClientMock.mockReset();
-  });
+  useRecordingPrompts();
+  useCliGenerationEnvironment();
 
   it('disables tools when generating the subagent prompt', async () => {
-    const liveClient = await makeClient('live prompt');
-    const detachedClient = await makeClient('expanded system prompt');
-    createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
-
-    await expect(
-      generateAutoPrompt(
-        await makeRuntime('gemini', liveClient),
-        'Review Python code',
-        { model: 'auto-prompt-test' },
-      ),
-    ).resolves.toBe('expanded system prompt');
-
-    expect(detachedClient.generateDirectMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: expect.stringContaining('Review Python code'),
-        config: expect.objectContaining({
-          toolConfig: {
-            functionCallingConfig: {
-              mode: 'NONE',
-            },
-          },
-        }),
-      }),
-      'subagent-auto-prompt',
+    await withOwners(
+      async (agent, _peer, transport) => {
+        transport.release();
+        agent.setEphemeralSetting('utility-model', 'must-not-be-selected');
+        expect(
+          await generateAutoPrompt(
+            'Review Python code',
+            agent.generate.bind(agent),
+          ),
+        ).toBe('expanded system prompt');
+        expect(transport.requests()).toHaveLength(1);
+        expect(transport.requests()[0].model).toBe('capture-a');
+        expect(transport.requests()[0].tools).toBeUndefined();
+        expect(JSON.stringify(transport.requests()[0].messages)).toContain(
+          JSON.stringify(expectedInstruction('Review Python code')).slice(
+            1,
+            -1,
+          ),
+        );
+        expect(await agent.getHistory()).toStrictEqual([]);
+      },
+      false,
+      false,
+      0,
+      0,
+      false,
+      413,
+      'expanded system prompt',
     );
-    expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('uses the live client for non-Gemini providers with an initialized client', async () => {
-    const client = await makeClient('anthropic prompt');
-
-    await expect(
-      generateAutoPrompt(
-        await makeRuntime('anthropic', client),
-        'Write tests',
-        {
-          model: 'auto-prompt-test',
-        },
-      ),
-    ).resolves.toBe('anthropic prompt');
-
-    expect(createDetachedAutoPromptClientMock).not.toHaveBeenCalled();
-    expect(client.generateDirectMessage).toHaveBeenCalledTimes(1);
-    expect(client.generateDirectMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          toolConfig: {
-            functionCallingConfig: {
-              mode: 'NONE',
-            },
-          },
-        }),
-      }),
-      'subagent-auto-prompt',
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        servePromptChunks(provider, ['anthropic ', 'prompt']);
+        const primary = clients[1];
+        expect(
+          await generateAutoPrompt('Write tests', (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).toBe('anthropic prompt');
+        expect(clients).toHaveLength(2);
+        expect(primary.initialized).toBe(1);
+        expect(primary.disposed).toBe(0);
+        expect(provider.requests).toHaveLength(1);
+        expect(provider.requests[0].tools).toStrictEqual([]);
+        expect(provider.requests[0].metadata?.__logicalRequestId).toBe(
+          'subagent-auto-prompt',
+        );
+      },
+      'anthropic',
     );
+    expect(cleanup).toStrictEqual([]);
   });
 
   it('uses an isolated detached client for Gemini providers', async () => {
-    const liveClient = await makeClient('live prompt');
-    const detachedClient = await makeClient('gemini prompt');
-    const runtime = await makeRuntime('gemini', liveClient);
-    createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
-
-    await expect(
-      generateAutoPrompt(runtime, 'Plan migration', {
-        model: 'auto-prompt-test',
-      }),
-    ).resolves.toBe('gemini prompt');
-
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
-      runtime.createDetached,
-      {
-        model: 'auto-prompt-test',
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        servePromptChunks(provider, ['gemini ', 'prompt']);
+        expect(
+          await generateAutoPrompt('Plan migration', (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).toBe('gemini prompt');
+        expect(clients).toHaveLength(3);
+        expect(clients[2]).not.toBe(clients[1]);
+        expect(clients[2].initialized).toBe(1);
+        expect(clients[2].disposed).toBe(1);
+        expect(clients[1].disposed).toBe(0);
+        expect(provider.requests).toHaveLength(1);
+        expect(provider.requests[0].tools).toStrictEqual([]);
+        const nativeOwner = fixtureAgentResources(owner)
+          .sessionOwners.values()
+          .next().value;
+        if (nativeOwner === undefined)
+          throw new Error('Missing native generation owner');
+        await nativeOwner.dispose();
+        expect(clients[2].disposed).toBe(1);
       },
     );
-    expect(liveClient.generateDirectMessage).not.toHaveBeenCalled();
-    expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-    expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
+    expect(cleanup).toStrictEqual([]);
   });
 
-  it('uses an isolated detached client when the live client is unavailable', async () => {
-    const detachedClient = await makeClient('fallback prompt');
-    const runtime = await makeRuntime('anthropic', null);
-    createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
-
-    await expect(
-      generateAutoPrompt(runtime, 'No live client', {
-        model: 'auto-prompt-test',
-      }),
-    ).resolves.toBe('fallback prompt');
-
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
-      runtime.createDetached,
-      {
-        model: 'auto-prompt-test',
+  it.each([
+    [
+      'uses an isolated detached client when the live client is unavailable',
+      'No live client',
+      ['fallback ', 'prompt'],
+      'fallback prompt',
+    ],
+    [
+      'uses an isolated detached client when the live client is undefined',
+      'Undefined live client',
+      ['undefined ', 'fallback prompt'],
+      'undefined fallback prompt',
+    ],
+  ] satisfies ReadonlyArray<
+    readonly [string, string, readonly string[], string]
+  >)('%s', async (_title, description, chunks, expected) => {
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        servePromptChunks(provider, chunks);
+        expect(clients).toHaveLength(2);
+        expect(
+          await generateAutoPrompt(description, (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).toBe(expected);
+        expect(clients).toHaveLength(3);
+        expect(clients[2].initialized).toBe(1);
+        expect(clients[2].disposed).toBe(1);
+        expect(clients[1].disposed).toBe(0);
+        expect(provider.requests).toHaveLength(1);
       },
     );
-    expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-    expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses an isolated detached client when the live client is undefined', async () => {
-    const detachedClient = await makeClient('undefined fallback prompt');
-    const runtime = await makeRuntime('anthropic', undefined);
-    createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
-
-    await expect(
-      generateAutoPrompt(runtime, 'Undefined live client', {
-        model: 'auto-prompt-test',
-      }),
-    ).resolves.toBe('undefined fallback prompt');
-
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
-      runtime.createDetached,
-      {
-        model: 'auto-prompt-test',
-      },
-    );
-    expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-    expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
+    expect(cleanup).toStrictEqual([]);
   });
 
   it('throws when the model returns an empty response', async () => {
-    await expect(
-      generateAutoPrompt(
-        await makeRuntime('anthropic', await makeClient('  ')),
-        'Empty',
-        {
-          model: 'auto-prompt-test',
-        },
-      ),
-    ).rejects.toThrow('Model returned empty response');
+    await withOwners(
+      async (agent, _peer, transport) => {
+        transport.release();
+        await expect(
+          generateAutoPrompt('Empty', agent.generate.bind(agent)),
+        ).rejects.toThrow('Model returned empty response');
+        expect(transport.requests()).toHaveLength(1);
+      },
+      false,
+      false,
+      0,
+      0,
+      false,
+      413,
+      '  ',
+    );
   });
 
   it('throws when no live or detached client is available', async () => {
-    createDetachedAutoPromptClientMock.mockReturnValue(undefined);
-
-    await expect(
-      generateAutoPrompt(await makeRuntime('gemini', null), 'No clients', {
-        model: 'auto-prompt-test',
-      }),
-    ).rejects.toThrow('Unable to access the AI client');
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        const nativeOwner = fixtureAgentResources(owner)
+          .sessionOwners.values()
+          .next().value;
+        if (nativeOwner === undefined)
+          throw new Error('Missing native generation owner');
+        await nativeOwner.dispose();
+        await expect(
+          generateAutoPrompt('No clients', (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).rejects.toThrow('Session client owner is disposed');
+        expect(clients).toHaveLength(2);
+        expect(provider.requests).toHaveLength(0);
+      },
+    );
+    expect(cleanup).toStrictEqual([]);
   });
 
   it('propagates detached client creation failures', async () => {
-    createDetachedAutoPromptClientMock.mockImplementation(() => {
-      throw new Error('factory exploded');
-    });
-
-    await expect(
-      generateAutoPrompt(await makeRuntime('gemini', null), 'Factory failure', {
-        model: 'auto-prompt-test',
-      }),
-    ).rejects.toThrow('factory exploded');
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        await expect(
+          generateAutoPrompt('Factory failure', (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).rejects.toThrow('factory exploded');
+        expect(clients).toHaveLength(2);
+        expect(provider.requests).toHaveLength(0);
+      },
+      'gemini',
+      undefined,
+      async () => {
+        throw new Error('factory exploded');
+      },
+    );
+    expect(cleanup).toStrictEqual([]);
   });
 
   it('disposes detached clients when generation fails', async () => {
-    const detachedClient = await makeClient('unused');
-    (
-      detachedClient.generateDirectMessage as Mock<
-        typeof detachedClient.generateDirectMessage
-      >
-    ).mockRejectedValueOnce(new Error('network failed'));
-    createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
-
-    await expect(
-      generateAutoPrompt(
-        await makeRuntime('gemini', await makeClient()),
-        'Failure',
-        {
-          model: 'auto-prompt-test',
-        },
-      ),
-    ).rejects.toThrow('network failed');
-
-    expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
+    const cleanup = await withGenerationOwner(
+      async (owner, clients, provider) => {
+        provider.generating = async () => {
+          throw new Error('network failed');
+        };
+        await expect(
+          generateAutoPrompt('Failure', (input, options) =>
+            owner.generate(input, options),
+          ),
+        ).rejects.toThrow('network failed');
+        expect(clients[2].initialized).toBe(1);
+        expect(clients[2].disposed).toBe(1);
+        expect(clients[1].disposed).toBe(0);
+        expect(provider.requests).toHaveLength(1);
+      },
+    );
+    expect(cleanup).toStrictEqual([]);
   });
 });

@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -65,7 +69,7 @@ function createOwnerWithClient(
     ...args: ConstructorParameters<typeof AgentClient>
   ) => AgentClient,
 ): Promise<SessionClientOwner> {
-  return SessionClientOwner.create(
+  return createCapturedSessionOwner(
     builtConfig,
     assembleTaskSchemaPolicy(builtSettings),
     builtManager,
@@ -178,7 +182,7 @@ describe('Factory-created session client acquisition', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -218,7 +222,7 @@ describe('Factory-created session client acquisition', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -363,7 +367,7 @@ describe('Factory-created session client acquisition', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -403,7 +407,7 @@ describe('Factory-created session client acquisition', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }

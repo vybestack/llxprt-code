@@ -1,88 +1,86 @@
+import { acquireSessionClient } from '../session/session-client-binding.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ContentGenerator,
+  MessageBus,
+  ProfileDefinitionReads,
+  RuntimeContentGeneratorFactory,
+  RuntimeTokenizerFactory,
+  SubagentDefinitionReads,
+  WorkspaceTrustControlPort,
+} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  ModelConfig,
+  PromptConfig,
+  RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import {
-  ProviderManager,
-  ProviderFileLifecycle,
-} from '@vybestack/llxprt-code-providers';
+import type { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { type AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import {
+  ProviderFileLifecycle,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
 import {
   createFileOAuthSettingsProvider,
   type CredentialAuthority,
   type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import {
-  createOwnerOAuthManager,
-  createOwnedTokenStoreClose,
-  createSessionAuthPolicyReader,
-  createOwnerAuthCacheInvalidator,
   configureProviderTokenizer,
+  createOwnedTokenStoreClose,
+  createOwnerAuthCacheInvalidator,
+  createOwnerOAuthManager,
   createRuntimeContentGeneratorFactory,
+  createSessionAuthPolicyReader,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import type { SettingsService, Profile } from '@vybestack/llxprt-code-settings';
+import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings';
-import type {
-  MessageBus,
-  ProfileDefinitionReads,
-  SubagentDefinitionReads,
-  WorkspaceTrustControlPort,
-  RuntimeContentGeneratorFactory,
-  RuntimeTokenizerFactory,
-  ContentGenerator,
-} from '@vybestack/llxprt-code-core';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { type AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
-import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
-import { releaseAdoptedFileScope } from './adoption-release.js';
-import {
-  createIsolatedSessionClient,
-  disposeIsolatedMediaRuntime,
-} from './agentRuntimeAssembly.js';
-import { registerProvidersOntoManager } from './policyComposition.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-import { activateChildProvider } from '../core/subagent-provider-activation.js';
-import {
-  createSettingsSnapshot,
-  populatePreActivationSettings,
-  populatePostActivationSettings,
-} from '../core/subagentSettingsPopulation.js';
-import { buildSubagentRuntimeLoaderOptions } from '../core/subagent-runtime-loader.js';
-import { getStringSetting } from '../core/subagentSettingsAccess.js';
-import { createSubagentProviderRuntime } from '../core/subagentRuntimeSetup.js';
 import {
   cleanupAfterFailure,
-  runCleanupSteps,
   disposeHistoryLike,
   firstDefinedHistory,
+  runCleanupSteps,
 } from '../core/subagent-cleanup.js';
+import { activateChildProvider } from '../core/subagent-provider-activation.js';
+import { buildSubagentRuntimeLoaderOptions } from '../core/subagent-runtime-loader.js';
 import type { SubAgentScope } from '../core/subagent.js';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type {
-  ModelConfig,
-  PromptConfig,
-  RunConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type {
   SubagentLaunchRequest,
   SubagentLaunchResult,
 } from '../core/subagentOrchestrator.js';
+import { createSubagentProviderRuntime } from '../core/subagentRuntimeSetup.js';
+import { getStringSetting } from '../core/subagentSettingsAccess.js';
+import {
+  createSettingsSnapshot,
+  populatePostActivationSettings,
+  populatePreActivationSettings,
+} from '../core/subagentSettingsPopulation.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
+import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
+import { releaseAdoptedFileScope } from './adoption-release.js';
+import { disposeIsolatedMediaRuntime } from './agentRuntimeAssembly.js';
+import { registerProvidersOntoManager } from './policyComposition.js';
 
 export interface ChildAgentLaunch {
   readonly subagent: SubagentConfig;
@@ -154,9 +152,7 @@ export class ChildAgentAssembly {
         'Subagent launch aborted after runtime assembly completed.',
       );
       this.scope = await this.createScope();
-      this.acquired.push(() => {
-        if (typeof this.scope.dispose === 'function') this.scope.dispose();
-      });
+      this.acquired.push(() => this.scope.dispose());
       this.assertAdmission('Subagent launch aborted before completion.');
       return {
         agentId:
@@ -167,7 +163,12 @@ export class ChildAgentAssembly {
         prompt: this.data.prompt,
         profile: this.data.profile,
         config: this.data.subagent,
-        runtime: this.loaded,
+        identity: Object.freeze({
+          runtimeId: this.loaded.runtimeContext.state.runtimeId,
+          sessionId: this.loaded.runtimeContext.state.sessionId,
+          provider: this.loaded.runtimeContext.state.provider,
+          model: this.loaded.runtimeContext.state.model,
+        }),
         dispose: () => this.close(),
       };
     } catch (primary) {
@@ -262,7 +263,7 @@ export class ChildAgentAssembly {
   }
 
   private async prepareClient(): Promise<void> {
-    this.client = await createIsolatedSessionClient(
+    this.client = await acquireSessionClient(
       this.config,
       this.settings,
       this.settingsOwner,
@@ -271,7 +272,7 @@ export class ChildAgentAssembly {
       this.content,
       this.tokenizer,
       this.files,
-      this.media,
+      this.media.store,
       this.clientFactory,
       this.readMcpInstructions,
       this.workspacePaths,
@@ -459,9 +460,7 @@ export class ChildAgentAssembly {
 
   private close(): Promise<void> {
     this.closing ??= runCleanupSteps([
-      () => {
-        if (typeof this.scope.dispose === 'function') this.scope.dispose();
-      },
+      () => this.scope.dispose(),
       () =>
         disposeHistoryLike(
           firstDefinedHistory(
@@ -479,49 +478,4 @@ export class ChildAgentAssembly {
     ]);
     return this.closing;
   }
-}
-
-export function assembleChildAgent(
-  data: ChildAgentLaunch,
-  authority: CredentialAuthority,
-  messageBus: MessageBus,
-  requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
-  profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
-  subagentReads: Pick<
-    SubagentDefinitionReads,
-    'loadSubagent' | 'listSubagents'
-  >,
-  telemetry: RootTelemetry | undefined,
-  createChildSettings: () => SettingsService,
-  foregroundConfig: Config,
-  instructions: InstructionReadOperations,
-  workspacePaths: WorkspacePathOperations,
-  readMcpInstructions: () => string | undefined,
-  trust: WorkspaceTrustControlPort | undefined,
-  tools: ToolSelection | undefined,
-  hooks: SessionHookOwner | undefined,
-  clientFactory: AgentClientFactory | undefined,
-  runtimeLoader: typeof loadAgentRuntime,
-  scopeFactory: typeof SubAgentScope.create,
-): Promise<SubagentLaunchResult> {
-  return new ChildAgentAssembly(
-    data,
-    authority,
-    messageBus,
-    requestInteractiveAuth,
-    profileReads,
-    subagentReads,
-    telemetry,
-    createChildSettings,
-    foregroundConfig,
-    instructions,
-    workspacePaths,
-    readMcpInstructions,
-    trust,
-    tools,
-    hooks,
-    clientFactory,
-    runtimeLoader,
-    scopeFactory,
-  ).assemble();
 }

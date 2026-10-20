@@ -26,10 +26,8 @@ import {
   buildAgent,
   drain,
   isDoneEvent,
-  internalSettingsOwner,
+  fixtureAgentResources,
 } from './helpers/agentHarness.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
 
 /**
  * @license
@@ -38,13 +36,11 @@ import { ShellJobOwner } from '../../session/shell-job-owner.js';
  */
 
 function clientOwner(agent: Agent): SessionClientOwner {
-  if (
-    !('ownerClient' in agent) ||
-    !(agent.ownerClient instanceof SessionClientOwner)
-  ) {
-    throw new Error('Expected an owned session client');
-  }
-  return agent.ownerClient;
+  const owner = fixtureAgentResources(agent)
+    .sessionOwners.values()
+    .next().value;
+  if (owner === undefined) throw new Error('Expected an owned session client');
+  return owner;
 }
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -123,17 +119,11 @@ describe('starting a new conversation session', () => {
       try {
         await entered.promise;
 
-        if (
-          !('taskLaunchOwner' in agent) ||
-          !(agent.taskLaunchOwner instanceof TaskLaunchOwner)
-        )
+        const { taskOwner: taskLaunchOwner, shellOwner } =
+          fixtureAgentResources(agent);
+        if (taskLaunchOwner === undefined)
           throw new Error('Expected task owner');
-        if (
-          !('shellOwner' in agent) ||
-          !(agent.shellOwner instanceof ShellJobOwner)
-        )
-          throw new Error('Expected shell owner');
-        const { taskLaunchOwner, shellOwner } = agent;
+        if (shellOwner === undefined) throw new Error('Expected shell owner');
         expect(() => taskLaunchOwner.start(async () => {})).toThrow(
           AgentBusyError,
         );
@@ -310,12 +300,13 @@ describe('starting a new conversation session', () => {
         const injectFailure = (): { mockRestore: () => void } => {
           if (stage === 'telemetry') {
             return spyOn(
-              internalSettingsOwner(agent).telemetry,
+              fixtureAgentResources(agent).telemetry,
               'setEnabled',
             ).mockRejectedValueOnce(new Error('retirement failed'));
           }
           if (stage === 'client') {
-            const previous = clientOwner(agent).getAgentClient();
+            const previous =
+              fixtureAgentResources(agent).publishedClient(agent);
             const original = previous.dispose.bind(previous);
             return spyOn(previous, 'dispose').mockImplementationOnce(
               async () => {
@@ -370,7 +361,7 @@ describe('starting a new conversation session', () => {
       telemetry: { enabled: true, outfile },
     });
     try {
-      const telemetry = internalSettingsOwner(agent).telemetry;
+      const telemetry = fixtureAgentResources(agent).telemetry;
       const oldId = agent.session.getSessionId();
       telemetry.events.record(() => ({ body: 'before clear' }));
       await agent.session.startNewSession();
@@ -646,7 +637,7 @@ describe('starting a new conversation session', () => {
           const nextId = agent.session.getSessionId();
           await agent.setModel('fresh-model');
           await drain(agent.stream('new request'));
-          await internalSettingsOwner(agent).telemetry.flush();
+          await fixtureAgentResources(agent).telemetry.flush();
           const spans = readFileSync(outfile, 'utf8')
             .trim()
             .split('\n')

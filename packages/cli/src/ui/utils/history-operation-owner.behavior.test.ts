@@ -1,3 +1,4 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,7 +6,10 @@
  */
 import type { HistoryItemWithoutId } from '../types.js';
 import { describe, expect, it } from 'bun:test';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { resumeOwnerSession } from './resumeOwnerSession.js';
 import { bindCompressCommand } from '../commands/compressCommandHost.js';
 import {
@@ -126,7 +130,7 @@ describe('history operation ownership', () => {
   it('reads raw chat history through its captured reader without selecting an attached client', async () => {
     const owner = await makeOwner('raw-callback-owner');
     const sibling = await makeOwner('raw-callback-sibling');
-    await owner.agentClient.startChat();
+    await commandOwnerClient(owner).startChat();
     await owner.setHistory([
       {
         speaker: 'human',
@@ -137,10 +141,15 @@ describe('history operation ownership', () => {
       Object.assign(() => null, { agent: sibling, config: null }),
       () => null,
       () => null,
-      () => owner.agentClient.mediaStore,
-      () => owner.agentClient.getChat().getHistory(),
+      ...checkpointBindings(
+        Object.assign(() => null, { agent: sibling, config: null }),
+        () => null,
+        () => null,
+        () => commandOwnerClient(owner).mediaStore,
+      ),
+      () => commandOwnerClient(owner).getChat().getHistory(),
       async (history) => {
-        await owner.agentClient.getChat().setHistory(history);
+        await commandOwnerClient(owner).getChat().setHistory(history);
       },
       () => owner.getModel(),
     );

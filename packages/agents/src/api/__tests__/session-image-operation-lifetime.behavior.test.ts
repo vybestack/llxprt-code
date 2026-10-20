@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +25,7 @@ import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/im
 import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
 import { createAgent } from '../createAgent.js';
-import { fromConfig } from '../fromConfig.js';
+
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {

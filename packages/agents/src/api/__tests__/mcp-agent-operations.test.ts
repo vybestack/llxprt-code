@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -48,7 +53,6 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -153,7 +157,7 @@ describe('MCP Agent operations', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -273,7 +277,7 @@ describe('MCP Agent operations', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('joins configured discovery when disposing the retained MCP owner', async () => {
@@ -365,7 +369,7 @@ describe('MCP Agent operations', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       const controller = new AbortController();

@@ -26,6 +26,7 @@ async function setActiveToolFormatOverride(
 
 const activeProvider = {
   name: 'openai',
+  toolFormat: 'openai',
   getToolFormat: () => 'openai',
   getModels: async () => [],
   async *generateChatCompletion() {},

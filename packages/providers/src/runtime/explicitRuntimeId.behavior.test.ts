@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,7 +23,7 @@ import {
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { configureProviderTokenizer } from '../composition/index.js';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+
 import { validateRuntimeId } from './runtimeIdValidation.js';
 import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
 /**
@@ -236,7 +237,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
     firstSettings.set('activeProvider', 'openai');
     secondSettings.set('activeProvider', 'kimi');
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         firstSettingsOwner,
         firstManager,
         () => firstConfig.getModel(),
@@ -244,7 +245,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       ).getActiveProviderName(),
     ).toBe('openai');
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         secondSettingsOwner,
         secondManager,
         () => secondConfig.getModel(),
@@ -265,7 +266,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       debugMode: false,
     });
     firstRetiring.push(() => incomplete.dispose());
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect('runtimeOAuthManager' in incomplete).toBe(false);
@@ -274,7 +275,7 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
   it('requires an explicit owner even after foreground infrastructure exists', async () => {
     await openFirst('same-label', 'same-label', 'owner-model');
     await activateFirst();
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect(firstManager.listProviders()).toContain('openai');

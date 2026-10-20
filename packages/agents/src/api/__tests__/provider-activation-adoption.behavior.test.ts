@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -39,7 +44,6 @@ import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import {
-  fromConfig,
   type Agent,
   type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
@@ -114,7 +118,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -224,7 +228,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('(a) fromConfig with activation intent activates the provider', async () => {
@@ -246,7 +250,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.providerReads.getActiveProviderName()).toBe('fake');
@@ -291,7 +295,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         // The profile auth ephemerals MUST survive fromConfig — the provider
@@ -330,7 +334,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();
@@ -353,7 +357,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         callerBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();

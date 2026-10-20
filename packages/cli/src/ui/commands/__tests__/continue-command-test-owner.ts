@@ -8,6 +8,7 @@ import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.
 import { basename } from 'node:path';
 import {
   SessionDiscovery,
+  type LocalMediaStore,
   validateSessionMediaPackage,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -17,6 +18,7 @@ import { warnUnreadableRecordings } from '../../utils/warnUnreadableRecordings.j
 
 export function createContinueCommandForTest(
   currentContext: () => CommandOwnerFixture,
+  readMedia: () => LocalMediaStore | undefined = () => undefined,
 ) {
   return createContinueCommand({
     isInteractive: () =>
@@ -35,7 +37,7 @@ export function createContinueCommandForTest(
         const detailed = await SessionDiscovery.listContinueTargetsDetailed(
           config.projectChatsDir,
           basename(config.projectTempDir),
-          context.services.agent?.agentClient.mediaStore,
+          readMedia(),
         );
         warnUnreadableRecordings(
           '/continue completions',

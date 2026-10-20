@@ -1,3 +1,4 @@
+import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,10 +18,7 @@ import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/o
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import {
-  acquireAdoptedProviderManager,
-  activateAdoptedProviders,
-} from '../../../agents/src/api/adopted-provider-assembly.js';
+
 import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
 import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
@@ -88,13 +86,10 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       release,
       undefined,
     );
-    await activateAdoptedProviders(
-      config,
-      settings,
+    await new AdoptedProviderFixture(config, settings, runtimeId).activate(
       settingsOwner,
       manager,
       oauth,
-      runtimeId,
       false,
       configureProviderTokenizer(manager),
     );
@@ -139,13 +134,14 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'setRuntimeContext-scoped'),
     );
-    const capturedManager = acquireAdoptedProviderManager(
-      undefined,
+    const capturedManager = new AdoptedProviderFixture(
       config,
       settings,
+      'setRuntimeContext-scoped',
+    ).acquireManager(
+      undefined,
       settingsOwner,
       files,
-      'setRuntimeContext-scoped',
       credentials().authority,
       release,
     );
@@ -184,13 +180,14 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'setRuntimeContext-adopted'),
     );
-    const selected = acquireAdoptedProviderManager(
-      adoptedManager,
+    const selected = new AdoptedProviderFixture(
       config,
       settings,
+      'setRuntimeContext-adopted',
+    ).acquireManager(
+      adoptedManager,
       settingsOwner,
       files,
-      'setRuntimeContext-adopted',
       credentials().authority,
       release,
     );
@@ -206,13 +203,14 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       release,
       undefined,
     );
-    await activateAdoptedProviders(
+    await new AdoptedProviderFixture(
       config,
       settings,
+      'setRuntimeContext-adopted',
+    ).activate(
       settingsOwner,
       selected,
       oauth,
-      'setRuntimeContext-adopted',
       false,
       configureProviderTokenizer(adoptedManager),
     );

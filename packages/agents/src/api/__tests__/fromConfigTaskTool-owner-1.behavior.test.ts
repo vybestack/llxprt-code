@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import {
   Config,
@@ -49,12 +56,7 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { requireInstructionReads } from '../../core/chat-system-prompt.js';
 import { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import {
-  fromConfig,
-  assembleAgentActivationBootstrap,
-  createAgentClient,
-  type Agent,
-} from '@vybestack/llxprt-code-agents';
+import { createAgentClient, type Agent } from '@vybestack/llxprt-code-agents';
 
 /**
  * @license
@@ -236,7 +238,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -358,7 +360,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('T3c excludeTools governance is never overridden: a caller-excluded task tool stays absent after the reconcile @requirement:REQ-3222-AC2 @scenario:exclusion-respected @given:a caller-initialized Config with excludeTools ["task"] and NO taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the shipped task tool is still NOT registered (the deny-list wins over the reconcile)', async () => {
@@ -492,7 +494,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       // registration exists, mirroring the CLI-at-preflight Config.
       expect(builtCallerMcp.toolSelection.getTool('task')).toBeUndefined();
       expect(
-        builtCallerOwner.getAgentClient().tools.getTool('task'),
+        capturedSessionClient(builtCallerOwner).tools.getTool('task'),
       ).toBeDefined();
 
       // The reviewer sequence's middle step: preflight runs BEFORE fromConfig
@@ -513,7 +515,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         null,
         () => undefined,
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
       );
       const preflight = await operation.preflight(intent);
@@ -524,7 +526,9 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         throw new Error('Preflight did not produce an activation token');
       expect(builtCallerMcp.toolSelection.getTool('task')).toBeUndefined();
       expect(
-        operation.sessionClient.getAgentClient().tools.getTool('task'),
+        capturedSessionClient(
+          capturedActivation(operation).owner,
+        ).tools.getTool('task'),
       ).toBeDefined();
 
       // Adoption with the preflight token (the CLI flow: preflight, then
@@ -539,7 +543,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         { operation, token },
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         undefined,
         undefined,

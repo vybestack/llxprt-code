@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -174,7 +178,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -296,7 +300,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -309,21 +313,23 @@ describe('explicit session authentication lifecycle', () => {
   }
   it('disposes the retired client without disposing the replacement', async () => {
     await withSession(async () => {
-      const previous = builtCallerOwner.getAgentClient();
+      const previous = capturedSessionClient(builtCallerOwner);
       const previousListeners = builtCallerSettingsOwner[
         'modelNotifications'
       ].listeners(CoreEvent.ModelChanged);
       await builtCallerOwner.refreshAuth();
-      expect(previous).not.toBe(builtCallerOwner.getAgentClient());
+      expect(previous).not.toBe(capturedSessionClient(builtCallerOwner));
       expect(
         builtCallerSettingsOwner['modelNotifications']
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
-      expect(builtCallerOwner.getAgentClient().isInitialized()).toBe(true);
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
+      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
+        true,
+      );
     });
   });
 });

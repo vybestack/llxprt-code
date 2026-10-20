@@ -1,3 +1,4 @@
+import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -40,7 +41,11 @@ export function bindChatRecordingOperations(
   getRecording: ChatRecordingOperations['getRecording'],
   readProjectHash: ChatRecordingOperations['getProjectHash'],
   readChatsDir: ChatRecordingOperations['getChatsDir'],
-  getMediaStore: ChatRecordingOperations['getMediaStore'],
+  listTargets: ChatRecordingOperations['listTargets'],
+  saveCheckpoint: ChatRecordingOperations['saveCheckpoint'],
+  deleteCheckpoint: ChatRecordingOperations['deleteCheckpoint'],
+  renameCheckpoint: ChatRecordingOperations['renameCheckpoint'],
+  nameSession: ChatRecordingOperations['nameSession'],
   getChatHistory: ChatRecordingOperations['getChatHistory'],
   replaceChatHistory: ChatRecordingOperations['replaceChatHistory'],
   getModel: ChatRecordingOperations['getModel'],
@@ -49,9 +54,50 @@ export function bindChatRecordingOperations(
     getRecording,
     getProjectHash: () => getRecording()?.getProjectHash() ?? readProjectHash(),
     getChatsDir: () => getRecording()?.getChatsDir() ?? readChatsDir(),
-    getMediaStore,
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
     getChatHistory,
     replaceChatHistory,
     getModel,
   };
+}
+
+export function bindPersistedChatRecording(
+  readPersistence: () => CliSessionPersistencePort,
+  readRecording: ChatRecordingOperations['getRecording'],
+  readHash: ChatRecordingOperations['getProjectHash'],
+  readDirectory: ChatRecordingOperations['getChatsDir'],
+  readHistory: ChatRecordingOperations['getChatHistory'],
+  replaceHistory: ChatRecordingOperations['replaceChatHistory'],
+  readModel: ChatRecordingOperations['getModel'],
+): ChatRecordingOperations {
+  const requireRecording = () => {
+    const recording = readRecording();
+    if (!recording) throw new Error('No recording available');
+    return recording;
+  };
+  return bindChatRecordingOperations(
+    readRecording,
+    readHash,
+    readDirectory,
+    () => readPersistence().listBrowserTargetsDetailed(),
+    (name, overwrite) =>
+      readPersistence().createCheckpoint(requireRecording(), name, overwrite),
+    (target) => readPersistence().deleteBrowserTarget(target, readRecording()),
+    (target, name, overwrite) =>
+      readPersistence().renameCheckpoint(
+        readRecording(),
+        target,
+        name,
+        overwrite,
+      ),
+    (name, overwrite) =>
+      readPersistence().nameSession(requireRecording(), name, overwrite),
+    readHistory,
+    replaceHistory,
+    readModel,
+  );
 }

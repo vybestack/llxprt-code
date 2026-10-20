@@ -1,3 +1,4 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,7 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../__tests__/render.js';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -37,14 +41,30 @@ function ownerOperations(owner: Agent): ChatOwnerOperations {
 }
 
 function rawOperations(owner: Agent): ChatRecordingOperations {
+  const [
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
+  ] = checkpointBindings(
+    () => null,
+    () => null,
+    () => null,
+    () => commandOwnerClient(owner).mediaStore,
+  );
   return {
     getRecording: () => null,
     getProjectHash: () => null,
     getChatsDir: () => null,
-    getMediaStore: () => owner.agentClient.mediaStore,
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
     getChatHistory: () => null,
     replaceChatHistory: async (history) => {
-      await owner.agentClient.getChat().setHistory(history);
+      await commandOwnerClient(owner).getChat().setHistory(history);
     },
     getModel: () => owner.getModel(),
   };

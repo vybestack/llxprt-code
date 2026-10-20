@@ -1,12 +1,12 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import type { SubAgentScope } from '../subagent.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { SubAgentScope } from '../subagent.js';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
@@ -28,16 +28,14 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
  * be imported.
  */
 
-import type { Mock } from 'bun:test';
-import { afterEach, vi } from 'bun:test';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { StreamEventType } from '../chatSession.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type {
+  ModelConfig,
+  RunConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
@@ -46,15 +44,19 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
-import type {
-  ModelConfig,
-  RunConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type {
+  ToolErrorType,
+  ToolSelection,
+} from '@vybestack/llxprt-code-tools';
+import type { Mock } from 'bun:test';
+import { afterEach, vi } from 'bun:test';
+import { McpRuntimeOwner } from '../../api/mcpRuntimeAssembly.js';
+import { StreamEventType } from '../chatSession.js';
 
 type RetainSubagentCleanup = (close: () => void | Promise<void>) => () => void;
 
@@ -529,7 +531,7 @@ export function scopeInputs(
     inputs.instructions,
     inputs.workspacePaths,
     inputs.readMcpInstructions,
-    inputs.messageBus,
+    inputs.messageBus ?? new MessageBus(),
     inputs.settingsSnapshot ?? runtime?.settingsSnapshot,
     inputs.environmentContextLoader,
     inputs.readApprovalMode,

@@ -1,58 +1,67 @@
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeLoaderResult,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { fileURLToPath } from 'node:url';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import type { TestChildLaunchOptions } from '../../core/__tests__/child-launch-fixture.js';
+import { createTestChildOrchestrator } from '../../core/__tests__/child-launch-fixture.js';
+import { AgentClient } from '../../core/client.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
+  cleanupAfterFailure,
+  runCleanupSteps,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { releaseAdoptedFileScope } from '../adoption-release.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { AgentClient } from '../../core/client.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import {
+  acquirePreferredOAuth,
+  acquirePreferredProviderManager,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
-import {
-  ProfileManager,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
-  SubagentOrchestrator,
-  type SubagentOrchestratorOptions,
-} from '../../core/subagentOrchestrator.js';
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
+import { SubagentOrchestrator } from '../../core/subagentOrchestrator.js';
 
 class TrackedChildClient extends AgentClient {
   disposed = false;
@@ -72,7 +81,7 @@ async function withChildOwner(
     clients: readonly TrackedChildClient[],
   ) => Promise<void>,
   authority: CredentialAuthority,
-  runtimeLoader?: SubagentOrchestratorOptions['runtimeLoader'],
+  runtimeLoader?: TestChildLaunchOptions['runtimeLoader'],
 ): Promise<void> {
   const builtPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
   process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
@@ -162,7 +171,7 @@ async function withChildOwner(
     builtConfig.projectTempDir,
     1024 * 1024,
   );
-  const builtOwner = await SessionClientOwner.create(
+  const builtOwner = await createCapturedSessionOwner(
     builtConfig,
     assembleTaskSchemaPolicy(builtSettings),
     builtManager,
@@ -202,7 +211,7 @@ async function withChildOwner(
     await builtMcp.initialize();
     await builtOwner.initializeTools();
     await builtOwner.refreshAuth();
-    await builtOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtOwner).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, builtClose);
   }
@@ -228,7 +237,7 @@ async function withChildOwner(
       'Answer the parent question.',
     );
     let adoptedChildSettings: SettingsService | undefined;
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: authority,
       runtimeFactoryBindings: {
         ...createAgentRuntimeFactoryBindings(),
@@ -262,7 +271,7 @@ async function withChildOwner(
       },
       workspaceTrust: builtMcp.trust,
       instructions: emptyInstructionReads,
-      toolRegistry: builtOwner.getAgentClient().tools,
+      toolRegistry: capturedSessionClient(builtOwner).tools,
       workspacePaths: builtMcp.workspacePaths,
       profileManager: profiles,
       subagentManager: subagents,
@@ -308,6 +317,7 @@ describe('Isolated child session client ownership', () => {
   });
   const credentials = useOwnedCredentials();
   it('withdraws child tool metadata immediately after adopted-store governance changes', async () => {
+    let childRuntime: AgentRuntimeLoaderResult | undefined;
     await withChildOwner(
       async (
         orchestrator,
@@ -317,21 +327,20 @@ describe('Isolated child session client ownership', () => {
         childSettings,
       ) => {
         const child = await orchestrator.launch({ name: 'child' });
+        if (childRuntime === undefined)
+          throw new Error('Child runtime was not acquired');
         try {
-          expect(child.runtime.toolsView.listToolNames()).toContain(
-            'read_file',
-          );
+          expect(childRuntime.toolsView.listToolNames()).toContain('read_file');
           childSettings().set('tools.allowed', []);
-          expect(child.runtime.toolsView.listToolNames()).toStrictEqual([]);
+          expect(childRuntime.toolsView.listToolNames()).toStrictEqual([]);
           expect(
-            child.runtime.toolsView.getToolMetadata('read_file'),
+            childRuntime.toolsView.getToolMetadata('read_file'),
           ).toBeUndefined();
           expect(
-            child.runtime.runtimeContext.readToolGovernance().allowedExplicit,
+            childRuntime.runtimeContext.readToolGovernance().allowedExplicit,
           ).toBe(true);
           expect(
-            parentOwner
-              .getAgentClient()
+            capturedSessionClient(parentOwner)
               .tools.getFunctionDeclarations()
               .map((tool) => tool.name),
           ).toContain('read_file');
@@ -340,6 +349,10 @@ describe('Isolated child session client ownership', () => {
         }
       },
       credentials().authority,
+      async (options) => {
+        childRuntime = await loadAgentRuntime(options);
+        return childRuntime;
+      },
     );
   }, 30000);
 
@@ -387,12 +400,12 @@ describe('Isolated child session client ownership', () => {
         expect(clients.every((client) => client.disposed)).toBe(true);
         expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
         await parentMcp.refreshContext();
-        await parentOwner.getAgentClient().addHistory({
+        await capturedSessionClient(parentOwner).addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await parentOwner.getAgentClient().getHistory()).filter(
+          (await capturedSessionClient(parentOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);
@@ -417,12 +430,12 @@ describe('Isolated child session client ownership', () => {
         expect(clients.every((client) => client.disposed)).toBe(true);
         expect(parentSettings.listenerCount('provider-change')).toBe(baseline);
         await parentMcp.refreshContext();
-        await parentOwner.getAgentClient().addHistory({
+        await capturedSessionClient(parentOwner).addHistory({
           speaker: 'human',
           blocks: [{ type: 'text', text: 'parent continues' }],
         });
         expect(
-          (await parentOwner.getAgentClient().getHistory()).filter(
+          (await capturedSessionClient(parentOwner).getHistory()).filter(
             (item) => item.speaker === 'human',
           ),
         ).toHaveLength(1);

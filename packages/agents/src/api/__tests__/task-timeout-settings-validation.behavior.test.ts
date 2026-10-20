@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +14,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';

@@ -1,3 +1,8 @@
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -15,7 +20,7 @@ import { runCleanupSteps } from '../../core/subagent-cleanup.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
@@ -25,15 +30,83 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { cleanupFailedAdoption } from '../fromConfig-cleanup.js';
-import { fromConfig } from '../fromConfig.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('adoption cleanup with explicit close operations', () => {
   const credentials = useOwnedCredentials();
+  for (const ownership of ['agent', 'caller'] as const) {
+    it(`retains ${ownership} workspace ownership when media acquisition fails before provider acquisition`, async () => {
+      const directory = await realpath(
+        await mkdtemp(join(tmpdir(), 'adoption-media-rollback-')),
+      );
+      const config = new Config(
+        toConfigParameters({
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: directory,
+          folderTrust: true,
+          mcpEnabled: false,
+          skillsSupport: false,
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+        }),
+      );
+      const settings = new SettingsService();
+      const selected = new SessionSettingsOwner(settings);
+      const policy = new RuntimePolicyOwner(config);
+      const mcp = await buildTestMcpRuntime(
+        config,
+        policy.session.messageBus,
+        {},
+        undefined,
+        policy,
+      );
+      const primary = new Error('media quota input failed');
+      const quota = spyOn(
+        config,
+        'getMediaStoreQuotaByteLimit',
+      ).mockImplementation(() => {
+        throw primary;
+      });
+      try {
+        await expect(
+          captureAgentAdoption(
+            config,
+            settings,
+            { mcpOwnership: ownership },
+            selected,
+            undefined,
+            undefined,
+            policy.session.messageBus,
+            mcp,
+          ),
+        ).rejects.toBe(primary);
+        expect(mcp.isStopped()).toBe(ownership === 'agent');
+        const retainsDirectory = await Promise.resolve()
+          .then(() => mcp.workspacePaths.directories())
+          .then(
+            (directories) => directories.includes(directory),
+            () => false,
+          );
+        expect(retainsDirectory).toBe(ownership === 'caller');
+        selected.writeUserParameter('survived-media-failure', true);
+        expect(selected.readNamedParameter('survived-media-failure')).toBe(
+          true,
+        );
+      } finally {
+        quota.mockRestore();
+        await runCleanupSteps([
+          () => mcp.dispose(),
+          () => selected.dispose(),
+          () => config.dispose(),
+          () => rm(directory, { recursive: true, force: true }),
+        ]);
+      }
+    });
+  }
   it('joins client closure before runtime closure and preserves independent failures', async () => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'adoption-cleanup-')),
@@ -117,7 +190,7 @@ describe('adoption cleanup with explicit close operations', () => {
       policyOwner,
     );
     const files = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig(
+    const agent = await captureAgentAdoption(
       fixtureFactorylessConfig,
       fixtureFactorylessSettings,
       {},
@@ -136,13 +209,15 @@ describe('adoption cleanup with explicit close operations', () => {
       credentials().authority,
       fixtureFactorylessPolicy,
     );
-    const tokenizerFactory = configureProviderTokenizer(agent.providerManager);
+    const tokenizerFactory = configureProviderTokenizer(
+      fixtureAgentResources(agent).manager,
+    );
     const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const media = new SessionMediaOwner(config.projectTempDir, 1024);
-    const owner = await SessionClientOwner.create(
+    const owner = await createCapturedSessionOwner(
       config,
       assembleTaskSchemaPolicy(settingsService),
-      agent.providerManager,
+      fixtureAgentResources(agent).manager,
       buildAgentClientFactory(),
       media.store,
       mcp.readInstructions,

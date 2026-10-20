@@ -1,3 +1,4 @@
+import type { ReasoningConfig } from '../llm-types/modelRequest.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,6 +23,8 @@ export interface AdmittedProviderRoute {
 }
 
 export interface AdmittedModelParameters {
+  readonly modelOverride?: string;
+  readonly reasoning?: ReasoningConfig;
   readonly providerName: string;
   readonly modelParams: Readonly<Record<string, unknown>>;
   readonly route?: AdmittedProviderRoute;
@@ -124,4 +127,21 @@ export function ownModelParameters(
   return ownWireValue(values, 'modelParams', new Set<object>()) as Readonly<
     Record<string, unknown>
   >;
+}
+
+export function applyAdmittedReasoning(
+  ephemerals: Readonly<Record<string, unknown>>,
+  reasoning: ReasoningConfig | undefined,
+): Record<string, unknown> {
+  const values = { ...ephemerals };
+  if (reasoning?.budgetTokens !== undefined) {
+    values['reasoning.enabled'] = reasoning.budgetTokens !== 0;
+    if (reasoning.budgetTokens === 0) delete values['reasoning.budgetTokens'];
+    else values['reasoning.budgetTokens'] = reasoning.budgetTokens;
+  }
+  if (reasoning?.effort !== undefined)
+    values['reasoning.effort'] = reasoning.effort;
+  if (reasoning?.includeInOutput !== undefined)
+    values['reasoning.includeInResponse'] = reasoning.includeInOutput;
+  return values;
 }

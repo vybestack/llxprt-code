@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -38,7 +44,7 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { buildAgent } from './helpers/agentHarness.js';
 
 /**
@@ -125,7 +131,7 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -235,7 +241,7 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('exposes the caller-supplied MessageBus as the SAME instance through the public accessor', async () => {
@@ -252,11 +258,11 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
         callerBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         // The public accessor returns the EXACT caller bus — no second bus.
-        expect(agent.getMessageBus()).toBe(callerBus);
+        expect(fixtureAgentResources(agent).messageBus).toBe(callerBus);
       } finally {
         await agent.dispose();
       }
@@ -278,11 +284,11 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
-        const first = agent.getMessageBus();
-        const second = agent.getMessageBus();
+        const first = fixtureAgentResources(agent).messageBus;
+        const second = fixtureAgentResources(agent).messageBus;
         expect(first).toBeDefined();
         // Idempotent read: the accessor never builds a bus on demand.
         expect(second).toBe(first);
@@ -298,10 +304,10 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
   it('a createAgent-built agent also exposes its owned bus via the public accessor', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const bus = agent.getMessageBus();
+      const bus = fixtureAgentResources(agent).messageBus;
       expect(bus).toBeDefined();
       // Same instance on every read.
-      expect(agent.getMessageBus()).toBe(bus);
+      expect(fixtureAgentResources(agent).messageBus).toBe(bus);
     } finally {
       await cleanup();
     }
@@ -321,10 +327,10 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
         callerBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
-        const exposed = agent.getMessageBus();
+        const exposed = fixtureAgentResources(agent).messageBus;
         // The exposed bus IS the caller bus, so a subscription on the caller bus
         // is observable through the accessor-returned reference (identity).
         expect(exposed).toBe(callerBus);

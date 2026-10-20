@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService, Profile } from '@vybestack/llxprt-code-settings';
@@ -162,7 +166,7 @@ describe('profile candidate operations', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const firstCallerOwner = await SessionClientOwner.create(
+    const firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -225,7 +229,7 @@ describe('profile candidate operations', () => {
       );
       requireCallerActivation(activation);
       await firstCallerOwner.initializeTools();
-      await firstCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(firstCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, firstCallerClose);
     }
@@ -330,7 +334,7 @@ describe('profile candidate operations', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const secondCallerOwner = await SessionClientOwner.create(
+    const secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -393,7 +397,7 @@ describe('profile candidate operations', () => {
       );
       requireCallerActivation(activation);
       await secondCallerOwner.initializeTools();
-      await secondCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(secondCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, secondCallerClose);
     }

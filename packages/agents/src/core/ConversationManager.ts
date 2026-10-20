@@ -598,13 +598,14 @@ export class ConversationManager {
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
-    const restored = history.map((content) => {
-      const turnKey = this.historyService.generateTurnKey();
-      return {
-        ...content,
-        metadata: { ...content.metadata, turnId: turnKey },
-      };
-    });
+    const restored = history.map((content) => ({
+      ...content,
+      metadata: {
+        ...content.metadata,
+        turnId:
+          content.metadata?.turnId ?? this.historyService.generateTurnKey(),
+      },
+    }));
     await this.historyService.replaceBatch(restored, generatingModel, {
       origin: historyOrigin,
     });

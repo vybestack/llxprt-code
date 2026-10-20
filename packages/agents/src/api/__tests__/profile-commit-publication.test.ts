@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -47,10 +53,11 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
+import { buildRuntimeProfileSnapshot } from '../profileSnapshot.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
@@ -168,7 +175,7 @@ describe('profile-commit-publication', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -288,7 +295,7 @@ describe('profile-commit-publication', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it.each([false, true])(
@@ -333,8 +340,15 @@ describe('profile-commit-publication', () => {
       const oldProfiles = builtCallerSettingsOwner['modelNotifications']
         .listeners(CoreEvent.ModelProfileChanged)
         .filter((listener) => !ownerProfiles.includes(listener));
-      await agent.agentClient.startChat();
-      const { agentClient: priorClient } = agent;
+      const resources = fixtureAgentResources(agent);
+      await resources.publishedClient(agent).startChat();
+      await resources.readObservedHistory(agent);
+      const priorClient = resources.historyReaders
+        .slice(-1)
+        .values()
+        .next().value;
+      if (priorClient === undefined)
+        throw new Error('Expected an actual native history receiver');
       const history = priorClient.getHistoryService();
       const modelError = new Error('model listener failed');
       const profileError = new Error('profile listener failed');
@@ -409,8 +423,14 @@ describe('profile-commit-publication', () => {
               CoreEvent.ModelProfileChanged,
             ),
           ).not.toContain(listener);
-        expect(agent.agentClient).not.toBe(priorClient);
-        expect(agent.agentClient.getHistoryService()).toBe(history);
+        expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+          priorClient,
+        );
+        expect(
+          fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService(),
+        ).toBe(history);
         expect(agent.getModel()).toBe('committed-after-listener-error');
         expect(agent.profiles.isApplying()).toBe(false);
         builtCallerSettingsOwner['modelNotifications'].off(
@@ -477,13 +497,29 @@ describe('profile-commit-publication', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     const settings = builtCallerSettings;
     const manager = builtCallerManager;
     if (!(manager instanceof ProviderManager))
       throw new Error('Expected real provider manager');
-    const before = agent.captureProfile();
+    const priorProvider = manager.getActiveProviderName();
+    if (priorProvider === undefined)
+      throw new Error('Expected an active caller provider');
+    const priorSettings = structuredClone(
+      settings.getProviderSettings(priorProvider),
+    );
+    const priorModel = priorSettings.model;
+    if (typeof priorModel !== 'string')
+      throw new Error('Expected a configured caller model');
+    const before = buildRuntimeProfileSnapshot({
+      providerName: priorProvider,
+      modelName: priorModel,
+      providerSettings: priorSettings,
+      ephemeralSettings: structuredClone(
+        builtCallerSettingsOwner.captureUserParameters(),
+      ),
+    });
     const interrupt = (event: { key: string; newValue: unknown }): void => {
       if (event.key === 'temperature' && event.newValue === 0.25)
         manager.clearActiveProvider();
@@ -572,7 +608,7 @@ describe('profile-commit-publication', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     const models: string[] = [];
     const profiles: unknown[] = [];
@@ -590,13 +626,16 @@ describe('profile-commit-publication', () => {
       CoreEvent.ModelProfileChanged,
       onProfile,
     );
-    const initialModel = agent.getModel();
+    const initialModel = builtCallerSettings.getProviderSettings('fake').model;
+    if (typeof initialModel !== 'string')
+      throw new Error('Expected the configured caller model');
     try {
       const initialEvents = [];
       for await (const event of agent.stream('remember the prior conversation'))
         initialEvents.push(event);
       expect(initialEvents.some((event) => event.type === 'error')).toBe(false);
-      const priorHistory = await agent.getHistory();
+      const priorNativeClient = capturedSessionClient(builtCallerOwner);
+      const priorHistory = await priorNativeClient.getHistory();
       expect(priorHistory.length).toBeGreaterThan(0);
       vi.useFakeTimers();
       for (const bucket of ['old', 'replacement']) {

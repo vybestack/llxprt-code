@@ -7,13 +7,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { MutableRefObject, Dispatch, SetStateAction } from 'react';
 
-import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type {
-  IContent,
-  AgentClientGenerateConfig,
-  ModelOutput,
-} from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import { isSlashCommand } from '../utils/commandUtils.js';
 
@@ -34,17 +30,12 @@ export interface PromptCompletionRuntime {
   getUtilityModel(): string | undefined;
 }
 
-export type PromptContentGenerator = (
-  contents: IContent[],
-  generationConfig: AgentClientGenerateConfig,
-  signal: AbortSignal,
-  model: string,
-) => Promise<ModelOutput>;
+export type PromptTextGenerator = Agent['generate'];
 
 export interface UsePromptCompletionOptions {
   buffer: TextBuffer;
   config?: PromptCompletionRuntime;
-  generateContent: PromptContentGenerator | null;
+  generateContent: PromptTextGenerator | null;
   enabled: boolean;
 }
 
@@ -62,7 +53,7 @@ interface PromptCompletionState {
 interface PromptSuggestionParams {
   buffer: TextBuffer;
   config: PromptCompletionRuntime | undefined;
-  generateContent: PromptContentGenerator | null;
+  generateContent: PromptTextGenerator | null;
   isPromptCompletionEnabled: boolean;
   clearGhostText: () => void;
   setGhostText: Dispatch<SetStateAction<string>>;
@@ -85,7 +76,7 @@ function hasUtilityModel(
 function shouldSkipPromptCompletion(
   trimmedText: string,
   isPromptCompletionEnabled: boolean,
-  generateContent: PromptContentGenerator | null,
+  generateContent: PromptTextGenerator | null,
   utilityModel: string | undefined,
 ): boolean {
   const tooShort = trimmedText.length < PROMPT_COMPLETION_MIN_LENGTH;
@@ -102,8 +93,10 @@ function shouldSkipPromptCompletion(
 
 function buildPromptCompletionRequest(trimmedText: string): {
   contents: IContent[];
-  generationConfig: AgentClientGenerateConfig & {
-    thinkingConfig?: { thinkingBudget?: number };
+  generationConfig: {
+    temperature: number;
+    maxOutputTokens: number;
+    thinkingConfig: { thinkingBudget: number };
   };
 } {
   return {
@@ -129,10 +122,9 @@ function buildPromptCompletionRequest(trimmedText: string): {
 }
 
 function deriveSuggestionText(
-  response: ModelOutput,
+  responseText: string,
   trimmedText: string,
 ): string {
-  const responseText = getResponseTextFromBlocks(response.content.blocks);
   if (!responseText) return '';
 
   const suggestionText = responseText.trim();
@@ -143,19 +135,20 @@ function deriveSuggestionText(
 }
 
 async function requestPromptSuggestion(
-  generateContent: PromptContentGenerator,
+  generateContent: PromptTextGenerator,
   trimmedText: string,
   signal: AbortSignal,
   utilityModel: string,
 ): Promise<string> {
   const { contents, generationConfig } =
     buildPromptCompletionRequest(trimmedText);
-  const response = await generateContent(
-    contents,
-    generationConfig,
+  const response = await generateContent(contents, {
+    model: utilityModel,
+    config: generationConfig,
     signal,
-    utilityModel,
-  );
+    readHistory: false,
+    writeHistory: false,
+  });
   if (signal.aborted) return '';
 
   return deriveSuggestionText(response, trimmedText);

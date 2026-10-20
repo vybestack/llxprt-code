@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +51,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
@@ -176,7 +181,7 @@ describe('provider owner generation boundary', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -296,7 +301,7 @@ describe('provider owner generation boundary', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('drives public generation and parameter changes without consulting Config for a manager', async () => {
@@ -318,7 +323,7 @@ describe('provider owner generation boundary', () => {
 
   it('keeps an initialized borrowed client usable after facade shutdown', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
-    const client = builtCallerOwner.getAgentClient();
+    const client = capturedSessionClient(builtCallerOwner);
     await client.startChat();
     const agent = await fromConfig(
       builtCallerConfig,
@@ -330,7 +335,7 @@ describe('provider owner generation boundary', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       const blocked = denyManagerDiscovery(builtCallerConfig);

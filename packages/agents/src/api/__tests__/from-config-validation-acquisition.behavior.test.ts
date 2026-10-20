@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { access, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fromConfig } from '../fromConfig.js';
 
 describe('adoption validation precedes host acquisition', () => {
   let previousDescriptor: string | undefined;

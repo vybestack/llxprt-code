@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -32,7 +36,8 @@ import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { SessionMcpApproval } from '../../session/session-mcp-approval.js';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
@@ -71,7 +76,7 @@ async function createReplacementOwner(
   clients: CountingClient[],
   scopeCleanups: string[],
 ): Promise<SessionClientOwner> {
-  const owner = await SessionClientOwner.create(
+  const owner = await createCapturedSessionOwner(
     builtConfig,
     assembleTaskSchemaPolicy(builtSettings),
     builtManager,
@@ -195,7 +200,7 @@ describe('Session client replacement failure', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -235,7 +240,7 @@ describe('Session client replacement failure', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -259,7 +264,7 @@ describe('Session client replacement failure', () => {
     );
     try {
       await owner.refreshAuth();
-      const previous = owner.getAgentClient();
+      const previous = capturedSessionClient(owner);
       expect(clients).toHaveLength(2);
 
       await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
@@ -267,7 +272,7 @@ describe('Session client replacement failure', () => {
       const abandoned = clients[2];
       expect(clients).toHaveLength(3);
       expect(abandoned.disposals).toBe(1);
-      expect(owner.getAgentClient()).toBe(previous);
+      expect(capturedSessionClient(owner)).toBe(previous);
       expect(clients[1].disposals).toBe(0);
       await expect(owner.refreshAuth()).rejects.toThrow('refresh boom');
       expect(clients[3].disposals).toBe(1);
@@ -366,7 +371,7 @@ describe('Session client replacement failure', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -406,7 +411,7 @@ describe('Session client replacement failure', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -430,14 +435,14 @@ describe('Session client replacement failure', () => {
     );
     try {
       await owner.refreshAuth();
-      const previous = owner.getAgentClient();
+      const previous = capturedSessionClient(owner);
 
-      await expect(owner.prepareProfileClientReplacement()).rejects.toThrow(
-        'refresh boom',
-      );
+      await expect(
+        owner.prepareProfileActivation(new AbortController().signal),
+      ).rejects.toThrow('refresh boom');
 
       expect(clients[2].disposals).toBe(1);
-      expect(owner.getAgentClient()).toBe(previous);
+      expect(capturedSessionClient(owner)).toBe(previous);
       expect(clients[1].disposals).toBe(0);
       expect(scopeCleanups).toStrictEqual([]);
       await owner.dispose();
@@ -540,7 +545,7 @@ describe('Session client owner policy persistence at disposal', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -552,7 +557,22 @@ describe('Session client owner policy persistence at disposal', () => {
       builtContent,
       builtTokenizer,
     );
-    builtOwner.bindMcpRuntime(builtMcp);
+    let sessionPolicy: Parameters<SessionMcpApproval['bind']>[0] | undefined;
+    const bindApproval = SessionMcpApproval.prototype.bind;
+    const policyCapture = spyOn(
+      SessionMcpApproval.prototype,
+      'bind',
+    ).mockImplementation(function (this: SessionMcpApproval, ...args) {
+      const result = bindApproval.call(this, ...args);
+      sessionPolicy = args[0];
+      return result;
+    });
+    try {
+      builtOwner.bindMcpRuntime(builtMcp);
+    } finally {
+      policyCapture.mockRestore();
+    }
+    if (sessionPolicy === undefined) throw new Error('Missing bound policy');
     builtOwner.bindHooks();
     const closeEngine = settleEngineRelease.bind(
       undefined,
@@ -580,7 +600,7 @@ describe('Session client owner policy persistence at disposal', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -591,7 +611,7 @@ describe('Session client owner policy persistence at disposal', () => {
     // A file where the policies directory belongs makes persistence fail.
     await writeFile(policiesDir, 'not a directory');
     try {
-      builtOwner.messageBus.publish({
+      sessionPolicy.messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'write_file',
         persist: true,

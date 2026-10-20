@@ -106,11 +106,14 @@ export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
   return (
     <>
       <BucketAuthConfirmation
-        messageBus={props.runtimeMessageBus}
+        subscribeBucketConsent={props.subscribeBucketConsent}
+        respondToBucketConsent={props.respondToBucketConsent}
         isFocused={!dialogsVisible}
       />
       {dialogsVisible ? (
         <DialogManager
+          readIdeWorkspaceTrust={props.readIdeWorkspaceTrust}
+          subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
           config={props.slashCommandRuntime}
           settings={props.settings}
         />
@@ -124,7 +127,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const { store } = useSettingsProfileStore();
   const terminal = useTerminalStore();
   const { vimEnabled, vimMode } = useVimMode();
-  const activeHooks = useHookDisplayState(props.runtimeMessageBus);
+  const activeHooks = useHookDisplayState(props.subscribeHookPhase);
   const fields = {
     isTrustedFolder: useStoreSelector(store, (s) => s.isTrustedFolder),
     currentModel: useStoreSelector(store, (s) => s.currentModel),

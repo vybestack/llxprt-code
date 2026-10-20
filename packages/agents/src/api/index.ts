@@ -142,8 +142,6 @@ export type {
   AgentProviderSwitchResult,
 } from './agent.js';
 
-export { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-
 export type { AgentSettingsControl } from './control/settings-control.js';
 export type {
   AgentToolFormatControl,

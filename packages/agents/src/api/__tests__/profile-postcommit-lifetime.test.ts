@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { initializeCallerClient } from './helpers/initialize-caller-client.js';
 import {
   gate,
@@ -41,7 +46,6 @@ import {
 
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -52,7 +56,7 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 
 import { AgentConfig } from '../config-types.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   OAuthManager,
   AnthropicOAuthProvider,
@@ -304,7 +308,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         builtCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const builtCallerOwner = await SessionClientOwner.create(
+      const builtCallerOwner = await createCapturedSessionOwner(
         builtCallerConfig,
         assembleTaskSchemaPolicy(builtCallerSettings),
         builtCallerManager,
@@ -452,7 +456,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         otherCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const otherCallerOwner = await SessionClientOwner.create(
+      const otherCallerOwner = await createCapturedSessionOwner(
         otherCallerConfig,
         assembleTaskSchemaPolicy(otherCallerSettings),
         otherCallerManager,
@@ -554,7 +558,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerFiles,
       );
       agents.push(agent);
@@ -701,9 +705,9 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
         expect(
           (await store.getToken('claudecode', 'primary'))?.refresh_token,
         ).toBe('rotated-refresh');
-        await builtCallerOwner
-          .getAgentClient()
-          .startChat(await builtCallerOwner.getAgentClient().getHistory());
+        await capturedSessionClient(builtCallerOwner).startChat(
+          await capturedSessionClient(builtCallerOwner).getHistory(),
+        );
         const successor = await fromConfig(
           builtCallerConfig,
           builtCallerSettings,
@@ -714,7 +718,7 @@ describe('public profile postcommit OAuth lifetime (#2616)', () => {
           builtCallerPolicy.session.messageBus,
           builtCallerMcp,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
         );
         try {
           agents.push(successor);

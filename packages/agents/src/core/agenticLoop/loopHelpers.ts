@@ -16,7 +16,7 @@
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -119,7 +119,7 @@ export function buildToolResponses(
  */
 export async function recordCompletedToolHistory(
   tools: CompletedToolCall[],
-  agentClient: AgentClientContract,
+  appendHistory: (content: IContent) => Promise<void>,
 ): Promise<void> {
   const allBlocks = tools.flatMap((tc) => tc.response.responseParts);
   const toolCallBlocks = allBlocks.filter(
@@ -128,10 +128,10 @@ export async function recordCompletedToolHistory(
   const nonToolCallBlocks = allBlocks.filter((b) => b.type !== 'tool_call');
 
   if (toolCallBlocks.length > 0) {
-    await agentClient.addHistory(iContentFromBlocks(toolCallBlocks, 'ai'));
+    await appendHistory(iContentFromBlocks(toolCallBlocks, 'ai'));
   }
   if (nonToolCallBlocks.length > 0) {
-    await agentClient.addHistory(iContentFromBlocks(nonToolCallBlocks, 'tool'));
+    await appendHistory(iContentFromBlocks(nonToolCallBlocks, 'tool'));
   }
 }
 
@@ -142,7 +142,7 @@ export async function recordCompletedToolHistory(
  */
 export async function recordCancelledToolHistory(
   tools: CompletedToolCall[],
-  agentClient: AgentClientContract,
+  appendHistory: (content: IContent) => Promise<void>,
 ): Promise<void> {
-  await recordCompletedToolHistory(tools, agentClient);
+  await recordCompletedToolHistory(tools, appendHistory);
 }

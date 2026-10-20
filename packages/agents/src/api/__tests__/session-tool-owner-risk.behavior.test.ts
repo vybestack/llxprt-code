@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -44,7 +50,7 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceToolCatalogOwner } from '@vybestack/llxprt-code-core';
-import { fromConfig } from '../fromConfig.js';
+
 import { gate as engineGate } from './helpers/async-child-disposal-join-fixture.js';
 
 /**
@@ -165,7 +171,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -285,7 +291,7 @@ describe('tool catalog publication and cleanup ownership', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   async function publicationClose(): Promise<void> {
@@ -300,17 +306,20 @@ describe('tool catalog publication and cleanup ownership', () => {
       undefined,
       builtCallerMcp,
     );
-    await agent.agentClient.startChat();
+    await fixtureAgentResources(agent).publishedClient(agent).startChat();
     const entered = engineGate();
     const release = engineGate();
-    const original = agent.agentClient.setTools.bind(agent.agentClient);
-    const publication = spyOn(agent.agentClient, 'setTools').mockImplementation(
-      async (...args) => {
-        entered.release();
-        await release.promise;
-        await original(...args);
-      },
-    );
+    const original = fixtureAgentResources(agent)
+      .publishedClient(agent)
+      .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
+    const publication = spyOn(
+      fixtureAgentResources(agent).publishedClient(agent),
+      'setTools',
+    ).mockImplementation(async (...args) => {
+      entered.release();
+      await release.promise;
+      await original(...args);
+    });
     const pending = agent.sessionClient.publishTools();
     await entered.promise;
     let finished = false;
@@ -349,17 +358,20 @@ describe('tool catalog publication and cleanup ownership', () => {
       undefined,
       builtCallerMcp,
     );
-    await agent.agentClient.startChat();
+    await fixtureAgentResources(agent).publishedClient(agent).startChat();
     const entered = engineGate();
     const release = engineGate();
-    const original = agent.agentClient.setTools.bind(agent.agentClient);
-    const publication = spyOn(agent.agentClient, 'setTools').mockImplementation(
-      async (...args) => {
-        entered.release();
-        await release.promise;
-        await original(...args);
-      },
-    );
+    const original = fixtureAgentResources(agent)
+      .publishedClient(agent)
+      .setTools.bind(fixtureAgentResources(agent).publishedClient(agent));
+    const publication = spyOn(
+      fixtureAgentResources(agent).publishedClient(agent),
+      'setTools',
+    ).mockImplementation(async (...args) => {
+      entered.release();
+      await release.promise;
+      await original(...args);
+    });
     const pending = builtCallerMcp.refreshContext();
     await entered.promise;
     let completed = false;
@@ -398,7 +410,8 @@ describe('tool catalog publication and cleanup ownership', () => {
         builtCallerMcp.trust,
       );
       try {
-        const tool = builtCallerOwner.getAgentClient().tools.getTool(name);
+        const tool =
+          capturedSessionClient(builtCallerOwner).tools.getTool(name);
         if (tool === undefined)
           throw new Error(`Missing actual session tool ${name}`);
         expect(() => workspace.publication.registerTool(tool)).toThrow(
@@ -432,7 +445,7 @@ describe('tool catalog publication and cleanup ownership', () => {
             .filter((entry) => entry.name === name),
         ).toHaveLength(0);
         expect(
-          builtCallerOwner.getAgentClient().tools.getTool(name),
+          capturedSessionClient(builtCallerOwner).tools.getTool(name),
         ).toBeDefined();
       } finally {
         await workspace.dispose();
@@ -448,7 +461,8 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp.trust,
     );
-    const tool = builtCallerOwner.getAgentClient().tools.getTool('read_file');
+    const tool =
+      capturedSessionClient(builtCallerOwner).tools.getTool('read_file');
     if (tool === undefined) throw new Error('Missing physical read tool');
     const lease = workspace.acceptSkillPublication();
     try {
@@ -475,7 +489,8 @@ describe('tool catalog publication and cleanup ownership', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp.trust,
     );
-    const tool = builtCallerOwner.getAgentClient().tools.getTool('read_file');
+    const tool =
+      capturedSessionClient(builtCallerOwner).tools.getTool('read_file');
     if (tool === undefined) throw new Error('Missing actual read tool');
     workspace.publication.registerTool(tool);
     try {
@@ -507,7 +522,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       Symbol('faulting read binding'),
       () => {
         if (closing) throw readError;
-        return builtCallerOwner.getAgentClient();
+        return capturedSessionClient(builtCallerOwner);
       },
       async () => {},
       async () => {},
@@ -515,7 +530,7 @@ describe('tool catalog publication and cleanup ownership', () => {
       () => async () => {},
     );
     const clear = spyOn(
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
       'clearTools',
     ).mockImplementation(() => {
       throw clearError;
@@ -562,18 +577,21 @@ describe('tool catalog publication and cleanup ownership', () => {
       undefined,
       builtCallerMcp,
     );
-    await first.agentClient.startChat();
-    await second.agentClient.startChat();
+    await fixtureAgentResources(first).publishedClient(first).startChat();
+    await fixtureAgentResources(second).publishedClient(second).startChat();
     const entered = engineGate();
     const release = engineGate();
-    const setTools = first.agentClient.setTools.bind(first.agentClient);
-    const publish = spyOn(first.agentClient, 'setTools').mockImplementation(
-      async () => {
-        entered.release();
-        await release.promise;
-        await setTools();
-      },
-    );
+    const setTools = fixtureAgentResources(first)
+      .publishedClient(first)
+      .setTools.bind(fixtureAgentResources(first).publishedClient(first));
+    const publish = spyOn(
+      fixtureAgentResources(first).publishedClient(first),
+      'setTools',
+    ).mockImplementation(async () => {
+      entered.release();
+      await release.promise;
+      await setTools();
+    });
     let publication: Promise<void> | undefined;
     try {
       publication = builtCallerMcp.refreshContext();

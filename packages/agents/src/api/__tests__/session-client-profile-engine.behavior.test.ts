@@ -1,3 +1,10 @@
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,16 +33,15 @@ import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { fileURLToPath } from 'node:url';
-import { fromConfig } from '../fromConfig.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -143,7 +149,7 @@ describe('Explicit session client lifetime', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -183,12 +189,12 @@ describe('Explicit session client lifetime', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
 
-    const client = builtOwner.getAgentClient();
+    const client = capturedSessionClient(builtOwner);
     const provider = new FakeProvider(
       fileURLToPath(
         new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
@@ -223,11 +229,15 @@ describe('Explicit session client lifetime', () => {
         modelParams: {},
         ephemeralSettings: {},
       });
-      expect(agent.agentClient).not.toBe(client);
+      expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+        client,
+      );
       expect(
         (await agent.getHistory()).filter((item) => item.speaker === 'human'),
       ).toHaveLength(1);
-      expect(agent.providerManager.getActiveProviderName()).toBe(provider.name);
+      expect(fixtureAgentResources(agent).manager.getActiveProviderName()).toBe(
+        provider.name,
+      );
       await agent.dispose();
       await builtMcp.refreshContext();
       await client.addHistory({
@@ -330,7 +340,7 @@ describe('Explicit session client lifetime', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -370,12 +380,12 @@ describe('Explicit session client lifetime', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
 
-    const client = builtOwner.getAgentClient();
+    const client = capturedSessionClient(builtOwner);
     try {
       await expect(
         fromConfig(
@@ -529,8 +539,8 @@ describe('Explicit session client lifetime', () => {
       const result = await operation.preflight(intent);
       if (result.token === undefined)
         throw new Error('Missing owned preflight handoff');
-      const owner = operation.sessionClient;
-      const client = owner.getAgentClient();
+      const owner = capturedActivation(operation).owner;
+      const client = capturedSessionClient(owner);
       const store = client.mediaStore;
       if (store === undefined) throw new Error('Missing preflight media store');
       const agent = await fromConfig(
@@ -545,7 +555,9 @@ describe('Explicit session client lifetime', () => {
         { operation, token: result.token },
       );
       try {
-        expect(agent.agentClient).toBe(client);
+        expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(
+          client,
+        );
         await agent.setHistory([
           {
             speaker: 'human',
@@ -556,7 +568,7 @@ describe('Explicit session client lifetime', () => {
       } finally {
         await agent.dispose();
       }
-      expect(() => owner.getAgentClient()).toThrow(/disposed/i);
+      expect(() => capturedSessionClient(owner)).toThrow(/disposed/i);
       await expect(store.getStoredByteLength()).rejects.toThrow(/closed/i);
     } finally {
       await operation.dispose();

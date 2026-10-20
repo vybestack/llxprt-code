@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -183,7 +187,7 @@ describe('public Agent workspace definition lifetime', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -305,7 +309,7 @@ describe('public Agent workspace definition lifetime', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -406,7 +410,7 @@ describe('public Agent workspace definition lifetime', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -528,7 +532,7 @@ describe('public Agent workspace definition lifetime', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   let root: string;

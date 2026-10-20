@@ -13,7 +13,11 @@ import { shouldIncludeSubagentDelegationForConfig } from './clientToolGovernance
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  createContentGenerator,
+  type ContentGenerator,
+  type ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type {
   ModelGenerationSettings,
   ModelOutput,
@@ -255,4 +259,15 @@ function jsonRequestPrompt(iContents: IContent[]): string {
     )
     .filter((s) => s.length > 0)
     .join('\n\n');
+}
+
+export async function initializeClientContentGenerator(
+  configuration: ContentGeneratorConfig | undefined,
+  config: Config,
+): Promise<ContentGenerator> {
+  if (configuration === undefined)
+    throw new Error(
+      'Content generator config not initialized. Initialize the session client owner first.',
+    );
+  return createContentGenerator(configuration, config, config.getSessionId());
 }

@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import { recordToolCompletions } from '../../session/record-tool-completions.js';
 /**
  * @license
@@ -149,7 +150,8 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
 
       // Capture the clients BEFORE and AFTER refreshAuth, and spy on their
       // sendMessageStream so we can prove the second turn hit the NEW client.
-      const originalClient = agent.agentClient;
+      const originalClient =
+        fixtureAgentResources(agent).publishedClient(agent);
       const originalSendSpy = vi.spyOn(
         originalClient,
         'sendMessageStream' as keyof typeof originalClient,
@@ -157,7 +159,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
 
       // Simulate an external refreshAuth that replaces the client on the config.
       await agent.sessionClient.refreshAuth(undefined);
-      const newClient = agent.agentClient;
+      const newClient = fixtureAgentResources(agent).publishedClient(agent);
       expect(newClient).not.toBe(originalClient);
 
       const newSendSpy = vi.spyOn(
@@ -188,7 +190,7 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
       // Spy on the current client's sendMessageStream before the second turn.
       // Since the client is unchanged, the stale-client guard is a no-op and
       // the SAME client must be reused.
-      const currentClient = agent.agentClient;
+      const currentClient = fixtureAgentResources(agent).publishedClient(agent);
       const sendSpy = vi.spyOn(
         currentClient,
         'sendMessageStream' as keyof typeof currentClient,

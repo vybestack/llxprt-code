@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -47,7 +52,7 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { buildAgent } from './helpers/agentHarness.js';
 
 /**
@@ -153,7 +158,7 @@ describe('public Agent workspace filesystem lifetime', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -273,7 +278,7 @@ describe('public Agent workspace filesystem lifetime', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('rejects caller lifetime without an explicit filesystem root', async () => {
@@ -315,7 +320,7 @@ describe('public Agent workspace filesystem lifetime', () => {
       const optionsProviderManager: Parameters<typeof fromConfig>[4] =
         builtCallerManager;
       const optionsAgentClient: Parameters<typeof fromConfig>[9] =
-        builtCallerOwner.getAgentClient();
+        capturedSessionClient(builtCallerOwner);
       const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
         builtCallerMcp;
       const first = await fromConfig(

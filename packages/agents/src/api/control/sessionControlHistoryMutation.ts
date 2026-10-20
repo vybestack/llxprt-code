@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { SessionNativeHistory } from './session-history-observation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   HistoryMutationResult,
@@ -33,7 +33,7 @@ export async function preflightClearHistory(
 
 export async function restoreOwnerTurns(
   turns: number,
-  client: AgentClientContract,
+  client: SessionNativeHistory,
   recording: SessionRecordingService,
   integration: RecordingIntegration | null,
   owner: object,
@@ -61,7 +61,7 @@ export async function restoreOwnerTurns(
 }
 
 export async function clearOwnerHistory(
-  client: AgentClientContract,
+  client: SessionNativeHistory,
   recording: SessionRecordingService,
   integration: RecordingIntegration | null,
   owner: object,
@@ -90,7 +90,7 @@ async function commitRecordedHistoryMutation(input: {
   readonly result: HistoryMutationResult;
   readonly history: readonly IContent[];
   readonly recording: SessionRecordingService;
-  readonly client: AgentClientContract;
+  readonly client: SessionNativeHistory;
   readonly integration: RecordingIntegration | null;
   readonly owner: object;
   readonly resubscribe: () => Error | undefined;

@@ -1,3 +1,4 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +14,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -82,15 +86,23 @@ async function restore(owner: Agent, decoy: Agent): Promise<void> {
                     ? getProjectHash(context.services.config.getProjectRoot())
                     : null,
                 () => context.services.config?.projectChatsDir ?? null,
-                () => owner.agentClient.mediaStore,
+                ...checkpointBindings(
+                  () => recording,
+                  () =>
+                    context.services.config
+                      ? getProjectHash(context.services.config.getProjectRoot())
+                      : null,
+                  () => context.services.config?.projectChatsDir ?? null,
+                  () => commandOwnerClient(owner).mediaStore,
+                ),
                 () => {
-                  const client = owner.agentClient;
+                  const client = commandOwnerClient(owner);
                   return client.hasChatInitialized() === true
                     ? client.getChat().getHistory()
                     : null;
                 },
                 async (history) => {
-                  await owner.agentClient.getChat().setHistory(history);
+                  await commandOwnerClient(owner).getChat().setHistory(history);
                 },
                 () =>
                   context.services.config

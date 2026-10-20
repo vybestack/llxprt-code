@@ -6,10 +6,6 @@
 
 import type {} from '@vybestack/llxprt-code-tools';
 
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import { bindChildToolRegistry } from '../../session/childToolAssembly.js';
-import type { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import type { ShellJobOwner } from '../../session/shell-job-owner.js';
 import {
   ChildToolDisplay,
   type ChildToolDisplayCallbacks,
@@ -29,16 +25,17 @@ import {
  * `ToolConfirmation` always carries a structured `details` payload (T3c).
  */
 
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 // @plan:ISSUE-2376 the real tool/invocation types the get() handle wraps.
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type {
   AnyDeclarativeTool,
   AnyToolInvocation,
+  ToolConfirmationPayload,
   ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
-import type { EditorCallbacks } from '../config-types.js';
+import type { createClientToolChannel } from '../../session/clientToolChannel.js';
 import type {
   AgentDisplayCallbacks,
   AgentToolConfirmationDetails,
@@ -53,16 +50,10 @@ import type {
   ToolInfo,
   Unsubscribe,
 } from '../agent.js';
-import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
-import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import {
-  buildToolInfos,
-  projectRegistryTool,
-  readOptionalStringProp,
-} from '../agentBootstrap.js';
 import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { createClientToolChannel } from '../../session/clientToolChannel.js';
+import { readOptionalStringProp } from '../agentBootstrap.js';
+import type { EditorCallbacks } from '../config-types.js';
+import type { ToolConfirmation, ToolUpdate } from '../event-types.js';
 
 const logger = new DebugLogger('llxprt:agents:tool-control');
 
@@ -179,11 +170,10 @@ export class ToolControl implements AgentToolControl {
       onComplete: (calls: CompletedToolCall[]) => void | Promise<void>,
     ) => ReturnType<typeof createClientToolChannel>,
     private readonly assertSessionAdmission: (() => void) | undefined,
-    private readonly taskLaunchOwner: TaskLaunchOwner | undefined,
-    private readonly shellOwner: ShellJobOwner,
     childDisplay: ChildToolDisplay | undefined,
-    private readonly messageBus: MessageBus,
-    private readonly selection: ToolSelection,
+    private readonly respond: AgentToolControl['respondToConfirmation'],
+    private readonly listRegistered: AgentToolControl['list'],
+    private readonly lookup: AgentToolControl['get'],
     private readonly setAllowedTools: (names: readonly string[]) => void,
     private readonly describeToolConfiguration: AgentToolControl['describeConfiguration'],
     private readonly editorCallbacksHolder: {
@@ -219,19 +209,7 @@ export class ToolControl implements AgentToolControl {
   }
 
   list(): readonly ToolInfo[] {
-    const registry = this.selection;
-    const allTools = registry.getAllTools().map((t) =>
-      projectRegistryTool({
-        name: t.name,
-        displayName: t.displayName,
-        description: t.description,
-        schema: t.schema,
-        serverName: readOptionalStringProp(t, 'serverName'),
-        serverToolName: readOptionalStringProp(t, 'serverToolName'),
-      }),
-    );
-    const enabledNames = new Set(registry.getEnabledTools().map((t) => t.name));
-    return Object.freeze(buildToolInfos(allTools, enabledNames));
+    return this.listRegistered();
   }
 
   /**
@@ -246,17 +224,7 @@ export class ToolControl implements AgentToolControl {
    * @plan:ISSUE-2376
    */
   get(name: string): AgentToolHandle | undefined {
-    const registry = this.selection;
-    const tool = bindChildToolRegistry(
-      registry,
-      this.childDisplay,
-      this.taskLaunchOwner,
-      this.shellOwner,
-    ).getTool(name);
-    if (tool === undefined) {
-      return undefined;
-    }
-    return wrapToolHandle(tool);
+    return this.lookup(name);
   }
 
   /**
@@ -309,12 +277,7 @@ export class ToolControl implements AgentToolControl {
     if (!this.seen.has(confirmationId)) {
       throw new ToolControlError('unknown confirmationId: ' + confirmationId);
     }
-    this.messageBus.respondToConfirmation(
-      confirmationId,
-      decision,
-      payload,
-      requiresUserConfirmation,
-    );
+    this.respond(confirmationId, decision, payload, requiresUserConfirmation);
     if (decision === ToolConfirmationOutcome.ModifyWithEditor) {
       // editor-modify retires the correlationId; the coordinator issues a new one.
       this.seen.delete(confirmationId);

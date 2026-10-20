@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,11 +27,15 @@ import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
-import { createAgent } from '../../../agents/src/api/createAgent.js';
+import {
+  captureAgentAdoption as fromConfig,
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+
 import type { Agent } from '../../../agents/src/api/agent.js';
 import { internalConfig } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+
 import {
   acquirePreferredProviderManager,
   acquirePreferredOAuth,
@@ -153,20 +158,22 @@ describe('foreground explicit provider identity and preflight ownership', () => 
   }
   it('keeps the exact supplied Config on its actual Agent owner and supports stateless provider admission', async () => {
     const agent = await adopt();
-    expect(agent.providerManager).toBe(manager);
+    expect(fixtureAgentResources(agent).manager).toBe(manager);
     expect(internalConfig(agent)).toBe(config);
     expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
   });
   it('binds the exact bus, supplied provider manager, OAuth and file scope without Config service locators', async () => {
     const agent = await adopt();
     expect('providerManager' in config).toBe(false);
-    expect(oauth.runtimeMessageBus).toBe(agent.getMessageBus());
+    expect(oauth.runtimeMessageBus).toBe(
+      fixtureAgentResources(agent).messageBus,
+    );
     expect(manager.listProviders()).toContain('openai');
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect('providerManager' in config).toBe(false);
-    expect(agent.providerManager).toBe(manager);
+    expect(fixtureAgentResources(agent).manager).toBe(manager);
     const retained = await agent.retainProviderFile({
       cacheKey: 'caller-file',
       fileId: 'caller-file',
@@ -201,7 +208,7 @@ describe('foreground explicit provider identity and preflight ownership', () => 
     const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
     try {
       const agent = await adopt();
-      expect(agent.getMessageBus()).toBe(bus);
+      expect(fixtureAgentResources(agent).messageBus).toBe(bus);
       expect(oauth.runtimeMessageBus).toBe(bus);
       if (!confirmation) throw new Error('Missing caller confirmation');
       bus.publish({
@@ -230,8 +237,12 @@ describe('foreground explicit provider identity and preflight ownership', () => 
       workingDir: process.cwd(),
     });
     agents.push(first, second);
-    expect(first.providerManager).not.toBe(second.providerManager);
-    expect(first.getMessageBus()).not.toBe(second.getMessageBus());
+    expect(fixtureAgentResources(first).manager).not.toBe(
+      fixtureAgentResources(second).manager,
+    );
+    expect(fixtureAgentResources(first).messageBus).not.toBe(
+      fixtureAgentResources(second).messageBus,
+    );
     expect(internalConfig(first)).not.toBe(internalConfig(second));
     expect(internalConfig(first).getSessionId()).toBe('same-cli-label');
     expect(internalConfig(second).getSessionId()).toBe('same-cli-label');
@@ -404,8 +415,12 @@ describe('foreground explicit provider identity and preflight ownership', () => 
         expect('runtime' in recovered).toBe(false);
         expect(recovered.captureProviderFiles().retainedFiles).toBe(0);
         expect(
-          (await recovered.preflight({ provider: 'openai', authMode: 'none' }))
-            .activeProvider,
+          (
+            await recovered.preflight({
+              provider: 'openai',
+              authMode: 'none',
+            })
+          ).activeProvider,
         ).toBe('openai');
         expect(early.captureProviderFiles().retainedFiles).toBe(0);
         await expect(
@@ -447,7 +462,9 @@ describe('foreground explicit provider identity and preflight ownership', () => 
     agents.push(isolated);
     const foreground = await adopt();
     expect('providerManager' in config).toBe(false);
-    expect(foreground.providerManager).not.toBe(isolated.providerManager);
+    expect(fixtureAgentResources(foreground).manager).not.toBe(
+      fixtureAgentResources(isolated).manager,
+    );
     await foreground.dispose();
     expect('providerManager' in internalConfig(isolated)).toBe(false);
     expect(isolated.getModel()).toBe('isolated-model');

@@ -17,14 +17,14 @@ import { TaskTool } from '../tools/task.js';
 import type { ChildToolDisplay } from './childToolDisplay.js';
 import type { SchedulerConstruction } from './assembleSchedulerOwner.js';
 
-export function bindChildToolRegistry(
-  registry: ToolLookup,
+export function bindChildToolRegistry<T extends ToolLookup>(
+  registry: T,
   display: ChildToolDisplay,
   taskLaunchOwner: TaskLaunchOwner | undefined,
   shellOwner: ShellJobOwner,
-): ToolLookup {
+): T {
   const view = new Proxy(registry, {
-    get(target: ToolLookup, key: string | symbol): unknown {
+    get(target: T, key: string | symbol): unknown {
       if (key === 'getTool') {
         return (...args: Parameters<ToolLookup['getTool']>) => {
           const tool = target.getTool(...args);
@@ -49,7 +49,7 @@ export function bindChildToolRegistry(
             });
           }
           return tool instanceof TaskTool
-            ? tool.withChildDisplay(() => display.open(), taskLaunchOwner, view)
+            ? tool.withChildDisplay(() => display.open(), taskLaunchOwner)
             : tool;
         };
       }

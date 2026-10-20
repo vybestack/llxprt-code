@@ -22,7 +22,7 @@ import type { Key } from '../hooks/useKeypress.js';
 import type { WelcomeActions } from '../hooks/useWelcomeOnboarding.js';
 import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { SettingScope } from '../../config/settings.js';
-import type { PromptContentGenerator } from '../hooks/usePromptCompletion.js';
+import type { PromptTextGenerator } from '../hooks/usePromptCompletion.js';
 
 /**
  * Changing input snapshots use a separate context from stable view commands.
@@ -30,7 +30,7 @@ import type { PromptContentGenerator } from '../hooks/usePromptCompletion.js';
  * that only dispatch commands.
  */
 export interface AppCommandData {
-  generatePromptContent: PromptContentGenerator | null;
+  generatePromptContent: PromptTextGenerator | null;
   buffer: TextBuffer;
   commandContext: CommandContext;
   inputHistory: string[];

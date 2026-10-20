@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,11 +53,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import {
-  assembleAgentActivationBootstrap,
-  fromConfig,
-  type AgentActivationPreflightResult,
-} from '@vybestack/llxprt-code-agents';
+import { type AgentActivationPreflightResult } from '@vybestack/llxprt-code-agents';
 import * as publicApi from '@vybestack/llxprt-code-agents';
 
 /**
@@ -174,7 +177,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -294,7 +297,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('activates the configured provider and reports a non-fatal auth outcome', async () => {
@@ -309,7 +312,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         null,
         () => undefined,
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
       );
       const intent: ProviderActivationIntent = {
@@ -348,7 +351,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         null,
         () => undefined,
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
       );
       const intent: ProviderActivationIntent = {
@@ -381,7 +384,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         null,
         () => undefined,
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
       );
       const intent: ProviderActivationIntent = {
@@ -412,7 +415,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         null,
         () => undefined,
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
       );
       const intent: ProviderActivationIntent = {
@@ -426,7 +429,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
       expect(configActiveProvider(builtCallerManager)).toBe('fake');
 
       if (!first.token) throw new Error('Missing token');
-      const client = builtCallerOwner.getAgentClient();
+      const client = capturedSessionClient(builtCallerOwner);
       const agent = await fromConfig(
         builtCallerConfig,
         builtCallerSettings,
@@ -437,9 +440,9 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         undefined,
         builtCallerMcp,
         { operation, token: first.token },
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
-      expect(agent.agentClient).toBe(client);
+      expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(client);
       expect(configActiveProvider(builtCallerManager)).toBe('fake');
       await agent.dispose();
       expect(builtCallerSettingsOwner.readNamedParameter('auth-key')).toBe(
@@ -451,7 +454,8 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
   });
 
   it('exposes bootstrap assembly without free receipt or activation-preflight APIs', () => {
-    expect(publicApi.assembleAgentActivationBootstrap).toBeFunction();
+    expect('assembleAgentActivationBootstrap' in publicApi).toBe(false);
+    expect(publicApi.prepareAgentPreflight).toBeFunction();
     for (const name of [
       'preflightAgentActivation',
       'AgentActivationBootstrap',

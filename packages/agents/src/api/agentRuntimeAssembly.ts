@@ -1,14 +1,4 @@
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
-import {
-  createAgentAuthState,
-  type AgentAuthState,
-} from './control/authState.js';
-import type { McpControl } from './control/mcpControl.js';
-import { WorkspaceControl } from './control/workspaceControl.js';
-import { assembleIdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
 import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import type { SettingsStateSnapshot } from '@vybestack/llxprt-code-settings';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -16,7 +6,6 @@ import { runCleanupSteps } from '../core/subagent-cleanup.js';
 import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import { withChildToolDisplay } from '../session/childToolAssembly.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
-import { cleanupProviderScope } from '../session/session-client-cleanup.js';
 import { ShellJobOwner } from '../session/shell-job-owner.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import {
@@ -31,12 +20,22 @@ import {
   type StableDisplayCallbacksHolder,
   type StableEditorCallbacksHolder,
 } from './agentBootstrap.js';
-import { AgentImpl } from './agentImpl.js';
+import { ForegroundAgentAssembly } from './foreground-agent-assembly.js';
+
 import type { AgentAuth } from './config-types.js';
+import {
+  createAgentAuthState,
+  type AgentAuthState,
+} from './control/authState.js';
+import { assembleIdeControl } from './control/ideControl.js';
+import { LspControl } from './control/lspControl.js';
+import type { McpControl } from './control/mcpControl.js';
+import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
 import {
   assembleSessionAuthentication,
   clearProviderAuthenticationCache,
 } from './control/session-authentication.js';
+import { WorkspaceControl } from './control/workspaceControl.js';
 import { assembleModelSelection } from './model-selection.js';
 import { setActiveModel } from './providerMutations.js';
 /**
@@ -61,14 +60,8 @@ import {
 import type { AgentRetainedProviderFile } from './provider-file-domain.js';
 
 import type { MessageBus } from '@vybestack/llxprt-code-core';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import {
-  assembleSessionImages,
-  type SessionImageSelection,
-} from './session-image-assembly.js';
 
-import { SessionClientOwner } from '../session/session-client-owner.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
 
 /**
  * @plan:ISSUE-3222
@@ -86,7 +79,6 @@ import type {
   AgentRuntimeFactoryBindings,
   ContentGenerator,
   RuntimeContentGeneratorFactory,
-  RuntimeProviderManager,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -112,7 +104,6 @@ import {
 } from './agent-construction-input.js';
 import type { Agent } from './agent.js';
 import type { resolveAuthType } from './agentBootstrap.js';
-import { buildAgentClientFactory } from './agentBootstrap.js';
 import type { AgentSchedulerHandle, EditorCallbacks } from './config-types.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
 import type { CreatedAgentMcpOptions } from './createAgent.js';
@@ -121,9 +112,9 @@ import {
   cleanupFailedCreatedAgent,
   initializeCreatedClient,
   prepareAgentConfig,
-  resolveSchedulerFactory,
   startAgentSession,
 } from './createAgent.js';
+import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
 import {
   assembleHostGitHubBroker,
   type HostGitHubBrokerOwner,
@@ -133,7 +124,6 @@ import {
   assembleOwnedMcpRuntime,
   bindCreatedSessionClient,
 } from './policyComposition.js';
-import { createTaskRegistration } from './runtimeFactories.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
 
 /**
@@ -218,59 +208,6 @@ export async function disposeIsolatedMediaRuntime(
     throw new AggregateError(failures, 'Isolated media runtime cleanup failed');
 }
 
-export async function createIsolatedSessionClient(
-  config: Config,
-  settings: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  providerManager: RuntimeProviderManager,
-  oauthManager: OAuthManager,
-  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-  tokenizerFactory: RuntimeTokenizerFactory,
-  providerFileLifecycle: ProviderFileLifecycle,
-  mediaOwner: SessionMediaOwner,
-  factory: AgentClientFactory = buildAgentClientFactory(),
-  readInstructions: () => string | undefined,
-  workspacePaths: WorkspacePathOperations,
-  messageBus?: MessageBus,
-  imageOperation?: SessionImageSelection['imageOperation'],
-): Promise<SessionClientOwner> {
-  const client = await SessionClientOwner.create(
-    config,
-    assembleTaskSchemaPolicy(settings),
-    providerManager,
-    factory,
-    mediaOwner.store,
-    readInstructions,
-    workspacePaths,
-    settingsOwner,
-    contentGeneratorFactory,
-    tokenizerFactory,
-    undefined,
-    messageBus,
-  );
-  client.bindInteractiveAuthRequests((prompt) =>
-    oauthManager.requestInteractiveAuth(prompt),
-  );
-  assembleSessionImages(
-    client,
-    config.getTargetDir(),
-    providerManager,
-    oauthManager,
-    settings,
-    imageOperation,
-  );
-  const mainScope = config.getSessionId();
-  client.bindProviderFiles(
-    providerFileLifecycle,
-    (provider) => oauthManager.composeRetryOperations(provider),
-    (scope) =>
-      scope === mainScope
-        ? Promise.resolve()
-        : cleanupProviderScope(providerFileLifecycle, scope),
-  );
-  return client;
-}
-
 export function closeIsolatedSessionRuntime(
   closeRuntime: () => void | Promise<void>,
   closeConfig: () => Promise<void>,
@@ -285,9 +222,9 @@ export function closeIsolatedSessionRuntime(
   );
 }
 
-export class PreferredAgentAssembly {
-  private settings!: SettingsService;
-  private settingsOwner!: SessionSettingsOwner;
+export class PreferredAgentAssembly extends ForegroundAgentAssembly {
+  private preferredSettings!: SettingsService;
+
   private files!: ProviderFileLifecycle;
   private manager!: ProviderManager;
   private oauth!: OAuthManager;
@@ -295,14 +232,14 @@ export class PreferredAgentAssembly {
   private contentGeneratorFactory!: RuntimeContentGeneratorFactory<ContentGenerator>;
   private release!: AcquisitionRelease;
   private mcpRuntime!: McpRuntimeOwner;
-  private sessionClient: SessionClientOwner | undefined;
+  private preferredSessionClient: SessionClientOwner | undefined;
+  private preferredMediaOwner!: SessionMediaOwner;
   private agent!: Agent;
 
-  private config!: Config;
   private parsed!: ParsedAgentConfig;
   private runtimeId!: string;
   private suppliedStore: TokenStore | undefined;
-  private messageBus!: MessageBus;
+  private preferredMessageBus!: MessageBus;
   private tokenizerSelection: AgentConfig['tokenizerFactory'];
   private contentSelection: AgentConfig['contentGeneratorFactory'];
   private profileReads:
@@ -311,7 +248,7 @@ export class PreferredAgentAssembly {
   private authority!: CredentialAuthority;
   private mcpOptions!: CreatedAgentMcpOptions;
   private resolvedAuth!: ReturnType<typeof resolveAuthType>;
-  private mediaOwner!: SessionMediaOwner;
+
   private agentClientFactory: AgentClientFactory | undefined;
   private taskToolRegistration:
     | AgentRuntimeFactoryBindings['taskToolRegistration']
@@ -319,7 +256,7 @@ export class PreferredAgentAssembly {
   private policyOwner!: RuntimePolicyOwner;
   private github: HostGitHubBrokerOwner | undefined;
   private onApproval: AgentConfig['onApproval'];
-  private onOAuthPrompt: AgentConfig['onOAuthPrompt'];
+  private preferredOAuthPrompt: AgentConfig['onOAuthPrompt'];
   private editorCallbacks: EditorCallbacks | undefined;
   private readonly schedulerHandles: AgentSchedulerHandle[] = [];
   private schedulerFactory!: SchedulerConstruction;
@@ -335,7 +272,9 @@ export class PreferredAgentAssembly {
     private readonly rawConfig: AgentConfig,
     private readonly retainedFiles: readonly AgentRetainedProviderFile[],
     private readonly settingsSnapshot: SettingsStateSnapshot | undefined,
-  ) {}
+  ) {
+    super();
+  }
 
   async assemble(): Promise<Agent> {
     const authority =
@@ -389,7 +328,7 @@ export class PreferredAgentAssembly {
       this.taskToolRegistration =
         construction.runtimeFactoryBindings?.taskToolRegistration;
       this.onApproval = construction.onApproval;
-      this.onOAuthPrompt = construction.onOAuthPrompt;
+      this.preferredOAuthPrompt = construction.onOAuthPrompt;
       this.editorCallbacks = construction.editorCallbacks;
       this.executeShellCommand = raw.executeShellCommand;
       this.sessionOverrides = raw.sessionOverrides;
@@ -440,7 +379,7 @@ export class PreferredAgentAssembly {
     this.policyOwner = policy;
     if (forceConfirmations)
       injectConfirmationForcingPolicy(policy.session.confirmation);
-    this.messageBus = policy.session.messageBus;
+    this.preferredMessageBus = policy.session.messageBus;
     const media =
       suppliedMedia ??
       new SessionMediaOwner(
@@ -448,7 +387,7 @@ export class PreferredAgentAssembly {
         config.getMediaStoreQuotaByteLimit(),
       );
     this.workspaceRelease.acquire('policy', () => media.dispose());
-    this.mediaOwner = media;
+    this.preferredMediaOwner = media;
   }
 
   private acquireWorkspaceTrust(raw: AgentConfig): AgentConfig['trustPort'] {
@@ -519,7 +458,7 @@ export class PreferredAgentAssembly {
         this.contentSelection ?? createRuntimeContentGeneratorFactory();
       oauth = acquirePreferredOAuth(
         this.suppliedStore,
-        this.messageBus,
+        this.preferredMessageBus,
         this.config,
         settings,
         manager,
@@ -539,7 +478,7 @@ export class PreferredAgentAssembly {
         tokenizerFactory,
         this.providerContributions,
       );
-      this.settings = settings;
+      this.preferredSettings = settings;
       this.settingsOwner = settingsOwner;
       this.files = files;
       this.manager = manager;
@@ -559,9 +498,6 @@ export class PreferredAgentAssembly {
     let disposeMcpRuntime = async (): Promise<void> =>
       this.policyOwner.dispose();
     try {
-      const registration = createTaskRegistration(
-        this.mcpOptions.credentialAuthority,
-      );
       const mcpRuntime = await assembleOwnedMcpRuntime(
         this.config,
         this.policyOwner.session.messageBus,
@@ -571,25 +507,26 @@ export class PreferredAgentAssembly {
       );
       disposeMcpRuntime = () => mcpRuntime.dispose();
       this.mcpRuntime = mcpRuntime;
-      this.sessionClient = await bindCreatedSessionClient(
+      this.preferredSessionClient = await bindCreatedSessionClient(
         this.config,
-        this.settings,
+        this.preferredSettings,
         this.settingsOwner,
         this.manager,
         this.oauth,
         this.contentGeneratorFactory,
         this.tokenizerFactory,
         this.files,
-        this.mediaOwner,
+        this.preferredMediaOwner,
         this.agentClientFactory,
         mcpRuntime,
-        this.taskToolRegistration?.(registration) ?? registration,
+        this.taskToolRegistration,
         (this.parsed.harness?.forceConfirmations ?? true) &&
           this.config.isInteractive(),
         this.mcpOptions.imageOperation,
+        this.mcpOptions.credentialAuthority,
       );
       if (this.executeShellCommand !== undefined)
-        this.sessionClient.toolCatalog.bindShellExecution(
+        this.preferredSessionClient.toolCatalog.bindShellExecution(
           this.executeShellCommand,
         );
       await this.initializeCreatedAgent();
@@ -598,16 +535,22 @@ export class PreferredAgentAssembly {
         primaryError,
         () => this.releaseProviders(),
         this.config,
-        this.mediaOwner,
-        this.sessionClient,
+        this.preferredMediaOwner,
+        this.preferredSessionClient,
         disposeMcpRuntime,
       );
     }
   }
 
   private async initializeCreatedAgent(): Promise<void> {
-    const { settings, settingsOwner, manager, oauth, mcpRuntime } = this;
-    const ownedSessionClient = this.sessionClient;
+    const {
+      preferredSettings: settings,
+      settingsOwner,
+      manager,
+      oauth,
+      mcpRuntime,
+    } = this;
+    const ownedSessionClient = this.preferredSessionClient;
     if (ownedSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
     await initializeCreatedClient(ownedSessionClient, this.github);
@@ -641,17 +584,22 @@ export class PreferredAgentAssembly {
     handles: AgentSchedulerHandle[],
     scheduler: SchedulerConstruction | undefined,
   ): Promise<Agent> {
-    if (this.sessionClient === undefined)
+    if (this.preferredSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
-    const tasks = assembleTaskOwner(this.settings, undefined);
+    const tasks = assembleTaskOwner(this.preferredSettings, undefined);
     const shell = new ShellJobOwner(() =>
-      resolveShellJobSettings(this.settings),
+      resolveShellJobSettings(this.preferredSettings),
     );
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
       const editors = { editorCallbacks: this.editorCallbacks ?? {} };
-      this.sessionClient.initializeExecution(
+      this.preferredSessionClient.toolCatalog.bindChildExecution(
+        child,
+        tasks,
+        shell,
+      );
+      this.preferredSessionClient.initializeExecution(
         withChildToolDisplay(
           scheduler ?? ((options) => new CoreToolScheduler(options)),
           child,
@@ -676,11 +624,11 @@ export class PreferredAgentAssembly {
     }
   }
   #constructMcpControl(auth: AgentAuthState): McpControl {
-    if (this.sessionClient === undefined)
+    if (this.preferredSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
     return buildOwnedMcpControl(
       (...args) => this.mcpRuntime.readServerSettings(...args),
-      this.sessionClient.toolCatalog.selection,
+      this.preferredSessionClient.toolCatalog.selection,
       (...args) => this.mcpRuntime.listPrompts(...args),
       (...args) => this.mcpRuntime.listResources(...args),
       (...args) => this.mcpRuntime.readOAuthCredentials(...args),
@@ -697,15 +645,15 @@ export class PreferredAgentAssembly {
     );
   }
   #refreshClientTools(): Promise<void> {
-    if (this.sessionClient === undefined)
+    if (this.preferredSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
-    return this.sessionClient.getAgentClient().setTools();
+    return this.preferredSessionClient.refreshToolDefinitions();
   }
   async #selectModel(model: string): Promise<void> {
     await setActiveModel(
       model,
       assembleModelSelection(this.settingsOwner),
-      this.settings,
+      this.preferredSettings,
       this.manager.getActiveProvider(),
     );
   }
@@ -745,7 +693,7 @@ export class PreferredAgentAssembly {
     editors: StableEditorCallbacksHolder,
     display: StableDisplayCallbacksHolder,
   ): Agent {
-    if (this.sessionClient === undefined)
+    if (this.preferredSessionClient === undefined)
       throw new Error('Preferred Agent client was not acquired');
     const runtimeState = buildFacadeState(parsed, baseUrl, this.runtimeId);
     const ownership = recordOwnership({
@@ -754,51 +702,46 @@ export class PreferredAgentAssembly {
       configOwnership: 'agent',
       disposeMcpRuntime: () => this.mcpRuntime.dispose(),
     });
-    const history =
-      this.sessionClient.getAgentClient().getHistoryService() ??
-      new HistoryService();
-    this.sessionClient.getAgentClient().storeHistoryServiceForReuse(history);
+    this.preferredSessionClient.initializeConversation();
     const auth = createAgentAuthState();
-    return new AgentImpl(
-      this.settingsOwner,
-      this.sessionClient,
-      this.mcpRuntime.workspaceSkills.operations,
-      undefined,
-      this.mediaOwner,
-      tasks,
-      shell,
-      this.#constructWorkspace(),
-      assembleIdeControl(
-        this.mcpRuntime.trust,
-        this.mcpRuntime.ide,
-        () => editors.editorCallbacks,
-      ),
-      new LspControl(this.mcpRuntime.lspInspection),
-      (...args) => this.mcpRuntime.awaitDiscovery(...args),
-      (...args) => this.mcpRuntime.closeAdmission(...args),
-      this.#constructMcpControl(auth),
-      auth,
-      this.config,
-      this.manager,
-      this.oauth,
-      () => 'agent',
-      this.settings,
-      this.runtimeId,
-      () => this.releaseProviders(),
-      this.sessionClient.messageBus,
-      runtimeState,
-      ownership,
-      'config',
-      this.sessionClient.getAgentClient.bind(this.sessionClient),
-      history,
-      editors,
-      display,
-      this.onOAuthPrompt,
-      parsed.auth,
-      child,
-      (model) => this.#selectModel(model),
-      this.#authentication(),
+    this.facadeSettingsOwner = this.settingsOwner;
+    this.facadeSessionOwner = this.preferredSessionClient;
+    this.facadeWorkspaceSkills = this.mcpRuntime.workspaceSkills.operations;
+    this.facadeMediaOwner = this.preferredMediaOwner;
+    this.facadeTaskOwner = tasks;
+    this.facadeShellOwner = shell;
+    this.workspace = this.#constructWorkspace();
+    this.ide = assembleIdeControl(
+      this.mcpRuntime.trust,
+      this.mcpRuntime.ide,
+      () => editors.editorCallbacks,
     );
+    this.lsp = new LspControl(this.mcpRuntime.lspInspection);
+    this.awaitMcpDiscovery = (...args) =>
+      this.mcpRuntime.awaitDiscovery(...args);
+    this.closeMcpAdmission = (...args) =>
+      this.mcpRuntime.closeAdmission(...args);
+    this.mcp = this.#constructMcpControl(auth);
+    this.facadeAuthState = auth;
+    this.facadeProviderManager = this.manager;
+    this.facadeOAuth = this.oauth;
+    this.facadeRuntimeKind = () => 'agent';
+    this.facadeSettingsService = this.preferredSettings;
+    this.facadeRuntimeId = this.runtimeId;
+    this.closeRuntime = () => this.releaseProviders();
+
+    this.facadeRuntimeState = runtimeState;
+    this.facadeOwnership = ownership;
+    this.sessionIdentityOwnership = 'config';
+
+    this.facadeEditors = editors;
+    this.facadeDisplay = display;
+    this.onOAuthPrompt = this.preferredOAuthPrompt;
+    this.initialAuth = parsed.auth;
+    this.childDisplay = child;
+    this.selectOwnerModel = (model) => this.#selectModel(model);
+    this.authentication = this.#authentication();
+    return this.initializeFacade();
   }
 }
 

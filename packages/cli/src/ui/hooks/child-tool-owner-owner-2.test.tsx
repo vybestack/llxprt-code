@@ -1,3 +1,8 @@
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -28,7 +33,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -47,10 +51,10 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { act } from 'react';
 import { cleanup, renderHook } from '../../__tests__/render.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { TaskTool } from '../../../../agents/src/tools/task.js';
 import { SubAgentScope } from '../../../../agents/src/core/subagent.js';
-import { SubagentOrchestrator } from '../../../../agents/src/core/subagentOrchestrator.js';
+import { createTestChildOrchestrator } from '../../../../agents/src/core/__tests__/child-launch-fixture.js';
 import { createStatelessRuntimeBundle } from '../../../../agents/src/core/__tests__/subagent-test-helpers.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
@@ -229,7 +233,7 @@ describe('Mounted CLI child execution ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -292,7 +296,7 @@ describe('Mounted CLI child execution ownership', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -371,141 +375,135 @@ describe('Mounted CLI child execution ownership', () => {
       }),
     );
     let scope: SubAgentScope | undefined;
-    const task = new TaskTool(builtCallerConfig, {
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
+      workspaceTrust: builtCallerMcp.trust,
       createChildSettings: () => builtCallerSettingsOwner.createChildStore(),
       readRunPolicy: () => builtCallerSettingsOwner.readSubagentRunPolicy(),
+      instructions: emptyInstructionReads,
+      workspacePaths: builtCallerMcp.workspacePaths,
+      readMcpInstructions: builtCallerMcp.readInstructions,
+      foregroundConfig: builtCallerConfig,
+      toolRegistry: childRegistry,
+      messageBus: builtCallerPolicy.session.messageBus,
+      profileManager: profiles,
+      subagentManager: subagents,
+      runtimeLoader: async (options) => {
+        const bundle = createStatelessRuntimeBundle({
+          history: new HistoryService(),
+          toolRegistry: childRegistry,
+          toolsView: {
+            listToolNames: () => ['child_record'],
+            getToolMetadata: (toolName) => ({
+              name: toolName,
+              description: toolName,
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        return loadAgentRuntime({
+          ...options,
+          overrides: {
+            ...options.overrides,
+            historyService: new HistoryService(),
+            toolsView: bundle.toolsView,
+            contentGenerator: bundle.contentGenerator,
+          },
+        });
+      },
+      scopeFactory: async (
+        childName,
+        config,
+        prompt,
+        model,
+        run,
+        tools,
+        outputs,
+        runtime,
+        generator,
+        telemetry,
+        registry,
+        view,
+        instructions,
+        paths,
+        readMcp,
+        bus,
+        settings,
+        _environment,
+        readApproval,
+        admitParameters,
+        lifecycle,
+        hooks,
+        retryFailover,
+        readBucket,
+        signal,
+      ) => {
+        let turn = 0;
+        scope = await SubAgentScope.create(
+          childName,
+          config,
+          prompt,
+          model,
+          run,
+          tools,
+          outputs,
+          runtime,
+          generator,
+          telemetry,
+          registry,
+          view,
+          instructions,
+          paths,
+          readMcp,
+          bus,
+          settings,
+          async () => [],
+          readApproval,
+          admitParameters,
+          lifecycle,
+          hooks,
+          retryFailover,
+          readBucket,
+          signal,
+          {
+            createTurn: (_chat, promptId, agentId) => {
+              const requests: ToolCallRequestInfo[] =
+                turn++ === 0
+                  ? [
+                      {
+                        callId: 'same-child-call',
+                        name: 'child_record',
+                        args: {},
+                        prompt_id: promptId,
+                        agentId,
+                        isClientInitiated: false,
+                      },
+                    ]
+                  : [];
+              return {
+                pendingToolCalls: requests,
+                async *run() {
+                  yield {
+                    type: AgentEventType.Content,
+                    value: requests.length > 0 ? 'Recording' : 'Done',
+                  };
+                },
+              };
+            },
+          },
+        );
+        return scope;
+      },
+    });
+    const task = new TaskTool(builtCallerConfig, {
       readTaskPolicy: () => builtCallerSettingsOwner.readTaskPolicy(),
       readGovernance: () =>
         builtCallerSettingsOwner.readToolGovernance(
           builtCallerConfig.getExcludeTools() ?? [],
         ),
-      instructions: emptyInstructionReads,
-      workspacePaths: builtCallerMcp.workspacePaths,
-      readMcpInstructions: builtCallerMcp.readInstructions,
       messageBus: builtCallerPolicy.session.messageBus,
       isInteractiveEnvironment: () => true,
-      orchestratorFactory: (messageBus) =>
-        new SubagentOrchestrator({
-          credentialAuthority: new CredentialAuthority(),
-          workspaceTrust: builtCallerMcp.trust,
-          createChildSettings: () =>
-            builtCallerSettingsOwner.createChildStore(),
-          readRunPolicy: () => builtCallerSettingsOwner.readSubagentRunPolicy(),
-          instructions: emptyInstructionReads,
-          workspacePaths: builtCallerMcp.workspacePaths,
-          readMcpInstructions: builtCallerMcp.readInstructions,
-          foregroundConfig: builtCallerConfig,
-          toolRegistry: childRegistry,
-          messageBus,
-          profileManager: profiles,
-          subagentManager: subagents,
-          runtimeLoader: async (options) => {
-            const bundle = createStatelessRuntimeBundle({
-              history: new HistoryService(),
-              toolRegistry: childRegistry,
-              toolsView: {
-                listToolNames: () => ['child_record'],
-                getToolMetadata: (toolName) => ({
-                  name: toolName,
-                  description: toolName,
-                  parameterSchema: { type: 'object', properties: {} },
-                }),
-              },
-            });
-            return loadAgentRuntime({
-              ...options,
-              overrides: {
-                ...options.overrides,
-                historyService: new HistoryService(),
-                toolsView: bundle.toolsView,
-                contentGenerator: bundle.contentGenerator,
-              },
-            });
-          },
-          scopeFactory: async (
-            childName,
-            config,
-            prompt,
-            model,
-            run,
-            tools,
-            outputs,
-            runtime,
-            generator,
-            telemetry,
-            registry,
-            view,
-            instructions,
-            paths,
-            readMcp,
-            bus,
-            settings,
-            _environment,
-            readApproval,
-            admitParameters,
-            lifecycle,
-            hooks,
-            retryFailover,
-            readBucket,
-            signal,
-          ) => {
-            let turn = 0;
-            scope = await SubAgentScope.create(
-              childName,
-              config,
-              prompt,
-              model,
-              run,
-              tools,
-              outputs,
-              runtime,
-              generator,
-              telemetry,
-              registry,
-              view,
-              instructions,
-              paths,
-              readMcp,
-              bus,
-              settings,
-              async () => [],
-              readApproval,
-              admitParameters,
-              lifecycle,
-              hooks,
-              retryFailover,
-              readBucket,
-              signal,
-              {
-                createTurn: (_chat, promptId, agentId) => {
-                  const requests: ToolCallRequestInfo[] =
-                    turn++ === 0
-                      ? [
-                          {
-                            callId: 'same-child-call',
-                            name: 'child_record',
-                            args: {},
-                            prompt_id: promptId,
-                            agentId,
-                            isClientInitiated: false,
-                          },
-                        ]
-                      : [];
-                  return {
-                    pendingToolCalls: requests,
-                    async *run() {
-                      yield {
-                        type: AgentEventType.Content,
-                        value: requests.length > 0 ? 'Recording' : 'Done',
-                      };
-                    },
-                  };
-                },
-              },
-            );
-            return scope;
-          },
-        }),
+      launchChild: orchestrator.launch.bind(orchestrator),
     });
     const agent: Agent = await fromConfig(
       builtCallerConfig,
@@ -517,7 +515,7 @@ describe('Mounted CLI child execution ownership', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
       undefined,
       undefined,
       undefined,
@@ -541,7 +539,7 @@ describe('Mounted CLI child execution ownership', () => {
       undefined,
       undefined,
       undefined,
-      (_config, _bus, tools) => {
+      (tools) => {
         tools.registerTool(parentRecord);
         tools.registerTool(task);
       },

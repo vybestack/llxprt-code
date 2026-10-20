@@ -12,11 +12,15 @@ import {
   Config,
   SessionRecordingService,
   type SessionRecordingServiceConfig,
+  getProjectHash,
 } from '@vybestack/llxprt-code-core';
-import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
-import { createOrResumeRecording } from './cliSessionBootstrap.js';
+import {
+  createUiSessionOwner,
+  uiFixtureResources,
+} from './__tests__/uiSessionOwner.js';
+import { setupOwnerSessionRecording } from './cliSessionBootstrap.js';
 
-const PROJECT_HASH = 'startup-recording-test';
+let projectHash: string;
 
 function recordingConfig(
   chatsDir: string,
@@ -25,11 +29,24 @@ function recordingConfig(
   return {
     chatsDir,
     sessionId,
-    projectHash: PROJECT_HASH,
+    projectHash,
     workspaceDirs: [chatsDir],
     provider: 'test-provider',
     model: 'test-model',
   };
+}
+
+class RecordingConfig extends Config {
+  override readonly projectTempDir: string;
+  override readonly projectChatsDir: string;
+  constructor(
+    root: string,
+    parameters: ConstructorParameters<typeof Config>[0],
+  ) {
+    super(parameters);
+    this.projectTempDir = join(root, getProjectHash(root));
+    this.projectChatsDir = join(root, 'chats');
+  }
 }
 
 describe('recording bootstrap checkpoint resolution', () => {
@@ -39,6 +56,7 @@ describe('recording bootstrap checkpoint resolution', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'recording-bootstrap-'));
     chatsDir = join(root, 'chats');
+    projectHash = getProjectHash(root);
   });
 
   afterEach(async () => {
@@ -62,7 +80,7 @@ describe('recording bootstrap checkpoint resolution', () => {
       }
     }
 
-    const config = new Config({
+    const config = new RecordingConfig(root, {
       cwd: root,
       targetDir: root,
       debugMode: false,
@@ -75,11 +93,30 @@ describe('recording bootstrap checkpoint resolution', () => {
     });
 
     const owner = await createUiSessionOwner(config);
-    await expect(
-      createOrResumeRecording(config, PROJECT_HASH, chatsDir, {
-        getAgentClient: () => owner.agentClient,
-        workspaceDirectories: () => [root],
-      }),
-    ).rejects.toThrow(/Ambiguous continue target name/);
+    const session = uiFixtureResources(
+      owner,
+    ).sessionClient.createSessionControl(
+      'config',
+      () => config.getSessionId(),
+      (operation) => operation(),
+      () => {},
+      () => {},
+      () => config.getProvider() ?? '',
+      () => config.getModel(),
+    );
+    try {
+      await expect(
+        setupOwnerSessionRecording(
+          config,
+          session,
+          session.listBrowserTargetsDetailed,
+          { listSessions: false, deleteSession: undefined },
+          null,
+        ),
+      ).rejects.toThrow(/Ambiguous continue target name/);
+    } finally {
+      await session.dispose();
+      await config.dispose();
+    }
   });
 });

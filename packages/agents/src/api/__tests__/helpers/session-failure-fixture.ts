@@ -1,3 +1,5 @@
+import { capturedSessionClient } from './session-client-capture.js';
+import { capturedActivation } from './activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,7 +9,7 @@ import { afterEach, vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { assembleAgentActivationBootstrap } from '../../providerSwitchAssembly.js';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './activation-acquisition-capture.js';
 export function installFailingSessionFixture(): (
   config: Config,
   failure: Error,
@@ -58,7 +60,7 @@ async function createFailingSession(
     'borrowed',
   );
   vi.spyOn(
-    operation.sessionClient.getAgentClient(),
+    capturedSessionClient(capturedActivation(operation).owner),
     'dispose',
   ).mockImplementation(async () => {
     throw failure;

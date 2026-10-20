@@ -1,5 +1,7 @@
 # Lane C: remove command, React, ACP and A2A service shapes
 
+Historical status (2026-10-19): the measurements and baseline-lowering/commit instructions below describe intermediate slices. The final strict gate, `npm run check:runtime-boundary`, has no baseline allowance. Cutover qualification is recorded separately under `tmp/consumer-closure/ratchet-retirement/`; these dated slice receipts do not qualify that source.
+
 ## Measurement and scope
 
 The remaining Lane C surfaces contain 1,308 prohibited shapes. They must be removed through consumer cutovers, without changing the boundary rule.

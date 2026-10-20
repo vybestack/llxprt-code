@@ -1,3 +1,7 @@
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -147,31 +151,35 @@ describe('loadCliConfig memory discovery', () => {
       './extension.js'
     );
     let operation: AgentActivationOperation | undefined;
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-      'test-session',
-      argv,
-      workspaceDir,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-      undefined,
-      (owner) => {
-        operation = owner;
-      },
+    const config = await captureActivationConstruction(() =>
+      loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        'test-session',
+        argv,
+        workspaceDir,
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
+        undefined,
+        (owner) => {
+          operation = owner;
+        },
+      ),
     );
 
     if (operation === undefined)
       throw new Error('Missing retained CLI activation root');
     try {
       expect(
-        operation.workspaceMemory.operations.snapshot().memoryContent,
+        capturedActivation(operation).workspaceMemory.operations.snapshot()
+          .memoryContent,
       ).toContain(contextContent);
       expect(
-        operation.workspaceMemory.operations.snapshot().fileCount,
+        capturedActivation(operation).workspaceMemory.operations.snapshot()
+          .fileCount,
       ).toBeGreaterThan(0);
       expect(config.getProvidedInstructions()).toBe('');
     } finally {
@@ -184,26 +192,30 @@ describe('loadCliConfig memory discovery', () => {
       './extension.js'
     );
     let operation: AgentActivationOperation | undefined;
-    await loadCliConfig(
-      createSettings('AGENTS.md'),
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-      'test-session',
-      createArgv(),
-      workspaceDir,
-      undefined,
-      undefined,
-      undefined,
-      new CredentialAuthority(),
-      undefined,
-      (owner) => {
-        operation = owner;
-      },
+    await captureActivationConstruction(() =>
+      loadCliConfig(
+        createSettings('AGENTS.md'),
+        [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        'test-session',
+        createArgv(),
+        workspaceDir,
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
+        undefined,
+        (owner) => {
+          operation = owner;
+        },
+      ),
     );
     if (operation === undefined)
       throw new Error('Missing retained CLI activation root');
-    const memory = operation.workspaceMemory;
-    expect(operation.workspaceMemoryOwnership).toBe('transferred');
+    const memory = capturedActivation(operation).workspaceMemory;
+    expect(capturedActivation(operation).workspaceMemoryOwnership).toBe(
+      'transferred',
+    );
     const originalDispose = memory.dispose.bind(memory);
     let memoryDisposals = 0;
     memory.dispose = () => {

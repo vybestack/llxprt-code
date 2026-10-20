@@ -17,7 +17,8 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import { SessionControl } from '../control/sessionControl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionRecordingPaths } from '../control/sessionControl.js';
+import { SessionConversationBinding } from '../../session/session-conversation-binding.js';
 import type {
   IContent,
   TextBlock,
@@ -64,20 +65,14 @@ function makeMockClient(history: IContent[]): AgentClientContract {
   } as unknown as AgentClientContract;
 }
 
-function makeConfig(): Config {
+function makeRecordingPaths(): SessionRecordingPaths {
   return {
-    getProjectRoot: () => '/tmp/test-session-control',
-    setSessionRecordingService: () => undefined,
-    getSessionRecordingService: () => undefined,
-    storage: {
-      readProjectTempData: () => Promise.resolve(null),
-      writeProjectTempData: () => Promise.resolve(),
-      deleteProjectTempData: () => Promise.resolve(),
-      projectTempDataPath: () => '/tmp/test-session-control/data',
-      getProjectTempDir: () => '/tmp/test-session-control/tmp',
-      getProjectChatsDir: () => '/tmp/test-session-control/chats',
-    },
-  } as unknown as Config;
+    projectRoot: '/tmp/test-session-control',
+    storageRoot: '/tmp/test-session-control/data',
+    projectTempDir: '/tmp/test-session-control/tmp',
+    projectChatsDir: '/tmp/test-session-control/chats',
+    persistenceQueueBytes: 1024 * 1024,
+  };
 }
 
 function textContent(
@@ -95,8 +90,20 @@ function createSessionControl(
   client: AgentClientContract,
   id = 'test-session',
 ): SessionControl {
+  let ownedSessionId = id;
+  let closed = false;
+  class CharacterizationConversation extends SessionConversationBinding {
+    constructor() {
+      super();
+      this.client = client;
+    }
+    protected assertConversationOpen(): void {
+      if (closed) throw new Error('Characterization session is closed');
+    }
+  }
+  const conversation = new CharacterizationConversation();
   return new SessionControl(
-    makeConfig(),
+    makeRecordingPaths(),
     new LocalMediaStore({
       rootDirectory: '/tmp/test-session-control/media',
       quotaBytes: 1024 * 1024,
@@ -104,21 +111,21 @@ function createSessionControl(
     () => 1024 * 1024,
     () => fixturePaths().directories(),
     'config',
-    () => id,
-    () => client,
+    () => ownedSessionId,
+    conversation.nativeHistory,
     (operation) => operation(),
-    () => {},
+    () => {
+      closed = true;
+    },
     async () => {
-      await client.resetChat();
-      return {
-        client,
-        publish: () => {},
-        retire: async () => {},
-        discard: async () => {},
-      };
+      throw new Error('Characterization fixture does not prepare new sessions');
     },
     () => 'test-provider',
     () => 'test-model',
+    () => ownedSessionId,
+    (nextId) => {
+      ownedSessionId = nextId;
+    },
     new AgentSessionPersistence(
       {
         projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),

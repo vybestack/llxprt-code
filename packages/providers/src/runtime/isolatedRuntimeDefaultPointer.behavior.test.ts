@@ -1,3 +1,5 @@
+import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,8 +24,7 @@ import {
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { configureProviderTokenizer } from '../composition/index.js';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
-import { activateAdoptedProviders } from '../../../agents/src/api/adopted-provider-assembly.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -337,19 +338,20 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
       foregroundSettings.set('activeProvider', 'kimi');
       await openFirst('same-label', 'same-label', 'owner-model');
       if (activation === 'wrapper')
-        await activateAdoptedProviders(
+        await new AdoptedProviderFixture(
           firstConfig,
           firstSettings,
+          'same-label',
+        ).activate(
           firstSettingsOwner,
           firstManager,
           firstOauth,
-          'same-label',
           true,
           configureProviderTokenizer(firstManager),
         );
       else await activateFirst();
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           foregroundSettingsOwner,
           foregroundManager,
           () => foregroundConfig.getModel(),
@@ -386,7 +388,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
     await openFirst('same-label', 'same-label', 'owner-model');
     await openSecond('same-label', 'same-label', 'owner-model');
     await Promise.all([activateFirst(), activateSecond()]);
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect(firstOauth).not.toBe(secondOauth);

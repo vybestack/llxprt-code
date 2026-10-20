@@ -1,3 +1,5 @@
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -101,12 +103,21 @@ describe('session browser resume with an unreadable recording present (issue #37
       getModel: () => 'test-model',
       directories: () => [root],
       adoptSessionId: () => {},
+      sessionPersistence: new CliSessionPersistence(
+        { projectRoot, chatsDir },
+        {
+          mediaStore: new LocalMediaStore({
+            rootDirectory: join(root, 'media'),
+            quotaBytes: 4096,
+          }),
+        },
+      ),
     } as never;
     const logger = new DebugLogger('test-browser-resume');
     const resume = bindRawBrowserResume(
       bindRawBrowserSession(
         config,
-        () => undefined,
+        undefined,
         {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,

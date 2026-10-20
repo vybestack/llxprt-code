@@ -22,7 +22,10 @@ import {
   createMockCommandContext,
   type CommandOwnerFixture,
 } from '../../__tests__/mockCommandContext.js';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { MessageType } from '../types.js';
 import type { SlashCommand } from './types.js';
 import type {
@@ -94,8 +97,10 @@ describe('compression scenario conservation', () => {
         blocks: [{ type: 'text', text: 'compression input' }],
       },
     ]);
-    await owner.agentClient.startChat(await owner.agentClient.getHistory());
-    const chat = owner.agentClient.getChat();
+    await commandOwnerClient(owner).startChat(
+      await commandOwnerClient(owner).getHistory(),
+    );
+    const chat = commandOwnerClient(owner).getChat();
     const history = chat.getHistoryService();
     if (history === null) throw new Error('Fixture chat has no history');
     const sourceHistory = source.getHistoryService();

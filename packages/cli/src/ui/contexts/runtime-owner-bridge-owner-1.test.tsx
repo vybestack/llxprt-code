@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +30,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -48,7 +52,7 @@ import { OwnerView } from '../../__tests__/runtime-owner-bridge-views.fixture.js
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { render } from 'ink-testing-library';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
@@ -216,7 +220,7 @@ describe('interactive runtime owner bridge', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const firstCallerOwner = await SessionClientOwner.create(
+    const firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -279,7 +283,7 @@ describe('interactive runtime owner bridge', () => {
       );
       requireCallerActivation(activation);
       await firstCallerOwner.initializeTools();
-      await firstCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(firstCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, firstCallerClose);
     }
@@ -385,7 +389,7 @@ describe('interactive runtime owner bridge', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const secondCallerOwner = await SessionClientOwner.create(
+    const secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -448,7 +452,7 @@ describe('interactive runtime owner bridge', () => {
       );
       requireCallerActivation(activation);
       await secondCallerOwner.initializeTools();
-      await secondCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(secondCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, secondCallerClose);
     }

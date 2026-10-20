@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license
@@ -23,7 +25,7 @@ import {
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { fromConfig } from '../fromConfig.js';
+
 import { toConfigParameters } from '../agentConfig.adapter.js';
 
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
@@ -250,24 +252,27 @@ describe('MCP scheduler approval isolation', () => {
       expect(a.mcpRuntime.policyOwner.session.confirmation).not.toBe(
         b.mcpRuntime.policyOwner.session.confirmation,
       );
-      expect(a.agent.getMessageBus()).not.toBe(b.agent.getMessageBus());
+      expect(fixtureAgentResources(a.agent).messageBus).not.toBe(
+        fixtureAgentResources(b.agent).messageBus,
+      );
       let requests: ToolConfirmationRequest[] = [];
       let decision = ToolConfirmationOutcome.ProceedOnce;
       unsubscribers.push(
-        b.agent
-          .getMessageBus()
-          .subscribe<ToolConfirmationRequest>(
-            MessageBusType.TOOL_CONFIRMATION_REQUEST,
-            (request) => {
-              requests = [...requests, request];
-              trace.push({ busRequest: request, decision });
-              queueMicrotask(() =>
-                b.agent
-                  .getMessageBus()
-                  .respondToConfirmation(request.correlationId, decision),
-              );
-            },
-          ),
+        fixtureAgentResources(
+          b.agent,
+        ).messageBus.subscribe<ToolConfirmationRequest>(
+          MessageBusType.TOOL_CONFIRMATION_REQUEST,
+          (request) => {
+            requests = [...requests, request];
+            trace.push({ busRequest: request, decision });
+            queueMicrotask(() =>
+              fixtureAgentResources(b.agent).messageBus.respondToConfirmation(
+                request.correlationId,
+                decision,
+              ),
+            );
+          },
+        ),
       );
       async function turn(name: string): Promise<AgentEvent[]> {
         b.endpoint.requestTool(tool(b.agent, name).name);

@@ -1,3 +1,9 @@
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { bindTurnModel } from '../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
+import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
+import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import {
   useConsumerPromptDirectory,
   acquireConsumerPolicy,
@@ -50,7 +56,6 @@ import {
 import { withFixtureAgent, drain } from './helpers/agentHarness.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import {
-  fromConfig,
   createAgenticLoop,
   mapLoopStream,
   type AgentEvent,
@@ -98,7 +103,7 @@ import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
  */
 async function driveReferenceLoop(
   config: Config,
-  agentClient: Agent['agentClient'],
+  agentClient: ReturnType<typeof capturedSessionClient>,
   messageBus: MessageBus,
   input: string,
   settingsOwner: SessionSettingsOwner,
@@ -109,23 +114,34 @@ async function driveReferenceLoop(
   });
   const taskLaunchOwner = new TaskLaunchOwner(new AsyncTaskManager());
   const loop = createAgenticLoop({
-    telemetry: RootTelemetry.prepare({
-      enabled: false,
-      sessionId: 'isolated-caller-fixture',
-      maxBytes: 1024,
-      maxFiles: 1,
-    }),
-    taskLaunchOwner,
     readShellJobSettings: () => resolveShellJobSettings(settingsService),
-    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
-    getToolGovernance: () =>
-      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
-    agentClient,
     config,
-    messageBus,
     interactiveMode: false,
-    approvalHandler,
     displayCallbacks: {},
+    ...bindTurnModel(agentClient),
+    taskLaunchOwner,
+    acquireTools: (decorateScheduler) =>
+      new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          false,
+          agentClient.tools,
+          decorateScheduler((options) => new CoreToolScheduler(options)),
+          () => settingsOwner.readToolExecutionPolicy(),
+          () =>
+            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
   });
   const controller = new AbortController();
   const loopEvents = loop.run(input, controller.signal);
@@ -312,7 +328,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -330,7 +346,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         undefined,
         undefined,
@@ -516,7 +532,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
           );
           requireCallerActivation(activation);
           await builtRefCallerOwner.initializeTools();
-          await builtRefCallerOwner.getAgentClient().startChat();
+          await capturedSessionClient(builtRefCallerOwner).startChat();
         } catch (primary) {
           await cleanupAfterFailure(primary, builtRefCallerClose);
         }
@@ -524,7 +540,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         try {
           const pathBEvents = await driveReferenceLoop(
             builtRefCallerConfig,
-            builtRefCallerOwner.getAgentClient(),
+            capturedSessionClient(builtRefCallerOwner),
             builtRefCallerPolicy.session.messageBus,
             'hello',
             builtRefCallerSettingsOwner,

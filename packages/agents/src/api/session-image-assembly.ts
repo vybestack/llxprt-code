@@ -1,9 +1,8 @@
 import type { Config } from '@vybestack/llxprt-code-core';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import type { AgentActivationOperation } from './activationPreflightState.js';
-import { cleanupFailedMediaAssembly } from './fromConfig-cleanup.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
+import { cleanupFailedMediaAssembly } from './fromConfig-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -98,17 +97,15 @@ export function prepareImageConstruction(
 
 export async function acquireAdoptedMedia(
   config: Config,
-  preflight: AgentActivationOperation | undefined,
   borrowed: LocalMediaStore | undefined,
 ): Promise<SessionMediaOwner | undefined> {
   const owner =
-    preflight?.takeMediaOwner(config) ??
-    (borrowed === undefined
+    borrowed === undefined
       ? new SessionMediaOwner(
           config.projectTempDir,
           config.getMediaStoreQuotaByteLimit(),
         )
-      : undefined);
+      : undefined;
   try {
     if ((borrowed ?? owner?.store) === undefined)
       throw new AgentBootstrapError('Missing explicit media owner');
@@ -116,7 +113,7 @@ export async function acquireAdoptedMedia(
   } catch (error) {
     return cleanupFailedMediaAssembly(
       error,
-      preflight?.dispose.bind(preflight),
+      undefined,
       owner?.dispose.bind(owner),
       undefined,
     );

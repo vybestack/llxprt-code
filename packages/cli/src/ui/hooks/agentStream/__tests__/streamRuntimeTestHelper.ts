@@ -15,10 +15,8 @@ import type {
   WorkspacePromptSelection,
   WorkspaceCheckpointOperations,
   WorkspaceResourceSelection,
-  AgentClientContract,
   BucketFailoverHandler,
   FileFilteringOptions,
-  IdeClient,
   MCPServerConfig,
   SchedulerCallbacks,
   ToolSchedulerContract,
@@ -29,10 +27,9 @@ import type {
 import {
   WorkspaceMcpCatalogOwner,
   WorkspaceCheckpointOwner,
-  LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 
-import { afterEach, vi } from 'bun:test';
+import { afterEach } from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const createFilesystem = installTestWorkspaceFilesystem();
 let root: ReturnType<typeof createFilesystem> | undefined;
@@ -71,22 +68,18 @@ import type {
   SubscribeChildTools,
 } from '../../../../runtime/interactiveToolScheduler.js';
 import { createFakeAgent } from './helpers/createFakeAgent.js';
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
   RefreshMemoryResult,
   StreamRuntime,
-  UiContentGeneratorConfig,
 } from '../../../cliUiRuntime.js';
 
 export interface StreamRuntimeTestOverrides {
   session?: Partial<StreamRuntime['session']>;
   model?: Partial<StreamRuntime['model']>;
-  agentClientSource?: Partial<StreamRuntime['agentClientSource']>;
   shell?: Partial<StreamRuntime['shell']>;
   files?: Partial<StreamRuntime['files']>;
   memory?: Partial<StreamRuntime['memory']>;
-  ide?: Partial<StreamRuntime['ide']>;
   hooks?: Partial<StreamRuntime['hooks']>;
   mcp?: Partial<StreamRuntime['mcp']>;
   settings?: Partial<StreamRuntime['settings']>;
@@ -147,12 +140,6 @@ const reactToolSchedulerRuntimeCache = new WeakMap<
 
 const DEFAULT_EMPTY_SOURCE: LegacyRuntimeSource = {};
 
-function makeAgentClient(source: LegacyRuntimeSource): AgentClientContract {
-  return call(source, 'getAgentClient', {
-    getHistory: vi.fn(async () => []),
-  } as unknown as AgentClientContract);
-}
-
 function makeSessionRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['session'],
@@ -182,10 +169,6 @@ function makeModelRuntime(
     getModel: () => call(source, 'getModel', 'test-model'),
     getProvider: () =>
       call(source, 'getProvider', undefined as string | undefined),
-    getContentGeneratorConfig: () =>
-      call(source, 'getContentGeneratorConfig', {
-        model: 'test-model',
-      } as UiContentGeneratorConfig),
     ...override,
   };
 }
@@ -261,23 +244,6 @@ function makeMemoryRuntime(
       } as RefreshMemoryResult),
     shouldLoadMemoryFromIncludeDirectories: () =>
       call(source, 'shouldLoadMemoryFromIncludeDirectories', false),
-    ...override,
-  };
-}
-
-function makeIdeRuntime(
-  source: LegacyRuntimeSource,
-  override: StreamRuntimeTestOverrides['ide'],
-): StreamRuntime['ide'] {
-  return {
-    getIdeClient: () =>
-      call(source, 'getIdeClient', undefined as IdeClient | undefined),
-    getIdeMode: () => call(source, 'getIdeMode', false),
-    setIdeMode: (enabled) => delegateVoid(source, 'setIdeMode', enabled),
-    setIdeClientConnected: () => delegateVoid(source, 'setIdeClientConnected'),
-    setIdeClientDisconnected: () =>
-      delegateVoid(source, 'setIdeClientDisconnected'),
-    getLspConfig: () => call(source, 'getLspConfig', undefined),
     ...override,
   };
 }
@@ -482,29 +448,12 @@ export function createStreamRuntimeForTest(
   const selectedStorage = new Storage(process.cwd());
   const projectTempDir =
     overrides.projectTempDir ?? selectedStorage.getProjectTempDir();
-  const fallbackMediaStore = new LocalMediaStore({
-    rootDirectory: join(
-      projectTempDir,
-      `stream-runtime-test-media-${randomUUID()}`,
-    ),
-    quotaBytes: 1024 * 1024,
-  });
-  const sourceClient = makeAgentClient(source);
-  const client =
-    sourceClient.mediaStore === undefined
-      ? Object.assign(sourceClient, { mediaStore: fallbackMediaStore })
-      : sourceClient;
-  return {
+  const runtime: StreamRuntime = {
     session: makeSessionRuntime(source, overrides.session),
     model: makeModelRuntime(source, overrides.model),
-    agentClientSource: {
-      getAgentClient: () => client,
-      ...overrides.agentClientSource,
-    },
     shell: makeShellRuntime(source, overrides.shell),
     files: makeFilesRuntime(source, overrides.files),
     memory: makeMemoryRuntime(source, overrides.memory),
-    ide: makeIdeRuntime(source, overrides.ide),
     hooks: makeHooksRuntime(source, overrides.hooks),
     mcp: makeMcpRuntime(source, overrides.mcp),
     settings: makeSettingsRuntime(source, overrides.settings),
@@ -547,6 +496,7 @@ export function createStreamRuntimeForTest(
     projectTempDir,
     ...selectedCommandPaths(selectedStorage, overrides),
   };
+  return runtime;
 }
 
 export function createToolSchedulerOperationsForTest(

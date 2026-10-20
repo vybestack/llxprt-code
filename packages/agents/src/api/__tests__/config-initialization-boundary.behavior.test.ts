@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +16,7 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 

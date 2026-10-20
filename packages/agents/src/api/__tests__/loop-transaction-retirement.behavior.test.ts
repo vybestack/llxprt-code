@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
 import type { AgenticLoopEvent } from '../../core/agenticLoop/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
@@ -29,12 +31,16 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Agent } from '../agent.js';
-import { createAgent } from '../createAgent.js';
+import {
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
 import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
 import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
 import { SessionExecutionOwner } from '../../session/session-execution-owner.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { createServer } from 'node:net';
 import { once } from 'node:events';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -43,6 +49,7 @@ describe('real loop replacement transaction retirement', () => {
   const credentials = useOwnedCredentials();
   const cleanup: Array<() => void | Promise<void>> = [];
   let agent: Agent;
+  let client: AgentClientContract;
   let config: Config;
   let policy: RuntimePolicyOwner;
   let settings: SessionSettingsOwner;
@@ -90,7 +97,9 @@ describe('real loop replacement transaction retirement', () => {
     settings = new SessionSettingsOwner(new SettingsService());
     cleanup.push(() => settings.dispose());
     settings.bindTelemetry(config);
+    const capture = new AgentResourceCapture();
     agent = await createAgent({
+      runtimeFactoryBindings: capture.factories(undefined),
       provider: 'fake',
       model: 'fake-model',
       workingDir: directory,
@@ -98,6 +107,10 @@ describe('real loop replacement transaction retirement', () => {
       harness: { includeProcessCwd: false },
     });
     cleanup.push(() => agent.dispose());
+    const captured = capture.clients.slice(-1).values().next().value;
+    if (captured === undefined)
+      throw new Error('Ready loop fixture did not acquire a client');
+    client = captured;
   });
   afterEach(async () => {
     const failures: unknown[] = [];
@@ -141,23 +154,25 @@ describe('real loop replacement transaction retirement', () => {
       }
       const bus = new FaultingBus();
       const loop = new AgenticLoop({
-        agentClient: agent.agentClient,
         config,
-        messageBus: bus,
         interactiveMode: false,
-        approvalHandler: async () => ({
-          outcome: ToolConfirmationOutcome.Cancel,
-        }),
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
           bus,
-          false,
-          agent.agentClient.tools,
-          (options) => new CoreToolScheduler(options),
-          () => settings.readToolExecutionPolicy(),
-          () => settings.readToolGovernance([]),
-          () => config.getApprovalMode(),
-          settings.telemetry,
+          async () => ({
+            outcome: ToolConfirmationOutcome.Cancel,
+          }),
+          bindSchedulerOwner(
+            config,
+            bus,
+            false,
+            client.tools,
+            (options) => new CoreToolScheduler(options),
+            () => settings.readToolExecutionPolicy(),
+            () => settings.readToolGovernance([]),
+            () => config.getApprovalMode(),
+            settings.telemetry,
+          ),
         ),
       });
       async function consume(): Promise<AgenticLoopEvent[]> {
@@ -214,7 +229,6 @@ describe('real loop replacement transaction retirement', () => {
       }
       const bus = new ReleaseFaultBus();
       const loop = new AgenticLoop({
-        agentClient: agent.agentClient,
         config: {
           getSessionId: () => {
             throw primary;
@@ -222,20 +236,23 @@ describe('real loop replacement transaction retirement', () => {
           getModel: () => config.getModel(),
           getImagePayloadBudgetBytes: () => config.getImagePayloadBudgetBytes(),
         },
-        messageBus: bus,
-        approvalHandler: async () => ({
-          outcome: ToolConfirmationOutcome.Cancel,
-        }),
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
           bus,
-          false,
-          agent.agentClient.tools,
-          (options) => new CoreToolScheduler(options),
-          () => settings.readToolExecutionPolicy(),
-          () => settings.readToolGovernance([]),
-          () => config.getApprovalMode(),
-          settings.telemetry,
+          async () => ({
+            outcome: ToolConfirmationOutcome.Cancel,
+          }),
+          bindSchedulerOwner(
+            config,
+            bus,
+            false,
+            client.tools,
+            (options) => new CoreToolScheduler(options),
+            () => settings.readToolExecutionPolicy(),
+            () => settings.readToolGovernance([]),
+            () => config.getApprovalMode(),
+            settings.telemetry,
+          ),
         ),
       });
       const result = await Promise.allSettled([
@@ -284,7 +301,7 @@ describe('real loop replacement transaction retirement', () => {
         config,
         settings,
         bus,
-        agent.agentClient.tools,
+        client.tools,
         () => settings.readToolGovernance([]),
         policy.trust,
         undefined,
@@ -292,7 +309,7 @@ describe('real loop replacement transaction retirement', () => {
         undefined,
       );
       cleanup.push(() => owner.dispose());
-      const previous = owner.initialize(agent.agentClient);
+      const previous = owner.initialize(client);
       const before = previous.run(
         'Hold the prior actual generation',
         new AbortController().signal,
@@ -304,7 +321,7 @@ describe('real loop replacement transaction retirement', () => {
       expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(
         1,
       );
-      const replacement = owner.prepare(agent.agentClient);
+      const replacement = owner.prepare(client);
       const current = replacement.publish();
       expect(current).not.toBe(previous);
       expect(owner.isCurrent(current)).toBe(true);
@@ -383,7 +400,7 @@ describe('real loop replacement transaction retirement', () => {
   ): Promise<
     ReturnType<ReturnType<SessionExecutionOwner['initialize']>['run']>
   > {
-    const actual = owner.resolve(agent.agentClient);
+    const actual = owner.resolve(client);
     if (actual.execution === undefined) throw new Error(actual.error.message);
     const stream = actual.execution.run(
       'Hold actual subscription',
@@ -402,9 +419,9 @@ describe('real loop replacement transaction retirement', () => {
     const bus = new FaultedSubscriptionBus([secondary]);
     const owner = acquireExecution(bus);
     cleanup.push(() => owner.dispose());
-    const previous = owner.initialize(agent.agentClient);
+    const previous = owner.initialize(client);
     const paused = await pauseExecution(owner);
-    const replacement = owner.prepare(agent.agentClient);
+    const replacement = owner.prepare(client);
     const current = replacement.publish();
     const abort = AbortController.prototype.abort;
     const physicallyAborted: boolean[] = [];
@@ -480,17 +497,17 @@ describe('real loop replacement transaction retirement', () => {
     const bus = new FaultedSubscriptionBus([]);
     const owner = acquireExecution(bus, supplied);
     cleanup.push(() => owner.dispose());
-    const previous = owner.initialize(agent.agentClient);
+    const previous = owner.initialize(client);
     const stream = await pauseExecution(owner);
     expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(1);
     supplied.fail = true;
     try {
-      expect(() => owner.prepare(agent.agentClient)).toThrow(primary);
+      expect(() => owner.prepare(client)).toThrow(primary);
     } finally {
       supplied.fail = false;
     }
     expect(owner.isCurrent(previous)).toBe(true);
-    expect(owner.resolve(agent.agentClient)).toStrictEqual({
+    expect(owner.resolve(client)).toStrictEqual({
       execution: previous,
     });
     expect(bus.closed).toStrictEqual([]);
@@ -519,11 +536,11 @@ describe('real loop replacement transaction retirement', () => {
     const bus = new FaultedSubscriptionBus(reasons);
     const owner = acquireExecution(bus);
     cleanup.push(() => owner.dispose());
-    owner.initialize(agent.agentClient);
+    owner.initialize(client);
     const prior = [];
     for (const _reason of reasons) {
       await pauseExecution(owner);
-      const replacement = owner.prepare(agent.agentClient);
+      const replacement = owner.prepare(client);
       replacement.publish();
       prior.push(replacement);
     }
@@ -560,7 +577,7 @@ describe('real loop replacement transaction retirement', () => {
     const identities = new Set([current, latest.publish()]);
     expect(identities.size).toBe(1);
     expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(1);
-    const next = owner.prepare(agent.agentClient);
+    const next = owner.prepare(client);
     next.publish();
     next.retire();
     expect(bus.closed).toStrictEqual([0, 1, 2, 3]);
@@ -575,7 +592,7 @@ describe('real loop replacement transaction retirement', () => {
       suppliedConfig,
       settings,
       bus,
-      agent.agentClient.tools,
+      client.tools,
       () => settings.readToolGovernance([]),
       policy.trust,
       undefined,
@@ -588,7 +605,7 @@ describe('real loop replacement transaction retirement', () => {
 
   it('rejects delayed iteration of an admitted execution after closure without retiring the borrowed client', async () => {
     const owner = acquireExecution();
-    const execution = owner.initialize(agent.agentClient);
+    const execution = owner.initialize(client);
     const iterator = execution.run(
       'Do not start a closed generation',
       new AbortController().signal,
@@ -608,7 +625,7 @@ describe('real loop replacement transaction retirement', () => {
 
   it('rejects steering through a captured execution after closure without modifying a live borrower', async () => {
     const owner = acquireExecution();
-    const execution = owner.initialize(agent.agentClient);
+    const execution = owner.initialize(client);
     owner.closeAdmission();
     expect(() =>
       execution.injectSteer('Do not mutate a retired generation'),
@@ -694,12 +711,11 @@ describe('real loop replacement transaction retirement', () => {
           mcpEnabled: false,
           harness: { includeProcessCwd: false },
         });
-        if (
-          !('ownerClient' in httpAgent) ||
-          !(httpAgent.ownerClient instanceof SessionClientOwner)
-        )
+        const owner = fixtureAgentResources(httpAgent)
+          .sessionOwners.values()
+          .next().value;
+        if (owner === undefined)
           throw new Error('Missing actual session client owner');
-        const owner = httpAgent.ownerClient;
         const selected = owner.resolveExecution();
         if (selected.loop === undefined)
           throw new Error(selected.error.message);

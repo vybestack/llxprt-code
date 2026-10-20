@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -36,7 +41,7 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
-import { fromConfig } from '../fromConfig.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -146,7 +151,7 @@ describe('failed adopted session binding', () => {
       callerConfig.projectTempDir,
       1024 * 1024,
     );
-    const callerOwner = await SessionClientOwner.create(
+    const callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -187,7 +192,7 @@ describe('failed adopted session binding', () => {
       await callerMcp.initialize();
       await callerOwner.initializeTools();
       await callerOwner.refreshAuth();
-      await callerOwner.getAgentClient().startChat();
+      await capturedSessionClient(callerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, callerClose);
     }
@@ -214,7 +219,7 @@ describe('failed adopted session binding', () => {
         callerMessageBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -231,11 +236,13 @@ describe('failed adopted session binding', () => {
         message: 'Workspace memory is disposed',
       });
       expect(retired).toHaveLength(1);
-      expect(() => retired[0].getAgentClient()).toThrow('disposed');
+      expect(() => retired[0].conversation.getCurrentSequenceModel()).toThrow(
+        'disposed',
+      );
       expect(credentials().snapshot()).toStrictEqual([1]);
       callerSettingsOwner.writeUserParameter('maxOutputTokens', 37);
       expect(callerSettings.get('maxOutputTokens')).toBe(37);
-      expect(callerOwner.getAgentClient().isInitialized()).toBe(true);
+      expect(capturedSessionClient(callerOwner).isInitialized()).toBe(true);
       expect(callerManager.getActiveProviderName()).toBe('fake');
       expect(callerMessageBus.evaluate('read_file', {})).toBeDefined();
     } finally {

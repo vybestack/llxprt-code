@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 
-import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
-import { RuntimePolicyOwner } from '../policy/policy-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
@@ -36,14 +36,14 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn(() => mcpManager),
 }));
 
-import type { ConfigParameters } from './config.js';
-import { Config } from './config.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
-const testRoot = resolve(import.meta.dir, '../..');
+const testRoot = resolve(import.meta.dir, '../../../../core');
 
 const baseParams: ConfigParameters = {
   sessionId: 'ide-trust-test',
@@ -54,7 +54,7 @@ const baseParams: ConfigParameters = {
 };
 
 describe('Config live IDE trust', () => {
-  const ideOwners: Array<{ dispose(): void | Promise<void> }> = [];
+  const ideOwners: Array<{ dispose(): Promise<void> }> = [];
 
   async function initializeWorkspace(
     config: Config,

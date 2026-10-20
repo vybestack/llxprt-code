@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -61,7 +66,7 @@ import {
   ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   MemoryTokenStore,
@@ -159,7 +164,7 @@ describe('profile postcommit sibling lifetime', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -269,7 +274,7 @@ describe('profile postcommit sibling lifetime', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   let profileStore: ProfileDefinitionReads & ProfileDefinitionWrites;

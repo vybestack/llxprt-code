@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -55,17 +62,13 @@ import { fixturesDir } from './helpers/fixture-data.js';
 import { AgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import { fromConfig } from '../index.js';
 
 async function settleEngineRelease(
   steps: ReadonlyArray<() => void | Promise<void>>,
@@ -193,7 +196,7 @@ describe('public Agent workspace definition lifetime', () => {
       callerCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerCallerOwner = await SessionClientOwner.create(
+    callerCallerOwner = await createCapturedSessionOwner(
       callerCallerConfig,
       assembleTaskSchemaPolicy(callerCallerSettings),
       callerCallerManager,
@@ -315,7 +318,7 @@ describe('public Agent workspace definition lifetime', () => {
     );
     requireCallerActivation(activation);
     await callerCallerOwner.initializeTools();
-    await callerCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerCallerOwner).startChat();
   }
   useOwnedCredentials();
   useOwnedCredentials();
@@ -431,16 +434,15 @@ describe('public Agent workspace definition lifetime', () => {
     };
     let agent: Awaited<ReturnType<typeof fromConfig>> | undefined;
     try {
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'owned-preflight',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'owned-preflight-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
+      await capturedActivation(
+        operation,
+      ).workspaceDefinitions.profileWrites.saveProfile('owned-preflight', {
+        version: 1,
+        provider: 'fake',
+        model: 'owned-preflight-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
       const result = await operation.preflight(intent);
       if (!result.token) throw new Error('Missing preflight receipt');
       agent = await fromConfig(
@@ -471,7 +473,9 @@ describe('public Agent workspace definition lifetime', () => {
       );
       await agent.dispose();
       expect(() =>
-        operation.workspaceDefinitions.profileReads.listProfiles(),
+        capturedActivation(
+          operation,
+        ).workspaceDefinitions.profileReads.listProfiles(),
       ).toThrow('closed');
       const persisted: unknown = JSON.parse(
         await readFile(
@@ -512,7 +516,7 @@ describe('public Agent workspace definition lifetime', () => {
       null,
       () => undefined,
       'borrowed',
-      callerCallerOwner.getAgentClient(),
+      capturedSessionClient(callerCallerOwner),
       callerCallerMcp,
       callerCallerMcp.workspaceFilesystem,
       callerCallerMcp.workspaceMemory,
@@ -520,16 +524,15 @@ describe('public Agent workspace definition lifetime', () => {
     );
     let agent: Awaited<ReturnType<typeof fromConfig>> | undefined;
     try {
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'preflight',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'preflight-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
+      await capturedActivation(
+        operation,
+      ).workspaceDefinitions.profileWrites.saveProfile('preflight', {
+        version: 1,
+        provider: 'fake',
+        model: 'preflight-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
       const intent: Parameters<typeof operation.preflight>[0] = {
         provider: 'fake',
         authMode: 'auto',
@@ -552,21 +555,24 @@ describe('public Agent workspace definition lifetime', () => {
       expect(agent.getModel()).toBe('preflight-model');
       await agent.saveProfileSnapshot('after-adoption');
       expect(
-        await operation.workspaceDefinitions.profileReads.listProfiles(),
+        await capturedActivation(
+          operation,
+        ).workspaceDefinitions.profileReads.listProfiles(),
       ).toContain('after-adoption');
       await agent.dispose();
-      await operation.workspaceDefinitions.profileWrites.saveProfile(
-        'caller-survives',
-        {
-          version: 1,
-          provider: 'fake',
-          model: 'fake-model',
-          modelParams: {},
-          ephemeralSettings: {},
-        },
-      );
+      await capturedActivation(
+        operation,
+      ).workspaceDefinitions.profileWrites.saveProfile('caller-survives', {
+        version: 1,
+        provider: 'fake',
+        model: 'fake-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
       expect(
-        await operation.workspaceDefinitions.profileReads.listProfiles(),
+        await capturedActivation(
+          operation,
+        ).workspaceDefinitions.profileReads.listProfiles(),
       ).toContain('caller-survives');
     } finally {
       await agent?.dispose();

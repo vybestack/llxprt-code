@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
@@ -11,7 +12,6 @@ import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license

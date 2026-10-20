@@ -73,8 +73,12 @@ describe('browser catalog application owner', () => {
             owner.session,
             'agent',
             runtime,
-            undefined,
-            undefined,
+            async () => {
+              throw new Error('Raw catalog must not be selected');
+            },
+            async () => {
+              throw new Error('Raw deletion must not be selected');
+            },
           );
           return renderSessionBrowserDialog(
             runtime,

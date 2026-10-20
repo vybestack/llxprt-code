@@ -330,8 +330,7 @@ function buildSandboxConfig(): Config {
     getConversationLoggingEnabled: fn(() => false),
     getMcpServers: fn(() => ({})),
     getDebugMode: fn(() => false),
-    getIdeMode: fn(() => false),
-    getIdeClient: fn(() => null),
+
     getListExtensions: fn(() => false),
     getOutputFormat: fn(() => OutputFormat.TEXT),
     getToolRegistryInfo: fn(() => ({ registered: [], unregistered: [] })),

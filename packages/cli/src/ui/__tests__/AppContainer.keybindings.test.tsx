@@ -77,7 +77,6 @@ interface MockConfig {
   getSessionId: () => string;
 
   getWorkingDir: () => string;
-  getIdeClient: () => unknown;
   getIdeMode: () => boolean;
   getScreenReader: () => boolean;
   getTerminalBackground: () => string | undefined;
@@ -102,10 +101,6 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
     getSessionId: vi.fn(() => 'test-session-id'),
 
     getWorkingDir: vi.fn(() => '/test/dir'),
-    getIdeClient: vi.fn(() => ({
-      getCurrentIde: vi.fn(),
-      disconnect: vi.fn(),
-    })),
     getIdeMode: vi.fn(() => true),
     getScreenReader: vi.fn(() => false),
     getTerminalBackground: vi.fn(() => undefined),

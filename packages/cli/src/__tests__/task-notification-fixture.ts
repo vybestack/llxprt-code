@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { toConfigParameters } from '../../../agents/src/api/agentConfig.adapter.js';
 import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 

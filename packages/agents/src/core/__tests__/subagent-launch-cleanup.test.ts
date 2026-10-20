@@ -1,22 +1,22 @@
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { isMediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import { isMediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { AggregateDisposeError } from '../../api/disposeErrors.js';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
 import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
+import { AggregateDisposeError } from '../../api/disposeErrors.js';
 
 function flatten(error: unknown): unknown[] {
   return error instanceof AggregateDisposeError ||
@@ -120,12 +120,12 @@ describe('subagent cleanup error retention', () => {
         try {
           if (stage === 'activation')
             process.env.LLXPRT_FAKE_RESPONSES = missingReplay;
-          const orchestrator = new SubagentOrchestrator({
+          const orchestrator = createTestChildOrchestrator({
             credentialAuthority: transport.authority,
             workspaceTrust: fixture.workspaceTrust,
             createChildSettings: () => fixture.settingsOwner.createChildStore(),
             readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-            toolRegistry: fixture.agent.agentClient.tools,
+            toolRegistry: fixture.client.tools,
             workspacePaths: fixture.workspacePaths,
             instructions: fixture.instructionReads,
             foregroundConfig: fixture.config,

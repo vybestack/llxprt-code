@@ -16,20 +16,15 @@
  * functionResponse parts → feed back → repeat until the model stops requesting
  * tools. Cancellation via AbortSignal cleanly tears down the scheduler.
  *
- * Two injection points:
- *  - **Policy**: `config` carries the `PolicyEngine` and `ApprovalMode`. Pure
- *    engine logic — never touches UI. ALLOW/DENY are resolved synchronously
- *    inside the scheduler's ConfirmationCoordinator.
- *  - **Approval**: the optional `approvalHandler`, invoked only when policy
- *    returns `ASK_USER`. It resolves an {@link ApprovalResult} (outcome +
- *    optional payload) which the loop forwards back over the confirmation bus.
+ * Model streaming and tool-history writes are bound to the admitted client by
+ * the session execution owner. The loop only consumes those operations and
+ * small session/budget reads.
  *
- * Bus-native: when an `approvalHandler` is provided the loop subscribes to
- * `MessageBusType.TOOL_CONFIRMATION_REQUEST` and replies via
- * `messageBus.respondToConfirmation`. If no `approvalHandler` is provided,
- * headless callers should use a non-asking policy. An ASK_USER decision in
- * non-interactive mode is returned to the model as a safe tool error rather
- * than executing unapproved tools.
+ * The tool execution owner acquires the confirmation subscription and admits
+ * tool-call IDs through its scheduling leases. It forwards ASK_USER decisions
+ * to the bound approval handler and rejects late replies after retirement.
+ * Without an approval handler, headless callers should use a non-asking
+ * policy; unsatisfiable confirmation requests remain safe tool errors.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -44,20 +39,10 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { SchedulerLease } from '../../session/sessionSchedulerOwner.js';
-import {
-  MessageBusType,
-  type ToolConfirmationRequest,
-} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgenticLoopEvent, AgenticLoopOptions } from './types.js';
 import { AgenticEventQueue } from './agenticEventQueue.js';
-import {
-  buildToolResponses,
-  classifyCompletedTools,
-  recordCancelledToolHistory,
-  recordCompletedToolHistory,
-} from './loopHelpers.js';
+import { buildToolResponses, classifyCompletedTools } from './loopHelpers.js';
 
 const logger = new DebugLogger('llxprt:agents:agentic-loop');
 
@@ -157,19 +142,16 @@ function wrapCompletionTask(
 }
 
 export class AgenticLoop {
-  private readonly agentClient: AgenticLoopOptions['agentClient'];
+  private readonly streamModel: AgenticLoopOptions['streamModel'];
+  private readonly recordToolHistory: AgenticLoopOptions['recordToolHistory'];
   private readonly config: AgenticLoopOptions['config'];
-  private readonly messageBus: AgenticLoopOptions['messageBus'];
-  private readonly approvalHandler?: AgenticLoopOptions['approvalHandler'];
-  private readonly createSchedulerOwner: AgenticLoopOptions['createSchedulerOwner'];
+  private readonly tools: AgenticLoopOptions['tools'];
   private readonly displayCallbacks: AgenticLoopOptions['displayCallbacks'];
-  private readonly ownedToolCallIds = new Set<string>();
   private retired = false;
-  private releaseApproval: () => void = () => {};
 
   retire(): void {
     this.retired = true;
-    this.releaseApproval();
+    this.tools.retire();
   }
 
   private promptCount = 0;
@@ -182,11 +164,10 @@ export class AgenticLoop {
   private pendingSteer: string[] = [];
 
   constructor(options: AgenticLoopOptions) {
-    this.agentClient = options.agentClient;
+    this.streamModel = options.streamModel;
+    this.recordToolHistory = options.recordToolHistory;
     this.config = options.config;
-    this.messageBus = options.messageBus;
-    this.approvalHandler = options.approvalHandler;
-    this.createSchedulerOwner = options.createSchedulerOwner;
+    this.tools = options.tools;
     this.displayCallbacks = options.displayCallbacks;
   }
 
@@ -253,64 +234,6 @@ export class AgenticLoop {
   }
 
   /**
-   * @requirement REQ-LOOP-002
-   * Subscribe to confirmation requests on the bus and forward them to the
-   * injected approval handler, replying via `respondToConfirmation`. Returns
-   * an unsubscribe function. No-op when no approvalHandler was provided.
-   */
-  private wireApprovalHandler(): () => void {
-    if (!this.approvalHandler) {
-      return () => {};
-    }
-    const handler = this.approvalHandler;
-    const bus = this.messageBus;
-    let active = true;
-    const unsubscribe = bus.subscribe<ToolConfirmationRequest>(
-      MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      (request) => {
-        const callId = request.toolCall.id;
-        if (callId === undefined || !this.ownedToolCallIds.has(callId)) {
-          return;
-        }
-        void handler(request)
-          .then((result) => {
-            if (!active || !this.ownedToolCallIds.has(callId)) {
-              return;
-            }
-            bus.respondToConfirmation(
-              request.correlationId,
-              result.outcome,
-              result.payload,
-            );
-          })
-          .catch((error: unknown) => {
-            if (!active || !this.ownedToolCallIds.has(callId)) {
-              return;
-            }
-            // A rejecting approval handler must not leave the confirmation
-            // unanswered (which would hang the loop). Respond with a safe
-            // denial so the scheduler cancels the tool and the loop proceeds.
-            logger.debug(
-              () =>
-                `approvalHandler rejected; denying confirmation: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-            );
-            bus.respondToConfirmation(
-              request.correlationId,
-              ToolConfirmationOutcome.Cancel,
-            );
-          });
-      },
-    );
-    return () => {
-      if (!active) return;
-      active = false;
-      unsubscribe();
-    };
-  }
-
-  /**
    * @requirement REQ-LOOP-001
    * @requirement REQ-LOOP-005
    * Run the multi-turn loop. Yields a flat {@link AgenticLoopEvent} stream
@@ -338,8 +261,7 @@ export class AgenticLoop {
     let failed = false;
     let primary: unknown;
     try {
-      unsubscribe = this.wireApprovalHandler();
-      this.releaseApproval = unsubscribe;
+      unsubscribe = this.tools.begin();
       let currentMessage = message;
       const initialPromptId = promptId ?? this.generateInitialPromptId();
       let currentPromptId = initialPromptId;
@@ -446,23 +368,11 @@ export class AgenticLoop {
     }
 
     const dedupedRequests = deduplicateToolCallRequests(toolCallRequests);
-    for (const request of dedupedRequests) {
-      this.ownedToolCallIds.add(request.callId);
-    }
-
-    let completed: CompletedToolCall[] | null;
-    try {
-      const result = yield* this.scheduleAndAwait(
-        dedupedRequests,
-        signal,
-        recordingExecution?.hookOwner,
-      );
-      completed = result.completed;
-    } finally {
-      for (const request of dedupedRequests) {
-        this.ownedToolCallIds.delete(request.callId);
-      }
-    }
+    const { completed } = yield* this.scheduleAndAwait(
+      dedupedRequests,
+      signal,
+      recordingExecution?.hookOwner,
+    );
 
     if (completed === null || completed.length === 0) {
       return {
@@ -523,13 +433,10 @@ export class AgenticLoop {
     recordingExecution?: AgentChatRecordingExecution,
     modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<AgenticLoopEvent, StreamCollectionResult> {
-    const stream = this.agentClient.sendMessageStream(
+    const stream = this.streamModel(
       message,
       signal,
       promptId,
-      undefined,
-      false,
-      false,
       recordingExecution,
       modelParameters,
     );
@@ -669,7 +576,7 @@ export class AgenticLoop {
       }
     };
 
-    const owner = this.createSchedulerOwner({
+    const lease = this.tools.acquire({
       outputUpdateHandler: (callId, update) => {
         if (!forwardingState.active) {
           return;
@@ -718,7 +625,6 @@ export class AgenticLoop {
       onEditorOpen: display?.onEditorOpen ?? (() => {}),
       onEditorClose: display?.onEditorClose ?? (() => {}),
     });
-    const lease = owner.acquire();
     await lease.ready;
     return lease;
   }
@@ -757,7 +663,7 @@ export class AgenticLoop {
     }
     if (agentTools.every((tc) => tc.status === 'cancelled')) {
       // Await so the cancelled-tool history is persisted before the loop ends.
-      await recordCancelledToolHistory(agentTools, this.agentClient);
+      await this.recordToolHistory(agentTools);
       return { continueLoop: false, nextMessage: [] };
     }
     // A successful pause request (the pause tool) is a terminal signal: the
@@ -768,7 +674,7 @@ export class AgenticLoop {
     if (hasSuccessfulTodoPause(agentTools)) {
       // Eagerly persist tool history since there will be no next model turn
       // to carry the response parts naturally.
-      await recordCompletedToolHistory(agentTools, this.agentClient);
+      await this.recordToolHistory(agentTools);
       return { continueLoop: false, nextMessage: [] };
     }
     const responseParts = buildToolResponses(

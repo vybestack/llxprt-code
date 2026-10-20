@@ -11,10 +11,7 @@
 
 export * from './src/index.js';
 
-export {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from './src/api/providerSwitchAssembly.js';
+export { assembleProviderSwitch } from './src/api/providerSwitchAssembly.js';
 
 export {
   captureAgentPreflightHostInput,
@@ -32,7 +29,7 @@ export {
   type AgentProfileApplication,
 } from './src/api/profileApplicationAssembly.js';
 
-export { McpRuntimeOwner } from './src/api/mcpRuntimeAssembly.js';
+export { discoverAgentSkills } from './src/api/skill-discovery.js';
 
 export {
   assembleProfileDefinitions,
@@ -41,7 +38,7 @@ export {
 
 export {
   NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
-  SessionProviderReads,
+  type SessionProviderReads,
   type SessionProviderStatus,
 } from './src/api/session-provider-reads.js';
 

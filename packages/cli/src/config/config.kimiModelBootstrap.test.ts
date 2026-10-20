@@ -1,5 +1,6 @@
-import * as agents from '@vybestack/llxprt-code-agents';
-import { spyOn, afterEach, describe, expect, it, vi } from 'bun:test';
+import { observeActivationPreparation } from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 /**
@@ -8,6 +9,11 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import type { Settings } from './settings.js';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
@@ -70,20 +76,15 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     let secondFiles: object | undefined;
     let firstManager: RuntimeProviderManager | undefined;
     let secondManager: RuntimeProviderManager | undefined;
-    const assemble = agents.assembleAgentActivationBootstrap;
-    const observation = spyOn(
-      agents,
-      'assembleAgentActivationBootstrap',
-    ).mockImplementation(async (...args) => {
-      const operation = await assemble(...args);
-      if (args[1] === firstSettings) {
-        firstManager = args[2];
-        firstFiles = args[16];
-      } else if (args[1] === secondSettings) {
-        secondManager = args[2];
-        secondFiles = args[16];
+
+    const observation = observeActivationPreparation((operation, state) => {
+      if (state.settingsService === firstSettings) {
+        firstManager = state.manager;
+        firstFiles = state.providerFileLifecycle;
+      } else if (state.settingsService === secondSettings) {
+        secondManager = state.manager;
+        secondFiles = state.providerFileLifecycle;
       }
-      return operation;
     });
     const first = await loadCliConfig(
       {},

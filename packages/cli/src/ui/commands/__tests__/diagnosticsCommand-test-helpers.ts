@@ -132,8 +132,7 @@ export function setupDiagnosticsTest(): DiagnosticsTestSetup {
       config: {
         getDebugMode: vi.fn(() => false),
         getApprovalMode: vi.fn(() => 'off'),
-        getIdeMode: vi.fn(() => false),
-        getIdeClient: vi.fn(() => null),
+
         getMcpServers: vi.fn(() => ({})),
         getMcpServerCommand: vi.fn(() => null),
         getUserMemory: vi.fn(() => null),

@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +51,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   MemoryTokenStore,
@@ -167,7 +172,7 @@ describe('profile-preparation-cancellation', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -287,7 +292,7 @@ describe('profile-preparation-cancellation', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const otherCredentials = useOwnedCredentials();
@@ -373,7 +378,7 @@ describe('profile-preparation-cancellation', () => {
       otherCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    otherCallerOwner = await SessionClientOwner.create(
+    otherCallerOwner = await createCapturedSessionOwner(
       otherCallerConfig,
       assembleTaskSchemaPolicy(otherCallerSettings),
       otherCallerManager,
@@ -493,7 +498,7 @@ describe('profile-preparation-cancellation', () => {
     );
     requireCallerActivation(activation);
     await otherCallerOwner.initializeTools();
-    await otherCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(otherCallerOwner).startChat();
   }
 
   it.each([false, true])(
@@ -537,7 +542,7 @@ describe('profile-preparation-cancellation', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerFiles,
       );
       const ownerB = await fromConfig(
@@ -550,7 +555,7 @@ describe('profile-preparation-cancellation', () => {
         otherCallerPolicy.session.messageBus,
         otherCallerMcp,
       );
-      const client = builtCallerOwner.getAgentClient();
+      const client = capturedSessionClient(builtCallerOwner);
       const before = agent.captureProfile();
       const notifications: unknown[] = [];
       const notice = (value: unknown): void => {
@@ -591,9 +596,9 @@ describe('profile-preparation-cancellation', () => {
         await disposal;
         expect(agent.captureProfile()).toStrictEqual(before);
         expect(notifications).toStrictEqual([]);
-        expect(new Set([client, builtCallerOwner.getAgentClient()]).size).toBe(
-          1,
-        );
+        expect(
+          new Set([client, capturedSessionClient(builtCallerOwner)]).size,
+        ).toBe(1);
         const nextOwner = await fromConfig(
           builtCallerConfig,
           builtCallerSettings,
@@ -604,7 +609,7 @@ describe('profile-preparation-cancellation', () => {
           builtCallerPolicy.session.messageBus,
           builtCallerMcp,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
         );
         try {
           const events = [];

@@ -1,3 +1,5 @@
+import { capturedSessionClient } from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,22 +16,35 @@
 // Enable React's act() environment so hook state updates are flushed.
 Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  spyOn,
+} from 'bun:test';
 import { act } from 'react';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   RecordingIntegration,
+  getProjectHash,
   isSessionStartHeader,
-  type AgentClientContract,
   type HydratedModel,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { LiveProviderConfig } from '../../__tests__/liveProviderConfig.js';
-import { buildNewRecordingService } from '../../cliSessionBootstrap.js';
+import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
+import {
+  createUiSessionOwner,
+  uiFixtureResources,
+} from '../../__tests__/uiSessionOwner.js';
+import type { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
@@ -138,18 +153,21 @@ import { useLoadProfileDialog } from './useLoadProfileDialog.js';
 import { useProfileManagement } from './useProfileManagement.js';
 import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
 
-const PROJECT_HASH = 'provider-switch-recording';
-
-/** The session client recording bootstrap needs; these tests never use its agent client. */
-function sessionClientFor(root: string) {
-  return {
-    getAgentClient: () => ({}) as AgentClientContract,
-    workspaceDirectories: () => [root],
-  };
+class RecordingConfig extends LiveProviderConfig {
+  override readonly projectTempDir: string;
+  override readonly projectChatsDir: string;
+  constructor(
+    root: string,
+    parameters: ConstructorParameters<typeof LiveProviderConfig>[0],
+  ) {
+    super(parameters);
+    this.projectTempDir = join(root, getProjectHash(root));
+    this.projectChatsDir = join(root, 'chats');
+  }
 }
 
 function noProviderConfig(root: string): LiveProviderConfig {
-  return new LiveProviderConfig({
+  return new RecordingConfig(root, {
     cwd: root,
     targetDir: root,
     debugMode: false,
@@ -166,40 +184,80 @@ function pickerModel(provider: string, id: string): HydratedModel {
 
 describe('provider changes made in dialogs reach the session recording (issue #3732)', () => {
   let root: string;
-  let chatsDir: string;
   let config: LiveProviderConfig;
   let recording: SessionRecordingService;
   let integration: RecordingIntegration;
+  let session: SessionControl;
+  let nativeHistory: HistoryService;
   let addedMessages: string[];
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'switch-recording-'));
-    chatsDir = join(root, 'chats');
     config = noProviderConfig(root);
     runtimeHolder.current = createConfigBackedRuntime(config);
-    recording = await buildNewRecordingService(
-      config,
-      PROJECT_HASH,
-      chatsDir,
-      sessionClientFor(root),
+    const owner = await createUiSessionOwner(config);
+    const runtime = uiFixtureResources(owner);
+    runtime.sessionClient.initializeConversation();
+    const acquiredHistory = capturedSessionClient(
+      runtime.sessionClient,
+    ).getHistoryService();
+    if (acquiredHistory === null)
+      throw new Error('Actual recording owner has no history');
+    nativeHistory = acquiredHistory;
+    session = runtime.sessionClient.createSessionControl(
+      'config',
+      () => config.getSessionId(),
+      (operation) => operation(),
+      () => {},
+      () => {},
+      () => config.getProvider() ?? 'unknown',
+      () => config.getModel(),
     );
-    integration = new RecordingIntegration(recording);
+    await startOwnerRecording();
     addedMessages = [];
   });
 
   afterEach(async () => {
     runtimeHolder.current = null;
-    await integration.dispose();
-    await recording.dispose();
+    await session.dispose();
+    await config.dispose();
     await rm(root, { recursive: true, force: true });
   });
+
+  async function startOwnerRecording(): Promise<void> {
+    const attached: RecordingIntegration[] = [];
+    const subscribe = RecordingIntegration.prototype.subscribeToHistory;
+    const capture = spyOn(
+      RecordingIntegration.prototype,
+      'subscribeToHistory',
+    ).mockImplementation(function (this: RecordingIntegration, ...args) {
+      attached.push(this);
+      return subscribe.call(this, ...args);
+    });
+    try {
+      await setupOwnerSessionRecording(
+        config,
+        session,
+        session.listBrowserTargetsDetailed,
+        { listSessions: false, deleteSession: undefined },
+        null,
+      );
+    } finally {
+      capture.mockRestore();
+    }
+    const acquired = attached.at(-1);
+    if (acquired === undefined)
+      throw new Error('Owner did not attach its actual recording integration');
+    integration = acquired;
+    recording = acquired.getRecordingService();
+  }
 
   /** Send the first message, then read back what reached the file. */
   async function recordedFile(): Promise<{
     header: { provider: string; model: string };
     switches: Array<{ provider: unknown; model: unknown }>;
   }> {
-    recording.recordContent({
+    nativeHistory.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'first message' }],
     });
@@ -379,16 +437,9 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       // A queue limit equal to the bytes already held makes the switch itself
       // the thing that exceeds it.
       const heldBytes = recording.getPendingByteCount();
-      await integration.dispose();
-      await recording.dispose();
+      await session.setRecording({ enabled: false });
       config.setSessionRecordingQueueByteLimit(heldBytes);
-      recording = await buildNewRecordingService(
-        config,
-        PROJECT_HASH,
-        chatsDir,
-        sessionClientFor(root),
-      );
-      integration = new RecordingIntegration(recording);
+      await startOwnerRecording();
     });
 
     it('keeps a model picker switch successful and reports the recording failure as an error item', async () => {

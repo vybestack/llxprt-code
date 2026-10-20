@@ -1,3 +1,7 @@
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,14 +10,14 @@
 import { describe, it, expect } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { RuntimePolicyOwner } from '../../policy/policy-owner.js';
-import { Config } from '../../config/config.js';
-import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   ProviderManager,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { fromConfig, McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { fileURLToPath } from 'node:url';
 
@@ -91,7 +95,7 @@ async function owner() {
     undefined,
     credentialAuthority,
   );
-  await agent.agentClient.startChat();
+  await fixtureAgentResources(agent).publishedClient(agent).startChat();
   return { config, manager, agent, mcp };
 }
 
@@ -99,9 +103,13 @@ describe('Config workspace disposal', () => {
   it('does not dispose independently owned clients with identical session labels', async () => {
     const first = await owner();
     const sibling = await owner();
-    const client = first.agent.agentClient;
+    const client = fixtureAgentResources(first.agent).publishedClient(
+      first.agent,
+    );
     try {
-      expect(client).not.toBe(sibling.agent.agentClient);
+      expect(client).not.toBe(
+        fixtureAgentResources(sibling.agent).publishedClient(sibling.agent),
+      );
       await first.config.dispose();
       await client.setHistory([
         {
@@ -113,14 +121,22 @@ describe('Config workspace disposal', () => {
       ]);
       expect(await client.getHistory()).toHaveLength(1);
       await first.agent.dispose();
-      expect(() => first.agent.agentClient).toThrow('disposed');
-      await sibling.agent.agentClient.setHistory([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'sibling still works' }],
-        },
-      ]);
-      expect(await sibling.agent.agentClient.getHistory()).toHaveLength(1);
+      expect(() =>
+        fixtureAgentResources(first.agent).publishedClient(first.agent),
+      ).toThrow('disposed');
+      await fixtureAgentResources(sibling.agent)
+        .publishedClient(sibling.agent)
+        .setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'sibling still works' }],
+          },
+        ]);
+      expect(
+        await fixtureAgentResources(sibling.agent)
+          .publishedClient(sibling.agent)
+          .getHistory(),
+      ).toHaveLength(1);
     } finally {
       await first.agent.dispose();
       await sibling.agent.dispose();

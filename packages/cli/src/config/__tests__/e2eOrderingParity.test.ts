@@ -1,5 +1,10 @@
-import * as agents from '@vybestack/llxprt-code-agents';
-import { spyOn } from 'bun:test';
+import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,6 +35,17 @@ const retainedSettingsOwners: SessionSettingsOwner[] = [];
  * checks that post-Config runtime assembly binds its manager and bus to Config.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P13
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
+/**
+ * Task 1.7 – End-to-end provider/profile/override ordering parity test
+ *
+ * Verifies provider/profile/override ordering through loadCliConfig and
+ * checks that post-Config runtime assembly binds its manager and bus to Config.
+ */
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -155,16 +171,11 @@ async function runConfig(
   let providerManager: RuntimeProviderManager | undefined;
   const callLog: string[] = [];
   const switchErrors: unknown[] = [];
-  const assemble = agents.assembleAgentActivationBootstrap;
-  const observation = spyOn(
-    agents,
-    'assembleAgentActivationBootstrap',
-  ).mockImplementation(async (...args) => {
-    const operation = await assemble(...args);
-    providerManager = args[2];
-    oauthManager = args[3] ?? undefined;
+
+  const observation = observeActivationPreparation((operation, state) => {
+    providerManager = state.manager;
+    oauthManager = state.oauthManager ?? undefined;
     callLog.push('manager-ready', 'oauth-ready');
-    return operation;
   });
   const config = await loadCliConfig(
     settings,
@@ -179,7 +190,6 @@ async function runConfig(
     new CredentialAuthority(),
     await loadPrecedenceProviderContributions(),
     (operation) => {
-      operation.takeSettingsOwner(runtimeSettingsService);
       retainedActivationOperations.push(operation);
     },
     undefined,

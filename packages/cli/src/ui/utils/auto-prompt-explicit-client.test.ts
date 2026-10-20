@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -52,13 +56,15 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { prepareAgentPreflight } from '@vybestack/llxprt-code-agents';
 import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
-import { bindAutoPromptOperation } from '../commands/subagentCommandHost.js';
+import { generateAutoPrompt } from './autoPromptGenerator.js';
+import { generationRecording } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
 async function owner(
   name: string,
   failure?: Error,
+  providerName = name,
 ): Promise<{
   client: AgentClientContract;
   config: Config;
@@ -77,7 +83,7 @@ async function owner(
   });
   const requests: unknown[] = [];
   const provider: RuntimeProvider = {
-    name,
+    name: providerName,
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
     async *generateChatCompletion(options): AsyncIterableIterator<IContent> {
@@ -101,7 +107,7 @@ async function owner(
   const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
   const settingsOwner = new SessionSettingsOwner(settings);
   settingsOwner.bindTelemetry(config);
-  settingsOwner.initializeProviderSelection(name, 'test-model');
+  settingsOwner.initializeProviderSelection(providerName, 'test-model');
   const listeners = new Set<
     Parameters<SessionSettingsOwner['subscribeModelChanges']>[0]
   >();
@@ -117,7 +123,7 @@ async function owner(
       listeners.delete(listener);
     };
   });
-  const sessionClient = await SessionClientOwner.create(
+  const sessionClient = await createCapturedSessionOwner(
     config,
     assembleTaskSchemaPolicy(settings),
     manager,
@@ -156,7 +162,7 @@ async function owner(
     await config.dispose();
   });
   await sessionClient.refreshAuth();
-  const client = sessionClient.getAgentClient();
+  const client = capturedSessionClient(sessionClient);
   return {
     client,
     config,
@@ -198,12 +204,9 @@ describe('auto prompt explicit client ownership', () => {
       credentials().authority,
     );
     cleanups.push(() => unrelated.dispose());
-    const result = await bindAutoPromptOperation(
-      () => 'anthropic',
-      () => a.sessionClient.getAgentClient(),
-      () => a.sessionClient.createDetachedAgentClient(),
-      () => a.config.getContentGeneratorConfig(),
-    )('Review code').catch((error: unknown) => error);
+    const result = await generateAutoPrompt('Review code', (input, options) =>
+      a.sessionClient.generateText(input, options, generationRecording),
+    ).catch((error: unknown) => error);
     await unrelated.dispose();
     expect(a.requests).toHaveLength(1);
     expect(result).toBeInstanceOf(Error);
@@ -220,12 +223,9 @@ describe('auto prompt explicit client ownership', () => {
       credentials().authority,
     );
     cleanups.push(() => unrelated.dispose());
-    const result = await bindAutoPromptOperation(
-      () => 'anthropic',
-      () => a.sessionClient.getAgentClient(),
-      () => a.sessionClient.createDetachedAgentClient(),
-      () => a.config.getContentGeneratorConfig(),
-    )('Review code');
+    const result = await generateAutoPrompt('Review code', (input, options) =>
+      a.sessionClient.generateText(input, options, generationRecording),
+    );
     await unrelated.dispose();
     expect(result).toBe('  owner-a: expanded prompt\n');
     expect(a.requests).toHaveLength(1);
@@ -234,14 +234,15 @@ describe('auto prompt explicit client ownership', () => {
 
   for (const failure of [undefined, new Error('detached generation denied')]) {
     it(`releases detached client event subscriptions after ${failure ? 'failure' : 'success'}`, async () => {
-      const detached = await owner('detached-owner', failure);
+      const detached = await owner('detached-owner', failure, 'gemini');
       expect(detached.readModelListenerCount()).toBe(1);
-      const result = await bindAutoPromptOperation(
-        () => 'gemini',
-        () => detached.sessionClient.getAgentClient(),
-        () => detached.sessionClient.createDetachedAgentClient(),
-        () => detached.client.getContentGeneratorConfig(),
-      )('Review code').then(
+      const result = await generateAutoPrompt('Review code', (input, options) =>
+        detached.sessionClient.generateText(
+          input,
+          options,
+          generationRecording,
+        ),
+      ).then(
         (text) => ({ text }),
         (error: unknown) => ({ error }),
       );

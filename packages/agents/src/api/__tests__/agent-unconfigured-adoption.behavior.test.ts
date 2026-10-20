@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -157,7 +161,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -277,7 +281,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   disposeOwnedPolicies(async () => {
@@ -285,7 +289,9 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
   });
 
   it('fromConfig over a real Config (buildCliStyleConfig) drives a real turn when configured', async () => {
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const { adoptFixture: fromConfig } = await import(
+      './helpers/adoption-fixture.js'
+    );
 
     await openbuiltCaller('plain-text.jsonl');
     try {
@@ -302,7 +308,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       try {
         // A real stream turn must resolve with exactly one done event.
@@ -321,7 +327,9 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
   });
 
   it('first Agent selection: fromConfig picks up the configured active provider', async () => {
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const { adoptFixture: fromConfig } = await import(
+      './helpers/adoption-fixture.js'
+    );
 
     await openbuiltCaller('plain-text.jsonl');
     try {
@@ -335,7 +343,7 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       try {
         // The agent should reflect the active FakeProvider, not a sentinel.

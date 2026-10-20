@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { createFixtureForeground } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +32,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -35,14 +41,10 @@ import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
 import { AgentActivationBootstrap } from '../activationPreflightState.js';
-import { fromConfig } from '../fromConfig.js';
 
 const intent = { provider: 'fake', authMode: 'auto' } as const;
 
@@ -175,7 +177,7 @@ describe('preflight adoption boundaries', () => {
       built_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const built_builtCallerOwner = await SessionClientOwner.create(
+    const built_builtCallerOwner = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -240,7 +242,7 @@ describe('preflight adoption boundaries', () => {
       );
       requireCallerActivation(built_activation);
       await built_builtCallerOwner.initializeTools();
-      await built_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(built_builtCallerOwner).startChat();
     } catch (built_primary) {
       await cleanupAfterFailure(built_primary, built_builtCallerClose);
     }
@@ -253,7 +255,7 @@ describe('preflight adoption boundaries', () => {
       null,
       () => undefined,
       'borrowed',
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerMcp,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,
@@ -362,7 +364,7 @@ describe('preflight adoption boundaries', () => {
       other_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const other_builtCallerOwner = await SessionClientOwner.create(
+    const other_builtCallerOwner = await createCapturedSessionOwner(
       other_builtCallerConfig,
       assembleTaskSchemaPolicy(other_builtCallerSettings),
       other_builtCallerManager,
@@ -427,7 +429,7 @@ describe('preflight adoption boundaries', () => {
       );
       requireCallerActivation(other_activation);
       await other_builtCallerOwner.initializeTools();
-      await other_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(other_builtCallerOwner).startChat();
     } catch (other_primary) {
       await cleanupAfterFailure(other_primary, other_builtCallerClose);
     }
@@ -440,7 +442,7 @@ describe('preflight adoption boundaries', () => {
       null,
       () => undefined,
       'borrowed',
-      other_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(other_builtCallerOwner),
       other_builtCallerMcp,
       other_builtCallerMcp.workspaceFilesystem,
       other_builtCallerMcp.workspaceMemory,
@@ -450,13 +452,21 @@ describe('preflight adoption boundaries', () => {
       const result = await built_operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
       const preflight = { operation: built_operation, token: result.token };
+      expect('consume' in AgentActivationBootstrap).toBe(false);
+      expect('validate' in AgentActivationBootstrap).toBe(false);
       expect(() =>
-        AgentActivationBootstrap.consume(
-          preflight,
-          built_builtCallerConfig,
+        createFixtureForeground(
+          built_operation,
+          preflight.token,
           intent,
-          other_builtCallerManager,
+          {},
           built_builtCallerSettings,
+          other_builtCallerManager,
+          built_builtCallerOAuth,
+          built_builtCallerPolicy,
+          builtCredentials().authority,
+          async () => {},
+          { runtimeKind: 'agent' },
         ),
       ).toThrow('different ProviderManager');
       const agent = await fromConfig(
@@ -469,7 +479,7 @@ describe('preflight adoption boundaries', () => {
         undefined,
         built_builtCallerMcp,
         preflight,
-        built_builtCallerOwner.getAgentClient(),
+        capturedSessionClient(built_builtCallerOwner),
       );
       expect(agent.getProvider()).toBe('fake');
       await agent.dispose();

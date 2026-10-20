@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -47,7 +53,7 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   ToolConfirmationOutcome,
   PolicyDecision,
@@ -86,7 +92,9 @@ interface ProviderToolDeclaration {
  * `ChatSession.setTools` cannot turn this green by accident.
  */
 function modelVisibleSkillNames(agent: Agent): string[] {
-  const chat = agent.agentClient.getChat() as unknown as {
+  const chat = fixtureAgentResources(agent)
+    .publishedClient(agent)
+    .getChat() as unknown as {
     generationConfig?: {
       tools?: ProviderToolDeclaration[];
     };
@@ -222,7 +230,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -342,7 +350,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('offers a skill from an adopted config that supplied no registrar', async () => {
@@ -364,7 +372,7 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       for await (const _event of agent.stream('hello')) {
         // Drain the turn so the chat session and its tool list exist.

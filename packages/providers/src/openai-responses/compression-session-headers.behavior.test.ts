@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +14,6 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   buildAgent,
   internalConfig,
-  internalSettingsOwner,
 } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { resolveCompressionProvider } from '../../../agents/src/core/CompressionProfileResolver.js';
 import { buildResponsesHeaders } from './openAIResponsesHttpStream.js';
@@ -67,10 +67,10 @@ describe('compression profile conversation identity', () => {
         const oldId = agent.session.getSessionId();
         await agent.session.startNewSession();
         const sessionId = agent.session.getSessionId();
-        const provider = agent.providerManager.getActiveProvider();
+        const resources = fixtureAgentResources(agent);
+        const provider = resources.manager.getActiveProvider();
         if (provider === undefined) throw new Error('Expected provider');
         const config = internalConfig(agent);
-        const owner = internalSettingsOwner(agent);
         const standard: StandardProfile = {
           version: 1,
           provider: 'openai-responses',
@@ -101,13 +101,7 @@ describe('compression profile conversation identity', () => {
               model: 'fake-model',
             }),
             prepareProviderInvocation: (name, parameters, signal) =>
-              owner.prepareProviderInvocation(
-                agent.getRuntimeId(),
-                name,
-                parameters,
-                signal,
-                sessionId,
-              ),
+              resources.prepareInvocation(agent, name, parameters, signal),
             profileDefinitions: {
               loadProfile: async (name): Promise<Profile> =>
                 name === 'compression-member' ? standard : profile,

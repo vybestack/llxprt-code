@@ -6,10 +6,12 @@
 
 import { useEffect } from 'react';
 import type { IdeContext } from '@vybestack/llxprt-code-core';
-import type { IdeState } from '../../../cliUiRuntime.js';
 
 interface UseIdeContextBridgeParams {
-  ide: Pick<IdeState, 'getIdeClient'>;
+  readIdeContext: () => IdeContext | undefined;
+  subscribeIdeContext: (
+    listener: (context: IdeContext | undefined) => void,
+  ) => () => void;
   setIdeContextState: (value: IdeContext | undefined) => void;
 }
 
@@ -22,16 +24,12 @@ interface UseIdeContextBridgeParams {
  * @cleanup Removes the listener on unmount
  */
 export function useIdeContextBridge({
-  ide,
+  readIdeContext,
+  subscribeIdeContext,
   setIdeContextState,
 }: UseIdeContextBridgeParams): void {
   useEffect(() => {
-    const client = ide.getIdeClient();
-    setIdeContextState(client?.getIdeContext());
-    if (client === undefined) return undefined;
-    client.addContextChangeListener(setIdeContextState);
-    return () => {
-      client.removeContextChangeListener(setIdeContextState);
-    };
-  }, [ide, setIdeContextState]);
+    setIdeContextState(readIdeContext());
+    return subscribeIdeContext(setIdeContextState);
+  }, [readIdeContext, subscribeIdeContext, setIdeContextState]);
 }

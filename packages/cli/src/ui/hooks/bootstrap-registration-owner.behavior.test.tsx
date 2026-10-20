@@ -12,7 +12,10 @@ import {
   bindRecordingHistorySubscription,
 } from '../containers/AppContainer/hooks/historyTokenSubscriptions.js';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   createMockSettings,
@@ -53,9 +56,9 @@ describe('bootstrap captured operation ownership', () => {
       ]);
       await current.session.setRecording({ enabled: true });
     }
-    await owner.agentClient.startChat(await owner.getHistory());
-    await peer.agentClient.startChat(await peer.getHistory());
-    const ownerHistory = owner.agentClient.getHistoryService();
+    await commandOwnerClient(owner).startChat(await owner.getHistory());
+    await commandOwnerClient(peer).startChat(await peer.getHistory());
+    const ownerHistory = commandOwnerClient(owner).getHistoryService();
     if (!ownerHistory) throw new Error('Missing bootstrap token history');
     await ownerHistory.waitForTokenUpdates();
     const ownerPath = owner.session.getRecording().path;
@@ -103,8 +106,9 @@ describe('bootstrap captured operation ownership', () => {
         const bootstrap = useBootstrapRuntime(
           {
             version: 'test',
+            readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
             subscribeHistoryTokens: bindHistoryTokenSubscription(
-              () => owner.agentClient.getHistoryService(),
+              () => commandOwnerClient(owner).getHistoryService(),
               new DebugLogger('test:bootstrap:tokens'),
             ),
             readLlxprtMdFileCount: owner.memory.getFileCount.bind(owner.memory),
@@ -134,10 +138,10 @@ describe('bootstrap captured operation ownership', () => {
           stores,
           uiRuntime.ephemeral,
           uiRuntime.shell,
-          uiRuntime.ide,
+          () => owner.ide.readConnection().currentIde,
           uiRuntime.app,
           bindRecordingHistorySubscription(
-            () => owner.agentClient.getHistoryService(),
+            () => commandOwnerClient(owner).getHistoryService(),
             new DebugLogger('test:bootstrap:recording'),
           ),
           'agent',

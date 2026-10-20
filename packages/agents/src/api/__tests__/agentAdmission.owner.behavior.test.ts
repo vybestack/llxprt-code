@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -53,7 +58,6 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import {
   createAgent,
-  fromConfig,
   AgentBusyError,
   type Agent,
   type AgentEvent,
@@ -318,7 +322,7 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -438,7 +442,7 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   usePromptFixture();
@@ -558,7 +562,7 @@ describe('Agent admission ownership (#2616 S2/C)', () => {
           builtCallerPolicy.session.messageBus,
           builtCallerMcp,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
         );
 
         agent = adopted;

@@ -171,7 +171,7 @@ async function resumeRaw(owner: Agent, decoy: Agent): Promise<void> {
     resumeRawSession: bindCommandRawResume(
       config,
       persistence,
-      () => owner.agentClient.getHistoryService(),
+      owner.session,
       callbacks,
       new DebugLogger('raw-owner'),
       performResume,

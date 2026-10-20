@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
@@ -105,23 +107,26 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         [toolCallRequestEvent('terminal_tool', 'terminal-call'), terminalEvent],
       ]);
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       const events = await collectEvents(
@@ -163,28 +168,31 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       [contentEvent('done'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
       displayCallbacks: {
         onToolCallsUpdate: (toolCalls) => {
           displaySizes.push(toolCalls.length);
         },
       },
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -243,23 +251,26 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       [contentEvent('denied'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -301,23 +312,26 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       ],
     ]);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -363,24 +377,26 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         [contentEvent('done'), finishedEvent()],
       ]);
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
-        approvalHandler,
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          approvalHandler,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       const events: AgenticLoopEvent[] = [];

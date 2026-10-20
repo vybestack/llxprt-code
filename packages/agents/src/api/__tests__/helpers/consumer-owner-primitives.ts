@@ -1,3 +1,4 @@
+import { createCapturedSessionOwner } from './session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,7 +26,7 @@ import type {
   RuntimeContentGeneratorFactory,
   ContentGenerator,
 } from '@vybestack/llxprt-code-core';
-import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { injectConfirmationForcingPolicy } from '../../confirmationForcing.js';
 import { releaseAdoptedFileScope } from '../../adoption-release.js';
 
@@ -95,7 +96,7 @@ export function createConsumerSessionClient(
   contentGenerator: Parameters<typeof SessionClientOwner.create>[8],
   tokenizer: Parameters<typeof SessionClientOwner.create>[9],
 ): Promise<SessionClientOwner> {
-  return SessionClientOwner.create(
+  return createCapturedSessionOwner(
     config,
     assembleTaskSchemaPolicy(settings),
     manager,

@@ -1,138 +1,31 @@
-import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  AgentRuntimeFactoryBindings,
-  Config,
-  ContentGenerator,
-  RuntimeContentGeneratorFactory,
-  RuntimeProviderManager,
-  RuntimeTokenizerFactory,
-  TokenStore,
-  WorkspaceDefinitionOwner,
-  WorkspaceIdePort,
-  WorkspaceTrustControlPort,
-} from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { type TokenStorage } from '@vybestack/llxprt-code-mcp';
-import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  type CredentialAuthority,
-  type OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
-  GitHubBrokerClient,
   ToolPublication,
   ToolSelection,
 } from '@vybestack/llxprt-code-tools';
-import { type ActivationPreflight } from './activationPreflightState.js';
-import { AdoptedAgentAssembly } from './adopted-agent-assembly.js';
+import { AgentActivationBootstrap } from './activationPreflightState.js';
 import type { Agent } from './agent.js';
-import type {
-  AgentAdoptionIntent,
-  AgentConfig,
-  AgentSchedulerFactory,
-  ApprovalHandler,
-  EditorCallbacks,
-  OAuthPromptHandler,
-} from './config-types.js';
-import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import { type SessionImageSelection } from './session-image-assembly.js';
-
+import type { AgentAdoptionIntent } from './config-types.js';
 export type PrepareSessionTools = (
-  config: Config,
-  messageBus: MessageBus,
   tools: Pick<ToolSelection, 'getAllTools'> & ToolPublication,
 ) => void;
-
 export function fromConfig(
   config: Config,
   settingsService: SettingsService,
-  intent: AgentAdoptionIntent = {},
-  settingsOwner?: SessionSettingsOwner | undefined,
-  providerManager?: RuntimeProviderManager | undefined,
-  oauthManager?: OAuthManager | undefined,
-  messageBus?: MessageBus | undefined,
-  mcpRuntime?: McpRuntimeOwner | undefined,
-  activationPreflight?: ActivationPreflight | undefined,
-  agentClient?: AgentClientContract | undefined,
-  providerFileLifecycle?: ProviderFileLifecycle | undefined,
-  tokenizerFactory?: RuntimeTokenizerFactory | undefined,
-  contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>,
-  runtimeFactoryBindings?: AgentRuntimeFactoryBindings | undefined,
-  tokenStore?: TokenStore | undefined,
-  credentialAuthority?: CredentialAuthority | undefined,
-  policyOwner?: RuntimePolicyOwner | undefined,
-  trustPort?: WorkspaceTrustControlPort | undefined,
-  idePort?: WorkspaceIdePort | undefined,
-  hookOwner?: SessionHookOwner | undefined,
-  definitionOwner?: WorkspaceDefinitionOwner | undefined,
-  filesystemOwner?: WorkspaceFilesystemOwner | undefined,
-  lspOwner?: WorkspaceLspOwner | undefined,
-  memoryOwner?: AgentConfig['memoryOwner'] | undefined,
-  asyncTaskManager?: AsyncTaskManager | undefined,
-  mcpHost?: Partial<McpHostServices> | undefined,
-  mcpTokenStorage?: TokenStorage | undefined,
-  githubBrokerClient?: GitHubBrokerClient | undefined,
-  disposeGitHubBroker?: (() => Promise<void>) | undefined,
-  imageOperation?: SessionImageSelection['imageOperation'] | undefined,
-  onApproval?: ApprovalHandler | undefined,
-  onOAuthPrompt?: OAuthPromptHandler | undefined,
-  editorCallbacks?: EditorCallbacks | undefined,
-  prepareSessionTools?: PrepareSessionTools,
-  toolSchedulerFactory?: AgentSchedulerFactory | undefined,
-  skillPolicy?: WorkspaceSkillAssemblyOperations['reloadPolicy'],
-  registerSkillTools?: WorkspaceSkillAssemblyOperations['registerTools'],
+  intent: AgentAdoptionIntent,
+  credentialAuthority: CredentialAuthority,
 ): Promise<Agent> {
-  return new AdoptedAgentAssembly(
+  return AgentActivationBootstrap.adopt(
     config,
     settingsService,
     intent,
-    settingsOwner,
-    providerManager,
-    oauthManager,
-    messageBus,
-    mcpRuntime,
-    activationPreflight,
-    agentClient,
-    providerFileLifecycle,
-    tokenizerFactory,
-    contentGeneratorFactory,
-    runtimeFactoryBindings,
-    tokenStore,
     credentialAuthority,
-    policyOwner,
-    trustPort,
-    idePort,
-    hookOwner,
-    definitionOwner,
-    filesystemOwner,
-    lspOwner,
-    memoryOwner,
-    asyncTaskManager,
-    mcpHost,
-    mcpTokenStorage,
-    githubBrokerClient,
-    disposeGitHubBroker,
-    imageOperation,
-    onApproval,
-    onOAuthPrompt,
-    editorCallbacks,
-    prepareSessionTools,
-    toolSchedulerFactory,
-    skillPolicy,
-    registerSkillTools,
-  ).assemble();
+  );
 }

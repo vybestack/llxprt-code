@@ -1,3 +1,8 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -28,7 +33,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -38,10 +42,7 @@ import { fixturesDir } from './helpers/fixture-data.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
@@ -197,7 +198,7 @@ describe('activation bootstrap ownership and queued work', () => {
       blocked_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const blocked_builtCallerOwner = await SessionClientOwner.create(
+    const blocked_builtCallerOwner = await createCapturedSessionOwner(
       blocked_builtCallerConfig,
       assembleTaskSchemaPolicy(blocked_builtCallerSettings),
       blocked_builtCallerManager,
@@ -264,7 +265,7 @@ describe('activation bootstrap ownership and queued work', () => {
       );
       requireCallerActivation(blocked_activation);
       await blocked_builtCallerOwner.initializeTools();
-      await blocked_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(blocked_builtCallerOwner).startChat();
     } catch (blocked_primary) {
       await cleanupAfterFailure(blocked_primary, blocked_builtCallerClose);
     }
@@ -284,7 +285,7 @@ describe('activation bootstrap ownership and queued work', () => {
       blocked_oauth,
       () => 'cli-interactive',
       'borrowed',
-      blocked_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(blocked_builtCallerOwner),
       blocked_builtCallerMcp,
       blocked_builtCallerMcp.workspaceFilesystem,
       blocked_builtCallerMcp.workspaceMemory,
@@ -402,7 +403,7 @@ describe('activation bootstrap ownership and queued work', () => {
       independent_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const independent_builtCallerOwner = await SessionClientOwner.create(
+    const independent_builtCallerOwner = await createCapturedSessionOwner(
       independent_builtCallerConfig,
       assembleTaskSchemaPolicy(independent_builtCallerSettings),
       independent_builtCallerManager,
@@ -474,7 +475,7 @@ describe('activation bootstrap ownership and queued work', () => {
       );
       requireCallerActivation(independent_activation);
       await independent_builtCallerOwner.initializeTools();
-      await independent_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(independent_builtCallerOwner).startChat();
     } catch (independent_primary) {
       await cleanupAfterFailure(
         independent_primary,
@@ -490,7 +491,7 @@ describe('activation bootstrap ownership and queued work', () => {
       null,
       () => undefined,
       'borrowed',
-      independent_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(independent_builtCallerOwner),
       independent_builtCallerMcp,
       independent_builtCallerMcp.workspaceFilesystem,
       independent_builtCallerMcp.workspaceMemory,

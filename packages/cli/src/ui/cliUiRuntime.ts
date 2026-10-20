@@ -23,11 +23,8 @@ import type {
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
   AccessibilitySettings,
-  AgentClientContract,
-  ContentGeneratorConfig,
   ApprovalMode,
   FileFilteringOptions,
-  IdeClient,
   LlxprtExtension,
   MCPServerConfig,
   RedactionConfig,
@@ -37,7 +34,6 @@ import type {
   TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import {
   readGitHubCompletionReport,
   type GitHubCompletionReads,
@@ -69,23 +65,11 @@ export interface ExtensionEnablementSource {
   isEnabled(extensionName: string, path: string): boolean;
 }
 
-export type UiContentGeneratorConfig = ContentGeneratorConfig;
-
 /**
  * Focused capability read-models. Each exposes only the members a single
  * consumer family needs, so callers depend on the smallest suitable surface
  * rather than the full CliUiRuntime aggregate.
  */
-
-/**
- * Provides the live AgentClient used by the streaming path.
- * Each lookup resolves the current Agent owner after profile replacement;
- * hooks receive this boundary separately from workspace capabilities.
- */
-export interface AgentClientSource {
-  getAgentClient(): AgentClientContract;
-  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
-}
 
 /**
  * Session identity read-model: stable identifiers and directories a UI
@@ -109,7 +93,6 @@ export interface SessionIdentity {
 export interface ModelState {
   getModel(): string;
   getProvider(): string | undefined;
-  getContentGeneratorConfig(): UiContentGeneratorConfig | undefined;
 }
 
 /**
@@ -168,18 +151,6 @@ export interface MemoryState {
   getLlxprtMdFilePaths(): string[];
   refreshMemory(): Promise<RefreshMemoryResult>;
   shouldLoadMemoryFromIncludeDirectories(): boolean;
-}
-
-/**
- * IDE read-model for IDE client and integration prompt consumers.
- */
-export interface IdeState {
-  getIdeClient(): IdeClient | undefined;
-  getIdeMode(): boolean;
-  setIdeMode(value: boolean): void;
-  setIdeClientConnected(): void | Promise<void>;
-  setIdeClientDisconnected(): void | Promise<void>;
-  getLspConfig(): LspConfig | undefined;
 }
 
 /**
@@ -377,11 +348,9 @@ export interface AppStateRuntime {
 export interface StreamRuntime {
   session: SessionIdentity;
   model: ModelState;
-  agentClientSource: AgentClientSource;
   shell: ShellState;
   files: FileWorkspaceState;
   memory: MemoryState;
-  ide: IdeState;
   hooks: HookSkillState;
   mcp: McpState;
   settings: SettingsTelemetryState;
@@ -430,7 +399,6 @@ export interface StreamRuntimeBareSource
       | 'initializeSearch'
     >,
     Pick<MemoryState, 'shouldLoadMemoryFromIncludeDirectories'>,
-    IdeState,
     Omit<HookSkillState, 'endHookSession'>,
     Omit<
       McpState,
@@ -470,7 +438,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -478,11 +445,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 export type UiRuntimeDeclarationSource = Omit<
   UiRuntimeBareSource,
@@ -494,7 +456,6 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -502,11 +463,6 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 
 function buildSessionRuntime(
@@ -526,42 +482,11 @@ function buildSessionRuntime(
 }
 
 function buildModelRuntime(
-  agent: Pick<Agent, 'getModel' | 'getProvider' | 'agentClient'>,
+  agent: Pick<Agent, 'getModel' | 'getProvider'>,
 ): ModelState {
   return {
     getModel: () => agent.getModel(),
     getProvider: () => agent.getProvider(),
-    getContentGeneratorConfig: () =>
-      agent.agentClient.getContentGeneratorConfig(),
-  };
-}
-
-function buildAgentClientSource(
-  agent: Pick<
-    Agent,
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-    | 'sessionClient'
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-  > & {
-    mcp: McpUiSelection;
-  },
-): AgentClientSource {
-  return {
-    getAgentClient: () => agent.agentClient,
-    createDetachedAgentClient: (id) =>
-      agent.sessionClient.createDetachedAgentClient(id),
   };
 }
 
@@ -593,8 +518,6 @@ function buildFilesRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
@@ -650,8 +573,6 @@ function buildMemoryRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
@@ -671,20 +592,6 @@ function buildMemoryRuntime(
     },
     shouldLoadMemoryFromIncludeDirectories: () =>
       source.shouldLoadMemoryFromIncludeDirectories(),
-  };
-}
-
-function buildIdeRuntime(
-  source: StreamRuntimeDeclarationSource,
-  ide: Agent['ide'],
-): IdeState {
-  return {
-    getIdeClient: () => ide.getIdeClient(),
-    getIdeMode: () => ide.getIdeMode(),
-    setIdeMode: (enabled) => ide.setIdeMode(enabled),
-    setIdeClientConnected: () => ide.setIdeClientConnected(),
-    setIdeClientDisconnected: () => ide.setIdeClientDisconnected(),
-    getLspConfig: () => source.getLspConfig(),
   };
 }
 
@@ -750,22 +657,19 @@ function buildStreamWorkspaceRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
     mcp: McpUiSelection;
   },
   telemetrySettings?: SessionSettingsOperations,
-): Omit<StreamRuntime, 'agentClientSource'> {
+): StreamRuntime {
   return {
     session: buildSessionRuntime(source),
     model: buildModelRuntime(workspace),
     shell: buildShellRuntime(source),
     files: buildFilesRuntime(source, workspace),
     memory: buildMemoryRuntime(source, workspace),
-    ide: buildIdeRuntime(source, workspace.ide),
     hooks: buildHooksRuntime(source, workspace.hooks),
     mcp: buildMcpRuntime(source, workspace.mcp),
     settings: buildSettingsRuntime(source, workspace, telemetrySettings),
@@ -799,12 +703,12 @@ function buildStreamWorkspaceRuntime(
 function buildUiWorkspaceRuntime(
   source: UiRuntimeDeclarationSource,
   workspace: Parameters<typeof buildStreamWorkspaceRuntime>[1] &
-    Pick<Agent, 'getApprovalMode' | 'setApprovalMode'> & {
+    Pick<Agent, 'getApprovalMode' | 'setApprovalMode' | 'ide'> & {
       tools: Pick<Agent['tools'], 'get'>;
     },
   bucketFailover?: BucketFailoverRuntime,
   telemetrySettings?: SessionSettingsOperations,
-): Omit<UiRuntime, 'agentClientSource'> {
+): UiRuntime {
   return {
     ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
     ...(bucketFailover ? { bucketFailover } : {}),
@@ -858,7 +762,6 @@ export function buildUiRuntimeFromSource(
   source: UiRuntimeDeclarationSource,
   agent: Pick<
     Agent,
-    | 'agentClient'
     | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
@@ -887,7 +790,6 @@ export function buildUiRuntimeFromSource(
       bucketFailover,
       telemetrySettings,
     ),
-    agentClientSource: buildAgentClientSource(agent),
   };
 }
 

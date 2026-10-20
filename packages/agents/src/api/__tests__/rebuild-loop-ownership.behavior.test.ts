@@ -29,8 +29,10 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { createAgent } from '../createAgent.js';
-import type { Agent } from '../agent.js';
+import {
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import {
   SessionExecutionOwner,
   type SessionExecution,
@@ -175,7 +177,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
       'Exercise real loop binding.',
     );
     configureWorkspace(false);
-    selectedClient = (await acquireAgent()).agentClient;
+    selectedClient = await acquireClient();
   });
   afterEach(async () => {
     const failures: unknown[] = [];
@@ -227,7 +229,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     const acquired = execution;
     cleanup.push(() => acquired.dispose());
   }
-  async function acquireAgent(): Promise<Agent> {
+  async function acquireClient(): Promise<AgentClientContract> {
     const agent = await createAgent({
       provider: 'fake',
       model: 'fake-model',
@@ -237,7 +239,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
       harness: { includeProcessCwd: false },
     });
     cleanup.push(() => agent.dispose());
-    return agent;
+    return fixtureAgentResources(agent).publishedClient(agent);
   }
   function rebuild(): SessionExecution {
     return execution.rebuild(selectedClient);
@@ -277,7 +279,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
     const firstClient = selectedClient;
     const first = rebuild();
     const paused = await pause(first);
-    selectedClient = (await acquireAgent()).agentClient;
+    selectedClient = await acquireClient();
     const second = rebuild();
     expect(execution.isCurrent(first)).toBe(false);
     expect(execution.isCurrent(second)).toBe(true);
@@ -298,10 +300,10 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
   it('releases every actual prior generation subscription exactly once, including deferred prior retirement @requirement:REQ-007', async () => {
     const first = rebuild();
     const firstPaused = await pause(first);
-    const replacement = execution.prepare((await acquireAgent()).agentClient);
+    const replacement = execution.prepare(await acquireClient());
     const second = replacement.publish();
     const secondPaused = await pause(second);
-    const final = execution.prepare((await acquireAgent()).agentClient);
+    const final = execution.prepare(await acquireClient());
     const current = final.publish();
     expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(2);
     replacement.retire();
@@ -319,9 +321,9 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
   it('throwing real unsubscribers do not prevent other generation release and replacement is already published @requirement:REQ-007', async () => {
     const first = rebuild();
     await pause(first);
-    const one = execution.prepare((await acquireAgent()).agentClient);
+    const one = execution.prepare(await acquireClient());
     await pause(one.publish());
-    const two = execution.prepare((await acquireAgent()).agentClient);
+    const two = execution.prepare(await acquireClient());
     const current = two.publish();
     bus.releaseFailure = 'error';
     const failures: unknown[] = [];
@@ -369,7 +371,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
 
   it('rebuild without an accepted old run closes old admission and admits the replacement without a run-controller injection @requirement:REQ-007', async () => {
     const first = rebuild();
-    selectedClient = (await acquireAgent()).agentClient;
+    selectedClient = await acquireClient();
     const second = rebuild();
     expect(execution.isCurrent(first)).toBe(false);
     expect(execution.isCurrent(second)).toBe(true);
@@ -385,7 +387,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
   it('rebuild without recorded actual subscriptions leaves borrowed bus and new generation usable @requirement:REQ-007', async () => {
     const first = rebuild();
     expect(bus.listenerCount(MessageBusType.TOOL_CONFIRMATION_REQUEST)).toBe(0);
-    selectedClient = (await acquireAgent()).agentClient;
+    selectedClient = await acquireClient();
     const second = rebuild();
     expect(second).not.toBe(first);
     expect(execution.resolve(selectedClient)).toStrictEqual({
@@ -418,7 +420,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
 
   it('initial binding actually executes through the supplied client rather than a second client @requirement:REQ-007', async () => {
     const client = selectedClient;
-    const peer = (await acquireAgent()).agentClient;
+    const peer = await acquireClient();
     const actual = rebuild();
     expect(execution.resolve(client)).toStrictEqual({ execution: actual });
     await runMode(actual);
@@ -430,7 +432,7 @@ describe('privately owned execution rebuild @plan:PLAN-20260617-COREAPI.P15 @req
   it('new binding sends actual work to the newly supplied client without mutating the old client history @requirement:REQ-007', async () => {
     const first = selectedClient;
     const previous = rebuild();
-    selectedClient = (await acquireAgent()).agentClient;
+    selectedClient = await acquireClient();
     const current = rebuild();
     expect(execution.isCurrent(previous)).toBe(false);
     expect(execution.resolve(selectedClient)).toStrictEqual({

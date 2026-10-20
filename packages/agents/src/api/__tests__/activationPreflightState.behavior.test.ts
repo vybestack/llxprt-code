@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +32,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -35,13 +41,9 @@ import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
-import { fromConfig } from '../fromConfig.js';
 
 const intent = { provider: 'fake', authMode: 'auto' } as const;
 
@@ -174,7 +176,7 @@ describe('activation bootstrap receipts', () => {
       built_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const built_builtCallerOwner = await SessionClientOwner.create(
+    const built_builtCallerOwner = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -239,7 +241,7 @@ describe('activation bootstrap receipts', () => {
       );
       requireCallerActivation(built_activation);
       await built_builtCallerOwner.initializeTools();
-      await built_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(built_builtCallerOwner).startChat();
     } catch (built_primary) {
       await cleanupAfterFailure(built_primary, built_builtCallerClose);
     }
@@ -252,7 +254,7 @@ describe('activation bootstrap receipts', () => {
       null,
       () => undefined,
       'borrowed',
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerMcp,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,
@@ -262,7 +264,7 @@ describe('activation bootstrap receipts', () => {
     try {
       const result = await built_operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
-      const client = built_builtCallerOwner.getAgentClient();
+      const client = capturedSessionClient(built_builtCallerOwner);
       const contentConfig = built_builtCallerConfig.getContentGeneratorConfig();
       const agent = await fromConfig(
         built_builtCallerConfig,
@@ -277,9 +279,9 @@ describe('activation bootstrap receipts', () => {
           operation: built_operation,
           token: result.token,
         },
-        built_builtCallerOwner.getAgentClient(),
+        capturedSessionClient(built_builtCallerOwner),
       );
-      expect(agent.agentClient).toBe(client);
+      expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(client);
       expect(built_builtCallerConfig.getContentGeneratorConfig()).toBe(
         contentConfig,
       );
@@ -298,7 +300,7 @@ describe('activation bootstrap receipts', () => {
             operation: built_operation,
             token: result.token,
           },
-          built_builtCallerOwner.getAgentClient(),
+          capturedSessionClient(built_builtCallerOwner),
         ),
       ).rejects.toThrow('Activation preflight');
     } finally {

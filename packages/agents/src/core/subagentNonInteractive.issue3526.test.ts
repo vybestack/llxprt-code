@@ -1,43 +1,44 @@
+import { afterAll } from 'bun:test';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import type {
-  ContentBlock,
-  IContent,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  toModelStreamChunk,
-  type ToolDeclaration,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import {
   SubagentTerminateMode,
   type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  toModelStreamChunk,
+  type ToolDeclaration,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import {
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
+  createStatelessRuntimeBundle,
+  createSubagentConfig,
+  defaultRunConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+} from './__tests__/subagent-test-helpers.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import {
   checkGoalCompletion,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
-import {
-  installSubagentCleanup,
-  seedSubagentSettings,
-  createSubagentConfig,
-  acquireSubagentSettings,
-  acquireSubagentWorkspace,
-  createStatelessRuntimeBundle,
-  defaultRunConfig,
-} from './__tests__/subagent-test-helpers.js';
+import { processFunctionCalls } from './subagentToolProcessing.js';
 
 const { readTodos, TodoStoreMock } = (() => {
   const readTodos = vi.fn(async () => []);
@@ -111,11 +112,7 @@ async function runDirectNonInteractive(
   const configSettings = seedSubagentSettings();
   const config = createSubagentConfig(configSettings, retainSubagentCleanup);
   await acquireSubagentSettings(config, configSettings, retainSubagentCleanup);
-  const configWorkspace = await acquireSubagentWorkspace(
-    config,
-    retainSubagentCleanup,
-  );
-  const toolRegistry = configWorkspace.toolSelection;
+  await acquireSubagentWorkspace(config, retainSubagentCleanup);
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -128,7 +125,10 @@ async function runDirectNonInteractive(
     runConfig: defaultRunConfig,
     outputConfig: params.outputConfig,
     textToolParser: new GemmaToolCallParser(),
-    toolsView: baseBundle.runtimeContext.tools,
+    resolveToolName: (name) =>
+      name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+        ? name
+        : null,
     logger,
   };
   let requestCount = 0;
@@ -146,37 +146,55 @@ async function runDirectNonInteractive(
     },
   } as unknown as ChatSession;
 
-  const settingsRoot = createSessionSettingsFixture(config);
   await executeNonInteractiveRun(
-    chat,
     [...params.declarations],
     new AbortController(),
     [{ speaker: 'human', blocks: [{ type: 'text', text: 'start' }] }],
     Date.now(),
-    execCtx,
+    {
+      ...execCtx,
+      resolveToolName: (name) =>
+        name && baseBundle.runtimeContext.tools.getToolMetadata(name)
+          ? name
+          : null,
+    },
     {
       output,
       subagentId: 'direct-issue3526-agent',
       name: 'direct-issue3526-agent',
-      runtimeContext: baseBundle.runtimeContext,
+      sessionId: config.getSessionId(),
       logger,
-      config,
       runConfig: defaultRunConfig,
       outputConfig: params.outputConfig,
-      toolExecutorContext: {
-        telemetry: settingsRoot.settingsOwner.telemetry,
-        getToolRegistry: () => toolRegistry,
-        getTelemetryLogPromptsEnabled: () =>
-          config.getTelemetryLogPromptsEnabled(),
-        readExecutionPolicy: () =>
-          settingsRoot.settingsOwner.readToolExecutionPolicy(),
-        readGovernance: () =>
-          settingsRoot.settingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        getExcludeTools: () => config.getExcludeTools(),
-        getSessionId: () => config.getSessionId(),
-      },
+      streamTimeoutPolicy: chat.getStreamTimeoutPolicy(),
+      imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+      streamModel: (message, tools, signal, promptId, modelParameters) =>
+        chat.sendMessageStream(
+          {
+            message,
+            modelParameters,
+            hookOwner: undefined,
+            config: { abortSignal: signal, tools },
+          },
+          promptId,
+        ),
+      executeToolCalls: (calls, controller, promptId, allowedToolNames) =>
+        processFunctionCalls(
+          calls,
+          controller,
+          promptId,
+          {
+            output,
+            subagentId: 'direct-issue3526-agent',
+            logger,
+            imagePayloadBudgetBytes: config.getImagePayloadBudgetBytes(),
+            executeToolCall: async () => {
+              throw new Error('Unexpected ordinary tool call in emitter test');
+            },
+          },
+          allowedToolNames,
+        ),
+      readTodoCompletionPrompt: async () => null,
     },
     () => undefined,
   );
@@ -301,5 +319,11 @@ describe('issue 3526 non-interactive emitter completion invariants', () => {
         text: expect.stringContaining('toString'),
       }),
     ]);
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('@vybestack/llxprt-code-tools', () => toolsModule);
   });
 });

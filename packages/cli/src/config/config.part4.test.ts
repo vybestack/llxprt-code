@@ -30,7 +30,6 @@ async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
       new CredentialAuthority(),
       undefined,
       (operation) => {
-        operation.takeSettingsOwner(store);
         retainedActivationOperations.push(operation);
       },
     );

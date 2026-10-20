@@ -52,8 +52,6 @@ function addConfigStubs(mockContext: CommandOwnerFixture): void {
   >;
   config.getDebugMode = () => false;
   config.getApprovalMode = () => 'normal';
-  config.getIdeMode = () => false;
-  config.getIdeClient = () => undefined;
   config.getMcpServers = () => undefined;
   config.getMcpServerCommand = () => undefined;
   config.getUserMemory = () => '';

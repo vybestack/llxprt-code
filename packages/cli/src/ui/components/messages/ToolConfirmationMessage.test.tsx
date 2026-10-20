@@ -6,24 +6,29 @@
 import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
 
 import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
-const workspaceFixture = installWorkspaceRuntimeFixture();
+const _workspaceFixture = installWorkspaceRuntimeFixture();
 async function composeFixtureRuntime(
-  source: Parameters<typeof workspaceFixture>[0],
+  _source: Parameters<typeof _workspaceFixture>[0],
   trusted = true,
-): Promise<ReturnType<typeof workspaceFixture>> {
-  return workspaceFixture(
-    source,
-    await createUiSessionOwner(
-      new Config({
-        sessionId: crypto.randomUUID(),
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'confirmation-fixture',
-        debugMode: false,
-        trustedFolder: trusted,
-      }),
-    ),
+) {
+  const owner = await createUiSessionOwner(
+    new Config({
+      sessionId: crypto.randomUUID(),
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'confirmation-fixture',
+      debugMode: false,
+      trustedFolder: trusted,
+    }),
   );
+  return {
+    isTrustedFolder: owner.ide.isTrustedFolder(),
+    readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
+    readIdeDiffingEnabled: () => owner.ide.readConnection().diffingEnabled,
+    subscribeIdeDiffing: (listener: () => void) =>
+      owner.ide.subscribeConnection(() => listener()),
+    resolveIdeDiff: owner.ide.resolveDiff.bind(owner.ide),
+  };
 }
 
 import { describe, it, expect, vi } from 'bun:test';
@@ -69,7 +74,7 @@ describe('ToolConfirmationMessage', () => {
     const { lastFrame } = renderWithProviders(
       <ToolConfirmationMessage
         confirmationDetails={confirmationDetails}
-        config={await composeFixtureRuntime(mockConfig)}
+        {...await composeFixtureRuntime(mockConfig)}
         availableTerminalHeight={30}
         terminalWidth={80}
       />,
@@ -93,7 +98,7 @@ describe('ToolConfirmationMessage', () => {
     const { lastFrame } = renderWithProviders(
       <ToolConfirmationMessage
         confirmationDetails={confirmationDetails}
-        config={await composeFixtureRuntime(mockConfig)}
+        {...await composeFixtureRuntime(mockConfig)}
         availableTerminalHeight={30}
         terminalWidth={80}
       />,
@@ -177,7 +182,7 @@ describe('ToolConfirmationMessage', () => {
         const { lastFrame } = renderWithProviders(
           <ToolConfirmationMessage
             confirmationDetails={details}
-            config={await composeFixtureRuntime(mockConfig)}
+            {...await composeFixtureRuntime(mockConfig)}
             availableTerminalHeight={30}
             terminalWidth={80}
           />,
@@ -195,7 +200,7 @@ describe('ToolConfirmationMessage', () => {
         const { lastFrame } = renderWithProviders(
           <ToolConfirmationMessage
             confirmationDetails={details}
-            config={await composeFixtureRuntime(mockConfig, false)}
+            {...await composeFixtureRuntime(mockConfig, false)}
             availableTerminalHeight={30}
             terminalWidth={80}
           />,
@@ -214,7 +219,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={execConfirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -246,7 +251,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={editConfirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -269,7 +274,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={editConfirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -299,7 +304,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -324,7 +329,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -349,7 +354,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -403,7 +408,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={await composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -455,7 +460,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -482,7 +487,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -512,7 +517,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -548,7 +553,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -573,7 +578,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -601,7 +606,7 @@ describe('ToolConfirmationMessage', () => {
       const { stdin, lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={await composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
           isFocused={false}

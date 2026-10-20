@@ -28,9 +28,9 @@ const fixtureRoot = installSchedulerToolFixture();
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { Kind } from '@vybestack/llxprt-code-tools';
-import { ToolControl } from '../control/toolControl.js';
+import { ToolControl, wrapToolHandle } from '../control/toolControl.js';
 import { createToolControlDeps } from './helpers/fakeToolControlDeps.js';
-import { projectRegistryTool } from '../agentBootstrap.js';
+import { buildToolInfos, projectRegistryTool } from '../agentBootstrap.js';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import type { EditorCallbacks } from '../config-types.js';
@@ -59,10 +59,20 @@ function buildDepsWithRealTools(
     },
     undefined,
     undefined,
-    fixture.shellOwner,
-    undefined,
-    fixture.messageBus,
-    fixture.selection,
+    (...args) => fixture.messageBus.respondToConfirmation(...args),
+    () =>
+      Object.freeze(
+        buildToolInfos(
+          fixture.selection
+            .getAllTools()
+            .map((tool) => projectRegistryTool(tool)),
+          new Set(fixture.selection.getEnabledTools().map((tool) => tool.name)),
+        ),
+      ),
+    (name) => {
+      const tool = fixture.selection.getTool(name);
+      return tool === undefined ? undefined : wrapToolHandle(tool);
+    },
     (names) => fixture.settingsOwner.setAllowedTools(names),
     () => ({
       registered: tools.map((tool) => ({ displayName: tool.displayName })),

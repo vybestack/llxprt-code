@@ -1,3 +1,5 @@
+import { createAgentRuntimeFactoryBindings } from '../../../agents/src/api/runtimeFactories.js';
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,7 +12,7 @@ import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+
 import type { Agent } from '../../../agents/src/api/agent.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -153,7 +155,18 @@ describe('foreground Agent provider-file ownership', () => {
         secondFiles,
         undefined,
         undefined,
-        undefined,
+        (() => {
+          const factories = createAgentRuntimeFactoryBindings();
+          return {
+            ...factories,
+            agentClientFactory: (
+              ...operands: Parameters<typeof factories.agentClientFactory>
+            ) => {
+              observedSecondConfig = operands[0];
+              return factories.agentClientFactory(...operands);
+            },
+          };
+        })(),
         undefined,
         credentials().authority,
         undefined,
@@ -173,9 +186,7 @@ describe('foreground Agent provider-file ownership', () => {
         undefined,
         undefined,
         undefined,
-        (config) => {
-          observedSecondConfig = config;
-        },
+        undefined,
       );
       second = agent;
       retiring.push(() => agent.dispose());

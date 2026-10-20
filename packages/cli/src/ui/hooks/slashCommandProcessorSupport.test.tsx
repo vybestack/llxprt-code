@@ -91,7 +91,7 @@ describe('useCommandReload', () => {
     let trusted = false;
     const config = {
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => trusted,
     } as CliUiRuntime;
     loaderState.fileCommands = [
@@ -127,7 +127,7 @@ describe('useCommandReload', () => {
     let trusted = true;
     const config = {
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => trusted,
     } as CliUiRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
@@ -145,7 +145,7 @@ describe('useCommandReload', () => {
   it('stops listening for folder trust changes after unmount', async () => {
     const config = {
       getFolderTrust: () => false,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => true,
     } as CliUiRuntime;
     const listenersBeforeMount = coreEvents.listenerCount(

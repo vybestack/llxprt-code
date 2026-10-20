@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +52,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
+
 import {
   startCatalogFixture,
   waitForFixtureFile,
@@ -153,7 +159,7 @@ describe('physical MCP tool cancellation', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -268,7 +274,7 @@ describe('physical MCP tool cancellation', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   async function runCancellation(closeOwner: boolean): Promise<void> {
@@ -299,7 +305,9 @@ describe('physical MCP tool cancellation', () => {
         .find((tool) => tool.serverToolName === 'multiply');
       if (declaration === undefined)
         throw new Error('Missing actual MCP declaration');
-      const tool = agent.agentClient.tools.getTool(declaration.name);
+      const tool = fixtureAgentResources(agent)
+        .publishedClient(agent)
+        .tools.getTool(declaration.name);
       if (tool === undefined) throw new Error('Missing actual MCP capability');
       const operation = tool.build({ factor: 99 }).execute(controller.signal);
       const settled = operation.then(

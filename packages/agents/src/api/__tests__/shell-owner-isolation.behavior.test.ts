@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { initializeCallerClient } from './helpers/initialize-caller-client.js';
 import {
   terminal,
@@ -33,7 +39,6 @@ import {
 
 import { randomUUID } from 'node:crypto';
 
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -46,7 +51,7 @@ import { AgentConfig } from '../config-types.js';
 import { existsSync } from 'node:fs';
 
 import { setImmediate } from 'node:timers/promises';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
@@ -218,7 +223,7 @@ describe('Public Agent managed shell ownership (#2616)', () => {
         builtCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const builtCallerOwner = await SessionClientOwner.create(
+      const builtCallerOwner = await createCapturedSessionOwner(
         builtCallerConfig,
         assembleTaskSchemaPolicy(builtCallerSettings),
         builtCallerManager,
@@ -282,10 +287,10 @@ describe('Public Agent managed shell ownership (#2616)', () => {
         );
 
         agents.push(agent);
-        expect(agent.getMessageBus()).not.toBe(
+        expect(fixtureAgentResources(agent).messageBus).not.toBe(
           builtCallerPolicy.session.messageBus,
         );
-        const bus = agent.getMessageBus();
+        const bus = fixtureAgentResources(agent).messageBus;
         busSubscriptions.push(
           bus.subscribe<ToolConfirmationRequest>(
             MessageBusType.TOOL_CONFIRMATION_REQUEST,
@@ -302,7 +307,9 @@ describe('Public Agent managed shell ownership (#2616)', () => {
       }
       const a = await facade();
       const b = await facade();
-      expect(a.getMessageBus()).not.toBe(b.getMessageBus());
+      expect(fixtureAgentResources(a).messageBus).not.toBe(
+        fixtureAgentResources(b).messageBus,
+      );
       const aNotices: string[] = [];
       const bNotices: string[] = [];
       const unsubscribeA = a.tasks.subscribeNotifications(
@@ -625,7 +632,7 @@ describe('Public Agent managed shell ownership (#2616)', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -696,7 +703,7 @@ describe('Public Agent managed shell ownership (#2616)', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       const shell = agent.tools.get('run_shell_command');
       if (!shell) throw new Error('Missing public Agent shell tool');

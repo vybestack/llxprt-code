@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -177,7 +181,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       fixtureCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    fixtureCallerOwner = await SessionClientOwner.create(
+    fixtureCallerOwner = await createCapturedSessionOwner(
       fixtureCallerConfig,
       assembleTaskSchemaPolicy(fixtureCallerSettings),
       fixtureCallerManager,
@@ -301,7 +305,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
     );
     requireCallerActivation(activation);
     await fixtureCallerOwner.initializeTools();
-    await fixtureCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(fixtureCallerOwner).startChat();
   }
 
   let fixtureDirectory: string;

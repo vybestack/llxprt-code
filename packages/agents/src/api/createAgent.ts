@@ -35,32 +35,24 @@ import type {
   SessionSettingsOwner,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { type SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   captureSettingsSnapshot,
   type SettingsStateSnapshot,
   type SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import type {
-  AgentConfig,
-  AgentSchedulerFactory,
-  AgentSchedulerHandle,
-  ProviderActivationIntent,
-} from './config-types.js';
+import type { AgentConfig, ProviderActivationIntent } from './config-types.js';
 import type { AgentAuth } from './config-types.js';
 import type { Agent } from './agent.js';
 import type { AgentConfigSchema } from './config-schema.js';
 import { toConfigParameters } from './agentConfig.adapter.js';
 
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
-import { wrapRegistryWithConfirmation } from './confirmationForcing.js';
-
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { PLACEHOLDER_MODEL } from './constants.js';
-import { wrapSchedulerFactory, AgentBootstrapError } from './agentBootstrap.js';
+import { AgentBootstrapError } from './agentBootstrap.js';
 
 /**
  * Builds a ready Agent by composing shipped primitives through a shared runtime
@@ -233,38 +225,6 @@ function applyHarnessGates(
  * @pseudocode createAgent.md steps 30-38 + tool-confirmation-merge.md steps 10-31
  */
 
-/**
- * Resolves the agents-owned scheduler construction. When the caller
- * injects a factory, wraps it around the default (confirmation-forcing)
- * CoreToolScheduler and retains the handles for facade-level disposal. When no
- * factory is injected, uses the default directly.
- *
- * @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
- */
-export function resolveSchedulerFactory(
-  forceConfirmations: boolean,
-  injected: AgentSchedulerFactory | undefined,
-  injectedSchedulerHandles: AgentSchedulerHandle[],
-): SchedulerConstruction {
-  const defaultSchedulerFactory = createDefaultToolSchedulerFactory({
-    forceConfirmations,
-  });
-  if (injected !== undefined) {
-    // @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-006 @requirement:REQ-016
-    // The caller injected a factory: each per-turn scheduler is still a real,
-    // functioning CoreToolScheduler (built by defaultSchedulerFactory), while
-    // the injected factory is invoked alongside and the handle it returns is
-    // retained for facade-level disposal. The injected factory FUNCTION is
-    // never disposed — only the handle instances it creates.
-    return wrapSchedulerFactory(
-      injected,
-      defaultSchedulerFactory,
-      injectedSchedulerHandles,
-    );
-  }
-  return defaultSchedulerFactory;
-}
-
 /** Applies the explicit or synthesized intent and returns the activated state. */
 async function applyActivation(
   parsed: {
@@ -354,55 +314,6 @@ function safeActiveModelName(selection: ModelSelectionOperations): string {
   } catch {
     return '';
   }
-}
-
-/**
- * The DEFAULT tool scheduler factory injected by createAgent when the caller
- * supplies none. Constructs a {@link CoreToolScheduler} backed by the tool
- * registry, optionally wrapped so every tool surfaces a REAL confirmation (the
- * confirmation-forcing seam).
- *
- * @plan:PLAN-20260617-COREAPI.P17
- * @requirement:REQ-006
- * @pseudocode tool-confirmation-merge.md steps 10-31 (confirmation-forcing seam)
- */
-function createDefaultToolSchedulerFactory(options: {
-  readonly forceConfirmations: boolean;
-}): SchedulerConstruction {
-  return (schedulerOptions) => {
-    const registry = options.forceConfirmations
-      ? wrapRegistryWithConfirmation(schedulerOptions.toolRegistry)
-      : schedulerOptions.toolRegistry;
-    return new CoreToolScheduler({
-      telemetry: schedulerOptions.telemetry,
-      config: schedulerOptions.config,
-      readExecutionPolicy: schedulerOptions.readExecutionPolicy,
-      readApprovalMode: schedulerOptions.readApprovalMode,
-      getToolGovernance: schedulerOptions.getToolGovernance,
-      messageBus: schedulerOptions.messageBus,
-      toolRegistry: registry,
-      ...(schedulerOptions.outputUpdateHandler !== undefined
-        ? { outputUpdateHandler: schedulerOptions.outputUpdateHandler }
-        : {}),
-      ...(schedulerOptions.onAllToolCallsComplete !== undefined
-        ? { onAllToolCallsComplete: schedulerOptions.onAllToolCallsComplete }
-        : {}),
-      ...(schedulerOptions.onToolCallsUpdate !== undefined
-        ? { onToolCallsUpdate: schedulerOptions.onToolCallsUpdate }
-        : {}),
-      getPreferredEditor: schedulerOptions.getPreferredEditor,
-      onEditorClose: schedulerOptions.onEditorClose,
-      ...(schedulerOptions.onEditorOpen !== undefined
-        ? { onEditorOpen: schedulerOptions.onEditorOpen }
-        : {}),
-      ...(schedulerOptions.toolContextInteractiveMode !== undefined
-        ? {
-            toolContextInteractiveMode:
-              schedulerOptions.toolContextInteractiveMode,
-          }
-        : {}),
-    });
-  };
 }
 
 export async function cleanupFailedCreatedAgent(

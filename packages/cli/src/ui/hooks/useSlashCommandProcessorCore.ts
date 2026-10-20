@@ -128,6 +128,10 @@ export type SlashCommandProcessorCoreResult = {
 export interface UseSlashCommandProcessorCoreArgs
   extends RegisteredHistoryReads {
   config: CliUiRuntime | null;
+  registerIdeCommand: Parameters<typeof useHostCommands>[3];
+  readIdeDisplayName: () => string;
+  readIdeMode: () => boolean;
+  readIdeAvailable: () => boolean;
   registerWorkspaceCommands: RegisterWorkspaceCommands;
   registerChatCommands: RegisterChatCommands;
   registerSubagentCommand: RegisterSubagentCommand;
@@ -291,6 +295,8 @@ function useStaticBuiltinCommands(
   addItem: UseHistoryManagerReturn['addItem'],
   setPendingItem: ReturnType<typeof usePendingHistory>['setPendingItem'],
   dispatchExtensionStateUpdate: SlashCommandProcessorActions['dispatchExtensionStateUpdate'],
+  registerIdeCommand: UseSlashCommandProcessorCoreArgs['registerIdeCommand'],
+  subscribeCommandChanges: SubscribeCommandChanges,
 ) {
   return {
     extensionsCommand: useExtensionCommand(
@@ -299,7 +305,13 @@ function useStaticBuiltinCommands(
       setPendingItem,
       dispatchExtensionStateUpdate,
     ),
-    ...useHostCommands(config, settings, addItem),
+    ...useHostCommands(
+      config,
+      settings,
+      addItem,
+      registerIdeCommand,
+      subscribeCommandChanges,
+    ),
     ...useUtilityCommands(config, settings, addItem),
     ...useResourceCommands(config, settings, addItem, setPendingItem),
   };
@@ -343,6 +355,8 @@ function useRegisteredCommands(
     args.addItem,
     setPendingItem,
     args.actions.dispatchExtensionStateUpdate,
+    args.registerIdeCommand,
+    args.subscribeCommandChanges,
   );
 
   const workspaceCommands = useMemo(
@@ -398,6 +412,7 @@ function useRegisteredCommands(
 function useAboutDetails(
   config: CliUiRuntime | null,
   settings: LoadedSettings,
+  readIdeDisplayName: () => string,
 ) {
   const readProviderDetails = useGetActiveProviderDetails();
   const readProviderName = useGetActiveProviderName();
@@ -414,14 +429,12 @@ function useAboutDetails(
         () => config?.getModel(),
         (key) => config?.getEphemeralSetting(key),
         () => config?.getProvider(),
-        () =>
-          config?.getIdeMode() === true
-            ? (config.getIdeClient()?.getDetectedIdeDisplayName() ?? '')
-            : '',
+        readIdeDisplayName,
         readProviderStatus,
         settings.getProviderKeyfile.bind(settings),
       ),
     [
+      readIdeDisplayName,
       readProviderDetails,
       readProviderName,
       readEphemeral,
@@ -460,7 +473,7 @@ export function useSlashCommandProcessorCore(
     args.addItem,
   );
   const presentationCommands = usePresentationCommands(
-    useAboutDetails(config, settings),
+    useAboutDetails(config, settings, args.readIdeDisplayName),
     config?.getTargetDir(),
     args.endCommandSession,
     args.startNewCommandSession,
@@ -558,6 +571,8 @@ function useProcessorRegistration(
         readSessionTokens,
         readProviderStatus,
         oauth,
+        args.readIdeMode,
+        args.readIdeAvailable,
       ),
       config,
       settings,
@@ -608,6 +623,8 @@ function useDiagnosticsRegistration(
   readSessionTokens: GetSessionTokenUsageOperation,
   readProviderStatus: ProviderStatusOperation,
   oauth: ReturnType<typeof useOAuthControl>,
+  readIdeMode: () => boolean,
+  readIdeAvailable: () => boolean,
 ) {
   return useMemo(
     () =>
@@ -621,6 +638,8 @@ function useDiagnosticsRegistration(
         readSessionTokens,
         readProviderStatus,
         oauth,
+        readIdeMode,
+        readIdeAvailable,
       ),
     [
       listTools,
@@ -632,6 +651,8 @@ function useDiagnosticsRegistration(
       readSessionTokens,
       readProviderStatus,
       oauth,
+      readIdeMode,
+      readIdeAvailable,
     ],
   );
 }

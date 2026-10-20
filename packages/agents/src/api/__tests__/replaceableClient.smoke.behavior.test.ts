@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -54,11 +59,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import {
-  fromConfig,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
   drain,
@@ -215,7 +216,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -335,7 +336,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   // ── Cleanup strategy (intentional split) ─────────────────────────────────
@@ -438,7 +439,7 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
 
     // Adoption (public surface only): the Agent reports the SAME provider/model

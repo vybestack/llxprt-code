@@ -1,3 +1,9 @@
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,10 +43,6 @@ import { injectConfirmationForcingPolicy } from '../../../../agents/src/api/conf
 import { executeProviderActivation } from '../../../../agents/src/api/providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitchAssembly.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
-import {
-  fromConfig,
-  SessionProviderReads,
-} from '@vybestack/llxprt-code-agents';
 
 /**
  * @license
@@ -117,7 +119,7 @@ describe('interactive runtime owner admission', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -235,7 +237,7 @@ describe('interactive runtime owner admission', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -293,7 +295,7 @@ describe('interactive runtime owner admission', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -411,7 +413,7 @@ describe('interactive runtime owner admission', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   it('rejects ownerless service reads while two same-label Agents are active', async () => {
@@ -439,7 +441,7 @@ describe('interactive runtime owner admission', () => {
     );
     try {
       const missingOwner = (): unknown =>
-        Reflect.construct(SessionProviderReads, []);
+        Reflect.construct(ProviderReadFixture, []);
       expect(missingOwner).toThrow(
         'Provider reads require an explicit session owner',
       );

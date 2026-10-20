@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -49,7 +54,6 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -163,7 +167,7 @@ describe('provider switch transaction ownership', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -283,7 +287,7 @@ describe('provider switch transaction ownership', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -369,7 +373,7 @@ describe('provider switch transaction ownership', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -489,7 +493,7 @@ describe('provider switch transaction ownership', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   it('rejects replacement failure and restores the switching owner without disturbing a successful same-label sibling', async () => {
@@ -507,7 +511,7 @@ describe('provider switch transaction ownership', () => {
       firstCallerPolicy.session.messageBus,
       firstCallerMcp,
       undefined,
-      firstCallerOwner.getAgentClient(),
+      capturedSessionClient(firstCallerOwner),
     );
     const b = await fromConfig(
       secondCallerConfig,
@@ -519,7 +523,7 @@ describe('provider switch transaction ownership', () => {
       secondCallerPolicy.session.messageBus,
       secondCallerMcp,
       undefined,
-      secondCallerOwner.getAgentClient(),
+      capturedSessionClient(secondCallerOwner),
     );
     const managerA = firstCallerManager;
     const managerB = secondCallerManager;
@@ -534,7 +538,7 @@ describe('provider switch transaction ownership', () => {
     const before = {
       settings: structuredClone(settingsA.exportForStateSnapshot()),
       provider: originalProvider,
-      client: firstCallerOwner.getAgentClient(),
+      client: capturedSessionClient(firstCallerOwner),
     };
     const ephemerals = structuredClone(
       firstCallerSettingsOwner.captureNamedParameters(),
@@ -600,7 +604,7 @@ describe('provider switch transaction ownership', () => {
         ephemerals,
       );
       expect(managerA.getActiveProvider()).toBe(before.provider);
-      expect(firstCallerOwner.getAgentClient()).toBe(before.client);
+      expect(capturedSessionClient(firstCallerOwner)).toBe(before.client);
       const siblingSnapshot = secondCallerSettings.exportForStateSnapshot();
       expect({
         global: siblingSnapshot.global,

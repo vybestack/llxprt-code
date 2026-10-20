@@ -1,5 +1,6 @@
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,18 +31,17 @@ const fixturePaths = installTestWorkspacePaths({
  *       profile so failover/round-robin routing downstream is not lost.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { SubAgentScope } from '../subagent.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import type { SubAgentScope } from '../subagent.js';
 import {
-  makeForegroundConfig,
-  createRuntimeBundle,
   createOrchestratorForTurns,
+  createRuntimeBundle,
   extractRunConfig,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
@@ -128,7 +128,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const scopeFactory = vi.fn<typeof SubAgentScope.create>();
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
@@ -166,7 +166,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const foregroundConfig2 = makeForegroundConfig();
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings2.workspaceTrust,
       createChildSettings: () =>
@@ -218,7 +218,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings3.workspaceTrust,
       createChildSettings: () =>
@@ -274,7 +274,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
 
     const foregroundConfig4 = makeForegroundConfig();
     const foregroundSettings4 = createSessionSettingsFixture(foregroundConfig4);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings4.workspaceTrust,
       createChildSettings: () =>

@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -42,7 +43,7 @@ import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
 import { describe, expect, it } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { AgentBootstrapError } from '../agentBootstrap.js';
 
 describe('finalizeAgent post-auth client guard', () => {

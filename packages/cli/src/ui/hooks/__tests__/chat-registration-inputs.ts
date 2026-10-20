@@ -1,8 +1,10 @@
+import { checkpointBindings } from '../../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ChatOwnerOperations } from '../../commands/chatOwnerCommand.js';
 import type { ChatRecordingOperations } from '../../commands/chatCommand.js';
@@ -26,15 +28,34 @@ export function ownerOperations(owner: Agent): ChatOwnerOperations {
   };
 }
 
-export function rawOperations(owner: Agent): ChatRecordingOperations {
+export function rawOperations(
+  owner: Agent,
+  media: LocalMediaStore,
+): ChatRecordingOperations {
+  const [
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
+  ] = checkpointBindings(
+    () => null,
+    () => null,
+    () => null,
+    () => media,
+  );
   return {
     getRecording: () => null,
     getProjectHash: () => null,
     getChatsDir: () => null,
-    getMediaStore: () => owner.agentClient.mediaStore,
+    listTargets,
+    saveCheckpoint,
+    deleteCheckpoint,
+    renameCheckpoint,
+    nameSession,
     getChatHistory: () => null,
     replaceChatHistory: async (history) => {
-      await owner.agentClient.getChat().setHistory(history);
+      await owner.session.replaceHistory(history);
     },
     getModel: () => owner.getModel(),
   };

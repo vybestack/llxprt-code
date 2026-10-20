@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -55,7 +60,6 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import { fromConfig } from '../index.js';
 
 async function settleEngineRelease(
   steps: ReadonlyArray<() => void | Promise<void>>,
@@ -183,7 +187,7 @@ describe('public Agent workspace definition lifetime', () => {
       callerCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerCallerOwner = await SessionClientOwner.create(
+    callerCallerOwner = await createCapturedSessionOwner(
       callerCallerConfig,
       assembleTaskSchemaPolicy(callerCallerSettings),
       callerCallerManager,
@@ -305,7 +309,7 @@ describe('public Agent workspace definition lifetime', () => {
     );
     requireCallerActivation(activation);
     await callerCallerOwner.initializeTools();
-    await callerCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerCallerOwner).startChat();
   }
   useOwnedCredentials();
   useOwnedCredentials();
@@ -409,7 +413,9 @@ describe('public Agent workspace definition lifetime', () => {
           'route',
         ]);
         callerCallerSettingsOwner.assertSettingsIdentity(callerCallerSettings);
-        expect(callerCallerOwner.getAgentClient().isInitialized()).toBe(true);
+        expect(capturedSessionClient(callerCallerOwner).isInitialized()).toBe(
+          true,
+        );
       } finally {
         await first.dispose();
         await second.dispose();

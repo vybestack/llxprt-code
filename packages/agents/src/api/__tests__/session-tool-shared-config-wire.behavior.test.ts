@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
@@ -17,7 +19,7 @@ import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { fromConfig } from '../fromConfig.js';
+
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
@@ -179,9 +181,17 @@ describe('independent session model routing and schema refresh on a shared Confi
     const first = await adopt('schema-alpha');
     const second = await adopt('schema-beta');
     try {
-      expect(new Set([first.agentClient, second.agentClient]).size).toBe(2);
       expect(
-        new Set([first.getMessageBus(), second.getMessageBus()]).size,
+        new Set([
+          fixtureAgentResources(first).publishedClient(first),
+          fixtureAgentResources(second).publishedClient(second),
+        ]).size,
+      ).toBe(2);
+      expect(
+        new Set([
+          fixtureAgentResources(first).messageBus,
+          fixtureAgentResources(second).messageBus,
+        ]).size,
       ).toBe(2);
       successful(await collect(first.stream('First physical schema request')));
       successful(

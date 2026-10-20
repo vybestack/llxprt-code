@@ -1,3 +1,7 @@
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { Config, OutputFormat } from '@vybestack/llxprt-code-core';
-import { createAgent, fromConfig } from '@vybestack/llxprt-code-agents';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const fakeResponses = fileURLToPath(
@@ -201,8 +205,7 @@ describe('cli main provider initialization', () => {
       getConversationLoggingEnabled: vi.fn(() => false),
       getMcpServers: vi.fn(() => ({})),
       getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
+
       getListExtensions: vi.fn(() => false),
       getOutputFormat: vi.fn(() => OutputFormat.TEXT),
       getToolRegistryInfo: vi.fn(() => ({
@@ -344,13 +347,13 @@ describe('cli main provider initialization', () => {
       extensions: [],
       sessionSummary: undefined,
     } as unknown as CliArgs);
-    const owner = await fromConfig(config, settingsService, {
+    const owner = await captureAgentAdoption(config, settingsService, {
       sessionId: freshId,
       sessionIdentityOwnership: 'config',
     });
-    const client = owner.agentClient;
+    const client = fixtureAgentResources(owner).publishedClient(owner);
     if (failRestore) {
-      vi.spyOn(client, 'setHistory').mockRejectedValueOnce(
+      vi.spyOn(client, 'restoreHistory').mockRejectedValueOnce(
         new Error('restore failed on purpose'),
       );
     }

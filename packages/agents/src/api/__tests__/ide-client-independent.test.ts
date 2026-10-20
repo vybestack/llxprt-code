@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,12 +16,9 @@ import {
   cleanup,
   deferred,
   installIdeCleanup,
-} from './helpers/ide-companion.js';
-import {
-  fromConfig,
-  toConfigParameters,
-  McpRuntimeOwner,
-} from '@vybestack/llxprt-code-agents';
+} from './helpers/ide-lifecycle-companion.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
@@ -118,9 +116,6 @@ describe('Independent IDE transport lifetime', () => {
   it('reads owner availability separately from connection status without using the public getter', async (): Promise<void> => {
     await setup();
     const { owner, domain } = await domainFixture(false);
-    const getter = vi.spyOn(owner, 'getClient').mockImplementation(() => {
-      throw new Error('raw transport access is forbidden');
-    });
     try {
       expect(domain.readConnection()).toStrictEqual({
         available: false,
@@ -154,7 +149,7 @@ describe('Independent IDE transport lifetime', () => {
       await domain.setIdeClientConnected();
       expect(states).toHaveLength(3);
     } finally {
-      getter.mockRestore();
+      domain.closeAdmission();
     }
   });
 
@@ -330,12 +325,13 @@ describe('Independent IDE transport lifetime', () => {
       );
       cleanup.push(() => second.dispose());
       await first.ide.setIdeClientConnected();
+      expect(second.ide.readConnection().status).toBe(
+        IDEConnectionStatus.Disconnected,
+      );
       await second.ide.setIdeClientConnected();
-      expect(first.ide.getIdeClient()).not.toBe(second.ide.getIdeClient());
-      expect(
-        first.ide.getIdeClient()?.getIdeContext()?.workspaceState?.isTrusted,
-      ).not.toBe(
-        second.ide.getIdeClient()?.getIdeContext()?.workspaceState?.isTrusted,
+      expect(host.sessions).toHaveLength(2);
+      expect(first.ide.readContext()?.workspaceState?.isTrusted).not.toBe(
+        second.ide.readContext()?.workspaceState?.isTrusted,
       );
       expect(first.ide.isTrustedFolder()).toBe(host.sessions[0].trusted);
       expect(second.ide.isTrustedFolder()).toBe(host.sessions[1].trusted);
@@ -343,13 +339,13 @@ describe('Independent IDE transport lifetime', () => {
       const surviving = reverse ? first : second;
       await retiring.dispose();
       await host.sessions[reverse ? 1 : 0].streamClosed.promise;
-      const peer = surviving.ide.getIdeClient();
-      if (peer === undefined)
-        throw new Error('Surviving Agent lost its IDE client');
-      expect(peer.getConnectionStatus().status).toBe(
+      expect(surviving.ide.readConnection().status).toBe(
         IDEConnectionStatus.Connected,
       );
-      expect(await peer.closeDiff('/public-peer.txt')).toContain('usable');
+      await surviving.ide.resolveDiff('/public-peer.txt', 'accepted');
+      expect(host.sessions[reverse ? 0 : 1].closedDiffs).toContain(
+        '/public-peer.txt',
+      );
       expect(surviving.ide.isTrustedFolder()).toBe(
         host.sessions[reverse ? 0 : 1].trusted,
       );
@@ -708,15 +704,13 @@ describe('Independent IDE transport lifetime', () => {
       await agent.dispose().catch(() => undefined);
     });
     await agent.ide.setIdeClientConnected();
-    const instance = agent.ide.getIdeClient();
-    if (instance === undefined)
-      throw new Error('Owned IDE client was not initialized');
+    expect(agent.ide.readConnection().status).toBe(
+      IDEConnectionStatus.Connected,
+    );
     try {
       await expect(agent.dispose()).rejects.toBeInstanceOf(Error);
-      expect(instance.getConnectionStatus().status).toBe(
-        IDEConnectionStatus.Disconnected,
-      );
       await host.sessions[0].streamClosed.promise;
+      expect(host.sessions[0].closed).toBe(true);
       expect(() => workspace.workspaceMemory.operations.snapshot()).toThrow(
         'disposed',
       );

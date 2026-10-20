@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +51,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig } from '../fromConfig.js';
+
 import {
   startCatalogFixture,
   type PhysicalCatalogFixture,
@@ -178,7 +183,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       fixtureCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    fixtureCallerOwner = await SessionClientOwner.create(
+    fixtureCallerOwner = await createCapturedSessionOwner(
       fixtureCallerConfig,
       assembleTaskSchemaPolicy(fixtureCallerSettings),
       fixtureCallerManager,
@@ -302,7 +307,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
     );
     requireCallerActivation(activation);
     await fixtureCallerOwner.initializeTools();
-    await fixtureCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(fixtureCallerOwner).startChat();
   }
 
   let fixtureDirectory: string;
@@ -353,7 +358,7 @@ describe('workspace catalog ownership through public Agent operations', () => {
       undefined,
       fixtureCallerMcp,
       undefined,
-      fixtureCallerOwner.getAgentClient(),
+      capturedSessionClient(fixtureCallerOwner),
     );
     const forbidden = ['getPromptRegistry', 'getResourceRegistry'];
     for (const name of forbidden)

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IdeClient } from '@vybestack/llxprt-code-core';
-import type { IdeState } from '../cliUiRuntime.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -46,19 +45,27 @@ describe('registered IDE settings owner', () => {
     const otherSettings = settingsAt(sibling.workspace.getWorkingDirectory());
     const client = await IdeClient.create();
     let enabled = false;
-    const state: IdeState = {
-      getIdeClient: () => client,
-      getIdeMode: () => enabled,
-      setIdeMode: (value) => {
-        enabled = value;
-      },
-      setIdeClientConnected: () => {},
-      setIdeClientDisconnected: () => client.disconnect(),
-      getLspConfig: () => undefined,
+    const setIdeMode = (value: boolean): void => {
+      enabled = value;
     };
+    const readConnection = () => ({
+      available: true,
+      ...client.getConnectionStatus(),
+      currentIde: client.getCurrentIde(),
+      detectedIdeDisplayName: client.getDetectedIdeDisplayName(),
+      diffingEnabled: client.isDiffingEnabled(),
+    });
     try {
       const command = createIdeCommand(
-        bindIdeCommand(state, settings, () => 0),
+        bindIdeCommand(
+          readConnection,
+          () => client.getIdeContext(),
+          setIdeMode,
+          async () => {},
+          () => client.disconnect(),
+          settings,
+          () => 0,
+        ),
       );
       const registry = await CommandService.create(
         [
@@ -80,6 +87,7 @@ describe('registered IDE settings owner', () => {
         }),
         '',
       );
+      expect(enabled).toBe(true);
       const persisted: unknown = JSON.parse(
         await readFile(settings.user.path, 'utf8'),
       );

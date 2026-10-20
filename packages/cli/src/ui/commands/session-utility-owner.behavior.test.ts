@@ -8,7 +8,10 @@ import {
   ConfigurationManager,
   createSessionMetrics,
 } from '@vybestack/llxprt-code-telemetry';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -61,7 +64,7 @@ describe('registered session utility owners', () => {
     );
     expect(history).toContainEqual(expect.objectContaining({ type: 'help' }));
     await owner.dispose();
-    expect(await sibling.agentClient.getHistory()).toStrictEqual([]);
+    expect(await commandOwnerClient(sibling).getHistory()).toStrictEqual([]);
   });
 
   it('summarizes registered session metrics rather than invocation metrics', async () => {

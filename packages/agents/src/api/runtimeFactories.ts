@@ -1,17 +1,11 @@
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import type {
-  ToolExecutionPolicy,
-  ToolGovernance,
-} from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 /**
  * @plan:PLAN-20260629-ISSUE2204.P01
@@ -29,46 +23,40 @@ import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/servic
  */
 
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { bindSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { withChildToolDisplay } from '../session/childToolAssembly.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
+import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import { ShellJobOwner } from '../session/shell-job-owner.js';
 import { LoopRunLifetime } from './loop-run-lifetime.js';
-import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
-export { TaskLaunchOwner } from '../session/task-launch-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
-  ToolSchedulerFactory,
   ToolSchedulerContract,
+  ToolSchedulerFactory,
 } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-import { buildAgentClientFactory } from './agentBootstrap.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
-import { TaskTool } from '../tools/task.js';
-import { AgenticLoop } from '../core/agenticLoop/index.js';
+
 import type {
   AgenticLoopMessage,
   AgenticLoopOptions,
 } from '../core/agenticLoop/index.js';
+import { AgenticLoop } from '../core/agenticLoop/index.js';
 import type {
-  AgenticLoopEvent,
   ApprovalHandler as AgenticLoopApprovalHandler,
+  AgenticLoopEvent,
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+
+import { TaskTool, type TaskToolDependencies } from '../tools/task.js';
+import { buildAgentClientFactory } from './agentBootstrap.js';
+
+export { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-
-function assertConfig(
-  value: unknown,
-  context: string,
-): asserts value is Config {
-  if (!(value instanceof Config)) {
-    throw new TypeError(`${context}: expected Config instance`);
-  }
-}
 
 /**
  * Builds the {@link AgentRuntimeFactoryBindings} descriptor wiring the
@@ -129,74 +117,25 @@ export function createToolScheduler(
  * instead (#2204).
  */
 export function createTaskRegistration(
-  credentialAuthority?: CredentialAuthority,
+  config: Config,
+  dependencies: TaskToolDependencies,
 ): TaskToolRegistration {
   return {
     toolClass: TaskTool,
     className: 'TaskTool',
     staticName: TaskTool.Name,
-    buildArgs(...args: Parameters<TaskToolRegistration['create']>): unknown[] {
-      return [...args];
-    },
-    create(
-      config,
-      profileManager,
-      subagentManager,
-      messageBus,
-      workspacePaths,
-      readMcpInstructions,
-      instructions,
-      createChildSettings,
-      readTaskPolicy,
-      readRunPolicy,
-      readGovernance,
-      toolSelection,
-      hookOwner,
-      workspaceTrust,
-      telemetry,
-      requestInteractiveAuth,
-    ) {
-      assertConfig(config, 'TaskToolRegistration.create');
-      if (instructions === undefined)
-        throw new Error('Task requires explicit instruction operations');
-      if (
-        createChildSettings === undefined ||
-        readTaskPolicy === undefined ||
-        readRunPolicy === undefined ||
-        readGovernance === undefined
-      )
-        throw new Error(
-          'Task requires explicit session policy and child settings',
-        );
-      return new TaskTool(config, {
-        credentialAuthority,
-        profileManager,
-        subagentManager,
-        messageBus,
-        workspacePaths,
-        readMcpInstructions: readMcpInstructions ?? (() => undefined),
-        instructions,
-        createChildSettings,
-        readTaskPolicy,
-        readRunPolicy,
-        readGovernance,
-        toolRegistry: toolSelection,
-        hookOwner,
-        workspaceTrust,
-        telemetry,
-        requestInteractiveAuth,
-      });
-    },
+    buildArgs: () => [config, dependencies],
+    create: () => new TaskTool(config, dependencies),
   };
 }
 
 // Re-export the agentic-loop public surface so consumers construct the loop
 // via the curated api barrel rather than importing the concrete class.
 export type {
+  AgenticLoopApprovalHandler,
   AgenticLoopEvent,
   AgenticLoopMessage,
   AgenticLoopOptions,
-  AgenticLoopApprovalHandler,
   DisplayCallbacks,
 };
 
@@ -216,41 +155,37 @@ export interface AgenticLoopRunner {
  * couple to the concrete class via the internals barrel (#2204).
  */
 export function createAgenticLoop(
-  options: Omit<AgenticLoopOptions, 'createSchedulerOwner' | 'config'> & {
-    config: Config;
-    telemetry: RootTelemetry;
+  options: Omit<AgenticLoopOptions, 'tools'> & {
     taskLaunchOwner: TaskLaunchOwner;
+    acquireTools: (
+      decorateScheduler: (
+        construct: SchedulerConstruction,
+      ) => SchedulerConstruction,
+    ) => AgenticLoopOptions['tools'];
     readShellJobSettings: () => {
       maxBackgroundJobs: number;
       logMaxBytes: number;
     };
-    readExecutionPolicy: () => ToolExecutionPolicy;
-    getToolGovernance: () => ToolGovernance;
   },
 ): AgenticLoopRunner {
   const shellOwner = new ShellJobOwner(options.readShellJobSettings);
-  const scheduler = withChildToolDisplay(
-    (schedulerOptions) => new CoreToolScheduler(schedulerOptions),
-    new ChildToolDisplay(),
-    options.taskLaunchOwner,
-    shellOwner,
-  );
-  const loop = new AgenticLoop({
-    ...options,
-    createSchedulerOwner: bindSchedulerOwner(
-      options.config,
-      options.messageBus,
-      options.interactiveMode ?? false,
-      options.agentClient.tools,
-      scheduler,
-      options.readExecutionPolicy,
-      options.getToolGovernance,
-      undefined,
-      options.telemetry,
+  const tools = options.acquireTools((construct) =>
+    withChildToolDisplay(
+      construct,
+      new ChildToolDisplay(),
+      options.taskLaunchOwner,
+      shellOwner,
     ),
-  });
+  );
+  const loop = new AgenticLoop({ ...options, tools });
   return new LoopRunLifetime(
     (message, signal, promptId) => loop.run(message, signal, promptId),
-    () => shellOwner.dispose(),
+    async () => {
+      try {
+        tools.retire();
+      } finally {
+        await shellOwner.dispose();
+      }
+    },
   );
 }

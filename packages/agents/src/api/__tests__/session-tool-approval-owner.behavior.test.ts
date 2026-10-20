@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -51,7 +56,7 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { fromConfig } from '../fromConfig.js';
+
 import { startCatalogFixture } from './helpers/workspace-catalog-http-fixture.js';
 
 /**
@@ -168,7 +173,7 @@ describe('shared workspace session approval ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -288,7 +293,7 @@ describe('shared workspace session approval ownership', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('keeps peer confirmation required after a session grant and peer closure', async () => {

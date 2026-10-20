@@ -1,3 +1,5 @@
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import {
   useConsumerPromptDirectory,
   acquireConsumerRelease,
@@ -42,7 +44,7 @@ import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import * as fc from 'fast-check';
 
 /**
@@ -239,7 +241,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('T8a numeric normalize: agent.setEphemeralSetting("context-limit","1000") yields the Config-normalized number 1000 and parity with the Config (REQ-INT-003)', async () => {
@@ -255,7 +257,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         agent.setEphemeralSetting('context-limit', '1000');
@@ -291,7 +293,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         agent.setEphemeralSetting('streaming', 'enabled');
@@ -324,7 +326,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         // The Config rule (configBase.ts:207) throws
@@ -354,7 +356,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         agent.setEphemeralSetting('context-limit', 50000);
@@ -396,7 +398,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
               undefined,
               callerMcp,
               undefined,
-              callerOwner.getAgentClient(),
+              capturedSessionClient(callerOwner),
             );
             try {
               agent.setEphemeralSetting(key, value);
@@ -431,7 +433,7 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           try {
             agent.setEphemeralSetting('streaming', mode);

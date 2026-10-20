@@ -1,3 +1,11 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -28,7 +36,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -38,13 +45,9 @@ import { fixturesDir } from './helpers/fixture-data.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
-import { fromConfig } from '../fromConfig.js';
 
 const intent = { provider: 'fake', authMode: 'auto' } as const;
 
@@ -178,7 +181,7 @@ describe('preflight adoption boundaries', () => {
       built_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const built_builtCallerOwner = await SessionClientOwner.create(
+    const built_builtCallerOwner = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -243,7 +246,7 @@ describe('preflight adoption boundaries', () => {
       );
       requireCallerActivation(built_activation);
       await built_builtCallerOwner.initializeTools();
-      await built_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(built_builtCallerOwner).startChat();
     } catch (built_primary) {
       await cleanupAfterFailure(built_primary, built_builtCallerClose);
     }
@@ -260,7 +263,7 @@ describe('preflight adoption boundaries', () => {
       null,
       () => undefined,
       'borrowed',
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerMcp,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,
@@ -277,7 +280,9 @@ describe('preflight adoption boundaries', () => {
       };
       const result = await built_operation.preflight(activation);
       if (!result.token) throw new Error('Missing receipt');
-      const client = built_operation.sessionClient.getAgentClient();
+      const client = capturedSessionClient(
+        capturedActivation(built_operation).owner,
+      );
       await rm(keyfile);
       const agent = await fromConfig(
         built_builtCallerConfig,
@@ -299,7 +304,7 @@ describe('preflight adoption boundaries', () => {
           'auth-key'
         ],
       ).toBe('local-test-key');
-      expect(agent.agentClient).toBe(client);
+      expect(fixtureAgentResources(agent).publishedClient(agent)).toBe(client);
       await agent.dispose();
     } finally {
       await built_operation.dispose();

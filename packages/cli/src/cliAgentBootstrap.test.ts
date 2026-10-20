@@ -1,3 +1,12 @@
+import {
+  capturedActivation,
+  captureActivationConstruction,
+} from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { capturedSessionClient } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import {
+  AgentResourceCapture,
+  fixtureAgentResources,
+} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -88,13 +97,15 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
       targetDir: directory,
       isTrusted: () => trust.isTrustedFolder(),
     });
-    await preflight.preparePostConfiguration(
-      config,
-      filesystem,
-      assembleWorkspaceMemory(config, filesystem, trust),
-      trust,
-      () => trust.dispose(),
-      undefined,
+    await captureActivationConstruction(() =>
+      preflight.preparePostConfiguration(
+        config,
+        filesystem,
+        assembleWorkspaceMemory(config, filesystem, trust),
+        trust,
+        () => trust.dispose(),
+        undefined,
+      ),
     );
     preflight.transferActivation((operation) => {
       activation = operation;
@@ -110,13 +121,16 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
     token = result.token;
   }
   async function create(): Promise<Agent> {
-    agent = await createForegroundAgent(
-      preflight,
-      token,
-      intent,
-      authority,
-      {},
+    const capture = new AgentResourceCapture();
+    const retained = capturedSessionClient(
+      capturedActivation(activation).owner,
     );
+    capture.observe(retained);
+    capture.clients.push(retained);
+    agent = await capture.construct(() =>
+      createForegroundAgent(preflight, token, intent, authority, {}),
+    );
+    capture.bindAgent(agent);
     return agent;
   }
   async function expectClosed(created: Agent): Promise<void> {
@@ -127,15 +141,19 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
 
   it('constructs once with the existing config and activation receipt and the one agents-owned bus', async () => {
     await prepare();
-    const client = activation.sessionClient.getAgentClient();
-    const bus = activation.messageBus;
+    const client = capturedSessionClient(capturedActivation(activation).owner);
+    const bus = capturedActivation(activation).messageBus;
     if (bus === undefined) throw new Error('Missing exact bus');
     const created = await create();
-    expect(created.agentClient).toBe(client);
-    created.agentClient.assertConfig(config);
+    expect(fixtureAgentResources(created).publishedClient(created)).toBe(
+      client,
+    );
+    fixtureAgentResources(created)
+      .publishedClient(created)
+      .assertConfig(config);
     expect(created.getRuntimeId()).toBe(config.getSessionId());
-    expect(created.getMessageBus()).toBe(bus);
-    expect(created.getMessageBus()).toBe(bus);
+    expect(fixtureAgentResources(created).messageBus).toBe(bus);
+    expect(fixtureAgentResources(created).messageBus).toBe(bus);
     expect(created.tools.list().length).toBeGreaterThan(0);
     expect(created.getModel()).toBe('gemini-2.5-pro');
     expect((await activation.preflight(intent)).authFailed).toBe(true);
@@ -145,9 +163,13 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
 
   it('returns the exact ready agent retained by the owner and disposes it on cleanup', async () => {
     await prepare();
-    const originalClient = activation.sessionClient.getAgentClient();
+    const originalClient = capturedSessionClient(
+      capturedActivation(activation).owner,
+    );
     const created = await create();
-    expect(created.agentClient).toBe(originalClient);
+    expect(fixtureAgentResources(created).publishedClient(created)).toBe(
+      originalClient,
+    );
     expect(created.getRuntimeId()).toBe(config.getSessionId());
     expect(created.tools.list().length).toBeGreaterThan(0);
     await runExitCleanup();
@@ -193,17 +215,21 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
 
   it('retains the exact existing Config without duplicate client construction', async () => {
     await prepare();
-    const client = activation.sessionClient.getAgentClient();
+    const client = capturedSessionClient(capturedActivation(activation).owner);
     const created = await create();
-    expect(created.agentClient).toBe(client);
-    created.agentClient.assertConfig(config);
+    expect(fixtureAgentResources(created).publishedClient(created)).toBe(
+      client,
+    );
+    fixtureAgentResources(created)
+      .publishedClient(created)
+      .assertConfig(config);
   });
 
   it('retains the configured provider and model from activation', async () => {
     await prepare('fake', 'glm-4');
     const created = await create();
     expect(created.getModel()).toBe('glm-4');
-    expect(created.providerManager.getActiveProviderName()).toBe('fake');
+    expect(created.getProvider()).toBe('fake');
     expect(created.getRuntimeId()).toBe(config.getSessionId());
   });
 
@@ -220,29 +246,29 @@ describe('createForegroundAgent preferred construction and cleanup', () => {
     const created = await create();
     expect(intent).toStrictEqual({ provider: 'fake', authMode: 'auto' });
     expect(intent).not.toHaveProperty('model');
-    expect(created.providerManager.getActiveProviderName()).toBe('fake');
+    expect(created.getProvider()).toBe('fake');
   });
 
   it('applies session policy updates through the exact foreground policy owner', async () => {
     await prepare();
     const created = await create();
     expect(
-      created.getMessageBus().evaluate('activate_skill', {
+      fixtureAgentResources(created).messageBus.evaluate('activate_skill', {
         name: 'pr-creator',
       }),
     ).toBe(PolicyDecision.ASK_USER);
-    created.getMessageBus().publish({
+    fixtureAgentResources(created).messageBus.publish({
       type: MessageBusType.UPDATE_POLICY,
       toolName: 'activate_skill',
       persist: false,
     });
     expect(
-      created.getMessageBus().evaluate('activate_skill', {
+      fixtureAgentResources(created).messageBus.evaluate('activate_skill', {
         name: 'pr-creator',
       }),
     ).toBe(PolicyDecision.ALLOW);
-    expect(created.getMessageBus().evaluate('ast_edit', {})).toBe(
-      PolicyDecision.ASK_USER,
-    );
+    expect(
+      fixtureAgentResources(created).messageBus.evaluate('ast_edit', {}),
+    ).toBe(PolicyDecision.ASK_USER);
   });
 });

@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
@@ -25,7 +30,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -43,7 +47,7 @@ import { AgentConfig } from '../config-types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { Agent, AgentToolHandle } from '../agent.js';
-import { fromConfig } from '../fromConfig.js';
+
 import fs from 'node:fs/promises';
 
 /**
@@ -235,7 +239,7 @@ describe('MCP saved approval lifetime', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -298,7 +302,7 @@ describe('MCP saved approval lifetime', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -343,7 +347,7 @@ describe('MCP saved approval lifetime', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         undefined,
         undefined,

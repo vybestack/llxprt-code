@@ -1,3 +1,5 @@
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
@@ -12,12 +14,12 @@ import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
+
 import {
   ProviderManager,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 
 /**
  * @license
@@ -204,11 +206,11 @@ describe('supplied workspace memory lifetime through public adoption', () => {
       'Transferred preflight instructions.',
     );
     await facade.dispose();
-    expect(() => operation.workspaceMemory.operations.refresh()).toThrow(
-      'disposed',
-    );
-    expect(() => operation.workspaceMemory.operations.snapshot()).toThrow(
-      'disposed',
-    );
+    expect(() =>
+      capturedActivation(operation).workspaceMemory.operations.refresh(),
+    ).toThrow('disposed');
+    expect(() =>
+      capturedActivation(operation).workspaceMemory.operations.snapshot(),
+    ).toThrow('disposed');
   });
 });

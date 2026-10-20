@@ -54,6 +54,8 @@ describe('registered diagnostic session owner', () => {
         registration.runtimeApi.getSessionTokenUsage,
         registration.runtimeApi.providerStatus,
         registration.oauthControl,
+        () => false,
+        () => false,
       ),
     );
     const registry = await CommandService.create(

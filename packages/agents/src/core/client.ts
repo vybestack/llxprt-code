@@ -7,7 +7,7 @@ import * as modelNotifications from './client-model-subscriptions.js';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createClientComplexity } from './clientHelpers.js';
+import { createClientComplexity, readClientHistory } from './clientHelpers.js';
 import { resolveModelForSystemPrompt } from './systemPromptModel.js';
 import { ClientSessionPolicy } from './client-session-policy.js';
 import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -54,7 +54,6 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  createContentGenerator,
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -70,8 +69,8 @@ export {
   isThinkingSupported,
   findCompressSplitPoint,
 } from './clientHelpers.js';
-import { readClientHistory } from './clientHelpers.js';
 import {
+  initializeClientContentGenerator,
   generateJson as clientLlmGenerateJson,
   generateContent as clientLlmGenerateContent,
   generateEmbedding as clientLlmGenerateEmbedding,
@@ -374,16 +373,9 @@ export class AgentClient
     if (this.isInitialized()) {
       return;
     }
-    const contentGenConfig = this.sessionContentGeneratorConfig;
-    if (!contentGenConfig) {
-      throw new Error(
-        'Content generator config not initialized. Initialize the session client owner first.',
-      );
-    }
-    this.contentGenerator = await createContentGenerator(
-      contentGenConfig,
+    this.contentGenerator = await initializeClientContentGenerator(
+      this.sessionContentGeneratorConfig,
       this.config,
-      this.config.getSessionId(),
     );
 
     // Don't create chat here - that causes infinite recursion with startChat()
@@ -779,8 +771,11 @@ export class AgentClient
     promptId: string,
     execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
+    params.config?.abortSignal?.throwIfAborted();
     await this.lazyInitialize();
-    this.chat ??= await this.startChat([]);
+    params.config?.abortSignal?.throwIfAborted();
+    this.chat ??= await this.startChat(this._previousHistory);
+    params.config?.abortSignal?.throwIfAborted();
     return this.getChat().generateDirectMessage(params, promptId, execution);
   }
 

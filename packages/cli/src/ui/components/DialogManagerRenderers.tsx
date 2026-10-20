@@ -87,6 +87,11 @@ export interface DialogData {
 }
 
 export interface StoreDialogRenderContext {
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
   uiState: DialogData;
   uiActions: AppCommands;
   settings: LoadedSettings;

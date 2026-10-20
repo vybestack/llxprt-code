@@ -1,3 +1,12 @@
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,7 +35,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -42,7 +51,7 @@ import {
   WorkspaceDefinitionOwner,
   LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { loadExtension } from './config/extension.js';
 
 /**
@@ -55,8 +64,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object';
 }
 
-function visibleSkills(agent: Pick<Agent, 'agentClient'>): string[] {
-  const chat: unknown = agent.agentClient.getChat();
+function visibleSkills(client: AgentClientContract): string[] {
+  const chat: unknown = client.getChat();
   if (!isRecord(chat) || !isRecord(chat.generationConfig))
     throw new Error('Missing real chat declarations');
   const tools = chat.generationConfig.tools;
@@ -285,7 +294,7 @@ describe('filesystem workspace extension ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -348,7 +357,7 @@ describe('filesystem workspace extension ownership', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -363,7 +372,7 @@ describe('filesystem workspace extension ownership', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       for await (const event of agent.stream('hello')) void event;
@@ -371,7 +380,7 @@ describe('filesystem workspace extension ownership', () => {
       const adopted = builtCallerMcp.extensionOperations.list()[0];
       extensionMcp = builtCallerMcp;
 
-      builtCallerOwner.getAgentClient();
+      capturedSessionClient(builtCallerOwner);
       initial = adopted;
       await run();
     } finally {
@@ -397,11 +406,15 @@ describe('filesystem workspace extension ownership', () => {
             ),
       };
       const subagents = extensionMcp.subagentDefinitions;
-      expect(visibleSkills(agent)).toStrictEqual(['alpha']);
+      expect(
+        visibleSkills(fixtureAgentResources(agent).publishedClient(agent)),
+      ).toStrictEqual(['alpha']);
       expect(catalog.getToolsByServer('arithmetic')).toHaveLength(1);
       expect(await subagents.listSubagents()).toContain('alpha-agent');
       await operations.load(beta);
-      expect(visibleSkills(agent)).toStrictEqual(['alpha', 'beta']);
+      expect(
+        visibleSkills(fixtureAgentResources(agent).publishedClient(agent)),
+      ).toStrictEqual(['alpha', 'beta']);
       const previous = new Set(catalog.getToolsByServer('arithmetic'));
       await operations.restart(initial);
       await extensionMcp.awaitDiscovery();
@@ -411,10 +424,14 @@ describe('filesystem workspace extension ownership', () => {
           .getToolsByServer('arithmetic')
           .some((tool) => previous.has(tool)),
       ).toBe(false);
-      expect(visibleSkills(agent)).toStrictEqual(['alpha', 'beta']);
+      expect(
+        visibleSkills(fixtureAgentResources(agent).publishedClient(agent)),
+      ).toStrictEqual(['alpha', 'beta']);
       await operations.unload(initial);
       expect(operations.list()).toStrictEqual([beta]);
-      expect(visibleSkills(agent)).toStrictEqual(['beta']);
+      expect(
+        visibleSkills(fixtureAgentResources(agent).publishedClient(agent)),
+      ).toStrictEqual(['beta']);
       expect(catalog.getToolsByServer('arithmetic')).toStrictEqual([]);
       expect(await subagents.listSubagents()).not.toContain('alpha-agent');
       expect(await subagents.listSubagents()).toContain('beta-agent');

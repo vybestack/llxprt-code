@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 /**
  * @license
@@ -14,7 +16,6 @@ import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-m
 import * as fs from 'node:fs/promises';
 import {
   buildAgent,
-  createAgent,
   internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
   tempRoot,
@@ -286,9 +287,14 @@ describe('created policy failure lifetime', () => {
       credentialAuthority: credentials().authority,
     });
     try {
-      expect(control.agent.getMessageBus()).not.toBe(closedBuses[0]);
+      expect(fixtureAgentResources(control.agent).messageBus).not.toBe(
+        closedBuses[0],
+      );
       expect(
-        control.agent.getMessageBus().evaluate('read_file', {}),
+        fixtureAgentResources(control.agent).messageBus.evaluate(
+          'read_file',
+          {},
+        ),
       ).toBeDefined();
     } finally {
       await control.cleanup();

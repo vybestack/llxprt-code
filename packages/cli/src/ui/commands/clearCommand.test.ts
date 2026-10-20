@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from '../../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -36,7 +37,11 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -71,7 +76,7 @@ import {
   escapeShellArg,
   CONTINUE_LATEST,
 } from '@vybestack/llxprt-code-core';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
@@ -222,7 +227,7 @@ describe('clearCommand new session', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -342,7 +347,7 @@ describe('clearCommand new session', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const builtReleases: Array<() => Promise<void>> = [];
@@ -394,7 +399,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
       builtCallerFiles,
       undefined,
       undefined,
@@ -543,7 +548,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     const resumed = await setupOwnerSessionRecording(
       request,
       agent.session,
-      () => agent.agentClient.mediaStore,
+      () => agent.session.listBrowserTargetsDetailed(),
       { listSessions: false, deleteSession: undefined },
       null,
     );

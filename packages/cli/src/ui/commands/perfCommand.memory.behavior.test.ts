@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 /**
@@ -19,9 +20,7 @@ function memorySubCommand(context?: CommandOwnerFixture): SlashCommand {
   const command = createPerfCommand({
     perfDir: '/tmp/perf-memory-test',
     readHistory: () =>
-      context?.services.agent?.agentClient
-        .getHistoryService()
-        ?.getRawHistory() ?? null,
+      context?.services.agent?.session.readHistorySnapshot()?.messages ?? null,
   });
   const sub = command.subCommands?.find((s) => s.name === 'memory');
   if (sub === undefined) {
@@ -32,20 +31,15 @@ function memorySubCommand(context?: CommandOwnerFixture): SlashCommand {
 
 /** A context whose agent client exposes the given history. */
 function contextWithHistory(history: readonly IContent[]): CommandOwnerFixture {
-  return {
+  return createMockCommandContext({
     services: {
       agent: {
-        agentClient: {
-          getHistoryService: () => ({
-            getAll: () => history,
-            getChronologyTrace: () => [],
-            getRawHistory: () => history,
-          }),
+        session: {
+          readHistorySnapshot: () => ({ messages: history, chronology: [] }),
         },
       },
-      config: {},
     },
-  } as unknown as CommandOwnerFixture;
+  });
 }
 
 async function run(
@@ -114,9 +108,7 @@ describe('/perf memory', () => {
     const context = {
       services: {
         agent: {
-          get agentClient() {
-            return { getHistoryService: () => null };
-          },
+          session: { readHistorySnapshot: () => null },
         },
         config: {},
       },

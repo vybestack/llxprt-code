@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -120,7 +121,9 @@ describe('shared history compression recording origin', () => {
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
-        const history = agent.agentClient.getHistoryService();
+        const history = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getHistoryService();
         if (!history) throw new Error('Missing shared history');
         history.startCompression();
         history.endCompression(
@@ -217,7 +220,9 @@ describe('shared history compression recording origin', () => {
           await expect(agent.compress()).rejects.toThrow(
             'compression rejected',
           );
-          const history = agent.agentClient.getHistoryService();
+          const history = fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService();
           if (!history) throw new Error('Missing history');
           history.add({
             speaker: 'human',
@@ -322,7 +327,9 @@ describe('shared history compression recording origin', () => {
           await new Promise((resolve) => setTimeout(resolve, 1100));
           await sibling.session.setRecording({ enabled: true });
           expect((await agent.compress()).status).toBe('compressed');
-          const history = agent.agentClient.getHistoryService();
+          const history = fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService();
           if (!history) throw new Error('Missing shared history');
           const summary = history
             .getAll()

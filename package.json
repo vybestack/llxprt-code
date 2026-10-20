@@ -101,7 +101,7 @@
     "lint:eslint-guard": "bun scripts/check-eslint-guard.ts",
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
     "lint:runtime-deps": "bun scripts/check-runtime-dependency-declarations.ts",
-    "check:runtime-boundary": "bun scripts/check-runtime-state-boundary.ts --baseline scripts/runtime-service-shape-baseline.json",
+    "check:runtime-boundary": "bun scripts/check-runtime-state-boundary.ts",
     "lint:a2a-boundary": "bun scripts/check-a2a-import-boundary.ts",
     "lint:gemini-containment": "bun scripts/check-gemini-containment.ts",
     "lint:legacy-paths": "bun scripts/check-legacy-paths.ts",

@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 import {
   createBarrier,
   createDeferred,
@@ -6,7 +7,6 @@ import {
 import {
   assembleProfileApplication,
   assembleProviderSwitch,
-  SessionProviderReads,
   switchActiveProvider,
 } from '@vybestack/llxprt-code-agents';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
@@ -499,13 +499,13 @@ describe('CLI runtime isolation', () => {
   });
 
   it('enforces runtime guard for ownerless provider queries @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', () => {
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
   });
 
   it('enforces explicit SettingsService for ownerless settings queries @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', () => {
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
   });
@@ -533,7 +533,7 @@ describe('CLI runtime isolation', () => {
   });
 
   it('rejects ownerless provider queries without consulting process preference', () => {
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
   });

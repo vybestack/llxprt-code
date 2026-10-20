@@ -1,3 +1,10 @@
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,10 +53,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import {
-  SessionProviderReads,
-  fromConfig,
-} from '@vybestack/llxprt-code-agents';
+
 import { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { drain, countType } from './helpers/agentHarness.js';
 
@@ -216,7 +220,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -336,7 +340,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('awaits post-activation provider/model preparation before returning a usable Agent', async () => {
@@ -379,7 +383,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         factory,
         undefined,
@@ -397,7 +401,13 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       releasePreparation.resolve();
       const agent = await observedAgent;
       try {
-        await agent.agentClient.startChat(await agent.agentClient.getHistory());
+        await fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .startChat(
+            await fixtureAgentResources(agent)
+              .publishedClient(agent)
+              .getHistory(),
+          );
         expect(builtCallerManager.getTokenizerFactory()).toBe(factory);
 
         const turnEvents = await drain(agent.stream('hello'));
@@ -451,7 +461,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
           undefined,
           builtCallerMcp,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
           undefined,
           tokenizerFactory,
           undefined,
@@ -466,7 +476,7 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         model: 'fake-model',
       });
       expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
     } finally {

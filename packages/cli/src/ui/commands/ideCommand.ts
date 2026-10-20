@@ -5,11 +5,12 @@
  */
 
 import * as path from 'node:path';
+import { IDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 import {
-  IDEConnectionStatus,
   IDE_DEFINITIONS,
   type getIdeInstaller,
-  type IdeClient,
+  type WorkspaceIdeConnection,
+  type IdeContext,
   type File,
   LLXPRT_CODE_COMPANION_EXTENSION_NAME,
 } from '@vybestack/llxprt-code-core';
@@ -21,14 +22,11 @@ import {
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 export interface IdeCommandOperations {
-  readonly getConnectionStatus: IdeClient['getConnectionStatus'];
-  readonly getDetectedIdeDisplayName: IdeClient['getDetectedIdeDisplayName'];
-  readonly getIdeContext: IdeClient['getIdeContext'];
-  readonly currentIDE: ReturnType<IdeClient['getCurrentIde']>;
+  readonly readConnection: () => WorkspaceIdeConnection;
+  readonly readContext: () => IdeContext | undefined;
   readonly connect: () => Promise<void>;
   readonly setIdeMode: (enabled: boolean) => void;
-  readonly setConnected: () => Promise<void>;
-  readonly setDisconnected: () => Promise<void>;
+  readonly disconnect: () => Promise<void>;
   readonly persistMode: (enabled: boolean) => void;
   readonly installCompanion: (
     announce: () => void,
@@ -73,11 +71,11 @@ async function getIdeStatusMessageWithFiles(
   messageType: 'info' | 'error';
   content: string;
 }> {
-  const connection = operations.getConnectionStatus();
+  const connection = operations.readConnection();
   switch (connection.status) {
     case IDEConnectionStatus.Connected: {
-      let content = `[CONNECTED] Connected to ${operations.getDetectedIdeDisplayName()}`;
-      const openFiles = operations.getIdeContext()?.workspaceState?.openFiles;
+      let content = `[CONNECTED] Connected to ${operations.readConnection().detectedIdeDisplayName}`;
+      const openFiles = operations.readContext()?.workspaceState?.openFiles;
       if (openFiles && openFiles.length > 0) {
         content += formatFileList(openFiles);
       }
@@ -128,9 +126,7 @@ async function pollForConnection(
   for (let i = 0; i < 10; i++) {
     operations.setIdeMode(true);
     await operations.connect();
-    if (
-      operations.getConnectionStatus().status === IDEConnectionStatus.Connected
-    ) {
+    if (operations.readConnection().status === IDEConnectionStatus.Connected) {
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -140,7 +136,7 @@ async function pollForConnection(
 function buildInstallCommand(operations: IdeCommandOperations): SlashCommand {
   return {
     name: 'install',
-    description: `install required IDE companion for ${operations.getDetectedIdeDisplayName()}`,
+    description: `install required IDE companion for ${operations.readConnection().detectedIdeDisplayName}`,
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
     action: async () => {
@@ -157,7 +153,7 @@ function buildInstallCommand(operations: IdeCommandOperations): SlashCommand {
         operations.addItem(
           {
             type: 'error',
-            text: `No installer is available for ${operations.getDetectedIdeDisplayName()}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
+            text: `No installer is available for ${operations.readConnection().detectedIdeDisplayName}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
           },
           Date.now(),
         );
@@ -207,7 +203,7 @@ function buildEnableCommand(operations: IdeCommandOperations): SlashCommand {
     action: async () => {
       operations.persistMode(true);
       operations.setIdeMode(true);
-      await operations.setConnected();
+      await operations.connect();
     },
   };
 }
@@ -221,7 +217,7 @@ function buildDisableCommand(operations: IdeCommandOperations): SlashCommand {
     action: async () => {
       operations.persistMode(false);
       operations.setIdeMode(false);
-      await operations.setDisconnected();
+      await operations.disconnect();
     },
   };
 }
@@ -230,7 +226,7 @@ export function createIdeCommand(
   operations: IdeCommandOperations | null,
 ): SlashCommand | null {
   if (operations === null) return null;
-  const currentIDE = operations.currentIDE;
+  const currentIDE = operations.readConnection().currentIde;
   if (!currentIDE) {
     return {
       name: 'ide',
@@ -261,7 +257,7 @@ export function createIdeCommand(
     subCommands: [],
   };
 
-  const { status } = operations.getConnectionStatus();
+  const { status } = operations.readConnection();
   const isConnected = status === IDEConnectionStatus.Connected;
 
   if (isConnected) {

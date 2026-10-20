@@ -7,7 +7,11 @@ import type { CommandOwnerFixture } from './mockCommandContext.js';
 
 import { createDiagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { bindDiagnosticsReads } from '../ui/commands/diagnosticsCommandHost.js';
-export function registerDiagnosticsCommand(owner: CommandOwnerFixture) {
+export function registerDiagnosticsCommand(
+  owner: CommandOwnerFixture,
+  readIdeMode: () => boolean = () => false,
+  readIdeAvailable: () => boolean = () => false,
+) {
   return createDiagnosticsCommand(
     bindDiagnosticsReads(
       owner.services.config,
@@ -23,6 +27,8 @@ export function registerDiagnosticsCommand(owner: CommandOwnerFixture) {
       owner.runtimeApi.getSessionTokenUsage,
       owner.runtimeApi.providerStatus,
       owner.oauthControl,
+      readIdeMode,
+      readIdeAvailable,
     ),
   );
 }

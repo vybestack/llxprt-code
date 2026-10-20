@@ -8,13 +8,23 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { type Agent, type AgentConfig } from '@vybestack/llxprt-code-agents';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  createAgent,
-  type Agent,
-  type AgentConfig,
-} from '@vybestack/llxprt-code-agents';
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+
+export function commandOwnerManager(owner: Agent): RuntimeProviderManager {
+  return fixtureAgentResources(owner).manager;
+}
+
+export function commandOwnerClient(owner: Agent): AgentClientContract {
+  return fixtureAgentResources(owner).publishedClient(owner);
+}
 
 export function useCommandOwners(): (
   label: string,

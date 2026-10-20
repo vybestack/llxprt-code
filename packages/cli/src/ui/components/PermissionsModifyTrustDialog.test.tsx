@@ -23,7 +23,6 @@ import React, { act } from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
-import type { IdeClient } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 
@@ -97,6 +96,7 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
   </SettingsContext.Provider>
 );
 
+let rawIdeTrust: boolean | undefined;
 describe('PermissionsModifyTrustDialog', () => {
   let mockConfig: PermissionsTrustRuntime & {
     setTrustedFolderLive: ReturnType<typeof vi.fn>;
@@ -130,11 +130,11 @@ describe('PermissionsModifyTrustDialog', () => {
     });
     mockedResolvePathTrust.mockReturnValue(undefined);
     mockedCwd.mockReturnValue('/test/dir');
+    rawIdeTrust = undefined;
     mockConfig = {
       setTrustedFolderLive: vi.fn(),
       getWorkingDir: () => '/test/dir',
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
       isTrustedFolder: () => false,
     };
   });
@@ -153,6 +153,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -170,6 +172,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -186,6 +190,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -206,6 +212,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -224,6 +232,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -243,6 +253,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -273,6 +285,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -313,6 +327,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -344,6 +360,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -366,6 +384,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -381,6 +401,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -417,6 +439,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -447,6 +471,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={addItem}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -473,6 +499,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -496,6 +524,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={onExit}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -508,18 +538,15 @@ describe('PermissionsModifyTrustDialog', () => {
   });
 
   it('shows an IDE false override and distinguishes saved fallback from effective trust', async () => {
-    mockConfig.getIdeClient = () =>
-      ({
-        getWorkspaceTrust: () => false,
-        addTrustChangeListener: vi.fn(),
-        removeTrustChangeListener: vi.fn(),
-      }) as unknown as IdeClient;
+    rawIdeTrust = false;
     const { stdin, lastFrame } = renderWithProviders(
       <Wrapper>
         <PermissionsModifyTrustDialog
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );
@@ -547,6 +574,8 @@ describe('PermissionsModifyTrustDialog', () => {
           onExit={vi.fn()}
           addItem={vi.fn()}
           config={mockConfig}
+          readIdeWorkspaceTrust={() => rawIdeTrust}
+          subscribeIdeWorkspaceTrust={() => () => {}}
         />
       </Wrapper>,
     );

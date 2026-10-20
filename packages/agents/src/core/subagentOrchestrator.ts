@@ -4,66 +4,44 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { ChildAgentLaunch } from '../api/child-agent-assembly.js';
-import { assembleChildAgent } from '../api/child-agent-assembly.js';
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
-import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
-
-import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { randomUUID } from 'node:crypto';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ProfileDefinitionReads,
   SubagentDefinitionReads,
 } from '@vybestack/llxprt-code-core';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import type {
+  ModelConfig,
+  OutputConfig,
+  PromptConfig,
+  RunConfig,
+  ToolConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
 import {
   isLoadBalancerProfile,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
+import { randomUUID } from 'node:crypto';
+import { buildResolvedRunConfig } from './subagent-run-policy.js';
+import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import type {
+  ContextState,
+  OutputObject,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
   resolveRuntimeProfile,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
 import { normalizeDefaultToolSet } from './subagentSettingsPopulation.js';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { SubAgentScope } from './subagent.js';
-import type {
-  ModelConfig,
-  PromptConfig,
-  RunConfig,
-  ToolConfig,
-  OutputConfig,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { buildResolvedRunConfig } from './subagent-run-policy.js';
-import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
 
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-
-import {
-  loadAgentRuntime,
-  type AgentRuntimeLoaderOptions,
-  type AgentRuntimeLoaderResult,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
-
-type RuntimeLoader = (
-  options: AgentRuntimeLoaderOptions,
-) => Promise<AgentRuntimeLoaderResult>;
-
-type ScopeFactory = typeof SubAgentScope.create;
 
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
@@ -81,58 +59,53 @@ export interface SubagentLaunchRequest {
   outputConfig?: OutputConfig;
 }
 
+export interface ChildTaskRun {
+  readonly output: OutputObject;
+  onMessage?: (message: string) => void;
+  runInteractive(
+    context: ContextState,
+    options?: SubagentExecutionOptions,
+  ): Promise<void>;
+  runNonInteractive(context: ContextState): Promise<void>;
+  cancel(reason?: string): void;
+}
+
 export interface SubagentLaunchResult {
   agentId: string;
-  scope: SubAgentScope;
+  scope: ChildTaskRun;
   dispose: () => Promise<void>;
   prompt: PromptConfig;
   profile: Profile;
   config: SubagentConfig;
-  runtime: AgentRuntimeLoaderResult;
+  readonly identity: Readonly<{
+    runtimeId: string;
+    sessionId: string;
+    provider: string;
+    model: string;
+  }>;
 }
 
 export interface SubagentOrchestratorOptions {
-  readonly credentialAuthority?: CredentialAuthority;
-  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
-  instructions: InstructionReadOperations;
-  toolRegistry?: ToolSelection;
-  readMcpInstructions: () => string | undefined;
-  workspacePaths: WorkspacePathOperations;
-  subagentManager: Pick<
+  readonly subagentManager: Pick<
     SubagentDefinitionReads,
     'loadSubagent' | 'listSubagents'
   >;
-  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>;
-  foregroundConfig: Config;
-  readonly hookOwner?: SessionHookOwner;
-  readonly workspaceTrust?: WorkspaceTrustControlPort;
-  createChildSettings: () => SettingsService;
-  readonly telemetry?: RootTelemetry;
-  readRunPolicy: () => SubagentRunPolicy;
-  runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
-  runtimeLoader?: RuntimeLoader;
-  scopeFactory?: ScopeFactory;
-  idFactory?: () => string;
-  /**
-   * Required session/runtime MessageBus threaded into the SubAgentScope so
-   * non-interactive subagent tool execution can satisfy
-   * the child scheduler owner’s explicit MessageBus dependency (Issue #2312).
-   */
-  messageBus: MessageBus;
+  readonly profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>;
+  readonly sessionId: string;
+  readonly readRunPolicy: () => SubagentRunPolicy;
+  readonly assembleChild: (
+    launch: ChildAgentLaunch,
+  ) => Promise<SubagentLaunchResult>;
+  readonly idFactory?: () => string;
 }
 
 export class SubagentOrchestrator {
-  private readonly runtimeLoader: RuntimeLoader;
-  private readonly scopeFactory: ScopeFactory;
   private readonly idFactory: () => string;
   private readonly defaultDisabledTools = normalizeDefaultToolSet(
     DEFAULT_DISABLED_TOOLS,
   );
 
   constructor(private readonly options: SubagentOrchestratorOptions) {
-    this.runtimeLoader = options.runtimeLoader ?? loadAgentRuntime;
-    this.scopeFactory =
-      options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope);
     this.idFactory = options.idFactory ?? randomUUID;
   }
 
@@ -190,10 +163,7 @@ export class SubagentOrchestrator {
       'Subagent launch aborted before runtime assembly.',
     );
 
-    const authority = this.options.credentialAuthority;
-    if (authority === undefined)
-      throw new Error('Child assembly requires captured credential authority');
-    return assembleChildAgent(
+    return this.options.assembleChild(
       this.createLaunchData(
         subagent,
         runtimeProfile,
@@ -204,23 +174,6 @@ export class SubagentOrchestrator {
         request,
         signal,
       ),
-      authority,
-      this.options.messageBus,
-      this.options.requestInteractiveAuth,
-      this.options.profileManager,
-      this.options.subagentManager,
-      this.options.telemetry,
-      this.options.createChildSettings,
-      this.options.foregroundConfig,
-      this.options.instructions,
-      this.options.workspacePaths,
-      this.options.readMcpInstructions,
-      this.options.workspaceTrust,
-      this.options.toolRegistry,
-      this.options.hookOwner,
-      this.options.runtimeFactoryBindings?.agentClientFactory,
-      this.runtimeLoader,
-      this.scopeFactory,
     );
   }
 
@@ -358,14 +311,7 @@ export class SubagentOrchestrator {
   }
 
   private baseSessionId(): string {
-    const { foregroundConfig } = this.options;
-    if (typeof foregroundConfig.getSessionId === 'function') {
-      const session = foregroundConfig.getSessionId();
-      if (session) {
-        return String(session);
-      }
-    }
-    return 'llxprt-session';
+    return this.options.sessionId || 'llxprt-session';
   }
 
   private createRuntimeId(subagentName: string): string {

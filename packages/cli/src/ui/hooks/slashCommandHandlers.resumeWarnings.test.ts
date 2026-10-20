@@ -1,3 +1,5 @@
+import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
 import type { CommandHandlerFixture as SlashCommandHandlerDeps } from './slash-command-handler-deps-test-helpers.js';
 import { installFixtureRawResume } from '../../__tests__/command-raw-resume-fixture.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
@@ -78,6 +80,7 @@ async function writeCorruptSession(
 }
 
 describe('processSlashCommand /continue <id> with an unreadable recording present (issue #3732)', () => {
+  const createOwner = useCommandOwners();
   let root: string;
   let committed: SessionRecordingService | null;
   let committedLock: LockHandle | null;
@@ -94,9 +97,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
     await rm(root, { recursive: true, force: true });
   });
 
-  function createDeps(
+  async function createDeps(
     turnStore: ReturnType<typeof createTurnStore>,
-  ): SlashCommandHandlerDeps {
+  ): Promise<SlashCommandHandlerDeps> {
+    const owner = await createOwner('resume-warning-owner');
     const { commands } = turnStore;
     const addItem = (
       item: Parameters<SlashCommandHandlerDeps['addItem']>[0],
@@ -130,9 +134,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       commandContext: createMockCommandContext({
         ui: { addItem: commands.addItem, clear: commands.clearItems },
         services: {
-          agent: {
-            agentClient: { getHistoryService: () => undefined },
-          },
+          agent: owner,
         },
       }),
       actions: {} as never,
@@ -159,13 +161,15 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       recordCommandError: async () => {},
       loadCommandHistory: async () => {},
     };
-    const persistence = {
-      mediaStore: new LocalMediaStore({
-        rootDirectory: join(root, 'media'),
-        quotaBytes: 1024,
-      }),
-      forRecording: () => undefined,
-    } as never;
+    const persistence = new CliSessionPersistence(
+      { projectRoot, chatsDir: join(root, 'chats') },
+      {
+        mediaStore: new LocalMediaStore({
+          rootDirectory: join(root, 'media'),
+          quotaBytes: 1024,
+        }),
+      },
+    );
 
     const callbacks: RecordingSwapCallbacks = {
       getCurrentRecording: () => null,
@@ -189,7 +193,10 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
     const corruptPath = await writeCorruptSession(chatsDir, projectHash);
     const turnStore = createTurnStore();
 
-    await processSlashCommand(createDeps(turnStore), `/continue ${SESSION_ID}`);
+    await processSlashCommand(
+      await createDeps(turnStore),
+      `/continue ${SESSION_ID}`,
+    );
 
     const visible = turnStore.store
       .getState()

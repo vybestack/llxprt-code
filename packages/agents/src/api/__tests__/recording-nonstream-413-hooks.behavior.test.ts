@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -112,9 +113,11 @@ async function exerciseFacades(
         borrow,
       ) => {
         const b = await borrow();
-        expect(a.getMessageBus()).toBe(b.getMessageBus());
-        expect(a.agentClient).toBeDefined();
-        await a.agentClient.startChat();
+        expect(fixtureAgentResources(a).messageBus).toBe(
+          fixtureAgentResources(b).messageBus,
+        );
+        expect(fixtureAgentResources(a).publishedClient(a)).toBeDefined();
+        await fixtureAgentResources(a).publishedClient(a).startChat();
         await a.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
         ]);
@@ -173,7 +176,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
       await exerciseFacades(
         HookEventName.BeforeToolSelection,
         async (agent) => {
-          const client = agent.agentClient;
+          const client = fixtureAgentResources(agent).publishedClient(agent);
           await client
             .getChat()
             .sendMessage(
@@ -201,7 +204,8 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
               blocks: [{ type: 'text', text: 'history '.repeat(9000) }],
             },
           ]);
-          await agent.agentClient
+          await fixtureAgentResources(agent)
+            .publishedClient(agent)
             .getChat()
             .sendMessage(
               { message: 'short prompt' },
@@ -229,7 +233,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
         HookEventName.PreCompress,
         async (agent, config) => {
           agent.setEphemeralSetting('context-limit', 200000);
-          const manager = agent.providerManager;
+          const manager = fixtureAgentResources(agent).manager;
 
           const provider = manager.getActiveProvider();
           if (!provider) throw new Error('Missing active fixture provider');
@@ -303,7 +307,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
           ]);
           await agent.session.setRecording({ enabled: true });
           await sibling.session.setRecording({ enabled: true });
-          const bus = agent.getMessageBus();
+          const bus = fixtureAgentResources(agent).messageBus;
           const mediated = new HookSystem(
             readHookDefinitions(config),
             hookSessionRuntime(

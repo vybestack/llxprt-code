@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,7 +31,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -46,7 +51,7 @@ import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitc
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import { createSessionModelCommand } from '../../runtime/session-model-command.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+
 import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
 import { projectRuntimeAgent } from '../../__tests__/runtime-profile-agent-fixture.js';
@@ -136,7 +141,7 @@ describe('CLI profile operation projection', () => {
       ownerCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    ownerCallerOwner = await SessionClientOwner.create(
+    ownerCallerOwner = await createCapturedSessionOwner(
       ownerCallerConfig,
       assembleTaskSchemaPolicy(ownerCallerSettings),
       ownerCallerManager,
@@ -254,7 +259,7 @@ describe('CLI profile operation projection', () => {
     );
     requireCallerActivation(activation);
     await ownerCallerOwner.initializeTools();
-    await ownerCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(ownerCallerOwner).startChat();
   }
 
   afterFixtureTest(() => {

@@ -3,25 +3,24 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createIdeCommand } from './commands/ideCommand.js';
+import { bindIdeCommand } from './commands/ideCommandHost.js';
+import { generateAutoPrompt } from './utils/autoPromptGenerator.js';
 import { createWorkspaceCommandOwners } from './hooks/workspaceCommandOwners.js';
 import { bindDirectoryChangeRecording } from './commands/directoryCommandHost.js';
 import {
   bindChatOwnerOperations,
-  bindChatRecordingOperations,
+  bindPersistedChatRecording,
 } from './commands/chatCommandHost.js';
 import { createChatOwnerCommand } from './commands/chatOwnerCommand.js';
 import { createChatCommand } from './commands/chatCommand.js';
 import { createContinueRegistration } from './hooks/useContinueCommand.js';
 import { createSubagentCommand } from './commands/subagentCommand.js';
-import {
-  bindSubagentCommand,
-  bindAutoPromptOperation,
-} from './commands/subagentCommandHost.js';
+import { bindSubagentCommand } from './commands/subagentCommandHost.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import { resumeOwnerSession } from './utils/resumeOwnerSession.js';
 import { importOwnerSession } from './utils/ownerSessionUi.js';
 import { basename } from 'node:path';
-import { getProjectHash } from '@vybestack/llxprt-code-core';
 import type {
   RegisterWorkspaceCommands,
   RegisterChatCommands,
@@ -41,11 +40,6 @@ import { createHeadlessCommandLoader } from '../nonInteractiveBindings.js';
 
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  bindHistoryTokenSubscription,
-  bindRecordingHistorySubscription,
-} from './containers/AppContainer/hooks/historyTokenSubscriptions.js';
 import { bindRawBrowserSession } from './components/browserResumeHost.js';
 import { bindCommandRawResume } from './hooks/commandRawResumeHost.js';
 import { performResume } from '../services/performResume.js';
@@ -56,8 +50,8 @@ import {
   createModelRegistration,
   createProfileRegistration,
   createQuotaRegistration,
+  type CredentialCommandRegistration,
 } from './hooks/credentialCommandRegistration.js';
-import type { CredentialCommandRegistration } from './hooks/credentialCommandRegistration.js';
 import {
   createMcpOwnerCommand,
   createAuthOwnerCommand,
@@ -68,24 +62,19 @@ import {
   createToolkeyCommands,
 } from './hooks/credentialRegistrars.js';
 
-import { Component, useReducer, type ReactNode } from 'react';
-import type {
-  IContent,
-  RecordingIntegration,
-  SessionRecordingService,
-  LockHandle,
-  MessageBus,
+import { AppProviders, AppWithState } from './app-providers.js';
+import { Component, type ReactNode } from 'react';
+import {
+  getProjectHash,
+  type IContent,
+  type RecordingIntegration,
+  type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
-import { KeypressProvider } from './contexts/KeypressContext.js';
-import { MouseProvider } from './contexts/MouseContext.js';
-import { SessionStatsProvider } from './contexts/SessionContext.js';
-import { VimModeProvider } from './contexts/VimModeContext.js';
-import { TodoProvider } from './contexts/TodoProvider.js';
 import type {
   DetectProviderQuotaOperation,
   FetchOperation,
@@ -103,22 +92,9 @@ import type {
   SetEphemeralSettingOperation,
   UpdateActiveProviderApiKeyOperation,
 } from './contexts/RuntimeContext.js';
-import { OverflowProvider } from './contexts/OverflowContext.js';
-import {
-  ProviderAliasRefreshProvider,
-  type ProviderAliasRefresh,
-} from './contexts/ProviderAliasRefreshContext.js';
-import {
-  OAuthControlProvider,
-  type OAuthControl,
-} from './contexts/OAuthControlContext.js';
-import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
-import { ScrollProvider } from './contexts/ScrollProvider.js';
-import { ShellCommandDisplayProvider } from './contexts/ShellCommandDisplayContext.js';
-import { inkRenderOptions } from './inkRenderOptions.js';
-import { isMouseEventsEnabled } from './mouseEventsEnabled.js';
-import { appReducer, initialAppState } from './reducers/appReducer.js';
-import { AppContainer, type AppContainerProps } from './AppContainer.js';
+import { type ProviderAliasRefresh } from './contexts/ProviderAliasRefreshContext.js';
+import { type OAuthControl } from './contexts/OAuthControlContext.js';
+import { type AppContainerProps } from './AppContainer.js';
 import { bindPolicyRulesReader } from './hooks/policyRulesReaderHost.js';
 import {
   createCliModelIdentityRuntime,
@@ -155,14 +131,13 @@ interface AppProps {
   resumedHistory?: IContent[];
   version: string;
   terminalBackgroundColor?: string;
-  runtimeMessageBus?: MessageBus;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialRecordingService?: SessionRecordingService;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
-  initialLockHandle?: LockHandle | null;
+  initialLockHandle?: AppContainerProps['initialLockHandle'];
   suppressStartupWelcome?: boolean;
   /** P12: optional perf operation lifecycle registry (perf enabled only). */
   operationLifecycle?: OperationLifecycleRegistry;
@@ -188,21 +163,34 @@ export class AppWrapper extends Component<AppProps> {
   #captured: AppProps | undefined;
   #uiSource: UiRuntime | undefined;
   #uiView: AppContainerProps['uiRuntime'] | undefined;
-  readonly #tokenLogger = new DebugLogger('llxprt:ui:tokentracking');
-  private readonly isAgentClientPresent = (): boolean =>
-    Boolean(this.props.uiRuntime.agentClientSource.getAgentClient());
-  readonly #rawHistory = () => this.props.agent.agentClient.getHistoryService();
-  private readonly readTokenHistory = () =>
-    this.props.agent.agentClient.hasChatInitialized() === true
-      ? this.#rawHistory()
-      : null;
+  private readonly isAgentClientPresent = (): boolean => true;
   private readonly subscribeHistoryTokens: AppContainerProps['subscribeHistoryTokens'] =
-    bindHistoryTokenSubscription(this.readTokenHistory, this.#tokenLogger);
+    (publish) => this.props.agent.session.subscribeHistoryTokens(publish);
   private readonly connectRecordingHistory: AppContainerProps['connectRecordingHistory'] =
-    bindRecordingHistorySubscription(this.readTokenHistory, this.#tokenLogger);
+    (recording) =>
+      this.props.agent.session.connectRecordingHistory(() => recording.current);
+  private readonly readRawBrowserCatalog: AppContainerProps['readRawBrowserCatalog'] =
+    async () => {
+      const persistence = this.props.slashCommandRuntime.sessionPersistence;
+      if (!persistence)
+        throw new Error('CLI session persistence is unavailable');
+      const listing = await persistence.listBrowserTargetsDetailed();
+      return {
+        ...listing,
+        skippedCount: listing.unreadableRecordings.length,
+        currentSessionId: this.props.slashCommandRuntime.getSessionId(),
+      };
+    };
+  private readonly deleteRawBrowserTarget: AppContainerProps['deleteRawBrowserTarget'] =
+    (target, recording) => {
+      const persistence = this.props.slashCommandRuntime.sessionPersistence;
+      if (!persistence)
+        throw new Error('CLI session persistence is unavailable');
+      return persistence.deleteBrowserTarget(target, recording);
+    };
   private readonly bindRawBrowserSession: AppContainerProps['bindRawBrowserSession'] =
     (config, swaps, logger) =>
-      bindRawBrowserSession(config, this.#rawHistory, swaps, logger);
+      bindRawBrowserSession(config, this.props.agent.session, swaps, logger);
   #registry:
     | {
         readBuiltinCommands: ReadBuiltinCommands;
@@ -218,9 +206,8 @@ export class AppWrapper extends Component<AppProps> {
   #recordingPathAgent: Agent | undefined;
   #readAgentRecordingPath: (() => string | undefined) | undefined;
   #autoPromptAgent: Agent | undefined;
-  #autoPromptRuntime: SlashCommandRuntime | undefined;
   #generateSubagentPrompt:
-    | ReturnType<typeof bindAutoPromptOperation>
+    | AppContainerProps['generateSubagentPrompt']
     | undefined;
   readonly #toolkeys = createToolkeyCommands();
 
@@ -253,8 +240,6 @@ export class AppWrapper extends Component<AppProps> {
   private readonly setApprovalMode: AppContainerProps['setApprovalMode'] = (
     ...args
   ) => this.props.agent.setApprovalMode(...args);
-  private readonly generatePromptContent: AppContainerProps['generatePromptContent'] =
-    (...args) => this.props.agent.agentClient.generateContent(...args);
   private readonly readProviderMetrics: AppContainerProps['readProviderMetrics'] =
     () => this.props.agent.providerReads.getActiveProviderMetrics();
   private readonly readSessionTokenUsage: AppContainerProps['readSessionTokenUsage'] =
@@ -274,23 +259,23 @@ export class AppWrapper extends Component<AppProps> {
       }
     };
 
-  private generateSubagentPrompt(): ReturnType<typeof bindAutoPromptOperation> {
-    const agent = this.props.agent;
-    const runtime = this.props.slashCommandRuntime;
-    if (
-      this.#autoPromptAgent !== agent ||
-      this.#autoPromptRuntime !== runtime
-    ) {
-      const sessionClient = agent.sessionClient;
-      this.#generateSubagentPrompt = bindAutoPromptOperation(
-        () => agent.getProvider(),
-        () => agent.agentClient,
-        () => sessionClient.createDetachedAgentClient(),
-        () => runtime.getContentGeneratorConfig(),
-      );
-      this.#autoPromptAgent = agent;
-      this.#autoPromptRuntime = runtime;
+  #generateText: Agent['generate'] | undefined;
+
+  private generateText(): Agent['generate'] {
+    if (this.#autoPromptAgent !== this.props.agent) {
+      const generate = this.props.agent.generate.bind(this.props.agent);
+      this.#generateText = generate;
+      this.#generateSubagentPrompt = (description) =>
+        generateAutoPrompt(description, generate);
+      this.#autoPromptAgent = this.props.agent;
     }
+    if (this.#generateText === undefined)
+      throw new Error('Text generation operation was not initialized');
+    return this.#generateText;
+  }
+
+  private generateSubagentPrompt(): AppContainerProps['generateSubagentPrompt'] {
+    this.generateText();
     if (this.#generateSubagentPrompt === undefined)
       throw new Error('Subagent prompt operation was not initialized');
     return this.#generateSubagentPrompt;
@@ -390,14 +375,9 @@ export class AppWrapper extends Component<AppProps> {
   }
 
   private registrySubscription() {
-    const c = this.props.slashCommandRuntime;
     const mcp = this.props.agent.mcp;
     return createCommandChangeSubscription(
-      (listener) => {
-        const client = c.getIdeClient();
-        client?.addStatusChangeListener(listener);
-        return () => client?.removeStatusChangeListener(listener);
-      },
+      (listener) => this.props.agent.ide.subscribeConnection(() => listener()),
       (listener) => mcp.subscribeStatus(listener),
     );
   }
@@ -430,13 +410,13 @@ export class AppWrapper extends Component<AppProps> {
       replaceCommandHistory: async (
         history: Parameters<Agent['setHistory']>[0],
       ) => {
-        await a.setHistory(history);
+        await a.session.replaceHistory(history);
       },
       bindRawCommandResume: ((config, callbacks) =>
         bindCommandRawResume(
           config,
           config?.sessionPersistence,
-          () => a.agentClient.getHistoryService(),
+          a.session,
           callbacks,
           slashCommandLogger,
           performResume,
@@ -447,12 +427,59 @@ export class AppWrapper extends Component<AppProps> {
       startNewCommandSession: session.startNewSession.bind(session),
       startCommandSession: a.hooks.triggerSessionStart.bind(a.hooks),
       listCommandTools: a.tools.list.bind(a.tools),
+      subscribeBucketConsent: a.auth.subscribeBucketConsent.bind(a.auth),
+      respondToBucketConsent: a.auth.respondToBucketConsent.bind(a.auth),
+      subscribeHookPhase: a.hooks.subscribeExecutionPhase.bind(a.hooks),
     };
   }
+  private readonly readIdeMode: AppContainerProps['readIdeMode'] = () =>
+    this.props.agent.ide.getIdeMode();
+  private readonly readCurrentIde: AppContainerProps['readCurrentIde'] = () =>
+    this.props.agent.ide.readConnection().currentIde;
+  private readonly readIdeContext: AppContainerProps['readIdeContext'] = () =>
+    this.props.agent.ide.readContext();
+  private readonly subscribeIdeContext: AppContainerProps['subscribeIdeContext'] =
+    (listener) => this.props.agent.ide.subscribeContext(listener);
+  private readonly readIdeWorkspaceTrust: AppContainerProps['readIdeWorkspaceTrust'] =
+    () => this.props.agent.ide.readWorkspaceTrust();
+  private readonly subscribeIdeWorkspaceTrust: AppContainerProps['subscribeIdeWorkspaceTrust'] =
+    (listener) => this.props.agent.ide.subscribeWorkspaceTrust(listener);
+  private readonly readIdeDisplayName: AppContainerProps['readIdeDisplayName'] =
+    () =>
+      this.props.agent.ide.getIdeMode()
+        ? (this.props.agent.ide.readConnection().detectedIdeDisplayName ?? '')
+        : '';
+  private readonly readIdeAvailable: AppContainerProps['readIdeAvailable'] =
+    () => this.props.agent.ide.readConnection().available;
+  private readonly readIdeDiffingEnabled: AppContainerProps['readIdeDiffingEnabled'] =
+    () => {
+      const connection = this.props.agent.ide.readConnection();
+      return connection.available ? connection.diffingEnabled : null;
+    };
+  private readonly subscribeIdeDiffing: AppContainerProps['subscribeIdeDiffing'] =
+    (listener) => this.props.agent.ide.subscribeConnection(() => listener());
+  private readonly resolveIdeDiff: AppContainerProps['resolveIdeDiff'] = (
+    ...args
+  ) => this.props.agent.ide.resolveDiff(...args);
+  private readonly registerIdeCommand: AppContainerProps['registerIdeCommand'] =
+    (addItem) => {
+      const ide = this.props.agent.ide;
+      return createIdeCommand(
+        bindIdeCommand(
+          ide.readConnection.bind(ide),
+          ide.readContext.bind(ide),
+          ide.setIdeMode.bind(ide),
+          ide.setIdeClientConnected.bind(ide),
+          ide.setIdeClientDisconnected.bind(ide),
+          this.props.settings,
+          addItem,
+        ),
+      );
+    };
+
   private registerWorkspaceCommands(): RegisterWorkspaceCommands {
     const a = this.props.agent;
     const c = this.props.slashCommandRuntime;
-    const client = a.agentClient;
     return (add, setMemory, owner, raw) =>
       createWorkspaceCommandOwners(
         c,
@@ -462,7 +489,7 @@ export class AppWrapper extends Component<AppProps> {
         add,
         setMemory,
         async () => {
-          await client.setTools();
+          await a.sessionClient.publishTools();
         },
         a.policy.getRules.bind(a.policy),
         a.policy.getDefaultDecision.bind(a.policy),
@@ -475,17 +502,15 @@ export class AppWrapper extends Component<AppProps> {
         a.tasks.listRunning.bind(a.tasks),
         a.tasks.get.bind(a.tasks),
         a.tasks.cancel.bind(a.tasks),
-        client.addDirectoryContext.bind(client),
+        a.addDirectoryContext.bind(a),
         bindDirectoryChangeRecording(
           owner,
           a.session.recordRecordingEvent.bind(a.session),
           raw?.recordDirectoriesChanged.bind(raw),
         ),
         a.sessionClient.runImageOperation.bind(a.sessionClient),
-        () =>
-          client.hasChatInitialized()
-            ? client.getChat().getHistory()
-            : undefined,
+        () => a.session.readInitializedHistory() ?? undefined,
+        this.readIdeDisplayName,
       );
   }
   private registerChatCommands(): RegisterChatCommands {
@@ -506,27 +531,26 @@ export class AppWrapper extends Component<AppProps> {
       () => a.getModel(),
       () => resolveEmojiFilterMode(c),
     );
-    const client = a.agentClient;
+    const persistence = () => {
+      if (!c.sessionPersistence)
+        throw new Error('CLI session persistence is unavailable');
+      return c.sessionPersistence;
+    };
     return (mode, raw, swaps, fuzzy) => ({
       chatCommand:
         mode === 'agent'
           ? createChatOwnerCommand(owner, fuzzy)
           : createChatCommand(
-              bindChatRecordingOperations(
+              bindPersistedChatRecording(
+                persistence,
                 () =>
                   swaps?.getCurrentRecording() ??
                   raw?.getRecordingService() ??
                   null,
                 () => getProjectHash(c.getProjectRoot()),
                 () => c.projectChatsDir,
-                () => client.mediaStore,
-                () =>
-                  client.hasChatInitialized()
-                    ? client.getChat().getHistory()
-                    : null,
-                async (history) => {
-                  await client.getChat().setHistory(history);
-                },
+                s.readInitializedHistory.bind(s),
+                s.replaceHistory.bind(s),
                 () => c.getModel(),
               ),
               fuzzy,
@@ -537,20 +561,14 @@ export class AppWrapper extends Component<AppProps> {
         s.listBrowserTargets.bind(s),
         () => c.projectChatsDir,
         () => basename(c.projectTempDir),
-        client.mediaStore,
+        () => persistence().listBrowserTargetsDetailed(),
         mode,
       ),
     });
   }
   private registerSubagentCommand(): RegisterSubagentCommand {
     const a = this.props.agent;
-    const c = this.props.slashCommandRuntime;
-    const generate = bindAutoPromptOperation(
-      () => a.getProvider(),
-      () => a.agentClient,
-      a.sessionClient.createDetachedAgentClient.bind(a.sessionClient),
-      () => c.getContentGeneratorConfig(),
-    );
+    const generate = this.generateText();
     return (fuzzy, add) =>
       createSubagentCommand(
         bindSubagentCommand(
@@ -558,7 +576,7 @@ export class AppWrapper extends Component<AppProps> {
           a.workspace.subagentWrites,
           () => a.workspace.profileDefinitions.listProfiles(),
           fuzzy,
-          generate,
+          (description) => generateAutoPrompt(description, generate),
           true,
           add,
         ),
@@ -569,22 +587,13 @@ export class AppWrapper extends Component<AppProps> {
     const a = this.props.agent;
     return {
       compressHistory: (...args) => a.compress(...args),
-      readRawHistory: () =>
-        a.agentClient.getHistoryService()?.getRawHistory() ?? null,
-      isHistoryInitialized: () => a.agentClient.hasChatInitialized(),
+      readRawHistory: () => a.session.readHistorySnapshot()?.messages ?? null,
+      isHistoryInitialized: a.session.isHistoryInitialized.bind(a.session),
       readHistory: () => a.getHistory(),
       replaceHistory: async (items) => {
-        await a.setHistory(items);
+        await a.session.replaceHistory(items);
       },
-      readDumpHistory: () => {
-        const service = a.agentClient.getHistoryService();
-        return service == null
-          ? null
-          : {
-              messages: service.getAll(),
-              chronology: service.getChronologyTrace(),
-            };
-      },
+      readDumpHistory: a.session.readHistorySnapshot.bind(a.session),
     };
   }
   private models() {
@@ -732,9 +741,8 @@ export class AppWrapper extends Component<AppProps> {
   ): ReactNode {
     const { agent, uiRuntime, ...props } = this.props;
     if (this.#uiSource !== uiRuntime) {
-      const { agentClientSource: _agentClientSource, ...view } = uiRuntime;
       this.#uiSource = uiRuntime;
-      this.#uiView = view;
+      this.#uiView = uiRuntime;
     }
     if (
       !this.#uiView ||
@@ -747,11 +755,24 @@ export class AppWrapper extends Component<AppProps> {
       <AppWithState
         {...props}
         uiRuntime={this.#uiView}
+        readCurrentIde={this.readCurrentIde}
+        readIdeContext={this.readIdeContext}
+        subscribeIdeContext={this.subscribeIdeContext}
+        readIdeDisplayName={this.readIdeDisplayName}
+        readIdeAvailable={this.readIdeAvailable}
+        registerIdeCommand={this.registerIdeCommand}
+        readIdeMode={this.readIdeMode}
+        readIdeDiffingEnabled={this.readIdeDiffingEnabled}
+        subscribeIdeDiffing={this.subscribeIdeDiffing}
+        resolveIdeDiff={this.resolveIdeDiff}
+        readIdeWorkspaceTrust={this.readIdeWorkspaceTrust}
+        subscribeIdeWorkspaceTrust={this.subscribeIdeWorkspaceTrust}
         isAgentClientPresent={this.isAgentClientPresent}
         {...this.#registry}
         {...this.#sessionCommands}
         session={agent.session}
-        mediaStore={agent.agentClient.mediaStore}
+        readRawBrowserCatalog={this.readRawBrowserCatalog}
+        deleteRawBrowserTarget={this.deleteRawBrowserTarget}
         bindRawBrowserSession={this.bindRawBrowserSession}
         readHistory={this.readHistory}
         stream={this.stream}
@@ -766,7 +787,7 @@ export class AppWrapper extends Component<AppProps> {
         disposeInput={this.disposeInput}
         readApprovalMode={this.readApprovalMode}
         setApprovalMode={this.setApprovalMode}
-        generatePromptContent={this.generatePromptContent}
+        generatePromptContent={this.generateText()}
         readPolicyRules={this.readPolicyRules}
         subagentDefinitions={agent.workspace.subagentDefinitions}
         subagentWrites={agent.workspace.subagentWrites}
@@ -788,61 +809,22 @@ export class AppWrapper extends Component<AppProps> {
   override render() {
     const props = this.props;
     const registerCredentials = this.capture();
-    const metrics = props.agent.metrics;
-    const renderOptions = inkRenderOptions(props.uiRuntime.app, props.settings);
-    const mouseEventsEnabled = isMouseEventsEnabled(
-      renderOptions,
-      props.settings,
-    );
 
     return (
-      <KeypressProvider>
-        <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
-          <ScrollProvider>
-            <SessionStatsProvider metrics={metrics}>
-              <VimModeProvider settings={props.settings}>
-                <ShellCommandDisplayProvider
-                  alwaysDisplayFullShellCommand={
-                    props.settings.merged.ui.alwaysDisplayFullShellCommand ??
-                    true
-                  }
-                >
-                  <TodoProvider
-                    sessionId={props.uiRuntime.session.getSessionId()}
-                  >
-                    {props.renderRuntime(
-                      <OAuthControlProvider control={props.oauthControl}>
-                        <ProviderAliasRefreshProvider
-                          refresh={props.providerAliasRefresh}
-                        >
-                          <OverflowProvider>
-                            {this.renderAppWithState(registerCredentials)}
-                          </OverflowProvider>
-                        </ProviderAliasRefreshProvider>
-                      </OAuthControlProvider>,
-                    )}
-                  </TodoProvider>
-                </ShellCommandDisplayProvider>
-              </VimModeProvider>
-            </SessionStatsProvider>
-          </ScrollProvider>
-        </MouseProvider>
-      </KeypressProvider>
+      <AppProviders
+        metrics={props.agent.metrics}
+        screenReaderEnabled={props.uiRuntime.app.getScreenReader()}
+        settings={props.settings}
+        sessionId={props.uiRuntime.session.getSessionId()}
+        renderRuntime={props.renderRuntime}
+        oauthControl={props.oauthControl}
+        providerAliasRefresh={props.providerAliasRefresh}
+      >
+        {this.renderAppWithState(registerCredentials)}
+      </AppProviders>
     );
   }
 }
-
-const AppWithState = (
-  props: Omit<AppContainerProps, 'appState' | 'appDispatch'>,
-) => {
-  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
-
-  return (
-    <AppDispatchProvider value={appDispatch}>
-      <AppContainer {...props} appState={appState} appDispatch={appDispatch} />
-    </AppDispatchProvider>
-  );
-};
 
 // Re-export for backwards compatibility
 export { AppContainer } from './AppContainer.js';

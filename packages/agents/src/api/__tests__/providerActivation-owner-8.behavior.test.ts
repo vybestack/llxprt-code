@@ -1,3 +1,8 @@
+import { ProviderReadFixture } from './helpers/provider-read-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +51,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { SessionProviderReads } from '../session-provider-reads.js';
+
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 
 async function settleEngineRelease(
@@ -188,7 +193,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -310,7 +315,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('(i) auth-keyfile ephemeral with ~ expansion → api key applied from file content', async () => {
@@ -438,7 +443,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
       expect(result.authFailed).toBe(false);
       // Observable: the model params were pushed onto the active provider
       // runtime via setActiveModelParam.
-      const params = new SessionProviderReads(
+      const params = new ProviderReadFixture(
         builtCallerSettingsOwner,
         builtCallerManager,
         () => builtCallerConfig.getModel(),

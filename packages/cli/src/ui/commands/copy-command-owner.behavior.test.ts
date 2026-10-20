@@ -7,7 +7,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -18,7 +21,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 
 async function latestOutput(agent: Agent) {
   return bindCopyCommandHistoryRead(
-    () => agent.agentClient.hasChatInitialized(),
+    () => commandOwnerClient(agent).hasChatInitialized(),
     () => agent.getHistory(),
   )();
 }
@@ -43,15 +46,19 @@ describe('registered copy command owner', () => {
         blocks: [{ type: 'text', text: 'invocation decoy output' }],
       },
     ]);
-    await owner.agentClient.startChat(await owner.agentClient.getHistory());
-    await decoy.agentClient.startChat(await decoy.agentClient.getHistory());
+    await commandOwnerClient(owner).startChat(
+      await commandOwnerClient(owner).getHistory(),
+    );
+    await commandOwnerClient(decoy).startChat(
+      await commandOwnerClient(decoy).getHistory(),
+    );
     const outputDirectory = await mkdtemp(join(tmpdir(), 'copy-owner-'));
     const copiedOutput = join(outputDirectory, 'clipboard.txt');
 
     try {
       const command = createCopyCommand(
         bindCopyCommandHistoryRead(
-          () => owner.agentClient.hasChatInitialized(),
+          () => commandOwnerClient(owner).hasChatInitialized(),
           () => owner.getHistory(),
         ),
         (text) => writeFile(copiedOutput, text, 'utf8'),
@@ -106,7 +113,9 @@ describe('registered copy command owner', () => {
         ],
       },
     ]);
-    await owner.agentClient.startChat(await owner.agentClient.getHistory());
+    await commandOwnerClient(owner).startChat(
+      await commandOwnerClient(owner).getHistory(),
+    );
 
     expect(await latestOutput(owner)).toStrictEqual({
       kind: 'text',

@@ -1,3 +1,4 @@
+import { adoptScriptedHeadlessOwner } from './__tests__/scripted-headless-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -19,7 +20,6 @@ import {
 } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import {
   makeHeadlessConfig,
   runHeadlessPolicyFixture,
@@ -32,13 +32,15 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
-  type Agent,
   type AgentEvent,
   type AgentInput,
   type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-agents/constants.js';
-import { runNonInteractive } from './__tests__/noninteractive-run-fixture.js';
+import {
+  runNonInteractive,
+  buildNonInteractiveActivationIntent,
+} from './__tests__/noninteractive-run-fixture.js';
 import { LoadedSettings } from './config/settings.js';
 import { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
@@ -106,14 +108,62 @@ function runWithMcpBus(
     mockRuntimeSettings.store,
     mockRuntimeSettings.owner,
     mockCredentialAuthority,
+    async (policy) => {
+      const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+      const acquire = fromConfigSentinel;
+      acquire.mockImplementation((config, settings, intent, authority) =>
+        adoptScriptedHeadlessOwner(
+          [
+            config,
+            settings,
+            intent,
+            mockRuntimeSettings.owner,
+            mockProviderManager,
+            undefined,
+            policy.session.messageBus,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            authority,
+            policy,
+          ],
+          policy,
+          agentState.events,
+          (input, options) => {
+            agentState.streamInput = input;
+            agentState.streamOpts = options ?? null;
+          },
+        ),
+      );
+      return fromConfig(
+        params.config,
+        mockRuntimeSettings.store,
+        {
+          sessionId: params.config.getSessionId(),
+          sessionIdentityOwnership: 'config',
+          activation: buildNonInteractiveActivationIntent(
+            params.config,
+            params.settings,
+          ),
+          mcpOwnership: 'agent',
+        },
+        mockCredentialAuthority,
+      );
+    },
   );
 }
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+const fromConfigSentinel = vi.fn<typeof original.fromConfig>();
 
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...original,
-  fromConfig: vi.fn(),
+  fromConfig: fromConfigSentinel,
 }));
 
 // Mock core modules
@@ -140,27 +190,6 @@ void vi.mock('./services/CommandService.js', () => ({
 }));
 
 // Direct-call streaming cases use a fake Agent; the owner command case uses a real one.
-function buildFakeAgent(): Agent {
-  return {
-    getProvider: () => 'openai',
-    getModel: () => PLACEHOLDER_MODEL,
-    getCurrentSequenceModel: () => null,
-    getActiveProfileName: () => null,
-    metrics: new UiTelemetryService(),
-    stream: (input: AgentInput, opts?: TurnOptions) => {
-      agentState.streamInput = input;
-      agentState.streamOpts = opts ?? null;
-      return (async function* generateFakeStream(): AsyncIterable<AgentEvent> {
-        for (const event of agentState.events) {
-          yield event;
-        }
-      })();
-    },
-    getEphemeralSetting: (key: string) =>
-      mockRuntimeSettings.owner.readNamedParameter(key),
-    dispose: vi.fn().mockResolvedValue(undefined),
-  } as unknown as Agent;
-}
 describe('runNonInteractive - slash commands and thinking output', () => {
   let promptDirectory: string;
 
@@ -215,7 +244,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    (fromConfig as Mock<typeof fromConfig>).mockResolvedValue(buildFakeAgent());
+    (fromConfig as Mock<typeof fromConfig>).mockReset();
 
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
@@ -302,7 +331,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
     const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
-      ?.activation;
+      .activation;
     expect(activation).toBeDefined();
     expect(activation).toMatchObject({
       provider: 'anthropic',
@@ -331,7 +360,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
     const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
-      ?.activation;
+      .activation;
     expect(activation).toBeDefined();
     expect(activation?.provider).toBe('openai');
     expect(activation?.model).toBeUndefined();

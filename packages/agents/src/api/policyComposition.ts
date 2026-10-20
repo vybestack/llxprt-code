@@ -1,41 +1,44 @@
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { acquireSessionClient } from '../session/session-client-binding.js';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ContentGenerator,
+  RuntimeContentGeneratorFactory,
+  RuntimeProviderManager,
+  RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
   NodeFileSystem,
   type ProviderContributionRegistry,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import type {
-  RuntimeProviderManager,
-  RuntimeContentGeneratorFactory,
-  RuntimeTokenizerFactory,
-  ContentGenerator,
-} from '@vybestack/llxprt-code-core';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
-import { createIsolatedSessionClient } from './agentRuntimeAssembly.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type { AgentConfig } from './config-types.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
+import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
 
 export async function assembleOwnedMcpRuntime(
   config: Config,
@@ -69,8 +72,9 @@ export async function bindCreatedSessionClient(
   registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
+  authority?: CredentialAuthority,
 ): Promise<SessionClientOwner> {
-  const client = await createIsolatedSessionClient(
+  const client = await acquireSessionClient(
     config,
     settings,
     settingsOwner,
@@ -79,7 +83,7 @@ export async function bindCreatedSessionClient(
     contentGeneratorFactory,
     tokenizerFactory,
     providerFileLifecycle,
-    media,
+    media.store,
     factory,
     mcp.readInstructions,
     mcp.workspacePaths,
@@ -87,7 +91,7 @@ export async function bindCreatedSessionClient(
     imageOperation,
   );
   try {
-    client.bindMcpRuntime(mcp, registration);
+    client.bindMcpRuntime(mcp, registration, undefined, undefined, authority);
     client.bindHooks();
     if (forceConfirmations)
       injectConfirmationForcingPolicy({
@@ -145,6 +149,7 @@ export async function createOwnedSessionRoots(
         registration,
         forceConfirmations,
         imageOperation,
+        undefined,
       ),
     ];
   } catch (error) {

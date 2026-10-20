@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -27,7 +28,7 @@ import {
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { WorkspaceCheckpointOwner } from '@vybestack/llxprt-code-core/services/workspace-checkpoint-owner.js';
 import { CHECKPOINT_STORE_MARKER_FILENAME } from '@vybestack/llxprt-code-core/services/gitService.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { assembleMcpRuntime } from '../mcpOAuthAssembly.js';
 
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';

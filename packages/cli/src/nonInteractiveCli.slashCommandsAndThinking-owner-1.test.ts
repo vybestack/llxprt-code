@@ -1,3 +1,4 @@
+import { adoptFixture } from '../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -28,7 +29,10 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -144,12 +148,16 @@ function runWithMcpBus(
   );
 }
 
-const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+const { adoptFixture: actualAdoption } = await import(
+  '../../agents/src/api/__tests__/helpers/adoption-fixture.js'
+);
 
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  ...original,
-  fromConfig: vi.fn(),
-}));
+void vi.mock(
+  '../../agents/src/api/__tests__/helpers/adoption-fixture.js',
+  () => ({
+    adoptFixture: vi.fn(),
+  }),
+);
 
 // Mock core modules
 void vi.mock('./ui/hooks/atCommandProcessor.js', () =>
@@ -261,8 +269,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     >;
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    (fromConfig as Mock<typeof fromConfig>).mockResolvedValue(buildFakeAgent());
+    const { adoptFixture: fromConfig } = await import(
+      '../../agents/src/api/__tests__/helpers/adoption-fixture.js'
+    );
+    (fromConfig as Mock<typeof adoptFixture>).mockResolvedValue(
+      buildFakeAgent(),
+    );
 
     // Default: the Agent emits a clean stop completion. Individual tests
     // override agentState.events to stage thinking/tool/text sequences.
@@ -464,7 +476,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -527,12 +539,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
 
-    const agent = await original.fromConfig(
+    const agent = await actualAdoption(
       builtCallerConfig,
       builtCallerSettings,
       { sessionId: builtCallerConfig.getSessionId() },
@@ -552,7 +564,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       builtCallerPolicy,
     );
     mockGetCommands.mockReturnValue([createAgentSetCommand(agent)]);
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const { adoptFixture: fromConfig } = await import(
+      '../../agents/src/api/__tests__/helpers/adoption-fixture.js'
+    );
     try {
       await expect(
         runNonInteractive({
@@ -570,7 +584,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
         'error',
       );
       expect(foreignOwner.readNamedParameter('emojifilter')).toBe('allowed');
-      expect(fromConfig as Mock<typeof fromConfig>).not.toHaveBeenCalled();
+      expect(fromConfig as Mock<typeof adoptFixture>).not.toHaveBeenCalled();
     } finally {
       await agent.dispose();
       await builtCallerClose();
@@ -591,9 +605,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       }),
     };
     mockGetCommands.mockReturnValue([mockCommand]);
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const { adoptFixture: fromConfig } = await import(
+      '../../agents/src/api/__tests__/helpers/adoption-fixture.js'
+    );
     const fakeAgent = buildFakeAgent();
-    (fromConfig as Mock<typeof fromConfig>).mockResolvedValue(fakeAgent);
+    (fromConfig as Mock<typeof adoptFixture>).mockResolvedValue(fakeAgent);
     agentState.events = [
       { type: 'text', text: 'ok' },
       { type: 'done', reason: 'stop' },
@@ -606,14 +622,16 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-agent-lifecycle',
     });
 
-    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const call = (fromConfig as Mock<typeof fromConfig>).mock.calls[0];
+    expect(fromConfig as Mock<typeof adoptFixture>).toHaveBeenCalledTimes(1);
+    const call = (fromConfig as Mock<typeof adoptFixture>).mock.calls[0];
     expect(call[16]?.session.messageBus).toBe(call[6]);
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('passes the resolved config model and merged model params to fromConfig activation when no CLI model override is present', async () => {
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    const { adoptFixture: fromConfig } = await import(
+      '../../agents/src/api/__tests__/helpers/adoption-fixture.js'
+    );
     const configWithParams = mockConfig as ConfigWithActivationParams;
     (
       mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
@@ -632,9 +650,9 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       prompt_id: 'prompt-id-activation-model',
     });
 
-    expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
-    const activation = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][2]
-      ?.activation;
+    expect(fromConfig as Mock<typeof adoptFixture>).toHaveBeenCalledTimes(1);
+    const activation = (fromConfig as Mock<typeof adoptFixture>).mock
+      .calls[0][2]?.activation;
     expect(activation).toMatchObject({
       provider: 'openai',
       model: 'kimi-k2.5',

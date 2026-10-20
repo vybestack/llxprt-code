@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -197,7 +198,7 @@ describe('Agent recording identity transitions', () => {
 
       const { agent } = await build('history-owner');
       const config = internalConfig(agent);
-      const client = agent.agentClient;
+      const client = fixtureAgentResources(agent).publishedClient(agent);
       const failure = new Error('prior history unavailable');
       const fault = spyOn(client, 'getHistory').mockRejectedValueOnce(failure);
       try {

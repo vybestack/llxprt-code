@@ -1,3 +1,4 @@
+import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +20,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { acquirePreferredProviderManager } from '../../../agents/src/api/preferred-provider-acquisition.js';
-import { acquireAdoptedOAuth } from '../../../agents/src/api/adopted-provider-assembly.js';
+
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
 import {
   runCleanupSteps,
@@ -119,14 +120,15 @@ describe('explicit OAuth owner identity', () => {
         config,
       );
       if (supplied !== undefined) {
-        firstOAuth = acquireAdoptedOAuth(
+        firstOAuth = new AdoptedProviderFixture(
+          config,
+          settings,
+          'same-label',
+        ).acquireOAuth(
           supplied,
           store,
           policy.session.messageBus,
-          config,
-          settings,
           firstManager,
-          'same-label',
           undefined,
           credentials().authority,
           release,
@@ -235,14 +237,15 @@ describe('explicit OAuth owner identity', () => {
         config,
       );
       if (supplied !== undefined) {
-        secondOAuth = acquireAdoptedOAuth(
+        secondOAuth = new AdoptedProviderFixture(
+          config,
+          settings,
+          'same-label',
+        ).acquireOAuth(
           supplied,
           store,
           policy.session.messageBus,
-          config,
-          settings,
           secondManager,
-          'same-label',
           undefined,
           credentials().authority,
           release,

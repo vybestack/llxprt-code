@@ -39,6 +39,18 @@ describe('layout display inputs', () => {
       wrapWithProviders(
         <StreamingContext.Provider value={StreamingState.Responding}>
           <ComposerRegion
+            readIdeMode={owner.ide.getIdeMode.bind(owner.ide)}
+            readIdeDiffingEnabled={() =>
+              owner.ide.readConnection().diffingEnabled
+            }
+            subscribeIdeDiffing={(listener) =>
+              owner.ide.subscribeConnection(() => listener())
+            }
+            resolveIdeDiff={owner.ide.resolveDiff.bind(owner.ide)}
+            readIdeWorkspaceTrust={owner.ide.readWorkspaceTrust.bind(owner.ide)}
+            subscribeIdeWorkspaceTrust={owner.ide.subscribeWorkspaceTrust.bind(
+              owner.ide,
+            )}
             {...{ uiRuntime }}
             screenReaderEnabled={false}
             disableLoadingPhrases={disabled}

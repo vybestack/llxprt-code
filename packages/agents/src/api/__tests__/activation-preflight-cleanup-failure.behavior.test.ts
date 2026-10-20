@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -21,8 +22,8 @@ import {
   FakeProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
-import { fromConfig } from '../fromConfig.js';
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
+
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 

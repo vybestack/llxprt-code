@@ -1,3 +1,7 @@
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -24,11 +28,6 @@ import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  activateAdoptedSession,
-  initializeAdoptedClient,
-} from '../fromConfig-session.js';
-import { fromConfig } from '../fromConfig.js';
 import type { ProviderActivationIntent } from '../config-types.js';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
@@ -127,7 +126,7 @@ describe('adopted session explicit collaborators', () => {
       },
     );
     const files = new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 });
-    const agent = await fromConfig(
+    const agent = await captureAgentAdoption(
       fixtureFactorylessConfig,
       fixtureFactorylessSettings,
       {
@@ -149,8 +148,8 @@ describe('adopted session explicit collaborators', () => {
       fixtureFactorylessPolicy,
     );
     await agent.sessionClient.refreshAuth();
-    await agent.agentClient.startChat();
-    const manager = agent.providerManager;
+    await fixtureAgentResources(agent).publishedClient(agent).startChat();
+    const manager = fixtureAgentResources(agent).manager;
     const tokenizerFactory = configureProviderTokenizer(manager);
     const contentGeneratorFactory = createRuntimeContentGeneratorFactory();
     const activation: ProviderActivationIntent = {
@@ -158,46 +157,44 @@ describe('adopted session explicit collaborators', () => {
       model: 'adopted-model',
       authMode: 'none',
     };
-    const client = await initializeAdoptedClient(
+    const adopted = await captureAgentAdoption(
       config,
       settingsService,
+      { activation },
       settingsOwner,
       manager,
       oauth,
-      contentGeneratorFactory,
-      tokenizerFactory,
-      files,
-      undefined,
-      mcp.readInstructions,
-      mcp.workspacePaths,
-      activation,
-      undefined,
-      undefined,
-      agent.agentClient,
       messageBus,
+      mcp,
       undefined,
+      fixtureAgentResources(agent).publishedClient(agent),
+      files,
+      tokenizerFactory,
+      contentGeneratorFactory,
+      undefined,
+      undefined,
+      credentials().authority,
+      policyOwner,
     );
+    const client = fixtureAgentResources(adopted)
+      .sessionOwners.slice(-1)
+      .values()
+      .next().value;
+    if (client === undefined)
+      throw new Error('Expected the actual adopted session acquisition');
     try {
-      expect(client.getAgentClient()).toBe(agent.agentClient);
+      expect(fixtureAgentResources(adopted).publishedClient(adopted)).toBe(
+        fixtureAgentResources(agent).publishedClient(agent),
+      );
       expect(client.tokenizerFactory).toBe(tokenizerFactory);
       expect(client.contentGeneratorFactory).toBe(contentGeneratorFactory);
-      await activateAdoptedSession(
-        config,
-        settingsService,
-        settingsOwner,
-        manager,
-        oauth,
-        () => 'agent',
-        () => client.getAgentClient().isInitialized(),
-        (method) => client.refreshAuth(method),
-        activation,
-        undefined,
-      );
       expect(settingsOwner.readSelectedModel()).toBe(activation.model);
       expect(manager.getActiveProviderName()).toBe('fake');
-      expect(client.getAgentClient().isInitialized()).toBe(true);
+      expect(
+        fixtureAgentResources(adopted).publishedClient(adopted).isInitialized(),
+      ).toBe(true);
     } finally {
-      await client.dispose();
+      await adopted.dispose();
       await agent.dispose();
       await oauth.dispose();
       await mcp.dispose();

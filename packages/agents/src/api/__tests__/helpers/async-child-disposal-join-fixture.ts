@@ -1,3 +1,8 @@
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './agent-resource-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createSessionSettingsFixture } from './session-settings-fixture.js';
 /**
  * @license
@@ -17,7 +22,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentSchedulerFactory,
@@ -83,6 +87,7 @@ function responseChunk(child: boolean, launch: boolean): string {
 export interface DisposalJoinFixture {
   readonly manager: AsyncTaskManager;
   readonly agent: Agent;
+  readonly client: AgentClientContract;
   readonly adoptSibling: () => Promise<Agent>;
   readonly siblingWork: ReturnType<typeof createHeldFetch>;
   readonly config: Config;
@@ -108,6 +113,7 @@ function createHeldFetch(
 ): Omit<
   DisposalJoinFixture,
   | 'manager'
+  | 'client'
   | 'agent'
   | 'childStatus'
   | 'timeline'
@@ -206,26 +212,33 @@ async function createParentServer(): Promise<{
   };
 }
 
-function bindSibling(
+function createDisposalSettings(
   config: Config,
   runtime: McpRuntimeOwner,
   siblings: Agent[],
   manager: AsyncTaskManager,
-  settingsRoot: ReturnType<typeof createSessionSettingsFixture>,
-): DisposalJoinFixture['adoptSibling'] {
-  return adoptSibling.bind(
-    undefined,
-    config,
-    runtime,
-    siblings,
-    manager,
+): {
+  settingsRoot: ReturnType<typeof createSessionSettingsFixture>;
+  adoptSibling: DisposalJoinFixture['adoptSibling'];
+} {
+  const settingsRoot = createSessionSettingsFixture(config);
+  return {
     settingsRoot,
-  );
+    adoptSibling: adoptSibling.bind(
+      undefined,
+      config,
+      runtime,
+      siblings,
+      manager,
+      settingsRoot,
+    ),
+  };
 }
 
 export async function withDisposalJoinFixture(
   scenario: (fixture: DisposalJoinFixture) => Promise<void>,
   toolSchedulerFactory?: AgentSchedulerFactory,
+  extraTools: readonly string[] = [],
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'async-child-disposal-join-'));
   const server = await createParentServer();
@@ -240,9 +253,14 @@ export async function withDisposalJoinFixture(
   let childStatus: Promise<string> | undefined;
   const errors: unknown[] = [];
   try {
-    config = await createChildConfig(directory, server.baseUrl);
+    config = await createChildConfig(directory, server.baseUrl, extraTools);
     mcpRuntime = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    const settingsRoot = createSessionSettingsFixture(config);
+    const { settingsRoot, adoptSibling } = createDisposalSettings(
+      config,
+      mcpRuntime,
+      siblings,
+      manager,
+    );
     agent = await adoptParent(
       config,
       mcpRuntime,
@@ -252,15 +270,9 @@ export async function withDisposalJoinFixture(
       toolSchedulerFactory,
     );
     childStatus = observeTerminalTask(manager, timeline);
-    const adopt = bindSibling(
-      config,
-      mcpRuntime,
-      siblings,
-      manager,
-      settingsRoot,
-    );
     await scenario({
       agent,
+      client: fixtureAgentResources(agent).publishedClient(agent),
       manager,
       ...external,
       timeline,
@@ -268,7 +280,7 @@ export async function withDisposalJoinFixture(
       siblingWork,
       settingsOwner: settingsRoot.settingsOwner,
       config,
-      adoptSibling: adopt,
+      adoptSibling,
       workspaceTrust: mcpRuntime.trust,
       workspacePaths: mcpRuntime.workspacePaths,
       instructionReads: mcpRuntime.workspaceMemory.operations,
@@ -314,7 +326,7 @@ async function adoptSibling(
     config,
     parentSettings.settingsOwner.createChildStore(),
   );
-  const sibling = await fromConfig(
+  const sibling = await captureAgentAdoption(
     config,
     siblingSettings.settingsService,
     { mcpOwnership: 'caller' },
@@ -348,6 +360,7 @@ async function adoptSibling(
 async function createChildConfig(
   directory: string,
   baseUrl: string,
+  extraTools: readonly string[],
 ): Promise<Config> {
   const profiles = new ProfileManager(join(directory, 'profiles'));
   await profiles.saveProfile('disposal-child', {
@@ -389,7 +402,7 @@ async function createChildConfig(
       approvalMode: ApprovalMode.YOLO,
       folderTrust: true,
       interactive: false,
-      coreTools: ['task', 'check_async_tasks'],
+      coreTools: ['task', 'check_async_tasks', ...extraTools],
       telemetry: { enabled: false },
       recording: { enabled: false },
     }),
@@ -434,7 +447,7 @@ async function adoptParent(
   baseUrl: string,
   toolSchedulerFactory?: AgentSchedulerFactory,
 ): Promise<Agent> {
-  return fromConfig(
+  return captureAgentAdoption(
     config,
     settingsRoot.settingsService,
     {

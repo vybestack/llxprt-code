@@ -1,3 +1,4 @@
+import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -13,10 +14,7 @@ import {
   populateProviderManager,
 } from './index.js';
 import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
-import {
-  acquireAdoptedOAuth,
-  acquireAdoptedProviderManager,
-} from '../../../agents/src/api/adopted-provider-assembly.js';
+
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -205,16 +203,11 @@ describe('OAuth owner reads before registration', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, config.getSessionId()),
     );
-    const manager = acquireAdoptedProviderManager(
-      undefined,
+    const manager = new AdoptedProviderFixture(
       config,
       settings,
-      owner,
-      files,
       config.getSessionId(),
-      credentials().authority,
-      release,
-    );
+    ).acquireManager(undefined, owner, files, credentials().authority, release);
     if (!(manager instanceof ProviderManager))
       throw new Error('Expected concrete isolated manager');
     return acquirePreferredOAuth(
@@ -243,24 +236,20 @@ describe('OAuth owner reads before registration', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, configB.getSessionId()),
     );
-    const manager = acquireAdoptedProviderManager(
-      undefined,
+    const manager = new AdoptedProviderFixture(
       configB,
       settingsB,
-      owner,
-      files,
       configB.getSessionId(),
-      credentials().authority,
-      release,
-    );
-    acquireAdoptedOAuth(
+    ).acquireManager(undefined, owner, files, credentials().authority, release);
+    new AdoptedProviderFixture(
+      configB,
+      settingsB,
+      configB.getSessionId(),
+    ).acquireOAuth(
       oauth,
       undefined,
       policy.session.messageBus,
-      configB,
-      settingsB,
       manager,
-      configB.getSessionId(),
       undefined,
       credentials().authority,
       release,

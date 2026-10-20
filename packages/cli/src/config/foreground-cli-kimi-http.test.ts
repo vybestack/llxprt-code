@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -13,7 +14,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PromptService } from '@vybestack/llxprt-code-core/prompt-config/index.js';
 import {
-  fromConfig,
   type Agent,
   type AgentProfilePreflight,
 } from '@vybestack/llxprt-code-agents';
@@ -79,7 +79,7 @@ async function loadOwner(
     settingsOwner,
     credentialAuthority,
     undefined,
-    (operation) => operation.takeSettingsOwner(settingsService),
+    () => undefined,
     undefined,
     undefined,
     (owner) => {

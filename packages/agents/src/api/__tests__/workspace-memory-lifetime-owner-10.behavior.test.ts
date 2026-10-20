@@ -16,7 +16,7 @@ import {
   ProviderManager,
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 
 /**
  * @license

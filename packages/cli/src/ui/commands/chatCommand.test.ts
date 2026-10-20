@@ -1,3 +1,4 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -56,7 +57,18 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
             ? getProjectHash(context.services.config.getProjectRoot())
             : null,
         () => context.services.config?.projectChatsDir ?? null,
-        () => context.services.agent?.agentClient.mediaStore,
+        ...checkpointBindings(
+          () =>
+            context.recordingSwapCallbacks?.getCurrentRecording() ??
+            context.recordingIntegration?.getRecordingService() ??
+            null,
+          () =>
+            context.services.config
+              ? getProjectHash(context.services.config.getProjectRoot())
+              : null,
+          () => context.services.config?.projectChatsDir ?? null,
+          () => context.services.agent?.agentClient.mediaStore,
+        ),
         () => {
           const client = context.services.agent?.agentClient;
           return client?.hasChatInitialized() === true

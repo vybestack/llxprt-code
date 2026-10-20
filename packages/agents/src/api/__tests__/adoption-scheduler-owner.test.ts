@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -17,7 +18,6 @@ import { runCleanupSteps } from '../../core/subagent-cleanup.js';
  */
 
 import { describe, expect, it } from 'bun:test';
-import { fromConfig } from '../index.js';
 
 import { drain, countType } from './helpers/agentHarness.js';
 

@@ -1,3 +1,8 @@
+import {
+  ChatHistoryAdmissions,
+  appendGenerationHistory,
+} from './generation-history.js';
+import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import {
   chatResolvedBaseUrl,
@@ -46,7 +51,6 @@ import type {
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
-import type { MediaAdmissionContext } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { installHistoryDensityTracking } from './chatHistoryDensity.js';
@@ -93,6 +97,8 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
  * @requirement:REQ-005.5c
  */
 export interface SendMessageParams {
+  invocation?: RuntimeInvocationContext;
+  historyPrefix?: readonly IContent[];
   modelParameters?: AdmittedModelParameters;
   message: AgentMessageInput;
   config?: ChatSessionConfig;
@@ -241,8 +247,7 @@ export class ChatSession {
   /** Serializes per-turn system-prompt resolution against send hand-off. */
   private systemPromptTurnChain: Promise<void> = Promise.resolve();
   private setHistoryAdmission?: SessionHistoryAdmission;
-  private retainedHistoryAdmissions: readonly SessionHistoryAdmission[] = [];
-  private historyAdmissionSequence = 0;
+  private readonly historyAdmissions = new ChatHistoryAdmissions();
   private removeDensityWrapper?: () => void;
 
   constructor(
@@ -363,8 +368,8 @@ export class ChatSession {
   }
 
   takeHistoryAdmissions(): readonly SessionHistoryAdmission[] {
-    const admissions = this.retainedHistoryAdmissions;
-    this.retainedHistoryAdmissions = [];
+    const admissions = this.historyAdmissions.all;
+    this.historyAdmissions.all = [];
     this.setHistoryAdmission = undefined;
     return admissions;
   }
@@ -383,8 +388,8 @@ export class ChatSession {
       history,
     );
     return () => {
-      this.retainedHistoryAdmissions = [
-        ...this.retainedHistoryAdmissions,
+      this.historyAdmissions.all = [
+        ...this.historyAdmissions.all,
         ...(previousChat?.takeHistoryAdmissions() ?? []),
       ];
       this.removeDensityWrapper?.();
@@ -710,7 +715,15 @@ export class ChatSession {
     return this._withResolvedSystemPrompt(
       () =>
         this.directProcessor.generateDirectMessage(
-          params,
+          {
+            ...params,
+            config: {
+              ...params.config,
+              systemInstruction:
+                params.config?.systemInstruction ??
+                this.generationConfig.systemInstruction,
+            },
+          },
           prompt_id,
           execution,
         ),
@@ -746,50 +759,19 @@ export class ChatSession {
     return this.conversationManager.getHistory(curated);
   }
 
-  private async admitSetHistory(
+  private admitSetHistory(
     history: readonly IContent[],
   ): Promise<SessionHistoryAdmission | undefined> {
-    const mediaAdmission = this.runtimeContext.mediaAdmission;
-    const hasLocalMedia = history.some((content) =>
-      content.blocks.some(
-        (block) =>
-          block.type === 'media' &&
-          (block.encoding === 'base64' || block.encoding === 'reference'),
-      ),
+    return this.historyAdmissions.admit(
+      history,
+      this.runtimeContext.mediaAdmission,
     );
-    if (mediaAdmission === undefined || !hasLocalMedia) return undefined;
-    this.historyAdmissionSequence += 1;
-    const context: MediaAdmissionContext = {
-      turnId: `set-history:${this.historyAdmissionSequence}`,
-      source: `set-history:${this.historyAdmissionSequence}`,
-    };
-    const admitted = await mediaAdmission.admitContents(history, context);
-    const ownership: SessionHistoryAdmission = {
-      history: admitted,
-      release: () => mediaAdmission.releaseContents(admitted, context),
-    };
-    this.retainedHistoryAdmissions = [
-      ...this.retainedHistoryAdmissions,
-      ownership,
-    ];
-    return ownership;
   }
 
-  private async releaseSessionHistoryAdmissions(
+  private releaseSessionHistoryAdmissions(
     admissions: readonly SessionHistoryAdmission[],
   ): Promise<readonly unknown[]> {
-    const failures: unknown[] = [];
-    for (const admission of admissions) {
-      try {
-        await admission.release();
-        this.retainedHistoryAdmissions = this.retainedHistoryAdmissions.filter(
-          (candidate) => candidate !== admission,
-        );
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    return failures;
+    return this.historyAdmissions.release(admissions);
   }
 
   async clearHistory(): Promise<void> {
@@ -798,7 +780,7 @@ export class ChatSession {
       this.runtimeState.runtimeId,
     );
     const releaseFailures = await this.releaseSessionHistoryAdmissions(
-      this.retainedHistoryAdmissions,
+      this.historyAdmissions.all,
     );
     if (releaseFailures.length > 0) {
       throw new AggregateError(
@@ -812,6 +794,25 @@ export class ChatSession {
 
   addHistory(content: IContent): void {
     this.conversationManager.addHistory(content);
+  }
+
+  async appendGeneration(
+    input: readonly IContent[],
+    response: ModelOutput,
+    model: string,
+    signal: AbortSignal,
+    historyOrigin?: object,
+  ): Promise<void> {
+    return appendGenerationHistory(
+      this.historyService,
+      (contents) => this.admitSetHistory(contents),
+      (admissions) => this.releaseSessionHistoryAdmissions(admissions),
+      input,
+      response,
+      model,
+      signal,
+      historyOrigin,
+    );
   }
 
   async admitAndAddHistory(content: IContent): Promise<void> {

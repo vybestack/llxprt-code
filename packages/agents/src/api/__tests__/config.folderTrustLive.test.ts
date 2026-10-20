@@ -1,26 +1,33 @@
+import { adoptFixture as fromConfig } from './helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { WorkspaceIdeOwner } from '../services/workspace-ide-owner.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '../session/session-settings-owner.js';
-import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { afterEach as disposeOwnedPolicies } from 'bun:test';
 import {
   RuntimePolicyOwner,
   WorkspacePolicyOwner,
-} from '../policy/policy-owner.js';
-import { PolicyEngine } from '../policy/policy-engine.js';
+} from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { ConfigParameters } from './config.js';
-import { Config, ApprovalMode } from './config.js';
-import { coreEvents, CoreEvent } from '../utils/events.js';
-import { PolicyDecision } from '../policy/types.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  Config,
+  ApprovalMode,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  coreEvents,
+  CoreEvent,
+} from '@vybestack/llxprt-code-core/utils/events.js';
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 describe('Workspace trust runtime composition', () => {

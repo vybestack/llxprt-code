@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,12 +21,11 @@ import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildAgent, type Agent } from './helpers/agentHarness.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
-  if (
-    !('ownerClient' in agent) ||
-    !(agent.ownerClient instanceof SessionClientOwner)
-  )
-    throw new Error('Expected root client owner');
-  return agent.ownerClient;
+  const owner = fixtureAgentResources(agent)
+    .sessionOwners.values()
+    .next().value;
+  if (owner === undefined) throw new Error('Expected root client owner');
+  return owner;
 }
 
 async function proxy(
@@ -230,7 +230,7 @@ describe('root-owned quota and registry transport', () => {
           const bUpdated = new Promise<void>((resolve) => {
             clientOwner(b.agent).modelRegistry.on('models:updated', resolve);
           });
-          await b.agent.providerManager.getAvailableModels();
+          await fixtureAgentResources(b.agent).manager.getAvailableModels();
           await bUpdated;
           const bQuota = await fetchApiKeyQuota(
             b.agent.sessionClient.fetch,
@@ -240,8 +240,12 @@ describe('root-owned quota and registry transport', () => {
           );
           await clientOwner(a.agent).modelRegistry.refresh();
           expect(aQuota?.lines).not.toStrictEqual(bQuota?.lines);
-          const aModels = await a.agent.providerManager.getAvailableModels();
-          const bModels = await b.agent.providerManager.getAvailableModels();
+          const aModels = await fixtureAgentResources(
+            a.agent,
+          ).manager.getAvailableModels();
+          const bModels = await fixtureAgentResources(
+            b.agent,
+          ).manager.getAvailableModels();
           expect([
             aModels[0]?.contextWindow,
             bModels[0]?.contextWindow,
@@ -277,11 +281,13 @@ describe('root-owned quota and registry transport', () => {
             publications += 1;
           });
           await registry.refresh();
-          await b.agent.providerManager.getAvailableModels();
+          await fixtureAgentResources(b.agent).manager.getAvailableModels();
           await a.agent.dispose();
           expect(await registry.refresh()).toBe(true);
           expect(publications).toBe(2);
-          const models = await b.agent.providerManager.getAvailableModels();
+          const models = await fixtureAgentResources(
+            b.agent,
+          ).manager.getAvailableModels();
           expect(models[0]?.contextWindow).toBe(16000);
           expect([
             aProxy.requests().length,

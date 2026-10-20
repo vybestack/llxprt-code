@@ -231,7 +231,7 @@ describe('slashCommandHandlers', () => {
               createDirectoryCommand(
                 bindDirectoryCommand(
                   runtime,
-                  () => agent.agentClient.addDirectoryContext(),
+                  () => agent.addDirectoryContext(),
                   bindDirectoryChangeRecording(
                     'agent',
                     (event) => agent.session.recordRecordingEvent(event),
@@ -672,19 +672,17 @@ describe('slashCommandHandlers', () => {
       deps.commandContext.services.agent = createFakeAgent([], {
         workspace: owner.workspace,
         sessionClient: owner.sessionClient,
-        agentClient: owner.agentClient,
-        providerManager: owner.providerManager,
       });
       const callbacks = {} as never;
-      const persistence = {
-        mediaStore: new LocalMediaStore({
-          rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
-          quotaBytes: 1024,
-        }),
-        forRecording: () => {
-          throw new Error('Mocked resume must not request a journal');
+      const persistence = new CliSessionPersistence(
+        { projectRoot: '/tmp/project', chatsDir: '/tmp/project/chats' },
+        {
+          mediaStore: new LocalMediaStore({
+            rootDirectory: join(tmpdir(), 'slash-resume-text-only-media'),
+            quotaBytes: 1024,
+          }),
         },
-      };
+      );
       // Injected instead of vi.mock: bun module mocks leak across test files.
       installFixtureRawResume(deps, persistence, callbacks, performResumeMock);
       deps.commands = [

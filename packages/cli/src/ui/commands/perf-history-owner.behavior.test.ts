@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  useCommandOwners,
+  commandOwnerClient,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -30,11 +33,13 @@ describe('registered performance history owner', () => {
         ],
       },
     ]);
-    await owner.agentClient.startChat(await owner.agentClient.getHistory());
+    await commandOwnerClient(owner).startChat(
+      await commandOwnerClient(owner).getHistory(),
+    );
     await sibling.setHistory([]);
     const command = createPerfCommand({
       readHistory: () =>
-        owner.agentClient.getHistoryService()?.getRawHistory() ?? null,
+        commandOwnerClient(owner).getHistoryService()?.getRawHistory() ?? null,
     });
     const registry = await CommandService.create(
       [

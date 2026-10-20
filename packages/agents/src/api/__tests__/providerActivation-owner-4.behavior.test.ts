@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -222,7 +226,7 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -344,7 +348,7 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('intent with provider + provider-or-oauth takes the provider branch after successful activation', async () => {
@@ -373,11 +377,13 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
       // Provider-branch distinguishing observable: refreshAuth('provider') ran,
       // so the content generator config is populated AND carries the provider
       // manager (the provider-branch ensureProviderManagerOnConfig wired it).
-      expect(await activatedReply(builtCallerOwner.getAgentClient())).toBe(
-        'a plain text reply',
+      expect(
+        await activatedReply(capturedSessionClient(builtCallerOwner)),
+      ).toBe('a plain text reply');
+      await capturedSessionClient(builtCallerOwner).startChat();
+      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
+        true,
       );
-      await builtCallerOwner.getAgentClient().startChat();
-      expect(builtCallerOwner.getAgentClient().isInitialized()).toBe(true);
     } finally {
       await builtCallerClose();
     }
@@ -403,13 +409,12 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
       // attachProviderManagerToContentConfig, so the content generator config
       // carries the provider manager. This is the provider-branch-only side
       // effect that distinguishes it from a hypothetical no-manager path.
-      expect(await activatedReply(builtCallerOwner.getAgentClient())).toBe(
-        'a plain text reply',
-      );
-      await builtCallerOwner.getAgentClient().startChat();
       expect(
-        await builtCallerOwner
-          .getAgentClient()
+        await activatedReply(capturedSessionClient(builtCallerOwner)),
+      ).toBe('a plain text reply');
+      await capturedSessionClient(builtCallerOwner).startChat();
+      expect(
+        await capturedSessionClient(builtCallerOwner)
           .getContentGenerator()
           .countTokens({
             contents: [

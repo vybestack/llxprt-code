@@ -1,22 +1,38 @@
+import { adoptFixture } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { AgentActivationBootstrap } from '../../../agents/src/api/activationPreflightState.js';
+import type { AgentProfilePreflight } from '../../../agents/src/api/profile-preflight.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  RuntimeProviderManager,
+  Config,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { expect } from 'bun:test';
-import * as agents from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type * as agents from '@vybestack/llxprt-code-agents';
 
 export type ObservedBootstrap = {
   config: Config;
-  settingsService: Parameters<
-    typeof agents.assembleAgentActivationBootstrap
-  >[1];
-  providerManager: agents.Agent['providerManager'];
+  settingsService: SettingsService;
+  providerManager: RuntimeProviderManager;
   operation: agents.AgentActivationOperation;
   receipt?: agents.ActivationPreflight;
   intent?: agents.ProviderActivationIntent;
 };
+
+export function transferActivation(
+  preflight: AgentProfilePreflight,
+): agents.AgentActivationOperation {
+  let activation: agents.AgentActivationOperation | undefined;
+  preflight.transferActivation((operation) => {
+    activation = operation;
+  });
+  if (activation === undefined) throw new Error('Missing activation operation');
+  return activation;
+}
 
 export function requireReceipt(owner: ObservedBootstrap): {
   activation: agents.ProviderActivationIntent;
@@ -31,7 +47,7 @@ export async function expectInvalidReceipt(
   owner: ObservedBootstrap,
 ): Promise<void> {
   await expect(
-    agents.fromConfig(
+    adoptFixture(
       owner.config,
       owner.settingsService,
       { activation: requireReceipt(owner).activation },
@@ -62,7 +78,10 @@ export class StartupExit extends Error {
 }
 
 export function expectStartupAdmissionClosed(owner: ObservedBootstrap): void {
-  expect(() => owner.operation.sessionClient.getAgentClient()).toThrow(
-    'disposed',
-  );
+  const operation = owner.operation;
+  if (!(operation instanceof AgentActivationBootstrap))
+    throw new Error('Missing actual activation owner');
+  expect(() =>
+    operation.createForeground(Object.freeze({}), { authMode: 'none' }, {}),
+  ).toThrow('disposed');
 }

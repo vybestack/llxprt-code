@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
+import {
+  createUiSessionOwner,
+  uiFixtureResources,
+} from '../../../__tests__/uiSessionOwner.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { AgentEventType } from '@vybestack/llxprt-code-core';
 
@@ -232,11 +235,14 @@ function createProviderReads(
   'hasActiveProvider' | 'getProviderContextLimit' | 'listAvailableModels'
 > {
   return {
-    hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
+    hasActiveProvider: () =>
+      uiFixtureResources(owner).manager.hasActiveProvider(),
     getProviderContextLimit: () =>
-      owner.providerManager.getActiveProvider()?.getContextLimit?.(),
+      uiFixtureResources(owner)
+        .manager.getActiveProvider()
+        ?.getContextLimit?.(),
     listAvailableModels: (provider) =>
-      owner.providerManager.getAvailableModels(provider),
+      uiFixtureResources(owner).manager.getAvailableModels(provider),
   };
 }
 
@@ -296,11 +302,9 @@ async function createBaseAgent(
     memory: {} as unknown as Agent['memory'],
     skills: {} as unknown as Agent['skills'],
     lsp: {} as unknown as Agent['lsp'],
-    agentClient: owner.agentClient,
     sessionClient: owner.sessionClient,
     workspace: owner.workspace,
     mcp: owner.mcp,
-    providerManager: owner.providerManager,
     ...createHistoryControl(mockClient),
     async compress() {
       return { status: 'skipped' };

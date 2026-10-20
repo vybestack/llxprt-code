@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -174,7 +178,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -296,7 +300,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -327,11 +331,11 @@ describe('explicit session authentication lifecycle', () => {
       try {
         delete process.env.GEMINI_API_KEY;
         delete process.env.GOOGLE_API_KEY;
-        await builtCallerOwner.getAgentClient().initialize({
+        await capturedSessionClient(builtCallerOwner).initialize({
           model: 'fake-model',
           vertexai: false,
         });
-        await builtCallerOwner.getAgentClient().setHistory([
+        await capturedSessionClient(builtCallerOwner).setHistory([
           {
             speaker: 'ai',
             blocks: [
@@ -346,7 +350,8 @@ describe('explicit session authentication lifecycle', () => {
         ]);
         process.env.GOOGLE_API_KEY = 'local-vertex-metadata-only';
         await builtCallerOwner.refreshAuth();
-        const retained = await builtCallerOwner.getAgentClient().getHistory();
+        const retained =
+          await capturedSessionClient(builtCallerOwner).getHistory();
         expect(
           retained
             .flatMap((content) => content.blocks)
@@ -368,27 +373,28 @@ describe('explicit session authentication lifecycle', () => {
 
   it('refreshes authentication and clears fallback mode', async () => {
     await withSession(async () => {
-      const previous = builtCallerOwner.getAgentClient();
+      const previous = capturedSessionClient(builtCallerOwner);
       builtCallerSettingsOwner.chooseModel('replacement-model');
       builtCallerConfig.setFallbackMode(true);
       await builtCallerOwner.refreshAuth();
       expect(
-        builtCallerOwner.getAgentClient().getContentGeneratorConfig()?.model,
+        capturedSessionClient(builtCallerOwner).getContentGeneratorConfig()
+          ?.model,
       ).toBe('replacement-model');
-      expect(previous).not.toBe(builtCallerOwner.getAgentClient());
+      expect(previous).not.toBe(capturedSessionClient(builtCallerOwner));
       expect(builtCallerConfig.isInFallbackMode()).toBe(false);
     });
   });
 
   it('preserves conversation history when refreshing authentication', async () => {
     await withSession(async () => {
-      await builtCallerOwner.getAgentClient().setHistory(history);
+      await capturedSessionClient(builtCallerOwner).setHistory(history);
       await builtCallerOwner.refreshAuth();
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
       expect(
-        (await builtCallerOwner.getAgentClient().getHistory()).map(
+        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
           ({ speaker, blocks }) => ({
             speaker,
             blocks,
@@ -401,16 +407,18 @@ describe('explicit session authentication lifecycle', () => {
   it('preserves carried history before chat initialization (#2500)', async () => {
     await withSession(async () => {
       await builtCallerOwner.refreshAuth();
-      expect(builtCallerOwner.getAgentClient().hasChatInitialized()).toBe(
+      expect(capturedSessionClient(builtCallerOwner).hasChatInitialized()).toBe(
         false,
       );
-      await builtCallerOwner.getAgentClient().storeHistoryForLaterUse(history);
+      await capturedSessionClient(builtCallerOwner).storeHistoryForLaterUse(
+        history,
+      );
       await builtCallerOwner.refreshAuth();
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
       expect(
-        (await builtCallerOwner.getAgentClient().getHistory()).map(
+        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
           ({ speaker, blocks }) => ({
             speaker,
             blocks,
@@ -422,19 +430,19 @@ describe('explicit session authentication lifecycle', () => {
 
   it('preserves committed chat history without waiting for idle history', async () => {
     await withSession(async () => {
-      await builtCallerOwner.getAgentClient().setHistory(history);
+      await capturedSessionClient(builtCallerOwner).setHistory(history);
       const idleHistory = vi
-        .spyOn(builtCallerOwner.getAgentClient(), 'getHistory')
+        .spyOn(capturedSessionClient(builtCallerOwner), 'getHistory')
         .mockImplementation(async () => {
           throw new Error('Idle history must not be awaited');
         });
       try {
         await builtCallerOwner.refreshAuth();
-        await builtCallerOwner
-          .getAgentClient()
-          .startChat(await builtCallerOwner.getAgentClient().getHistory());
+        await capturedSessionClient(builtCallerOwner).startChat(
+          await capturedSessionClient(builtCallerOwner).getHistory(),
+        );
         expect(
-          (await builtCallerOwner.getAgentClient().getHistory()).map(
+          (await capturedSessionClient(builtCallerOwner).getHistory()).map(
             ({ speaker, blocks }) => ({
               speaker,
               blocks,

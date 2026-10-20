@@ -61,7 +61,11 @@ export function useRawChatOperations(
   getRecording: ChatRecordingOperations['getRecording'],
   getProjectHash: ChatRecordingOperations['getProjectHash'],
   getChatsDir: ChatRecordingOperations['getChatsDir'],
-  getMediaStore: ChatRecordingOperations['getMediaStore'],
+  listTargets: ChatRecordingOperations['listTargets'],
+  saveCheckpoint: ChatRecordingOperations['saveCheckpoint'],
+  deleteCheckpoint: ChatRecordingOperations['deleteCheckpoint'],
+  renameCheckpoint: ChatRecordingOperations['renameCheckpoint'],
+  nameSession: ChatRecordingOperations['nameSession'],
   getChatHistory: ChatRecordingOperations['getChatHistory'],
   replaceChatHistory: ChatRecordingOperations['replaceChatHistory'],
   getModel: ChatRecordingOperations['getModel'],
@@ -72,7 +76,11 @@ export function useRawChatOperations(
         getRecording,
         getProjectHash,
         getChatsDir,
-        getMediaStore,
+        listTargets,
+        saveCheckpoint,
+        deleteCheckpoint,
+        renameCheckpoint,
+        nameSession,
         getChatHistory,
         replaceChatHistory,
         getModel,
@@ -81,7 +89,11 @@ export function useRawChatOperations(
       getRecording,
       getProjectHash,
       getChatsDir,
-      getMediaStore,
+      listTargets,
+      saveCheckpoint,
+      deleteCheckpoint,
+      renameCheckpoint,
+      nameSession,
       getChatHistory,
       replaceChatHistory,
       getModel,
@@ -116,31 +128,5 @@ export function useChatProjectHash(
       return root === null ? null : getProjectHash(root);
     },
     [readRoot],
-  );
-}
-
-export function useRawChatHistory(
-  client:
-    | Pick<
-        Agent['agentClient'],
-        'hasChatInitialized' | 'getChat' | 'mediaStore'
-      >
-    | undefined,
-) {
-  return useMemo(
-    () => ({
-      getMediaStore: () => client?.mediaStore,
-      getChatHistory: () =>
-        client?.hasChatInitialized() === true
-          ? client.getChat().getHistory()
-          : null,
-      replaceChatHistory: async (
-        history: Parameters<ChatRecordingOperations['replaceChatHistory']>[0],
-      ) => {
-        if (!client) throw new Error('Session agent is unavailable');
-        await client.getChat().setHistory(history);
-      },
-    }),
-    [client],
   );
 }

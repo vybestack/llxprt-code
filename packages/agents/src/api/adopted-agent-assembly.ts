@@ -1,85 +1,37 @@
-import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
-import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import {
-  assertAdoptedWorkspaceHandoff,
-  assertAdoptedWorkspaceRoots,
-  assertMcpHandoff,
-  runtimeOwnership,
-  selectedOwnership,
-} from './mcpOAuthAssembly.js';
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
-import {
-  createAgentAuthState,
-  type AgentAuthState,
-} from './control/authState.js';
-import type { McpControl } from './control/mcpControl.js';
-import { WorkspaceControl } from './control/workspaceControl.js';
-import { projectTrustedSubagents } from './workspace-definition-assembly.js';
-import { assembleIdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
-import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
-import { withChildToolDisplay } from '../session/childToolAssembly.js';
-import { ChildToolDisplay } from '../session/childToolDisplay.js';
-import { ShellJobOwner } from '../session/shell-job-owner.js';
-import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
-import {
-  assembleTaskOwner,
-  cleanupFailedShellBootstrap,
-} from './agent-shell-assembly.js';
-import {
-  AgentBootstrapError,
-  generateRuntimeId,
-  validateAgentRuntimeId,
-  buildFacadeState,
-  createStableDisplayCallbacks,
-  recordOwnership,
-  wrapApprovalHandler,
-  type StableDisplayCallbacksHolder,
-  type StableEditorCallbacksHolder,
-} from './agentBootstrap.js';
-import {
-  assembleSessionAuthentication,
-  clearProviderAuthenticationCache,
-} from './control/session-authentication.js';
-import type { PrepareSessionTools } from './fromConfig.js';
-import { assembleModelSelection } from './model-selection.js';
-import { setActiveModel } from './providerMutations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  AgentRuntimeFactoryBindings,
-  ContentGenerator,
-  RuntimeContentGeneratorFactory,
-  RuntimeProviderManager,
-  RuntimeTokenizerFactory,
-  TokenStore,
-  WorkspaceDefinitionOwner,
-  WorkspaceIdePort,
-  WorkspaceTrustControlPort,
+import type { Config } from '@vybestack/llxprt-code-core';
+import {
+  openBrowserSecurely,
+  type AgentRuntimeFactoryBindings,
+  type ContentGenerator,
+  type MessageBus,
+  type RuntimeContentGeneratorFactory,
+  type RuntimeProviderManager,
+  type RuntimeTokenizerFactory,
+  type WorkspaceDefinitionOwner,
+  type WorkspaceIdePort,
+  type WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
-import { Config, openBrowserSecurely } from '@vybestack/llxprt-code-core';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+import { type WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { type AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { type SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import type { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { type WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
+import { type RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { type AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { type WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import {
   KeychainTokenStorage,
   MCPOAuthTokenStorage,
   type TokenStorage,
 } from '@vybestack/llxprt-code-mcp';
-import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+import { type McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   HostCredentialOwner,
@@ -90,133 +42,170 @@ import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
+import { type SettingsService } from '@vybestack/llxprt-code-settings';
+import { type GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-import {
-  AgentActivationBootstrap,
-  type ActivationPreflight,
-} from './activationPreflightState.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import { type SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import { withChildToolDisplay } from '../session/childToolAssembly.js';
+import { ChildToolDisplay } from '../session/childToolDisplay.js';
+import { assertBorrowedSessionClient } from '../session/session-client-binding.js';
+import { cleanupProviderScope } from '../session/session-client-cleanup.js';
+import { type SessionClientOwner } from '../session/session-client-owner.js';
+import { ShellJobOwner } from '../session/shell-job-owner.js';
+import { type TaskLaunchOwner } from '../session/task-launch-owner.js';
+import { type ActivationPreflight } from './activation-types.js';
 import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
-import {
-  acquireAdoptedOAuth,
-  acquireAdoptedProviderManager,
-  activateAdoptedProviders,
-} from './adopted-provider-assembly.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
-import type { Agent } from './agent.js';
-import { AgentImpl } from './agentImpl.js';
-import type {
-  AgentAuth,
-  AgentAdoptionIntent,
-  AgentConfig,
-  AgentSchedulerFactory,
-  AgentSchedulerHandle,
-  ApprovalHandler,
-  EditorCallbacks,
-  OAuthPromptHandler,
+import {
+  assembleTaskOwner,
+  cleanupFailedShellBootstrap,
+} from './agent-shell-assembly.js';
+import { type Agent } from './agent.js';
+import {
+  AgentBootstrapError,
+  buildFacadeState,
+  createStableDisplayCallbacks,
+  generateRuntimeId,
+  recordOwnership,
+  validateAgentRuntimeId,
+  wrapApprovalHandler,
+  type StableDisplayCallbacksHolder,
+  type StableEditorCallbacksHolder,
+} from './agentBootstrap.js';
+import {
+  FromConfigValidatableSchema,
+  type AgentAdoptionIntent,
+  type AgentAuth,
+  type AgentConfig,
+  type AgentSchedulerFactory,
+  type AgentSchedulerHandle,
+  type ApprovalHandler,
+  type EditorCallbacks,
+  type OAuthPromptHandler,
 } from './config-types.js';
-import { FromConfigValidatableSchema } from './config-types.js';
-import { resolveSchedulerFactory } from './createAgent.js';
+import { createAgentAuthState } from './control/authState.js';
+import { assembleIdeControl } from './control/ideControl.js';
+import { LspControl } from './control/lspControl.js';
+import {
+  assembleSessionAuthentication,
+  clearProviderAuthenticationCache,
+} from './control/session-authentication.js';
+import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
+import { assembleForegroundMcpControl } from './foreground-agent-assembly.js';
+import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
 import {
   cleanupFailedAdoption,
   cleanupFailedFromConfig,
   closePreflightAfterAdoption,
 } from './fromConfig-cleanup.js';
-import {
-  activateAdoptedSession,
-  initializeAdoptedClient,
-} from './fromConfig-session.js';
+import { AdoptedSessionAssembly } from './fromConfig-session.js';
+import { type PrepareSessionTools } from './fromConfig.js';
 import {
   assembleHostGitHubBroker,
   type HostGitHubBrokerOwner,
 } from './host-github-broker-owner.js';
+import {
+  assertAdoptedWorkspaceHandoff,
+  assertAdoptedWorkspaceRoots,
+  runtimeOwnership,
+  selectedOwnership,
+} from './mcpOAuthAssembly.js';
 import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import { createTaskRegistration } from './runtimeFactories.js';
+import { assembleModelSelection } from './model-selection.js';
+import { setActiveModel } from './providerMutations.js';
 import {
   acquireAdoptedMedia,
   prepareImageConstruction,
   type SessionImageSelection,
 } from './session-image-assembly.js';
-
-export class AdoptedAgentAssembly {
-  constructor(
-    private readonly config: Config,
-    private readonly settingsService: SettingsService,
-    private readonly intent: AgentAdoptionIntent,
-    private readonly settingsOwner: SessionSettingsOwner | undefined,
-    private readonly providerManager: RuntimeProviderManager | undefined,
-    private readonly oauthManager: OAuthManager | undefined,
-    private readonly messageBus: MessageBus | undefined,
-    private readonly mcpRuntime: McpRuntimeOwner | undefined,
-    private readonly activationPreflight: ActivationPreflight | undefined,
-    private readonly agentClient: AgentClientContract | undefined,
-    private readonly providerFileLifecycle: ProviderFileLifecycle | undefined,
-    private readonly tokenizerFactory: RuntimeTokenizerFactory | undefined,
-    private readonly contentGeneratorFactory:
-      | RuntimeContentGeneratorFactory<ContentGenerator>
-      | undefined,
-    private readonly runtimeFactoryBindings:
-      | AgentRuntimeFactoryBindings
-      | undefined,
-    private readonly tokenStore: TokenStore | undefined,
-    private readonly credentialAuthority: CredentialAuthority | undefined,
-    private readonly policyOwner: RuntimePolicyOwner | undefined,
-    private readonly trustPort: WorkspaceTrustControlPort | undefined,
-    private readonly idePort: WorkspaceIdePort | undefined,
-    private readonly hookOwner: SessionHookOwner | undefined,
-    private readonly definitionOwner: WorkspaceDefinitionOwner | undefined,
-    private readonly filesystemOwner: WorkspaceFilesystemOwner | undefined,
-    private readonly lspOwner: WorkspaceLspOwner | undefined,
-    private readonly memoryOwner: AgentConfig['memoryOwner'] | undefined,
-    private readonly asyncTaskManager: AsyncTaskManager | undefined,
-    private readonly mcpHost: Partial<McpHostServices> | undefined,
-    private readonly mcpTokenStorage: TokenStorage | undefined,
-    private readonly githubBrokerClient: GitHubBrokerClient | undefined,
-    private readonly disposeGitHubBroker: (() => Promise<void>) | undefined,
-    private readonly imageOperation:
-      | SessionImageSelection['imageOperation']
-      | undefined,
-    private readonly onApproval: ApprovalHandler | undefined,
-    private readonly onOAuthPrompt: OAuthPromptHandler | undefined,
-    private readonly editorCallbacks: EditorCallbacks | undefined,
-    private readonly prepareSessionTools: PrepareSessionTools | undefined,
-    private readonly toolSchedulerFactory: AgentSchedulerFactory | undefined,
-    private readonly skillPolicy:
-      | WorkspaceSkillAssemblyOperations['reloadPolicy']
-      | undefined,
-    private readonly registerSkillTools:
-      | WorkspaceSkillAssemblyOperations['registerTools']
-      | undefined,
-  ) {}
-
-  async assemble(): Promise<Agent> {
-    const images = prepareImageConstruction(this.imageOperation);
+import { projectTrustedSubagents } from './workspace-definition-assembly.js';
+import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
+export abstract class AdoptedAgentAssembly extends AdoptedSessionAssembly {
+  protected constructor(config?: Config) {
+    super();
+    if (config !== undefined) this.config = config;
+  }
+  protected abstract validateAdoptionIdentity(): void;
+  protected abstract acceptAdoption(): Promise<void>;
+  protected abstract closeAcquisition(): Promise<void>;
+  protected abstract publishAdoptedAgent(agent: Agent): Promise<Agent>;
+  protected adoptSettingsService!: SettingsService;
+  protected adoptIntent!: AgentAdoptionIntent;
+  protected adoptSettingsOwner!: SessionSettingsOwner | undefined;
+  protected adoptProviderManager!: RuntimeProviderManager | undefined;
+  protected adoptOauthManager!: OAuthManager | undefined;
+  protected adoptMessageBus!: MessageBus | undefined;
+  protected adoptMcpRuntime!: McpRuntimeOwner | undefined;
+  protected adoptActivationPreflight!: ActivationPreflight | undefined;
+  protected adoptAgentClient!: AgentClientContract | undefined;
+  protected adoptProviderFileLifecycle!: ProviderFileLifecycle | undefined;
+  protected adoptTokenizerFactory!: RuntimeTokenizerFactory | undefined;
+  protected adoptContentGeneratorFactory!:
+    | RuntimeContentGeneratorFactory<ContentGenerator>
+    | undefined;
+  protected adoptRuntimeFactoryBindings!:
+    | AgentRuntimeFactoryBindings
+    | undefined;
+  protected adoptCredentialAuthority!: CredentialAuthority | undefined;
+  protected adoptPolicyOwner!: RuntimePolicyOwner | undefined;
+  protected adoptTrustPort!: WorkspaceTrustControlPort | undefined;
+  protected adoptIdePort!: WorkspaceIdePort | undefined;
+  protected adoptHookOwner!: SessionHookOwner | undefined;
+  protected adoptDefinitionOwner!: WorkspaceDefinitionOwner | undefined;
+  protected adoptFilesystemOwner!: WorkspaceFilesystemOwner | undefined;
+  protected adoptLspOwner!: WorkspaceLspOwner | undefined;
+  protected adoptMemoryOwner!: AgentConfig['memoryOwner'] | undefined;
+  protected adoptAsyncTaskManager!: AsyncTaskManager | undefined;
+  protected adoptMcpHost!: Partial<McpHostServices> | undefined;
+  protected adoptMcpTokenStorage!: TokenStorage | undefined;
+  protected adoptGithubBrokerClient!: GitHubBrokerClient | undefined;
+  protected adoptDisposeGitHubBroker!: (() => Promise<void>) | undefined;
+  protected adoptImageOperation!:
+    | SessionImageSelection['imageOperation']
+    | undefined;
+  protected adoptOnApproval!: ApprovalHandler | undefined;
+  protected adoptOnOAuthPrompt!: OAuthPromptHandler | undefined;
+  protected adoptEditorCallbacks!: EditorCallbacks | undefined;
+  protected adoptPrepareSessionTools!: PrepareSessionTools | undefined;
+  protected adoptToolSchedulerFactory!: AgentSchedulerFactory | undefined;
+  protected adoptSkillPolicy!:
+    | WorkspaceSkillAssemblyOperations['reloadPolicy']
+    | undefined;
+  protected adoptRegisterSkillTools!:
+    | WorkspaceSkillAssemblyOperations['registerTools']
+    | undefined;
+  protected async assembleAdoption(): Promise<Agent> {
+    const images = prepareImageConstruction(this.adoptImageOperation);
     let github: HostGitHubBrokerOwner | undefined;
-    const preflight = this.activationPreflight?.operation;
+    const preflight =
+      this.adoptActivationPreflight === undefined ? undefined : this;
     const closePreflight =
-      preflight === undefined
-        ? undefined
-        : () => AgentActivationBootstrap.close(preflight);
-    const definitions = this.definitionOwner;
-    const memory = this.memoryOwner;
+      preflight === undefined ? undefined : () => this.closeAcquisition();
     try {
       github = assembleHostGitHubBroker({
-        githubBrokerClient: this.githubBrokerClient,
-        disposeGitHubBroker: this.disposeGitHubBroker,
+        githubBrokerClient: this.adoptGithubBrokerClient,
+        disposeGitHubBroker: this.adoptDisposeGitHubBroker,
       });
-      this.validatePreflight();
+      this.validateAdoptionIdentity();
+      const retainedBus =
+        this.adoptActivationPreflight === undefined
+          ? undefined
+          : this.messageBus;
       const messageBus =
-        this.messageBus ??
-        this.activationPreflight?.operation.messageBus ??
-        this.mcpRuntime?.messageBus ??
-        this.policyOwner?.session.messageBus;
-      const runtimeId = this.validateAdoption(messageBus);
+        this.adoptMessageBus ??
+        retainedBus ??
+        this.adoptMcpRuntime?.messageBus ??
+        this.adoptPolicyOwner?.session.messageBus;
+      const runtimeId = this.#adoptValidateAdoption(messageBus);
+      this.#adoptAssertWorkspaceHandoff();
+      if (preflight !== undefined) {
+        await this.acceptAdoption();
+      }
       const credentialAuthority =
-        this.credentialAuthority ??
+        this.adoptCredentialAuthority ??
         new HostCredentialOwner(process.env).authority;
-      await this.adoptConfig(
+      await this.#adoptAdoptConfig(
         github,
         runtimeId,
         messageBus,
@@ -228,62 +217,42 @@ export class AdoptedAgentAssembly {
         primaryError,
         github?.cleanupFailedConstruction.bind(github),
         () => images.cleanupFailedConstruction(),
-        this.intent.definitionOwnership === 'agent' && definitions !== undefined
-          ? () => definitions.dispose()
+        this.adoptIntent.definitionOwnership === 'agent' &&
+          this.adoptDefinitionOwner !== undefined
+          ? this.adoptDefinitionOwner.dispose.bind(this.adoptDefinitionOwner)
           : undefined,
-        memory?.ownership === 'agent'
-          ? () => memory.owner.dispose()
+        this.adoptMemoryOwner?.ownership === 'agent'
+          ? this.adoptMemoryOwner.owner.dispose.bind(
+              this.adoptMemoryOwner.owner,
+            )
           : undefined,
         closePreflight,
       );
     }
     await closePreflightAfterAdoption(closePreflight, () =>
-      this.agent.dispose(),
+      this.#adoptAgent.dispose(),
     );
-    return this.agent;
+    return this.publishAdoptedAgent(this.#adoptAgent);
   }
-
-  private validatePreflight(): void {
-    if (!isAdoptionConfig(this.config))
-      throw new AgentBootstrapError('fromConfig requires an existing Config');
-    assertMcpHandoff(
-      this.mcpRuntime,
-      this.intent.mcpOwnership,
-      this.mcpHost,
-      this.mcpTokenStorage,
-    );
-    AgentActivationBootstrap.assertAdoption(
-      this.activationPreflight,
-      this.config,
-      this.intent.activation,
-      this.providerManager,
-      this.settingsService,
-      this.imageOperation,
-      this.oauthManager,
-      this.messageBus,
-      this.tokenizerFactory,
-      this.contentGeneratorFactory,
-      this.providerFileLifecycle,
-      this.memoryOwner !== undefined,
-    );
-  }
-
-  private validateAdoption(messageBus: MessageBus | undefined): string {
+  #adoptValidateAdoption(messageBus: MessageBus | undefined): string {
     FromConfigValidatableSchema.parse({
-      sessionId: this.intent.sessionId,
-      activation: this.intent.activation,
+      sessionId: this.adoptIntent.sessionId,
+      activation: this.adoptIntent.activation,
     });
-    this.assertBorrowedClient();
-    const runtimeId = this.intent.sessionId ?? generateRuntimeId();
+    this.#adoptAssertBorrowedClient();
+    const runtimeId = this.adoptIntent.sessionId ?? generateRuntimeId();
     validateAgentRuntimeId(runtimeId);
-    this.settingsOwner?.assertSettingsIdentity(this.settingsService);
-    if (this.mcpRuntime !== undefined)
-      this.mcpRuntime.assertConfig(
+    this.adoptSettingsOwner?.assertSettingsIdentity(this.adoptSettingsService);
+    if (this.adoptMcpRuntime !== undefined)
+      this.adoptMcpRuntime.assertConfig(
         this.config,
-        messageBus ?? this.mcpRuntime.messageBus,
+        messageBus ?? this.adoptMcpRuntime.messageBus,
       );
     const oauth =
-      this.oauthManager ?? this.activationPreflight?.operation.oauthManager;
+      this.adoptOauthManager ??
+      (this.adoptActivationPreflight === undefined
+        ? undefined
+        : this.oauthManager);
     if (
       oauth?.runtimeMessageBus !== undefined &&
       messageBus !== undefined &&
@@ -294,68 +263,73 @@ export class AdoptedAgentAssembly {
       );
     return runtimeId;
   }
-
-  private assertBorrowedClient(): void {
-    AgentActivationBootstrap.assertBorrowedClient(
-      this.agentClient,
+  #adoptAssertBorrowedClient(): void {
+    assertBorrowedSessionClient(
+      this.adoptAgentClient,
       this.config,
-      this.providerManager,
-      this.mcpRuntime !== undefined,
-      this.activationPreflight?.operation.sessionClient.getAgentClient(),
+      this.adoptProviderManager,
+      this.adoptMcpRuntime !== undefined,
+      undefined,
     );
+    if (this.adoptActivationPreflight !== undefined)
+      this.ownedSessionClient.assertPreflightClient(this.adoptAgentClient);
   }
-
-  private assertWorkspaceHandoff(): void {
+  #adoptAssertWorkspaceHandoff(): void {
     assertAdoptedWorkspaceHandoff(
-      this.mcpRuntime !== undefined,
-      this.lspOwner,
-      this.intent.lspOwnership,
-      this.filesystemOwner,
-      this.intent.filesystemOwnership,
-      this.memoryOwner,
+      this.adoptMcpRuntime !== undefined,
+      this.adoptLspOwner,
+      this.adoptIntent.lspOwnership,
+      this.adoptFilesystemOwner,
+      this.adoptIntent.filesystemOwnership,
+      this.adoptMemoryOwner,
     );
   }
-
-  private constructMcp(
+  #adoptConstructMcp(
     messageBus: MessageBus | undefined,
   ): Promise<McpRuntimeOwner> {
-    const preflight = this.activationPreflight?.operation;
-    const filesystem = this.filesystemOwner ?? preflight?.workspaceFilesystem;
-    const definitions = this.definitionOwner ?? preflight?.workspaceDefinitions;
+    const preflight =
+      this.adoptActivationPreflight === undefined ? undefined : this;
+    const filesystem =
+      this.adoptFilesystemOwner ?? preflight?.workspaceFilesystem;
+    const definitions =
+      this.adoptDefinitionOwner ?? preflight?.workspaceDefinitions;
     assertAdoptedWorkspaceRoots(
-      this.intent.filesystemOwnership,
+      this.adoptIntent.filesystemOwnership,
       filesystem,
-      this.intent.definitionOwnership,
+      this.adoptIntent.definitionOwnership,
       definitions,
     );
-    const feedback = this.mcpHost?.emitFeedback;
-    const memory = this.memoryOwner?.owner ?? preflight?.workspaceMemory;
+    const feedback = this.adoptMcpHost?.emitFeedback;
+    const memory = this.adoptMemoryOwner?.owner ?? preflight?.workspaceMemory;
     const memoryOwnership = runtimeOwnership(
-      this.memoryOwner !== undefined
-        ? this.memoryOwner.ownership === 'agent'
+      this.adoptMemoryOwner !== undefined
+        ? this.adoptMemoryOwner.ownership === 'agent'
         : preflight?.workspaceMemoryOwnership === 'transferred',
     );
     return McpRuntimeOwner.create(
       {
-        getAuthProviderFactory: this.mcpHost?.getAuthProviderFactory,
+        getAuthProviderFactory: this.adoptMcpHost?.getAuthProviderFactory,
         tokenStorage: new MCPOAuthTokenStorage(
-          this.mcpTokenStorage ??
+          this.adoptMcpTokenStorage ??
             new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
         ),
-        openBrowser: this.mcpHost?.openBrowser ?? openBrowserSecurely,
+        openBrowser: this.adoptMcpHost?.openBrowser ?? openBrowserSecurely,
       },
       this.config,
       messageBus,
       { emitFeedback: feedback },
       undefined,
       undefined,
-      this.policyOwner,
-      runtimeOwnership(this.policyOwner === undefined),
-      this.lspOwner,
-      selectedOwnership(this.intent.lspOwnership, this.lspOwner === undefined),
+      this.adoptPolicyOwner,
+      runtimeOwnership(this.adoptPolicyOwner === undefined),
+      this.adoptLspOwner,
+      selectedOwnership(
+        this.adoptIntent.lspOwnership,
+        this.adoptLspOwner === undefined,
+      ),
       filesystem,
       selectedOwnership(
-        this.intent.filesystemOwnership,
+        this.adoptIntent.filesystemOwnership,
         preflight !== undefined || filesystem === undefined,
       ),
       memory === undefined
@@ -363,278 +337,233 @@ export class AdoptedAgentAssembly {
         : { owner: memory, ownership: memoryOwnership },
       definitions,
       selectedOwnership(
-        this.intent.definitionOwnership,
+        this.adoptIntent.definitionOwnership,
         preflight !== undefined || definitions === undefined,
       ),
-      this.trustPort ?? preflight?.workspaceTrust,
-      this.idePort,
+      this.adoptTrustPort ?? preflight?.workspaceTrust,
+      this.adoptIdePort,
       preflight?.trustCleanup,
       {
-        reloadPolicy: this.skillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
+        reloadPolicy:
+          this.adoptSkillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
         registerTools:
-          this.registerSkillTools ?? DEFAULT_SKILL_OPERATIONS.registerTools,
+          this.adoptRegisterSkillTools ??
+          DEFAULT_SKILL_OPERATIONS.registerTools,
       },
-      this.settingsOwner?.readMcpSettingsBinding(),
+      this.adoptSettingsOwner?.readMcpSettingsBinding(),
     );
   }
-
-  private agent!: Agent;
-  private client!: SessionClientOwner;
-  private mcp!: McpRuntimeOwner;
-  private media: SessionMediaOwner | undefined;
-  private selectedSettings!: SessionSettingsOwner;
-  private files!: ProviderFileLifecycle;
-  private manager!: RuntimeProviderManager;
-  private oauth!: OAuthManager;
-  private tokenizer!: RuntimeTokenizerFactory;
-  private content!: RuntimeContentGeneratorFactory<ContentGenerator>;
-  private readonly release = new AcquisitionRelease();
-  private runtimeId!: string;
-  private authority!: CredentialAuthority;
-  private github: HostGitHubBrokerOwner | undefined;
-  private selectedBus: MessageBus | undefined;
-  private images: SessionImageSelection['imageOperation'];
-
-  private async adoptConfig(
+  #adoptAgent!: Agent;
+  protected readonly adoptRelease = new AcquisitionRelease();
+  #adoptGithub: HostGitHubBrokerOwner | undefined;
+  async #adoptAdoptConfig(
     github: HostGitHubBrokerOwner | undefined,
     runtimeId: string,
     messageBus: MessageBus | undefined,
     authority: CredentialAuthority,
     images: SessionImageSelection['imageOperation'],
   ): Promise<void> {
-    this.github = github;
-    this.runtimeId = runtimeId;
-    this.selectedBus = messageBus;
-    this.authority = authority;
-    this.images = images;
-    this.assertWorkspaceHandoff();
-    this.mcp = this.mcpRuntime ?? (await this.constructMcp(messageBus));
-    this.media = await acquireAdoptedMedia(
-      this.config,
-      this.activationPreflight?.operation,
-      this.agentClient?.mediaStore,
-    );
+    this.#adoptGithub = github;
+    this.adoptRuntimeId = runtimeId;
+    this.adoptSelectedBus = messageBus;
+    this.adoptAuthority = authority;
+    this.adoptImages = images;
+    this.adoptMcp =
+      this.adoptMcpRuntime ?? (await this.#adoptConstructMcp(messageBus));
     try {
-      this.acquireProviders();
-      this.acquireOAuth();
+      if (this.adoptActivationPreflight !== undefined) {
+        this.ownsFilesystem = false;
+        this.ownsDefinitions = false;
+        this.ownsMemory = false;
+        this.adoptMedia = this.mediaOwner;
+        this.mediaOwner = undefined;
+      } else {
+        this.adoptMedia = await acquireAdoptedMedia(
+          this.config,
+          this.adoptAgentClient?.mediaStore,
+        );
+      }
+      this.#adoptAcquireProviders();
+      this.#adoptAcquireOAuth();
     } catch (primary) {
       await cleanupFailedAdoption(
         primary,
-        () => this.release.rollback(),
+        () => this.adoptRelease.rollback(),
         adoptedDefinitionCleanup(
-          this.mcp,
-          this.definitionOwner,
-          this.intent.definitionOwnership,
-          this.ownsMcp(),
+          this.adoptMcp,
+          this.adoptDefinitionOwner,
+          this.adoptIntent.definitionOwnership,
+          this.#adoptOwnsMcp(),
         ),
-        this.media === undefined
+        this.adoptMedia === undefined
           ? undefined
-          : this.media.dispose.bind(this.media),
+          : this.adoptMedia.dispose.bind(this.adoptMedia),
         undefined,
       );
     }
-    await this.complete();
+    await this.#adoptComplete();
   }
-
-  private acquireProviders(): void {
-    const preflight = this.activationPreflight?.operation;
-    const transferred = preflight?.takeSettingsOwner(this.settingsService);
+  #adoptAcquireProviders(): void {
+    const preflight =
+      this.adoptActivationPreflight === undefined ? undefined : this;
+    const transferred =
+      preflight === undefined ? undefined : this.settingsOwner;
     const settingsOwner =
       transferred ??
-      this.settingsOwner ??
-      new SessionSettingsOwner(this.settingsService);
-    this.selectedSettings = settingsOwner;
+      this.adoptSettingsOwner ??
+      new SessionSettingsOwner(this.adoptSettingsService);
+    this.adoptSelectedSettings = settingsOwner;
     if (
       (transferred !== undefined &&
         preflight?.settingsOwnerOwnership === 'transferred') ||
-      (transferred === undefined && this.settingsOwner === undefined)
+      (transferred === undefined && this.adoptSettingsOwner === undefined)
     )
-      this.release.acquire('settings', () => settingsOwner.dispose());
+      this.adoptRelease.acquire('settings', () => settingsOwner.dispose());
+    if (preflight !== undefined) this.ownsSettings = false;
     settingsOwner.bindTelemetry(this.config);
     const files =
-      this.providerFileLifecycle ??
+      this.adoptProviderFileLifecycle ??
       preflight?.providerFileLifecycle ??
       new ProviderFileLifecycle({
         maxFiles: 100,
         maxBytes: 512 * 1024 * 1024,
         proxy: this.config.getProxy(),
       });
-    this.files = files;
+    this.adoptFiles = files;
     const scope = this.config.getSessionId();
-    for (const id of this.runtimeId === scope
+    for (const id of this.adoptRuntimeId === scope
       ? [scope]
-      : [this.runtimeId, scope])
-      this.release.acquire('files', () => releaseAdoptedFileScope(files, id));
-    this.manager = acquireAdoptedProviderManager(
-      this.providerManager,
-      this.config,
-      this.settingsService,
-      settingsOwner,
-      files,
-      this.runtimeId,
-      this.authority,
-      this.release,
-    );
+      : [this.adoptRuntimeId, scope])
+      this.adoptRelease.acquire('files', () =>
+        releaseAdoptedFileScope(files, id),
+      );
+    this.acquireAdoptedProviderManager();
   }
-
-  private acquireOAuth(): void {
-    const preflight = this.activationPreflight?.operation;
-    this.tokenizer = configureProviderTokenizer(
-      this.manager,
-      this.tokenizerFactory ?? preflight?.tokenizerFactory,
+  #adoptAcquireOAuth(): void {
+    const preflight =
+      this.adoptActivationPreflight === undefined ? undefined : this;
+    this.adoptTokenizer = configureProviderTokenizer(
+      this.adoptManager,
+      this.adoptTokenizerFactory ??
+        preflight?.ownedSessionClient.tokenizerFactory,
     );
-    this.content =
-      this.contentGeneratorFactory ??
-      preflight?.contentGeneratorFactory ??
+    this.adoptContent =
+      this.adoptContentGeneratorFactory ??
+      preflight?.ownedSessionClient.contentGeneratorFactory ??
       createRuntimeContentGeneratorFactory();
-    this.oauth = acquireAdoptedOAuth(
-      this.oauthManager ?? preflight?.oauthManager,
-      this.tokenStore,
-      this.mcp.messageBus,
-      this.config,
-      this.settingsService,
-      this.manager,
-      this.runtimeId,
-      this.definitionOwner?.profileReads ??
-        preflight?.workspaceDefinitions.profileReads ??
-        this.mcpRuntime?.profileDefinitions,
-      this.authority,
-      this.release,
-    );
+    this.adoptSuppliedOAuth = this.adoptOauthManager ?? preflight?.oauthManager;
+    this.adoptOAuthBus = this.adoptMcp.messageBus;
+    this.adoptOAuthProfiles =
+      this.adoptDefinitionOwner?.profileReads ??
+      preflight?.workspaceDefinitions.profileReads ??
+      this.adoptMcpRuntime?.profileDefinitions;
+    this.acquireAdoptedOAuth();
   }
-
-  private ownsMcp(): boolean {
+  #adoptOwnsMcp(): boolean {
     return (
-      (this.intent.mcpOwnership ??
-        (this.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent'
+      (this.adoptIntent.mcpOwnership ??
+        (this.adoptMcpRuntime === undefined ? 'agent' : 'caller')) === 'agent'
     );
   }
-
-  private async complete(): Promise<void> {
+  async #adoptComplete(): Promise<void> {
     let client: SessionClientOwner | undefined;
     try {
-      client = await initializeAdoptedClient(
-        this.config,
-        this.settingsService,
-        this.selectedSettings,
-        this.manager,
-        this.oauth,
-        this.content,
-        this.tokenizer,
-        this.files,
-        this.media,
-        this.mcp.readInstructions,
-        this.mcp.workspacePaths,
-        this.intent.activation,
-        this.activationPreflight,
-        this.runtimeFactoryBindings?.agentClientFactory,
-        this.agentClient,
-        this.policyOwner === undefined && this.mcpRuntime !== undefined
-          ? undefined
-          : this.selectedBus,
-        this.images,
-      );
-      this.client = client;
-      await this.initializeSession();
-      await this.finalize();
+      if (this.adoptActivationPreflight === undefined)
+        await this.acquireAdoptedSession();
+      else {
+        this.adoptClient = this.ownedSessionClient;
+        this.ownsSessionClient = false;
+      }
+      client = this.adoptClient;
+      await this.#adoptInitializeSession();
+      await this.#adoptFinalize();
     } catch (primary) {
       await cleanupFailedAdoption(
         primary,
-        () => this.release.close(),
+        () => this.adoptRelease.close(),
         adoptedDefinitionCleanup(
-          this.mcp,
-          this.definitionOwner,
-          this.intent.definitionOwnership,
-          this.ownsMcp(),
+          this.adoptMcp,
+          this.adoptDefinitionOwner,
+          this.adoptIntent.definitionOwnership,
+          this.#adoptOwnsMcp(),
         ),
-        this.media === undefined
+        this.adoptMedia === undefined
           ? undefined
-          : this.media.dispose.bind(this.media),
+          : this.adoptMedia.dispose.bind(this.adoptMedia),
         client?.dispose.bind(client),
       );
     }
   }
-
-  private async initializeSession(): Promise<void> {
-    const client = this.client;
-    client.bindHostGitHub(this.github);
-    const definitions = this.definitionOwner ?? this.mcp.workspaceDefinitions;
-    const registration = createTaskRegistration(this.authority);
+  async #adoptInitializeSession(): Promise<void> {
+    const client = this.adoptClient;
+    const mainScope = this.config.getSessionId();
+    client.bindProviderFiles(
+      this.adoptFiles,
+      (provider) => this.adoptOauth.composeRetryOperations(provider),
+      (scope) =>
+        scope === mainScope
+          ? Promise.resolve()
+          : cleanupProviderScope(this.adoptFiles, scope),
+    );
+    client.bindInteractiveAuthRequests((prompt) =>
+      this.adoptOauth.requestInteractiveAuth(prompt),
+    );
+    client.bindHostGitHub(this.#adoptGithub);
+    const definitions =
+      this.adoptDefinitionOwner ?? this.adoptMcp.workspaceDefinitions;
     client.bindMcpRuntime(
-      this.mcp,
-      this.runtimeFactoryBindings?.taskToolRegistration(registration) ??
-        registration,
+      this.adoptMcp,
+      this.adoptRuntimeFactoryBindings?.taskToolRegistration,
       definitions.profileReads,
       projectTrustedSubagents(definitions, () =>
-        this.mcp.trust.isTrustedFolder(),
+        this.adoptMcp.trust.isTrustedFolder(),
       ),
+      this.adoptAuthority,
     );
     if (client.hasHookComposition()) {
-      if (this.hookOwner !== undefined)
+      if (this.adoptHookOwner !== undefined)
         throw new AgentBootstrapError(
           'Preflight hook ownership cannot be replaced during adoption',
         );
-    } else client.bindHooks(this.hookOwner);
-    await activateAdoptedProviders(
-      this.config,
-      this.settingsService,
-      this.selectedSettings,
-      this.manager,
-      this.oauth,
-      this.runtimeId,
-      this.providerManager === undefined,
-      this.tokenizer,
-    );
-    await this.mcp.initialize();
+    } else client.bindHooks(this.adoptHookOwner);
+    await this.activateAdoptedProviders();
+    await this.adoptMcp.initialize();
     await client.initializeTools();
-    const prepare = this.prepareSessionTools;
-    if (prepare !== undefined)
-      client.toolCatalog.prepareTools((tools) =>
-        prepare(this.config, client.messageBus, tools),
-      );
+    const prepare = this.adoptPrepareSessionTools;
+    if (prepare !== undefined) client.toolCatalog.prepareTools(prepare);
   }
-
-  private async finalize(): Promise<void> {
-    await activateAdoptedSession(
-      this.config,
-      this.settingsService,
-      this.selectedSettings,
-      this.manager,
-      this.oauth,
-      () => 'agent',
-      () => this.client.getAgentClient().isInitialized(),
-      (method) => this.client.refreshAuth(method),
-      this.intent.activation,
-      this.activationPreflight,
-    );
+  async #adoptFinalize(): Promise<void> {
+    if (this.adoptActivationPreflight === undefined)
+      await this.activateAdoptedSession();
     const parsed = {
       provider:
-        this.providerManager?.getActiveProviderName() ??
+        this.adoptProviderManager?.getActiveProviderName() ??
         this.config.getProvider() ??
         '',
       model:
-        this.selectedSettings.readSelectedModel() ?? this.config.getModel(),
-      ...(this.intent.sessionId === undefined
+        this.adoptSelectedSettings.readSelectedModel() ??
+        this.config.getModel(),
+      ...(this.adoptIntent.sessionId === undefined
         ? {}
-        : { sessionId: this.intent.sessionId }),
+        : { sessionId: this.adoptIntent.sessionId }),
     };
-    await this.tokenizer.prepareTokenizer?.(parsed.provider, parsed.model);
+    await this.adoptTokenizer.prepareTokenizer?.(parsed.provider, parsed.model);
     const handles: AgentSchedulerHandle[] = [];
     const scheduler = resolveSchedulerFactory(
       false,
-      this.toolSchedulerFactory,
+      this.adoptToolSchedulerFactory,
       handles,
     );
-    this.agent = await this.#acquireFacade(
+    this.assertConstructionOpen();
+    this.#adoptAgent = await this.#adoptAcquireFacade(
       parsed,
-      { baseUrl: admittedEndpoint(this.settingsService, parsed.provider) }
+      { baseUrl: admittedEndpoint(this.adoptSettingsService, parsed.provider) }
         .baseUrl,
       handles,
       scheduler,
     );
   }
-
-  async #acquireFacade(
+  async #adoptAcquireFacade(
     parsed: Parameters<typeof buildFacadeState>[0] & {
       readonly auth?: AgentAuth;
     },
@@ -643,39 +572,46 @@ export class AdoptedAgentAssembly {
     scheduler: SchedulerConstruction | undefined,
   ): Promise<Agent> {
     const tasks = assembleTaskOwner(
-      this.settingsService,
-      this.asyncTaskManager,
+      this.adoptSettingsService,
+      this.adoptAsyncTaskManager,
     );
     const shell = new ShellJobOwner(() =>
-      resolveShellJobSettings(this.settingsService),
+      resolveShellJobSettings(this.adoptSettingsService),
     );
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
-      const editors = { editorCallbacks: this.editorCallbacks ?? {} };
-      this.client.initializeExecution(
+      const editors = { editorCallbacks: this.adoptEditorCallbacks ?? {} };
+      this.adoptClient.toolCatalog.bindChildExecution(child, tasks, shell);
+      this.adoptClient.initializeExecution(
         withChildToolDisplay(
           scheduler ?? ((options) => new CoreToolScheduler(options)),
           child,
           tasks,
           shell,
         ),
-        this.onApproval ? wrapApprovalHandler(this.onApproval) : undefined,
+        this.adoptOnApproval
+          ? wrapApprovalHandler(this.adoptOnApproval)
+          : undefined,
         createStableDisplayCallbacks(editors, display),
       );
-      const runtimeState = buildFacadeState(parsed, baseUrl, this.runtimeId);
+      const runtimeState = buildFacadeState(
+        parsed,
+        baseUrl,
+        this.adoptRuntimeId,
+      );
       const ownership = recordOwnership({
-        runtimeHandle: { cleanup: () => this.release.close() },
+        runtimeHandle: { cleanup: () => this.adoptRelease.close() },
         injectedSchedulerHandles: handles,
         configOwnership: 'caller',
         disposeMcpRuntime: adoptedDefinitionCleanup(
-          this.mcp,
-          this.definitionOwner,
-          this.intent.definitionOwnership,
-          this.ownsMcp(),
+          this.adoptMcp,
+          this.adoptDefinitionOwner,
+          this.adoptIntent.definitionOwnership,
+          this.#adoptOwnsMcp(),
         ),
       });
-      return this.#constructFacade(
+      return this.#adoptConstructFacade(
         runtimeState,
         ownership,
         parsed.auth,
@@ -689,51 +625,12 @@ export class AdoptedAgentAssembly {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  #constructMcpControl(auth: AgentAuthState): McpControl {
-    return buildOwnedMcpControl(
-      (...args) => this.mcp.readServerSettings(...args),
-      this.client.toolCatalog.selection,
-      (...args) => this.mcp.listPrompts(...args),
-      (...args) => this.mcp.listResources(...args),
-      (...args) => this.mcp.readOAuthCredentials(...args),
-      (...args) => this.mcp.performOAuth(...args),
-      (...args) => this.mcp.status(...args),
-      (...args) => this.mcp.refresh(...args),
-      (...args) => this.mcp.reload(...args),
-      (server) => auth.mcpAuth.has(server),
-      (server) => auth.mcpAuth.add(server),
-      () => this.client.getAgentClient().setTools(),
-      (...args) => this.mcp.subscribeStatus(...args),
-      (...args) => this.mcp.findResource(...args),
-      (...args) => this.mcp.readResource(...args),
-    );
+  #adoptCloseMcpAdmission(): void {
+    if (this.adoptIntent.definitionOwnership === 'agent')
+      this.adoptDefinitionOwner?.closeAdmission();
+    if (this.#adoptOwnsMcp()) this.adoptMcp.closeAdmission();
   }
-  #constructWorkspace(): WorkspaceControl {
-    const definitions = this.definitionOwner ?? this.mcp.workspaceDefinitions;
-    return new WorkspaceControl(
-      definitions.profileReads,
-      definitions.profileWrites,
-      projectTrustedSubagents(definitions, () =>
-        this.mcp.trust.isTrustedFolder(),
-      ),
-      definitions.subagentWrites,
-      this.mcp.checkpointOperations,
-      this.mcp.workspaceIgnore,
-      this.mcp.workspaceSearch,
-      this.mcp.workspaceFiles,
-      this.mcp.workspacePaths.contains,
-      this.mcp.workspacePaths.directories,
-      this.mcp.addWorkspaceDirectory,
-      this.config.getTargetDir(),
-      this.config.getProjectRoot(),
-    );
-  }
-  #closeMcpAdmission(): void {
-    if (this.intent.definitionOwnership === 'agent')
-      this.definitionOwner?.closeAdmission();
-    if (this.ownsMcp()) this.mcp.closeAdmission();
-  }
-  #constructFacade(
+  #adoptConstructFacade(
     runtimeState: ReturnType<typeof buildFacadeState>,
     ownership: ReturnType<typeof recordOwnership>,
     initialAuth: AgentAuth | undefined,
@@ -743,67 +640,69 @@ export class AdoptedAgentAssembly {
     editors: StableEditorCallbacksHolder,
     display: StableDisplayCallbacksHolder,
   ): Agent {
-    const history =
-      this.client.getAgentClient().getHistoryService() ?? new HistoryService();
-    this.client.getAgentClient().storeHistoryServiceForReuse(history);
+    this.adoptClient.initializeConversation();
     const auth = createAgentAuthState();
-    return new AgentImpl(
-      this.selectedSettings,
-      this.client,
-      this.mcp.workspaceSkills.operations,
-      undefined,
-      this.media,
-      tasks,
-      shell,
-      this.#constructWorkspace(),
-      assembleIdeControl(
-        this.mcp.trust,
-        this.mcp.ide,
-        () => editors.editorCallbacks,
-      ),
-      new LspControl(this.mcp.lspInspection),
-      () => {
-        if (ownership.disposed) throw new Error('MCP facade is closed');
-        return this.mcp.awaitDiscovery();
-      },
-      () => this.#closeMcpAdmission(),
-      this.#constructMcpControl(auth),
-      auth,
+    this.facadeSettingsOwner = this.adoptSelectedSettings;
+    this.facadeSessionOwner = this.adoptClient;
+    this.facadeWorkspaceSkills = this.adoptMcp.workspaceSkills.operations;
+    this.facadeMediaOwner = this.adoptMedia;
+    this.facadeTaskOwner = tasks;
+    this.facadeShellOwner = shell;
+    this.workspace = assembleForegroundWorkspace(
+      this.adoptMcp,
       this.config,
-      this.manager,
-      this.oauth,
-      () => 'agent',
-      this.settingsService,
-      this.runtimeId,
-      () => this.release.close(),
-      this.client.messageBus,
-      runtimeState,
-      ownership,
-      this.intent.sessionIdentityOwnership ?? 'facade',
-      () => this.client.getAgentClient(),
-      history,
-      editors,
-      display,
-      this.onOAuthPrompt,
-      initialAuth,
-      child,
-      async (model) => {
-        await setActiveModel(
-          model,
-          assembleModelSelection(this.selectedSettings),
-          this.settingsService,
-          this.manager.getActiveProvider(),
-        );
-      },
-      assembleSessionAuthentication(this.oauth, (provider) =>
-        clearProviderAuthenticationCache(
-          this.manager.getProviderByName(provider),
-        ),
-      ),
+      this.adoptDefinitionOwner,
     );
-  }
-}
+    this.ide = assembleIdeControl(
+      this.adoptMcp.trust,
+      this.adoptMcp.ide,
+      () => editors.editorCallbacks,
+    );
+    this.lsp = new LspControl(this.adoptMcp.lspInspection);
+    this.awaitMcpDiscovery = () => {
+      if (ownership.disposed) throw new Error('MCP facade is closed');
+      return this.adoptMcp.awaitDiscovery();
+    };
+    this.closeMcpAdmission = () => this.#adoptCloseMcpAdmission();
+    this.mcp = assembleForegroundMcpControl(
+      this.adoptMcp,
+      this.adoptClient.toolCatalog.selection,
+      auth,
+      () => this.adoptClient.refreshToolDefinitions(),
+    );
+    this.facadeAuthState = auth;
+    this.facadeProviderManager = this.adoptManager;
+    this.facadeOAuth = this.adoptOauth;
+    this.facadeRuntimeKind = () => 'agent';
+    this.facadeSettingsService = this.adoptSettingsService;
+    this.facadeRuntimeId = this.adoptRuntimeId;
+    this.closeRuntime = () => this.adoptRelease.close();
 
-function isAdoptionConfig(value: unknown): boolean {
-  return value instanceof Config;
+    this.facadeRuntimeState = runtimeState;
+    this.facadeOwnership = ownership;
+    this.sessionIdentityOwnership =
+      this.adoptIntent.sessionIdentityOwnership ?? 'facade';
+
+    this.facadeEditors = editors;
+    this.facadeDisplay = display;
+    this.onOAuthPrompt = this.adoptOnOAuthPrompt;
+    this.initialAuth = initialAuth;
+    this.childDisplay = child;
+    this.selectOwnerModel = async (model) => {
+      await setActiveModel(
+        model,
+        assembleModelSelection(this.adoptSelectedSettings),
+        this.adoptSettingsService,
+        this.adoptManager.getActiveProvider(),
+      );
+    };
+    this.authentication = assembleSessionAuthentication(
+      this.adoptOauth,
+      (provider) =>
+        clearProviderAuthenticationCache(
+          this.adoptManager.getProviderByName(provider),
+        ),
+    );
+    return this.initializeFacade();
+  }
 }

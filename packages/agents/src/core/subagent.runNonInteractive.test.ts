@@ -1,5 +1,6 @@
-import { scopeInputs } from './__tests__/subagent-test-helpers.js';
+import { afterAll } from 'bun:test';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -11,43 +12,35 @@ import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
  * preservation (Issue #2069).
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
-import { SubAgentScope } from './subagent.js';
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   ContextState,
   SubagentTerminateMode,
   type PromptConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ChatSession } from './chatSession.js';
-import {
-  createContentGenerator,
-  type ContentGenerator,
-} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ChatSessionConfig } from './chatSession.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import { automock } from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
-  installSubagentCleanup,
-  seedSubagentSettings,
-  createSubagentConfig,
   acquireSubagentSettings,
   acquireSubagentWorkspace,
   createMockStream,
+  createRuntimeOverrides,
+  createStatelessRuntimeBundle,
+  createSubagentConfig,
   defaultModelConfig,
   defaultRunConfig,
-  createStatelessRuntimeBundle,
-  createRuntimeOverrides,
+  installSubagentCleanup,
+  seedSubagentSettings,
 } from './__tests__/subagent-test-helpers.js';
+import type { ChatSessionConfig } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
+import { SubAgentScope } from './subagent.js';
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
@@ -632,5 +625,25 @@ describe('subagent.ts', () => {
       const generationConfig = getGenerationConfigFromMock();
       expect(generationConfig.systemInstruction).toBeDefined();
     });
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('./chatSession.js', () => __actual);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/contentGenerator.js',
+      () => actual3,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => actual5);
   });
 });

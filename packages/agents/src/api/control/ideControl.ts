@@ -138,9 +138,6 @@ export class IdeControl implements AgentIdeControl {
   whenTrustTransitionSettled(): Promise<void> {
     return this.trustOwner.whenSettled();
   }
-  getIdeClient() {
-    return this.ideOwner.getClient();
-  }
   getIdeMode(): boolean {
     return this.ideOwner.isEnabled();
   }

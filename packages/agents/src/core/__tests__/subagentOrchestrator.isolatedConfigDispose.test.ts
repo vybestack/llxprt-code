@@ -1,5 +1,7 @@
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import type { TestChildLaunchOptions } from './child-launch-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,13 +11,13 @@ import { createSessionSettingsFixture } from '../../api/__tests__/helpers/sessio
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
 });
-import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**
  * The isolated runtime owns its session clients and settings independently
@@ -25,21 +27,20 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 
 import { describe, expect, it, vi } from 'bun:test';
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import type { SubagentOrchestratorOptions } from '../subagentOrchestrator.js';
 import {
-  makeForegroundConfig,
   createRuntimeBundle,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
 async function expectClientsClosed(
@@ -108,12 +109,8 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     ephemeralSettings: { 'auth-key': 'test-api-key' },
   };
 
-  type TestRuntimeLoader = NonNullable<
-    SubagentOrchestratorOptions['runtimeLoader']
-  >;
-  type TestScopeFactory = NonNullable<
-    SubagentOrchestratorOptions['scopeFactory']
-  >;
+  type TestRuntimeLoader = NonNullable<TestChildLaunchOptions['runtimeLoader']>;
+  type TestScopeFactory = NonNullable<TestChildLaunchOptions['scopeFactory']>;
 
   function buildOrchestrator(options: {
     runtimeLoader: TestRuntimeLoader;
@@ -128,7 +125,7 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
@@ -163,6 +160,7 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       const runtimeBundle = createRuntimeBundle('dispose-success');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scope = {
+        dispose: async () => {},
         runtimeContext: runtimeBundle.runtimeContext,
         getAgentId: () => 'planner-dispose-success',
       } as unknown as SubAgentScope;

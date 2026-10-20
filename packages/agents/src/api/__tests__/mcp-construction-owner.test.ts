@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,7 +31,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -46,7 +50,6 @@ import {
   listenCutoverFixtureServer,
   startCutoverFixtureServer,
 } from './helpers/mcp-cutover-server-fixture.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -278,7 +281,7 @@ describe('explicit MCP construction ownership', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const builtCallerOwner = await SessionClientOwner.create(
+    const builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -341,7 +344,7 @@ describe('explicit MCP construction ownership', () => {
       );
       requireCallerActivation(activation);
       await builtCallerOwner.initializeTools();
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtCallerClose);
     }
@@ -360,7 +363,7 @@ describe('explicit MCP construction ownership', () => {
           undefined,
           undefined,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
         ),
       ).rejects.toThrow('MCP runtime handoff');
       await expect(
@@ -374,7 +377,7 @@ describe('explicit MCP construction ownership', () => {
           undefined,
           undefined,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
           undefined,
           undefined,
           undefined,
@@ -395,7 +398,7 @@ describe('explicit MCP construction ownership', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       await agent.dispose();
       expect(builtCallerMcp.isStopped()).toBe(false);
@@ -535,7 +538,7 @@ describe('explicit MCP construction ownership', () => {
         builtCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const builtCallerOwner = await SessionClientOwner.create(
+      const builtCallerOwner = await createCapturedSessionOwner(
         builtCallerConfig,
         assembleTaskSchemaPolicy(builtCallerSettings),
         builtCallerManager,
@@ -598,7 +601,7 @@ describe('explicit MCP construction ownership', () => {
         );
         requireCallerActivation(activation);
         await builtCallerOwner.initializeTools();
-        await builtCallerOwner.getAgentClient().startChat();
+        await capturedSessionClient(builtCallerOwner).startChat();
       } catch (primary) {
         await cleanupAfterFailure(primary, builtCallerClose);
       }
@@ -615,7 +618,7 @@ describe('explicit MCP construction ownership', () => {
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       try {
         expect(browsers).toHaveLength(0);

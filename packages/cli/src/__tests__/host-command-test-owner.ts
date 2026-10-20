@@ -5,7 +5,7 @@
  */
 import type { CommandOwnerFixture } from './mockCommandContext.js';
 
-import type { IdeState } from '../ui/cliUiRuntime.js';
+import type { IdeCommandOperations } from '../ui/commands/ideCommand.js';
 import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
 import { bindPermissionCommit } from '../ui/commands/permissionsCommandHost.js';
 import { createIdeCommand } from '../ui/commands/ideCommand.js';
@@ -17,10 +17,20 @@ export function registerPermissionsCommand(owner: CommandOwnerFixture) {
   );
 }
 export function registerIdeCommand(
-  config: IdeState | null,
+  config: IdeCommandOperations | null,
   owner: CommandOwnerFixture,
 ) {
   return createIdeCommand(
-    bindIdeCommand(config, owner.services.settings, owner.ui.addItem),
+    config === null
+      ? null
+      : bindIdeCommand(
+          config.readConnection,
+          config.readContext,
+          config.setIdeMode,
+          config.connect,
+          config.disconnect,
+          owner.services.settings,
+          owner.ui.addItem,
+        ),
   );
 }

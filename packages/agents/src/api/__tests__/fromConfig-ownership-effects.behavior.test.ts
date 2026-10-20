@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -25,7 +26,6 @@ import {
   type ProviderFileLease,
   type ProviderFileScope,
 } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
-import { fromConfig } from '../fromConfig.js';
 
 import { makeToken } from './helpers/provider-auth-fixtures.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';

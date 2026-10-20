@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -279,7 +280,7 @@ describe('facade recording chat execution on a borrowed client', () => {
           config.getTargetDir(),
         );
         replacement.name = 'replacement';
-        agent.providerManager.registerProvider(replacement);
+        fixtureAgentResources(agent).manager.registerProvider(replacement);
         await agent.setHistory([
           {
             speaker: 'human',

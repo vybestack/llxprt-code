@@ -38,7 +38,8 @@ import type {
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
-import { ToolControl } from '../../control/toolControl.js';
+import { ToolControl, wrapToolHandle } from '../../control/toolControl.js';
+import { buildToolInfos, projectRegistryTool } from '../../agentBootstrap.js';
 import { ShellJobOwner } from '../../../session/shell-job-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -153,7 +154,7 @@ export function createToolControlDeps(
   tools: readonly FakeRegistryToolEntry[] = [],
   recordCompletedToolCalls: ConstructorParameters<
     typeof ToolControl
-  >[11] = unusedToolCompletion,
+  >[10] = unusedToolCompletion,
 ): ToolControlDepsHandle {
   const messageBus = new MessageBus();
   const editorCallbacksHolder = { editorCallbacks: noopEditorCallbacks };
@@ -209,10 +210,15 @@ export function createToolControlDeps(
       ),
     undefined,
     undefined,
-    shellOwner,
-    undefined,
-    messageBus,
-    toolRegistry,
+    (...args) => messageBus.respondToConfirmation(...args),
+    () =>
+      Object.freeze(
+        buildToolInfos(
+          allTools.map((tool) => projectRegistryTool(tool)),
+          enabledNames,
+        ),
+      ),
+    (name) => fixtureToolHandle(toolRegistry, name),
     (names) => {
       settingsOwner.setAllowedTools(names);
     },
@@ -229,15 +235,27 @@ export function createToolControlDeps(
   return {
     control,
     messageBus,
-    lastAllowed: () => {
-      const value = settingsOwner.readNamedParameter('tools.allowed');
-      return Array.isArray(value)
-        ? value.filter((name): name is string => typeof name === 'string')
-        : undefined;
-    },
+    lastAllowed: () => readFixtureAllowedTools(settingsOwner),
     editorCallbacksHolder,
     responses: () => responses,
   };
+}
+
+function fixtureToolHandle(
+  selection: ToolSelection,
+  name: string,
+): ReturnType<ToolControl['get']> {
+  const tool = selection.getTool(name);
+  return tool === undefined ? undefined : wrapToolHandle(tool);
+}
+
+function readFixtureAllowedTools(
+  settingsOwner: SessionSettingsOwner,
+): readonly string[] | undefined {
+  const value = settingsOwner.readNamedParameter('tools.allowed');
+  return Array.isArray(value)
+    ? value.filter((name): name is string => typeof name === 'string')
+    : undefined;
 }
 
 function createFixtureToolKeys(): ToolKeysControl {

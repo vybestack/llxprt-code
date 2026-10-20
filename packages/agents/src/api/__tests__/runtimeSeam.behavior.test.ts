@@ -1,3 +1,11 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -38,7 +46,7 @@ import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import * as fc from 'fast-check';
 
 /**
@@ -77,22 +85,8 @@ import * as fc from 'fast-check';
 // and probe a documented internal field. This is observation of the real
 // provider seam, not a spy on a mock.
 
-interface RecordLike {
-  readonly [key: string]: unknown;
-}
-
-function asRecord(v: unknown): RecordLike | null {
-  return typeof v === 'object' && v !== null ? (v as RecordLike) : null;
-}
-
-/** Reaches the AgentImpl providerManager field (agentImpl.ts AgentDeps). */
 function captureProviderManager(agent: Agent): unknown {
-  const impl = asRecord(agent);
-  if (impl === null) {
-    return undefined;
-  }
-  const pm = impl['providerManager'] ?? impl['manager'];
-  return pm ?? undefined;
+  return fixtureAgentResources(agent).manager;
 }
 
 // The no-2nd-manager identity (T6c / PROP-B) compares against the manager on
@@ -176,7 +170,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -286,7 +280,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
@@ -303,7 +297,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(asWithRuntimeId(agent).getRuntimeId()).toBe(
         'known-runtime-id-T6a',
@@ -328,7 +322,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
@@ -358,7 +352,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(captureProviderManager(agent)).toBe(callerManager);
     } finally {
@@ -385,7 +379,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
         } finally {
@@ -412,7 +406,7 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           expect(captureProviderManager(agent)).toBe(callerManager);
         } finally {

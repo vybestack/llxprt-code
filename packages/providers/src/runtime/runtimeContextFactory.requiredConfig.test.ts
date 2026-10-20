@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+
 import { captureAgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
 import type { AgentPreflightHostInput } from '../../../agents/src/api/preflight-host-input.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';

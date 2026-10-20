@@ -1,3 +1,4 @@
+import { AdoptedProviderFixture } from '../../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,11 +27,7 @@ import {
 import type { IProvider } from '../../IProvider.js';
 import type { OAuthManager } from '../../auth/oauth-manager.js';
 import { configureProviderTokenizer } from '../../composition/index.js';
-import {
-  acquireAdoptedProviderManager,
-  acquireAdoptedOAuth,
-  activateAdoptedProviders,
-} from '../../../../agents/src/api/adopted-provider-assembly.js';
+
 import { releaseAdoptedFileScope } from '../../../../agents/src/api/adoption-release.js';
 import {
   runCleanupSteps,
@@ -180,24 +177,26 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       });
       selectedFiles = files;
       release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
-      selectedManager = acquireAdoptedProviderManager(
-        supplied,
+      selectedManager = new AdoptedProviderFixture(
         config,
         settings,
+        runtimeId,
+      ).acquireManager(
+        supplied,
         owner,
         files,
-        runtimeId,
         credentials().authority,
         release,
       );
-      selectedOAuth = acquireAdoptedOAuth(
+      selectedOAuth = new AdoptedProviderFixture(
+        config,
+        settings,
+        runtimeId,
+      ).acquireOAuth(
         undefined,
         undefined,
         bus ?? policy.session.messageBus,
-        config,
-        settings,
         selectedManager,
-        runtimeId,
         undefined,
         credentials().authority,
         release,
@@ -209,13 +208,14 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     }
   }
   async function activateSelected(): Promise<void> {
-    await activateAdoptedProviders(
+    await new AdoptedProviderFixture(
       selectedConfig,
       selectedSettings,
+      selectedRuntimeId,
+    ).activate(
       selectedOwner,
       selectedManager,
       selectedOAuth,
-      selectedRuntimeId,
       false,
       configureProviderTokenizer(selectedManager),
     );
@@ -262,24 +262,22 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         maxBytes: 512 * 1024 * 1024,
       });
       release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
-      firstManager = acquireAdoptedProviderManager(
-        supplied,
+      firstManager = new AdoptedProviderFixture(
         config,
         settings,
+        runtimeId,
+      ).acquireManager(
+        supplied,
         owner,
         files,
-        runtimeId,
         credentials().authority,
         release,
       );
-      acquireAdoptedOAuth(
+      new AdoptedProviderFixture(config, settings, runtimeId).acquireOAuth(
         undefined,
         undefined,
         bus ?? policy.session.messageBus,
-        config,
-        settings,
         firstManager,
-        runtimeId,
         undefined,
         credentials().authority,
         release,
@@ -331,24 +329,22 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         maxBytes: 512 * 1024 * 1024,
       });
       release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
-      secondManager = acquireAdoptedProviderManager(
-        supplied,
+      secondManager = new AdoptedProviderFixture(
         config,
         settings,
+        runtimeId,
+      ).acquireManager(
+        supplied,
         owner,
         files,
-        runtimeId,
         credentials().authority,
         release,
       );
-      acquireAdoptedOAuth(
+      new AdoptedProviderFixture(config, settings, runtimeId).acquireOAuth(
         undefined,
         undefined,
         bus ?? policy.session.messageBus,
-        config,
-        settings,
         secondManager,
-        runtimeId,
         undefined,
         credentials().authority,
         release,

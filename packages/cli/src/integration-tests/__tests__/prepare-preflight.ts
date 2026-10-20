@@ -1,5 +1,10 @@
-import * as agents from '@vybestack/llxprt-code-agents';
-import { spyOn } from 'bun:test';
+import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,14 +44,9 @@ export async function prepareIntegrationPreflight(
     isTrusted: () => trust.isTrustedFolder(),
   });
   const memory = assembleWorkspaceMemory(config, filesystem, trust);
-  const assemble = agents.assembleAgentActivationBootstrap;
-  const observation = spyOn(
-    agents,
-    'assembleAgentActivationBootstrap',
-  ).mockImplementation(async (...args) => {
-    const activation = await assemble(...args);
-    publishManager(args[2]);
-    return activation;
+
+  const observation = observeActivationPreparation((activation, state) => {
+    publishManager(state.manager);
   });
   try {
     await preflight.preparePostConfiguration(

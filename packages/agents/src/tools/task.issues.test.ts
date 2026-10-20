@@ -13,24 +13,23 @@ import { TaskLaunchOwner } from '../session/task-launch-owner.js';
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import {
-  installTaskIssueConfigFixture,
-  taskIssueInstructionDependencies,
-  taskIssueSettingsDependencies,
-  qualifiedTaskInvocationFixture,
-} from './__tests__/task-issue-config-fixture.js';
-import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import {
+  installTaskIssueConfigFixture,
+  qualifiedTaskInvocationFixture,
+  taskIssueSettingsDependencies,
+} from './__tests__/task-issue-config-fixture.js';
+import { TaskTool, type TaskToolParams } from './task.js';
 
 describe('TaskTool', () => {
   const fixturePaths = installTestWorkspacePaths({
@@ -86,9 +85,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => false,
       });
       const invocation = tool.build({
@@ -161,9 +159,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
       const invocation = tool.build({
@@ -215,9 +212,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => false,
       });
       const invocation = tool.build({
@@ -267,9 +263,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => false,
       });
       const invocation = tool.build({
@@ -325,10 +320,13 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
         ),
@@ -412,9 +410,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => false,
       });
       const invocation = tool.build({
@@ -480,9 +477,8 @@ describe('TaskTool', () => {
           settingsOwner,
           config.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => false,
       });
       const invocation = tool.build({
@@ -534,9 +530,8 @@ describe('TaskTool', () => {
           ownedSettings1.settingsOwner,
           configNoRegistry.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 
@@ -595,9 +590,8 @@ describe('TaskTool', () => {
             { name: 'list_subagents' },
           ],
         }),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 
@@ -652,9 +646,8 @@ describe('TaskTool', () => {
           ownedSettings3.settingsOwner,
           configNoRegistry.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 
@@ -705,9 +698,8 @@ describe('TaskTool', () => {
           ownedSettings4.settingsOwner,
           configNoRegistry.getExcludeTools() ?? [],
         ),
-        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 

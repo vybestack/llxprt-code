@@ -1,3 +1,5 @@
+import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
+import { createCapturedSessionOwner } from './helpers/session-client-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -15,11 +17,16 @@ import { runCleanupSteps } from '../../core/subagent-cleanup.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
-import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 
 import { assembleWorkspaceMemory } from '@vybestack/llxprt-code-core';
@@ -30,11 +37,9 @@ import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 describe('activation media owner lifetime', () => {
   const createFilesystem = installTestWorkspaceFilesystem();
@@ -118,7 +123,7 @@ describe('activation media owner lifetime', () => {
     const factoriesContent = createRuntimeContentGeneratorFactory();
     const released = gate();
     const settingsOwner = builtFactorylessSettingsOwner;
-    const operation = new AgentActivationBootstrap(
+    const operation = prepareActivationFixture(
       builtFactorylessConfig,
       manager,
       async () => {
@@ -133,7 +138,7 @@ describe('activation media owner lifetime', () => {
       },
       undefined,
       owner,
-      await SessionClientOwner.create(
+      await createCapturedSessionOwner(
         builtFactorylessConfig,
         assembleTaskSchemaPolicy(builtFactorylessSettings),
         manager,

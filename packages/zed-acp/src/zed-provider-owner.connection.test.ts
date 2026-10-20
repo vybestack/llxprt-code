@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -188,7 +192,7 @@ describe('Zed ACP provider ownership', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -310,7 +314,7 @@ describe('Zed ACP provider ownership', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   let firstRoot: string;
@@ -488,7 +492,7 @@ describe('Zed ACP provider ownership', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -610,7 +614,7 @@ describe('Zed ACP provider ownership', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   let secondRoot: string;

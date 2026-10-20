@@ -1,3 +1,9 @@
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -38,10 +44,7 @@ import { executeProviderActivation } from '../../../../agents/src/api/providerAc
 import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitchAssembly.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import {
-  fromConfig,
-  SessionProviderReads,
-} from '@vybestack/llxprt-code-agents';
+
 import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
 import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 import { createSessionModelCommand } from '../session-model-command.js';
@@ -131,7 +134,7 @@ describe('CLI retained session model commands', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -249,7 +252,7 @@ describe('CLI retained session model commands', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -307,7 +310,7 @@ describe('CLI retained session model commands', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -425,7 +428,7 @@ describe('CLI retained session model commands', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   afterEach(() => {
@@ -455,7 +458,7 @@ describe('CLI retained session model commands', () => {
       secondCallerMcp,
     );
     try {
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
       expect(firstCallerManager).not.toBe(secondCallerManager);

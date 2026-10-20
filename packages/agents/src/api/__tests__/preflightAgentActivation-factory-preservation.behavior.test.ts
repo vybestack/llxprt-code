@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,10 +51,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import {
-  assembleAgentActivationBootstrap,
-  fromConfig,
-} from '@vybestack/llxprt-code-agents';
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
 import { drain, countType } from './helpers/agentHarness.js';
 
 /**
@@ -167,7 +169,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -287,7 +289,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('installs absent client and task defaults before activation and executes an adopted tool turn', async () => {
@@ -302,7 +304,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       null,
       () => undefined,
       'borrowed',
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
       builtCallerMcp,
     );
     const intent: ProviderActivationIntent = {
@@ -325,7 +327,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         { operation, token: result.token },
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       const events = await drain(agent.stream('read package metadata'));
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);
@@ -363,7 +365,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       null,
       () => undefined,
       'borrowed',
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
       builtCallerMcp,
     );
     const intent: ProviderActivationIntent = {
@@ -388,7 +390,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
         builtCallerPolicy.session.messageBus,
         builtCallerMcp,
         { operation, token: result.token },
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         undefined,
         undefined,
         undefined,
@@ -427,7 +429,9 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       expect(countType(events, 'tool-result')).toBeGreaterThan(0);
       expect(created).toBeGreaterThan(0);
       expect(active).toBe(created);
-      expect(callerClients.has(builtCallerOwner.getAgentClient())).toBe(true);
+      expect(callerClients.has(capturedSessionClient(builtCallerOwner))).toBe(
+        true,
+      );
       await agent.dispose();
       expect(active).toBe(0);
     } finally {

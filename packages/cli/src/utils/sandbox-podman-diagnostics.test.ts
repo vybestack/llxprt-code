@@ -184,6 +184,7 @@ describe('Podman tunnel startup diagnostics', () => {
           `    printf '%s\\n' '[{"Name":"default","URI":"ssh://core@localhost:12345/run/podman/podman.sock","Identity":"/tmp/key","Default":true}]'`,
           '    ;;',
           '  *)',
+          `    while [ ! -s ${shellQuote(sshPidPath)} ]; do sleep 0.01; done`,
           '    sleep 1.5 &',
           `    printf '%s\n' "$!" > ${shellQuote(probePidPath)}`,
           `    ${shellQuote(process.execPath)} -e ${shellQuote(`require('node:fs').writeFileSync(${JSON.stringify(readinessStarted)}, String(Date.now()))`)}`,

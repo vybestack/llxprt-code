@@ -241,9 +241,7 @@ describe('useAgentStream subagent isolation', () => {
       },
       model: {
         getModel: () => 'gemini-2.5-pro',
-        getContentGeneratorConfig: () => contentGeneratorConfig,
       },
-      agentClientSource: { getAgentClient: mockGetAgentClient },
       checkpoint: { getCheckpointingEnabled: () => false },
     };
 

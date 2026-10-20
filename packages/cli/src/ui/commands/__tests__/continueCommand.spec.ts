@@ -100,9 +100,14 @@ function isPerformResumeAction(
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   useRecordingPrompts();
   let ctx: CommandOwnerFixture;
-  const continueCommand = createContinueCommandForTest(() => ctx);
+  let media: LocalMediaStore | undefined;
+  const continueCommand = createContinueCommandForTest(
+    () => ctx,
+    () => media,
+  );
 
   beforeEach(() => {
+    media = undefined;
     ctx = createMockCommandContext();
   });
 
@@ -115,6 +120,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         _settingsService,
         _oauthManager,
         borrow,
+        _replaceProfile,
+        _history,
+        resources,
       ) => {
         const sibling = await borrow();
         await agent.setHistory([
@@ -125,7 +133,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         ]);
         await agent.session.setRecording({ enabled: true });
         await sibling.dispose();
-        const history = agent.agentClient.getHistoryService();
+        const history = resources.client.getHistoryService();
         if (history === null) throw new Error('Expected live history');
         history.add({
           speaker: 'human',
@@ -439,9 +447,6 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
         ctx = createMockCommandContext({
           services: {
-            agent: {
-              agentClient: { mediaStore: undefined },
-            },
             config: {
               isInteractive: () => true,
               projectChatsDir: chatsDir,
@@ -581,11 +586,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         rootDirectory: join(projectTemp, 'media'),
         quotaBytes: 1024,
       });
+      media = destinationStore;
       ctx = createMockCommandContext({
         services: {
-          agent: {
-            agentClient: { mediaStore: destinationStore },
-          },
           config: {
             isInteractive: () => false,
             projectChatsDir: destinationChats,
@@ -689,11 +692,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         rootDirectory: join(destinationProject, 'media'),
         quotaBytes: 1024,
       });
+      media = destinationStore;
       ctx = createMockCommandContext({
         services: {
-          agent: {
-            agentClient: { mediaStore: destinationStore },
-          },
           config: {
             isInteractive: () => true,
             projectChatsDir: destinationChats,
@@ -770,11 +771,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         rootDirectory: join(destinationProject, 'media'),
         quotaBytes: 1024,
       });
+      media = destinationStore;
       ctx = createMockCommandContext({
         services: {
-          agent: {
-            agentClient: { mediaStore: destinationStore },
-          },
           config: {
             isInteractive: () => true,
             projectChatsDir: destinationChats,

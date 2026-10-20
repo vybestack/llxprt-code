@@ -8,7 +8,7 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createTaskRegistration } from '@vybestack/llxprt-code-agents';
@@ -58,7 +58,14 @@ describe('P01 construction inversion contracts', () => {
     return config;
   }
 
-  async function assemble(config: Config, descriptor?: TaskToolRegistration) {
+  async function assemble(
+    config: Config,
+    descriptor?: (
+      config: Config,
+      settings: SessionSettingsOwner,
+      bus: MessageBus,
+    ) => TaskToolRegistration,
+  ) {
     const root = await mkdtemp(join(tmpdir(), 'definition-inversion-'));
     const definitions = new WorkspaceDefinitionOwner(
       join(root, 'profiles'),
@@ -80,54 +87,11 @@ describe('P01 construction inversion contracts', () => {
           localTrust: config.initialWorkspaceTrust,
         }).isTrustedFolder(),
     });
-    const sessionRegistration =
-      descriptor === undefined
-        ? undefined
-        : {
-            ...descriptor,
-            create: (
-              config,
-              profiles,
-              subagents,
-              bus,
-              paths,
-              readMcpInstructions,
-            ) =>
-              descriptor.create(
-                config,
-                profiles,
-                subagents,
-                bus,
-                paths,
-                readMcpInstructions,
-                emptyInstructionReads,
-                () => settingsOwner.createChildStore(),
-                () => settingsOwner.readTaskPolicy(),
-                () => settingsOwner.readSubagentRunPolicy(),
-                () => settingsOwner.readToolGovernance([]),
-              ),
-            buildArgs: (
-              config,
-              profiles,
-              subagents,
-              bus,
-              paths,
-              readMcpInstructions,
-            ) =>
-              descriptor.buildArgs(
-                config,
-                profiles,
-                subagents,
-                bus,
-                paths,
-                readMcpInstructions,
-                emptyInstructionReads,
-                () => settingsOwner.createChildStore(),
-                () => settingsOwner.readTaskPolicy(),
-                () => settingsOwner.readSubagentRunPolicy(),
-                () => settingsOwner.readToolGovernance([]),
-              ),
-          };
+    const sessionRegistration = descriptor?.(
+      config,
+      settingsOwner,
+      policy.session.messageBus,
+    );
     const result = await createToolRegistry(
       config,
       config,
@@ -179,24 +143,14 @@ describe('P01 construction inversion contracts', () => {
     settingsOwners = [...settingsOwners, settings];
     const policy = new RuntimePolicyOwner(config);
     policies = [...policies, policy];
-    const filesystem = createFilesystem({
-      targetDir: config.getTargetDir(),
-      includeDirectories: [],
-      isTrusted: () => true,
-    });
-    const tool = createTaskRegistration().create(
-      config,
-      undefined,
-      undefined,
-      policy.session.messageBus,
-      filesystem.paths,
-      () => undefined,
-      emptyInstructionReads,
-      () => settings.createChildStore(),
-      () => settings.readTaskPolicy(),
-      () => settings.readSubagentRunPolicy(),
-      () => settings.readToolGovernance([]),
-    );
+    const tool = createTaskRegistration(config, {
+      messageBus: policy.session.messageBus,
+      readTaskPolicy: () => settings.readTaskPolicy(),
+      readGovernance: () => settings.readToolGovernance([]),
+      launchChild: async () => {
+        throw new Error('Description-only scenario');
+      },
+    }).create();
     expect(
       tool
         .build({ subagent_name: 'child', goal_prompt: 'Use parent policy' })
@@ -279,10 +233,21 @@ describe('P01 construction inversion contracts', () => {
 
   it('uses injected TaskToolRegistration metadata instead of the concrete class name', async () => {
     const config = configuration();
-    const descriptor = {
-      ...createTaskRegistration(),
+    const descriptor = (
+      config: Config,
+      settings: SessionSettingsOwner,
+      bus: MessageBus,
+    ): TaskToolRegistration => ({
+      ...createTaskRegistration(config, {
+        messageBus: bus,
+        readTaskPolicy: () => settings.readTaskPolicy(),
+        readGovernance: () => settings.readToolGovernance([]),
+        launchChild: async () => {
+          throw new Error('Registration-only scenario');
+        },
+      }),
       className: 'InjectedTaskTool',
-    };
+    });
     const { registry, allPotentialTools, messageBus } = await assemble(
       config,
       descriptor,
@@ -295,7 +260,7 @@ describe('P01 construction inversion contracts', () => {
     expect(record.isRegistered).toBe(true);
     expect(record.toolName).not.toBe(record.toolClass?.name);
     expect(record.args[0]).toBe(config);
-    expect(record.args[3]).toBe(messageBus);
+    expect(record.args[1]).toHaveProperty('messageBus', messageBus);
     const tool = registry.getTool('task');
     if (tool === undefined || record.toolClass === undefined)
       throw new Error('Missing actual constructed task');

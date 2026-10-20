@@ -504,12 +504,9 @@ jobs:
           git checkout -- bun.lock
 
       - name: 'Run runtime-boundary production audit (#2616)'
-        # TypeScript-aware audit of production sources: fails on any
-        # mutable-state, ALS, ambient-delegation, Config-locator or compiler
-        # finding. runtime-service-bundle and runtime-service-bag-parameter
-        # are a tracked residual held by the committed ratchet baseline
-        # (scripts/runtime-service-shape-baseline.json): per-owner counts may
-        # fall but never rise. Needs the declarations from build:types above.
+        # TypeScript-aware audit of production sources: every finding and
+        # compiler diagnostic fails, including runtime-service-bundle and
+        # runtime-service-bag-parameter. Needs declarations from build:types.
         run: |-
           npm run check:runtime-boundary
 

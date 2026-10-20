@@ -230,6 +230,12 @@ async function renderDefaultAppLayout({
   );
   const inner = (
     <DefaultAppLayout
+      readIdeMode={() => false}
+      readIdeDiffingEnabled={() => false}
+      subscribeIdeDiffing={() => () => {}}
+      resolveIdeDiff={async () => {}}
+      readIdeWorkspaceTrust={() => undefined}
+      subscribeIdeWorkspaceTrust={() => () => {}}
       screenReaderEnabled={uiRuntime.app.getScreenReader()}
       disableLoadingPhrases={
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true

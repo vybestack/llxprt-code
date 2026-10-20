@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from './__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,7 +8,6 @@ import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { SessionProviderReads } from './session-provider-reads.js';
 
 function root(provider: string, model: string) {
   const settings = new SettingsService();
@@ -19,7 +19,7 @@ function root(provider: string, model: string) {
   return {
     settings,
     selection,
-    reads: new SessionProviderReads(
+    reads: new ProviderReadFixture(
       selection,
       manager,
       () => '',
@@ -78,7 +78,7 @@ describe('session provider reads', () => {
   it('rejects missing ownership instead of selecting another root', () => {
     const first = root('first', 'first-model');
     try {
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
     } finally {
@@ -89,7 +89,7 @@ describe('session provider reads', () => {
   it('returns an explicit empty state without adopting a neighboring selection', () => {
     const first = root('first', 'first-model');
     const owner = new SessionSettingsOwner(new SettingsService());
-    const reads = new SessionProviderReads(
+    const reads = new ProviderReadFixture(
       owner,
       new TestRuntimeProviderManager(),
       () => '',

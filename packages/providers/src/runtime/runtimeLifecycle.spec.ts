@@ -22,7 +22,10 @@ import {
   prepareAgentPreflight,
   type AgentProfilePreflight,
 } from '../../../agents/src/api/profile-preflight.js';
-import { createAgent } from '../../../agents/src/api/createAgent.js';
+import {
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 import { internalConfig } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
@@ -163,7 +166,9 @@ describe('explicit provider and preflight lifecycle owners', () => {
     );
     expect('providerManager' in internalConfig(first)).toBe(false);
     expect('providerManager' in internalConfig(second)).toBe(false);
-    expect(first.providerManager).not.toBe(second.providerManager);
+    expect(fixtureAgentResources(first).manager).not.toBe(
+      fixtureAgentResources(second).manager,
+    );
     const firstFile = join(directory, 'first-retained');
     const secondFile = join(directory, 'second-retained');
     await writeFile(firstFile, 'first remote bytes');

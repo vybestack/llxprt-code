@@ -563,7 +563,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       },
       {
         getProjectTempDir: () => join(tmpdir(), 'token-usage'),
-        getIdeClient: () => undefined,
+
         getCheckpointingEnabled: () => false,
         getEnableHooksUI: () => false,
         isSkillsSupportEnabled: () => false,

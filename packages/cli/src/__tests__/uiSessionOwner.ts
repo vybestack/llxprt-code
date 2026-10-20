@@ -1,9 +1,15 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
+
 import { assembleSessionAuthentication } from '../../../agents/src/api/control/session-authentication.js';
 import { IdeControl } from '../../../agents/src/api/control/ideControl.js';
 import { wrapToolHandle } from '../../../agents/src/api/control/toolControl.js';
@@ -32,13 +38,14 @@ import {
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { buildAgentClientFactory } from '../../../agents/src/api/agentBootstrap.js';
-import { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
 import { subscribeSessionStats } from '../../../agents/src/api/agentStatsProjector.js';
 import { resolve } from 'node:path';
 import { HookControl } from '../../../agents/src/api/control/hooks.js';
@@ -66,9 +73,7 @@ type UiSessionOwner = Pick<
   Agent,
   | 'providerReads'
   | 'authentication'
-  | 'agentClient'
   | 'sessionClient'
-  | 'providerManager'
   | 'workspace'
   | 'memory'
   | 'hooks'
@@ -94,6 +99,20 @@ type UiSessionOwner = Pick<
   tools: Pick<Agent['tools'], 'describeConfiguration' | 'get'>;
   settingsOwner: SessionSettingsOwner;
 };
+
+const fixtureResources = new WeakMap<
+  UiSessionOwner,
+  Awaited<ReturnType<typeof assembleUiInfrastructure>>
+>();
+
+export function uiFixtureResources(
+  owner: UiSessionOwner,
+): Awaited<ReturnType<typeof assembleUiInfrastructure>> {
+  const captured = fixtureResources.get(owner);
+  if (captured === undefined)
+    throw new Error('UI owner was not constructed by this fixture');
+  return captured;
+}
 
 export async function createUiSessionOwner(
   suppliedConfig?: Config,
@@ -161,7 +180,7 @@ export async function createUiSessionOwner(
     ];
     await retireUiResources(releases);
   });
-  return projectUiSessionOwner(
+  const owner = projectUiSessionOwner(
     config,
     settingsService,
     settings,
@@ -170,6 +189,8 @@ export async function createUiSessionOwner(
     hooks,
     selectedMcpSettings,
   );
+  fixtureResources.set(owner, runtime);
+  return owner;
 }
 
 function createUiHookControl(
@@ -179,7 +200,10 @@ function createUiHookControl(
 ): HookControl {
   return new HookControl({
     hookOperations: client.hookOperations,
-    messageBus: bus,
+    observeRequests: (listener) =>
+      bus.subscribe(MessageBusType.HOOK_EXECUTION_REQUEST, listener),
+    observeResponses: (listener) =>
+      bus.subscribe(MessageBusType.HOOK_EXECUTION_RESPONSE, listener),
     sessionId: () => config.getSessionId(),
     cwd: () => config.getTargetDir(),
   });
@@ -243,11 +267,12 @@ async function assembleUiInfrastructure(
   );
   const factoriesTokenizer = configureProviderTokenizer(manager);
   const factoriesContent = createRuntimeContentGeneratorFactory();
-  const sessionClient = await SessionClientOwner.create(
+  const createClient = buildAgentClientFactory(media);
+  const sessionClient = await createCapturedSessionOwner(
     config,
     assembleTaskSchemaPolicy(settingsService),
     manager,
-    buildAgentClientFactory(media),
+    createClient,
     media,
     () => undefined,
     filesystem.paths,
@@ -265,6 +290,9 @@ async function assembleUiInfrastructure(
     config.getCheckpointingEnabled(),
   );
   return {
+    get client(): AgentClientContract {
+      return capturedSessionClient(sessionClient);
+    },
     trust,
     ide,
     manager,
@@ -290,7 +318,7 @@ function projectUiSessionOwner(
   const { sessionClient, catalogs, filesystem, manager } = runtime;
   return {
     settingsOwner: settings,
-    providerReads: new SessionProviderReads(
+    providerReads: new ProviderReadFixture(
       settings,
       manager,
       () => settings.readSelectedModel() ?? config.getModel(),
@@ -343,17 +371,11 @@ function projectUiSessionOwner(
         })),
     },
     workspace: uiWorkspace(config, filesystem, runtime.checkpoints),
-    providerManager: manager,
     sessionClient: {
       fetch: sessionClient.operations.fetch,
       runImageOperation: (input) => sessionClient.runImageOperation(input),
       refreshAuth: (method) => sessionClient.refreshAuth(method),
       publishTools: () => sessionClient.publishTools(),
-      createDetachedAgentClient: (id) =>
-        sessionClient.createDetachedAgentClient(id),
-    },
-    get agentClient() {
-      return sessionClient.getAgentClient();
     },
   };
 }
@@ -365,7 +387,7 @@ function subscribeUiStats(
   listener: Parameters<Agent['onStats']>[0],
 ): () => void {
   const unsubscribe = subscribeSessionStats(
-    () => sessionClient.getAgentClient().getHistoryService(),
+    () => capturedSessionClient(sessionClient).getHistoryService(),
     listener,
     settings.telemetry.localMetrics,
   );

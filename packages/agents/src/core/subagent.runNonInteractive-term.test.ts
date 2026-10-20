@@ -1,3 +1,4 @@
+import { afterAll } from 'bun:test';
 import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
@@ -10,34 +11,28 @@ import { scopeInputs } from './__tests__/subagent-test-helpers.js';
  * and scheduling-timeout coverage lives in subagent.runInteractive-term.test.ts.
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { SubAgentScope } from './subagent.js';
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   ContextState,
   SubagentTerminateMode,
   type PromptConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockChunk } from './__tests__/turn-test-helpers.js';
-import {
-  createContentGenerator,
-  type ContentGenerator,
-} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import {
+  advanceTimersByTimeAsync,
+  automock,
+} from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { mockChunk } from './__tests__/turn-test-helpers.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
+import { SubAgentScope } from './subagent.js';
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -92,19 +87,19 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
+import { waitForCondition } from '../test-utils/eventLoop.js';
 import {
-  installSubagentCleanup,
-  seedSubagentSettings,
-  createSubagentConfig,
   acquireSubagentSettings,
   acquireSubagentWorkspace,
   createMockStream,
+  createRuntimeOverrides,
+  createStatelessRuntimeBundle,
+  createSubagentConfig,
   defaultModelConfig,
   defaultRunConfig,
-  createStatelessRuntimeBundle,
-  createRuntimeOverrides,
+  installSubagentCleanup,
+  seedSubagentSettings,
 } from './__tests__/subagent-test-helpers.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
 
 /**
  * Turn budget for condition waits that gate fake-time advancement or run-entry
@@ -312,7 +307,7 @@ describe('subagent.ts', () => {
         }
         if (!streamResolved) {
           resolveStream!(createMockStream(['stop'])());
-          scope?.dispose();
+          await scope?.dispose();
         }
       }
     });
@@ -426,7 +421,7 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          await scope.dispose();
         }
       };
 
@@ -553,7 +548,7 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          await scope.dispose();
         }
       };
   });
@@ -698,7 +693,7 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Now call dispose - it should clean up
-      scope.dispose();
+      await scope.dispose();
 
       // Verify disposal was successful by checking cancel is safe
       expect(() => scope.cancel('test')).not.toThrow();
@@ -740,7 +735,7 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Now dispose should clean up listeners
-      scope.dispose();
+      await scope.dispose();
 
       // Verify removeEventListener was called
       expect(removeEventListenerSpy).toHaveBeenCalled();
@@ -771,11 +766,11 @@ describe('subagent.ts', () => {
       );
 
       // Should not throw
+      const closing: Array<Promise<void>> = [];
       expect(() => {
-        scope.dispose();
-        scope.dispose();
-        scope.dispose();
+        closing.push(scope.dispose(), scope.dispose(), scope.dispose());
       }).not.toThrow();
+      await Promise.all(closing);
     });
 
     it('should nullify active abort controller reference', async () => {
@@ -807,7 +802,7 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Dispose
-      scope.dispose();
+      await scope.dispose();
 
       // Try to access the private activeAbortController through cancel method
       // If it's null, cancel should be safe
@@ -895,7 +890,7 @@ describe('subagent.ts', () => {
           },
         );
 
-        scope.dispose();
+        await scope.dispose();
 
         // The stream is stalled after its first chunk and the idle watchdog is
         // too far out to fire; dispose must abort so the run settles within a
@@ -914,8 +909,28 @@ describe('subagent.ts', () => {
         // Do not await — a stalled chain under fake timers must not hang cleanup.
         runPromise?.catch(() => {});
         runRejection?.catch(() => {});
-        scope?.dispose();
+        await scope?.dispose();
       }
     });
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('./chatSession.js', () => __actual);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/contentGenerator.js',
+      () => actual3,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => actual5);
   });
 });

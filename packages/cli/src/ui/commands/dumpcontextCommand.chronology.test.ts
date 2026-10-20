@@ -55,10 +55,11 @@ function contextWithTrace(): CommandOwnerFixture {
   const context = createMockCommandContext({
     services: {
       agent: {
-        get agentClient() {
-          return vi.fn().mockReturnValue({
-            getHistoryService: vi.fn().mockReturnValue(historyService),
-          })();
+        session: {
+          readHistorySnapshot: () => ({
+            messages: historyService.getAll(),
+            chronology: historyService.getChronologyTrace(),
+          }),
         },
       },
       config: {} as unknown as CommandOwnerFixture['services']['config'],
@@ -82,15 +83,8 @@ const dumpAndCaptureCall = async (): Promise<unknown[]> => {
       readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
       writeMode: (mode) =>
         context.runtimeApi.setSessionSetting('dumpcontext', mode),
-      readHistory: () => {
-        const history = context.services.agent?.agentClient.getHistoryService();
-        return history == null
-          ? null
-          : {
-              messages: history.getAll(),
-              chronology: history.getChronologyTrace(),
-            };
-      },
+      readHistory: () =>
+        context.services.agent?.session.readHistorySnapshot() ?? null,
       readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
       readOutputSettings: () => ({}),
       readRuntimeConfig: () => context.services.config,

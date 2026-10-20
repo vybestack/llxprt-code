@@ -1,3 +1,10 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +32,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -35,13 +41,9 @@ import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
-import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 function deferred() {
   let resolve!: () => void;
@@ -180,7 +182,7 @@ describe('activation public admission lifetime', () => {
       built_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const built_builtCallerOwner = await SessionClientOwner.create(
+    const built_builtCallerOwner = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -245,7 +247,7 @@ describe('activation public admission lifetime', () => {
       );
       requireCallerActivation(built_activation);
       await built_builtCallerOwner.initializeTools();
-      await built_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(built_builtCallerOwner).startChat();
     } catch (built_primary) {
       await cleanupAfterFailure(built_primary, built_builtCallerClose);
     }
@@ -258,7 +260,7 @@ describe('activation public admission lifetime', () => {
       null,
       () => undefined,
       'borrowed',
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerMcp,
       built_builtCallerMcp.workspaceFilesystem,
       built_builtCallerMcp.workspaceMemory,
@@ -367,7 +369,7 @@ describe('activation public admission lifetime', () => {
       other_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const other_builtCallerOwner = await SessionClientOwner.create(
+    const other_builtCallerOwner = await createCapturedSessionOwner(
       other_builtCallerConfig,
       assembleTaskSchemaPolicy(other_builtCallerSettings),
       other_builtCallerManager,
@@ -432,7 +434,7 @@ describe('activation public admission lifetime', () => {
       );
       requireCallerActivation(other_activation);
       await other_builtCallerOwner.initializeTools();
-      await other_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(other_builtCallerOwner).startChat();
     } catch (other_primary) {
       await cleanupAfterFailure(other_primary, other_builtCallerClose);
     }
@@ -445,7 +447,7 @@ describe('activation public admission lifetime', () => {
       null,
       () => undefined,
       'borrowed',
-      other_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(other_builtCallerOwner),
       other_builtCallerMcp,
       other_builtCallerMcp.workspaceFilesystem,
       other_builtCallerMcp.workspaceMemory,
@@ -454,7 +456,7 @@ describe('activation public admission lifetime', () => {
     const entered = deferred();
     const released = deferred();
     const failure = new Error('Image transport failed');
-    const handed = await SessionClientOwner.create(
+    const handed = await createCapturedSessionOwner(
       built_builtCallerConfig,
       assembleTaskSchemaPolicy(built_builtCallerSettings),
       built_builtCallerManager,
@@ -465,10 +467,10 @@ describe('activation public admission lifetime', () => {
       built_builtCallerSettingsOwner,
       built_builtCallerContent,
       built_builtCallerTokenizer,
-      built_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(built_builtCallerOwner),
       built_builtCallerPolicy.session.messageBus,
     );
-    const operation = new AgentActivationBootstrap(
+    const operation = prepareActivationFixture(
       built_builtCallerConfig,
       built_builtCallerManager,
       async () => ({ authFailed: false, infoMessages: [] }),
@@ -482,15 +484,17 @@ describe('activation public admission lifetime', () => {
       'borrowed',
       built_builtCallerMcp.workspaceDefinitions,
       false,
-      built_operation.workspaceTrust,
+      capturedActivation(built_operation).workspaceTrust,
     );
-    operation.takeSessionClient(built_builtCallerConfig);
+    const borrowedClient = capturedSessionClient(handed);
+    expect(capturedSessionClient(handed)).toBe(
+      capturedSessionClient(built_builtCallerOwner),
+    );
     handed.bindImageOperation(async () => {
       entered.resolve();
       await released.promise;
       throw failure;
     });
-    built_operation.takeSettingsOwner(built_builtCallerSettings);
     const accepted = operation.sessionClient.runImageOperation({
       prompt: 'held image',
       outputPath: 'held.png',
@@ -528,10 +532,14 @@ describe('activation public admission lifetime', () => {
       released.resolve();
       expect(await outcome).toBe(failure);
       await expect(closing).rejects.toThrow(/cleanup/);
-      expect(handed.getAgentClient()).toBe(
-        built_builtCallerOwner.getAgentClient(),
+      expect(() => capturedSessionClient(handed)).toThrow(/disposed/);
+      await expect(
+        Promise.resolve().then(() => handed.refreshAuth()),
+      ).rejects.toThrow(/disposed/);
+      expect(capturedSessionClient(built_builtCallerOwner)).toBe(
+        borrowedClient,
       );
-      await handed.refreshAuth();
+      await built_builtCallerOwner.refreshAuth();
     } finally {
       released.resolve();
       await outcome;

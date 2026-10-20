@@ -1,24 +1,19 @@
-import { buildOwnedMcpControl } from '../control/mcpControlWiring.js';
-import { createAgentAuthState } from '../control/authState.js';
-import { WorkspaceControl } from '../control/workspaceControl.js';
-import { assembleIdeControl } from '../control/ideControl.js';
-import { LspControl } from '../control/lspControl.js';
-import { assembleSessionAuthentication } from '../control/session-authentication.js';
+import { adoptFixture } from './helpers/adoption-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  ProviderManager,
+  ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import type { Agent } from '../agent.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
   configureProviderTokenizer,
   createRuntimeContentGeneratorFactory,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  OwnershipRecord,
-  StableDisplayCallbacksHolder,
-} from '../agentBootstrap.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   describe,
   expect,
@@ -29,36 +24,21 @@ import {
   afterEach,
 } from 'bun:test';
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import { EditorCallbacks } from '../config-types.js';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-policy';
-import {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  RuntimeProviderManager,
+  type RuntimeProviderManager,
   UNCONFIGURED_PROVIDER,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
-import { AgentImpl } from '../agentImpl.js';
-import { AgentEvent } from '../event-types.js';
+import type { AgentEvent } from '../event-types.js';
 
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-const createFilesystem = installTestWorkspaceFilesystem();
 
 /**
  * Behavioral tests proving an Agent backed by a manager with no active
@@ -69,43 +49,19 @@ const createFilesystem = installTestWorkspaceFilesystem();
  * BEFORE any model/client/MCP interaction.
  */
 
-function makeUnconfiguredProviderManager(): RuntimeProviderManager {
-  const keys = new CredentialAuthority().createProviderKeyStorage();
-  return {
-    getProviderKeys: () => keys,
-    hasActiveProvider: () => false,
-    getActiveProvider: () => undefined,
-    getActiveProviderName: () => undefined,
-    listProviders: () => [],
-    setConfig: () => {},
-    registerProvider: () => {},
-    setActiveProvider: () => {},
-    clearActiveProvider: () => {},
-    getAvailableModels: async () => [],
-    accumulateSessionTokens: () => {},
-    getSessionTokenUsage: () => ({
-      input: 0,
-      output: 0,
-      cache: 0,
-      tool: 0,
-      thought: 0,
-      total: 0,
-    }),
-    getProviderMetrics: () => null,
-    resetSessionTokenUsage: () => {},
-    setTokenizerFactory: () => {},
-    getTokenizerFactory: () => undefined,
-  } as unknown as RuntimeProviderManager;
-}
-
-function makeUnconfiguredRuntimeState(): AgentRuntimeState {
-  return {
-    runtimeId: 'test-unconfigured-runtime',
-    provider: UNCONFIGURED_PROVIDER,
-    model: PLACEHOLDER_MODEL,
-    sessionId: 'test-unconfigured-session',
-    updatedAt: Date.now(),
-  };
+function makeUnconfiguredProviderManager(
+  authority: CredentialAuthority,
+): ProviderManager {
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+    undefined,
+    undefined,
+    authority,
+  );
 }
 
 /**
@@ -163,32 +119,17 @@ function makeRecordingClient(): AgentClientContract & {
   });
 }
 
-function makeOwnership(): OwnershipRecord {
-  return {
-    config: {
-      dispose: async () => {},
-    } as unknown as Config,
-    messageBus: {} as MessageBus,
-    runtimeState: makeUnconfiguredRuntimeState(),
-    injectedSchedulerHandles: [],
-    configOwnership: 'agent',
-    disposed: false,
-    lspShutDown: false,
-    extensionsDisposed: false,
-    sessionLocks: [],
-    sessionLocksReleased: false,
-  } as unknown as OwnershipRecord;
-}
-
 describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
+  const credentials = useOwnedCredentials();
+  const releases: Array<() => void | Promise<void>> = [];
   disposeOwnedPolicies(async () => {
-    await Promise.all(ownedPolicies.splice(0).map((owner) => owner.dispose()));
+    await runCleanupSteps(releases.splice(0).reverse());
   });
 
   async function makeAgent(
-    manager: RuntimeProviderManager,
+    manager: ProviderManager,
     client: AgentClientContract,
-  ): Promise<AgentImpl> {
+  ): Promise<Agent> {
     const config = new Config({
       sessionId: 'test-unconfigured-session',
       targetDir: '/tmp',
@@ -197,10 +138,14 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
       model: PLACEHOLDER_MODEL,
       telemetry: { enabled: false },
     });
+    releases.push(() => config.dispose());
+    releases.push(() => manager.dispose());
     const settingsService = new SettingsService();
     const settingsOwner = new SessionSettingsOwner(settingsService);
     settingsOwner.bindTelemetry(config);
-    const policy = ownPolicy();
+    releases.push(() => settingsOwner.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    releases.push(() => policy.dispose());
     const workspace = await buildTestMcpRuntime(
       config,
       policy.session.messageBus,
@@ -208,16 +153,8 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
       undefined,
       policy,
     );
-    disposeOwnedPolicies(async () => {
-      await settingsOwner.dispose();
-      await workspace.dispose();
-      await config.dispose();
-    });
-    const messageBus = workspace.messageBus;
-    const filesystem = createFilesystem({
-      targetDir: config.getTargetDir(),
-      isTrusted: () => true,
-    });
+    releases.push(() => workspace.dispose());
+    await workspace.initialize();
     const mediaStore = new LocalMediaStore({
       rootDirectory: '/tmp/agent-unconfigured-media',
       quotaBytes: 1024,
@@ -232,167 +169,39 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
           throw new Error('Unexpected provider manager');
       },
     });
-    const factoriesTokenizer = configureProviderTokenizer(manager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    const sessionClient = await SessionClientOwner.create(
-      config,
-      assembleTaskSchemaPolicy(settingsService),
-      manager,
-      () => client,
-      mediaStore,
-      () => undefined,
-      filesystem.paths,
-      settingsOwner,
-      factoriesContent,
-      factoriesTokenizer,
-      client,
-    );
     const providerFiles = new ProviderFileLifecycle({
       maxFiles: 100,
       maxBytes: 512 * 1024 * 1024,
     });
-    sessionClient.bindProviderFiles(providerFiles, () => ({}));
-    sessionClient.bindMcpRuntime(workspace);
-    sessionClient.bindHooks();
-    sessionClient.initializeExecution(undefined, undefined, undefined);
-    disposeOwnedPolicies(() => sessionClient.dispose());
-    const facadeMcp: import('../mcpRuntimeAssembly.js').AgentMcpOperations = {
-      trust: policy.trust,
-      ide: {
-        getClient: () => undefined,
-        isEnabled: () => false,
-        setEnabled: () => {},
-      },
-      profileDefinitions: workspace.profileDefinitions,
-      profileWrites: workspace.profileWrites,
-      subagentDefinitions: workspace.subagentDefinitions,
-      subagentWrites: workspace.subagentWrites,
-      checkpointOperations: workspace.checkpointOperations,
-      closeAdmission: () => {},
-      listPrompts: () => [],
-      listResources: () => [],
-      workspacePaths: filesystem.paths,
-      workspaceFiles: filesystem.files,
-      workspaceIgnore: filesystem.ignore,
-      workspaceScans: filesystem.scans,
-      workspaceSearch: filesystem.search,
-      addWorkspaceDirectory: (directory) => filesystem.addDirectory(directory),
-      lspInspection: {
-        read: async () => ({
-          configured: undefined,
-          alive: false,
-          reason: undefined,
-          statuses: [],
-        }),
-      },
-      policyInspection: ownPolicy().session.inspection,
-      performOAuth: async () => {
-        throw new Error('Unexpected MCP OAuth');
-      },
-      readOAuthCredentials: async () => null,
-      readServerSettings: () => ({
-        mcpServers: {},
-        blockedMcpServers: [],
-        settingsMcpServers: {},
-      }),
-      subscribeStatus: () => () => {},
-      reload: async () => {},
-      findResource: () => undefined,
-      readResource: async () => {
-        throw new Error('No MCP server configured');
-      },
-      status: () => undefined,
-      refresh: async () => {},
-      awaitDiscovery: async () => new Map(),
-    };
-    const mcpAuth = createAgentAuthState();
-    return new AgentImpl(
-      settingsOwner,
-      sessionClient,
-      {
-        list: () => [],
-        find: () => undefined,
-        activate: async () => {
-          throw new Error('No skills configured');
-        },
-        reload: async () => {},
-        isAdminEnabled: () => true,
-      },
-      mediaStore,
-      undefined,
-      new TaskLaunchOwner(new AsyncTaskManager()),
-      new ShellJobOwner(() => resolveShellJobSettings(settingsService)),
-      new WorkspaceControl(
-        facadeMcp.profileDefinitions,
-        facadeMcp.profileWrites,
-        facadeMcp.subagentDefinitions,
-        facadeMcp.subagentWrites,
-        facadeMcp.checkpointOperations,
-        facadeMcp.workspaceIgnore,
-        facadeMcp.workspaceSearch,
-        facadeMcp.workspaceFiles,
-        facadeMcp.workspacePaths.contains,
-        facadeMcp.workspacePaths.directories,
-        facadeMcp.addWorkspaceDirectory,
-        config.getTargetDir(),
-        config.getProjectRoot(),
-      ),
-      assembleIdeControl(facadeMcp.trust, facadeMcp.ide, () => ({})),
-      new LspControl(facadeMcp.lspInspection),
-      (...args) => facadeMcp.awaitDiscovery(...args),
-      (...args) => facadeMcp.closeAdmission(...args),
-      buildOwnedMcpControl(
-        (...args) => facadeMcp.readServerSettings(...args),
-        sessionClient.toolCatalog.selection,
-        (...args) => facadeMcp.listPrompts(...args),
-        (...args) => facadeMcp.listResources(...args),
-        (...args) => facadeMcp.readOAuthCredentials(...args),
-        (...args) => facadeMcp.performOAuth(...args),
-        (...args) => facadeMcp.status(...args),
-        (...args) => facadeMcp.refresh(...args),
-        (...args) => facadeMcp.reload(...args),
-        (server) => mcpAuth.mcpAuth.has(server),
-        (server) => mcpAuth.mcpAuth.add(server),
-        () => sessionClient.getAgentClient().setTools(),
-        (...args) => facadeMcp.subscribeStatus(...args),
-        (...args) => facadeMcp.findResource(...args),
-        (...args) => facadeMcp.readResource(...args),
-      ),
-      mcpAuth,
+    const adopted = await adoptFixture(
       config,
-      manager,
-      {
-        dispose: async () => {},
-        attachAddItemToProviders: () => {},
-      } as unknown as OAuthManager,
-      () => 'agent',
       settingsService,
-      'test-unconfigured-runtime',
-      () => {},
-      messageBus,
-      makeUnconfiguredRuntimeState(),
-      makeOwnership(),
-      'config',
-      () => client,
+      { sessionId: 'test-unconfigured-runtime' },
+      settingsOwner,
+      manager,
       undefined,
-      { editorCallbacks: {} as EditorCallbacks },
-      {} as unknown as StableDisplayCallbacksHolder,
+      policy.session.messageBus,
+      workspace,
+      undefined,
+      client,
+      providerFiles,
+      configureProviderTokenizer(manager),
+      createRuntimeContentGeneratorFactory(),
       undefined,
       undefined,
-      undefined,
-      async () => {
-        throw new Error('Unexpected model selection');
-      },
-      assembleSessionAuthentication(undefined, () => {}),
+      credentials().authority,
+      policy,
     );
+    releases.push(() => adopted.dispose());
+    return adopted;
   }
 
-  let manager: RuntimeProviderManager;
+  let manager: ProviderManager;
   let client: ReturnType<typeof makeRecordingClient>;
-  let agent: AgentImpl;
+  let agent: Agent;
 
   beforeEach(async () => {
-    manager = makeUnconfiguredProviderManager();
+    manager = makeUnconfiguredProviderManager(credentials().authority);
     client = makeRecordingClient();
     agent = await makeAgent(manager, client);
   });
@@ -548,16 +357,3 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
       }
     };
 });
-
-const ownedPolicies: RuntimePolicyOwner[] = [];
-function ownPolicy(): RuntimePolicyOwner {
-  const owner = new RuntimePolicyOwner({
-    getPolicyEngineConfig: () => ({}),
-    getMcpServers: () => ({}),
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    getDebugMode: () => false,
-    initialWorkspaceTrust: true,
-  });
-  ownedPolicies.push(owner);
-  return owner;
-}

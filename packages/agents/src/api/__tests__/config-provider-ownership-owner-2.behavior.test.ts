@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -182,7 +186,7 @@ describe('explicit session authentication lifecycle', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -304,7 +308,7 @@ describe('explicit session authentication lifecycle', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   async function withSession(run: () => Promise<void>): Promise<void> {
@@ -329,12 +333,14 @@ describe('explicit session authentication lifecycle', () => {
   it('initializes a replacement without conversation history', async () => {
     await withSession(async () => {
       await builtCallerOwner.refreshAuth();
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
-      expect(builtCallerOwner.getAgentClient().isInitialized()).toBe(true);
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
+      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
+        true,
+      );
       expect(
-        await builtCallerOwner.getAgentClient().getHistory(),
+        await capturedSessionClient(builtCallerOwner).getHistory(),
       ).toStrictEqual([]);
     });
   });
@@ -428,17 +434,19 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.refreshAuth();
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
-      expect(builtCallerOwner.getAgentClient().isInitialized()).toBe(true);
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
+      expect(capturedSessionClient(builtCallerOwner).isInitialized()).toBe(
+        true,
+      );
       expect(logins).toBe(0);
     });
   });
 
   it('preserves history and caller OAuth ownership after refresh', async () => {
     await withSession(async () => {
-      await builtCallerOwner.getAgentClient().setHistory(history);
+      await capturedSessionClient(builtCallerOwner).setHistory(history);
       const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
         config: builtCallerConfig,
       });
@@ -446,11 +454,11 @@ describe('explicit session authentication lifecycle', () => {
         oauth.composeRetryOperations(provider),
       );
       await builtCallerOwner.refreshAuth();
-      await builtCallerOwner
-        .getAgentClient()
-        .startChat(await builtCallerOwner.getAgentClient().getHistory());
+      await capturedSessionClient(builtCallerOwner).startChat(
+        await capturedSessionClient(builtCallerOwner).getHistory(),
+      );
       expect(
-        (await builtCallerOwner.getAgentClient().getHistory()).map(
+        (await capturedSessionClient(builtCallerOwner).getHistory()).map(
           ({ speaker, blocks }) => ({
             speaker,
             blocks,

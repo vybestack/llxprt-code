@@ -14,7 +14,7 @@ import {
   buildAgent,
   drain,
   internalConfig,
-  internalSettingsOwner,
+  fixtureAgentResources,
   type Agent,
 } from './helpers/agentHarness.js';
 
@@ -33,7 +33,7 @@ function response(
   logApiResponse(
     internalConfig(agent),
     event,
-    internalSettingsOwner(agent).telemetry,
+    fixtureAgentResources(agent).telemetry,
   );
 }
 
@@ -54,7 +54,7 @@ function tool(agent: Agent): void {
   logToolCall(
     internalConfig(agent),
     event,
-    internalSettingsOwner(agent).telemetry,
+    fixtureAgentResources(agent).telemetry,
   );
 }
 

@@ -106,7 +106,7 @@ function createRuntime({
   return {
     getWorkingDir: () => workingDir,
     getFolderTrust: () => folderTrust,
-    getIdeClient: () => undefined,
+
     isTrustedFolder: () =>
       typeof isTrusted === 'function' ? isTrusted() : isTrusted,
     setTrustedFolderLive,
@@ -160,14 +160,26 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
 
   it('B1: targetPath defaults to the normalized working directory', () => {
     const config = createRuntime({ workingDir: CONFIGURED_WORKSPACE });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.targetPath).toBe(CONFIGURED_WORKSPACE);
   });
 
   it('B2: setTargetPath normalizes a relative input against the working directory', () => {
     const config = createRuntime({ workingDir: WORKSPACE_ROOT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(path.join('sub', 'dir'));
@@ -180,7 +192,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
 
   it('B2: setTargetPath ignores empty or whitespace-only input', () => {
     const config = createRuntime({ workingDir: WORKSPACE_ROOT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     // Move off the working directory first, otherwise "ignored" and "reset to
     // the working directory" are indistinguishable.
@@ -208,7 +226,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
 
   it('B2: setTargetPath expands a tilde-prefixed input to the home directory', () => {
     const config = createRuntime({ workingDir: WORKSPACE_ROOT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       // Written literally rather than joined: path.join would emit "~\projects"
@@ -249,7 +273,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       return undefined;
     });
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     const initialTargetPath = result.current.targetPath;
     const initialParentTrusted = result.current.isParentTrusted;
@@ -295,7 +325,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       (folderPath: string) => mockedUserConfig.value[folderPath],
     );
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.pendingTrustLevel).toBe(TrustLevel.DO_NOT_TRUST);
 
@@ -312,7 +348,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       [WORKSPACE_PROJECT]: TrustLevel.DO_NOT_TRUST,
     };
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -338,7 +380,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       isTrusted: () => liveTrust,
       setTrustedFolderLive,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -391,7 +439,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       isTrusted: () => liveTrust,
       setTrustedFolderLive,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(ANCESTOR_OF_CWD);
@@ -421,7 +475,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
   it('B6: exposes the current rule list refreshed after a successful set', async () => {
     mockedUserConfig.value = {};
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.trustRules).toStrictEqual([]);
 
@@ -442,7 +502,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       workingDir: WORKSPACE_PROJECT,
       isTrusted: true,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.trustRules).toStrictEqual([
       { path: WORKSPACE_PROJECT, trustLevel: TrustLevel.TRUST_FOLDER },
@@ -467,7 +533,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       workingDir: WORKSPACE_PROJECT,
       isTrusted: true,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.trustRules).toContainEqual({
       path: staleRule,
@@ -500,7 +572,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       workingDir: WORKSPACE_PROJECT,
       isTrusted: true,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     let removalResult:
       | { success: true }
@@ -522,7 +600,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       throw new Error('disk full');
     });
     const config = createRuntime({ workingDir: WORKSPACE_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -594,7 +678,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
         liveTrust = trusted;
       },
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(ANCESTOR_OF_CWD);
@@ -639,7 +729,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
 
   it('B9: isTargetCwd reflects whether the active target is the working directory', () => {
     const config = createRuntime({ workingDir: CWD_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.isTargetCwd).toBe(true);
 
@@ -653,7 +749,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
   it('B9: isParentTrusted is undefined-equivalent (false) for a non-cwd target with no inherited rule', () => {
     mockedIdeTrust.value = undefined;
     const config = createRuntime({ workingDir: CWD_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -667,7 +769,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
   it('B9: IDE trust does not govern a non-cwd target path', () => {
     mockedIdeTrust.value = true;
     const config = createRuntime({ workingDir: CWD_PROJECT, isTrusted: true });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     expect(result.current.isIdeTrusted).toBe(true);
 
@@ -682,7 +790,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
   it('B9: IDE trust still governs once the target returns to the working directory', () => {
     mockedIdeTrust.value = false;
     const config = createRuntime({ workingDir: CWD_PROJECT });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -716,7 +830,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
       workingDir: CWD_PROJECT,
       isTrusted: true,
     });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);
@@ -749,7 +869,13 @@ describe('target-path aware hook (issue 638 slice 2)', () => {
     );
     // The live session (cwd) is trusted...
     const config = createRuntime({ workingDir: CWD_PROJECT, isTrusted: true });
-    const { result } = renderHook(() => usePermissionsModifyTrust(config));
+    const { result } = renderHook(() =>
+      usePermissionsModifyTrust(
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
     act(() => {
       result.current.setTargetPath(OTHER_FOLDER);

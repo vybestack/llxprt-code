@@ -268,7 +268,7 @@ describe('subagent.ts', () => {
         // rejection so nothing leaks into the next test. Do not await.
         runPromise.catch(() => {});
         runRejection.catch(() => {});
-        scope.dispose();
+        void scope.dispose();
       }
     });
   });
@@ -418,7 +418,7 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          void scope.dispose();
         }
       };
   });

@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
@@ -108,23 +110,7 @@ describe('AgenticLoop with caller display callbacks', () => {
       ]);
 
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
         displayCallbacks: {
           onToolCallsUpdate: (toolCalls) => {
             displayToolUpdates.push(...toolCalls);
@@ -134,6 +120,25 @@ describe('AgenticLoop with caller display callbacks', () => {
           },
           getPreferredEditor: () => undefined,
         },
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       const events = await collectEvents(
@@ -216,24 +221,27 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
       interactiveMode: true,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -323,11 +331,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner,
-      agentClient: client,
       config,
-      messageBus,
-      approvalHandler,
       interactiveMode: true,
       displayCallbacks: {
         getPreferredEditor: () => 'vscode',
@@ -338,6 +342,12 @@ describe('AgenticLoop with caller display callbacks', () => {
           editorCloseCalls.push('closed');
         },
       },
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        approvalHandler,
+        createSchedulerOwner,
+      ),
     });
 
     const events = await collectEvents(
@@ -393,23 +403,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     let recordedCountAtCallback = -1;
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: (completed) => {
           onCompleteCallCount += 1;
@@ -417,6 +411,25 @@ describe('AgenticLoop with caller display callbacks', () => {
           displayCompletions.push(completed);
         },
       },
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -472,28 +485,31 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: () => {
           throw new Error('callback boom');
         },
       },
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -547,28 +563,31 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        configSettingsOwner.telemetry,
-      ),
-      agentClient: client,
       config,
-      messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: async () => {
           throw new Error('async callback boom');
         },
       },
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+      ),
     });
 
     const events = await collectEvents(
@@ -645,29 +664,32 @@ describe('AgenticLoop with caller display callbacks', () => {
       ]);
 
       const loop = new AgenticLoop({
-        createSchedulerOwner: bindSchedulerOwner(
-          config,
-          messageBus,
-          config.isInteractive(),
-          toolRegistry,
-          (options) => new CoreToolScheduler(options),
-          () => configSettingsOwner.readToolExecutionPolicy(),
-          () =>
-            configSettingsOwner.readToolGovernance(
-              config.getExcludeTools() ?? [],
-            ),
-          undefined,
-          configSettingsOwner.telemetry,
-        ),
-        agentClient: client,
         config,
-        messageBus,
         displayCallbacks: {
           onToolCallsUpdate: (toolCalls) => {
             toolUpdatesByStatus.push(...toolCalls);
           },
           getPreferredEditor: () => undefined,
         },
+        ...bindTurnModel(client),
+        tools: new TurnToolExecutionOwner(
+          messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            configSettingsOwner.telemetry,
+          ),
+        ),
       });
 
       await collectEvents(loop, 'go', new AbortController().signal);

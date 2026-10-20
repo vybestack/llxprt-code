@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -16,11 +17,7 @@ import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts
 import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { requireInstructionReads } from '../../core/chat-system-prompt.js';
 import { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import {
-  fromConfig,
-  createAgentClient,
-  type Agent,
-} from '@vybestack/llxprt-code-agents';
+import { createAgentClient, type Agent } from '@vybestack/llxprt-code-agents';
 import { ASYNC_PROPERTY_TIMEOUT_MS } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import * as fc from 'fast-check';

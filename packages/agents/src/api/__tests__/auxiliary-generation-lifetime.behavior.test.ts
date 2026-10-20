@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -49,7 +54,7 @@ import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/co
 import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AggregateDisposeError } from '../disposeErrors.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { gate } from './helpers/recording-finalizer-join-fixture.js';
 
 /**
@@ -161,7 +166,7 @@ describe('auxiliary generation lifetime', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -281,7 +286,7 @@ describe('auxiliary generation lifetime', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const peerCredentials = useOwnedCredentials();
@@ -367,7 +372,7 @@ describe('auxiliary generation lifetime', () => {
       peerCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    peerCallerOwner = await SessionClientOwner.create(
+    peerCallerOwner = await createCapturedSessionOwner(
       peerCallerConfig,
       assembleTaskSchemaPolicy(peerCallerSettings),
       peerCallerManager,
@@ -484,18 +489,19 @@ describe('auxiliary generation lifetime', () => {
     );
     requireCallerActivation(activation);
     await peerCallerOwner.initializeTools();
-    await peerCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(peerCallerOwner).startChat();
   }
 
   for (const kind of ['json', 'embedding'] as const) {
     it(`joins accepted ${kind} work and retains a borrowed client after facade closure`, async () => {
       await openbuiltCaller('plain-text.jsonl');
-      await builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtCallerOwner).startChat();
       await openpeerCaller('plain-text.jsonl');
-      await peerCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(peerCallerOwner).startChat();
       const entered = gate();
       const release = gate();
-      const generator = builtCallerOwner.getAgentClient().getContentGenerator();
+      const generator =
+        capturedSessionClient(builtCallerOwner).getContentGenerator();
       let cancellation: AbortSignal | undefined;
       const failure = new Error('Held transport failed');
       generator.generateContent = async (request) => {
@@ -519,7 +525,7 @@ describe('auxiliary generation lifetime', () => {
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
       );
       const pending =
         kind === 'json'
@@ -549,15 +555,16 @@ describe('auxiliary generation lifetime', () => {
         await Promise.resolve();
         await Promise.resolve();
         expect(finished).toBe(false);
-        peerCallerOwner.getAgentClient().getContentGenerator().embedContent =
-          async ({ texts }) => ({
-            embeddings: texts.map((text) => [text.length]),
-          });
+        capturedSessionClient(
+          peerCallerOwner,
+        ).getContentGenerator().embedContent = async ({ texts }) => ({
+          embeddings: texts.map((text) => [text.length]),
+        });
         expect(
           (
-            await peerCallerOwner
-              .getAgentClient()
-              .generateEmbedding(['sibling'])
+            await capturedSessionClient(peerCallerOwner).generateEmbedding([
+              'sibling',
+            ])
           ).length,
         ).toBe(1);
         release.release();
@@ -569,9 +576,10 @@ describe('auxiliary generation lifetime', () => {
         });
         expect(
           (
-            await builtCallerOwner
-              .getAgentClient()
-              .generateEmbedding(['borrowed', 'still usable'])
+            await capturedSessionClient(builtCallerOwner).generateEmbedding([
+              'borrowed',
+              'still usable',
+            ])
           ).map((row) => row.length),
         ).toStrictEqual([1, 1]);
       } finally {
@@ -586,8 +594,8 @@ describe('auxiliary generation lifetime', () => {
 
   it('joins raw client embedding work before removing owned listeners', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    await builtCallerOwner.getAgentClient().startChat();
-    const client = builtCallerOwner.getAgentClient();
+    await capturedSessionClient(builtCallerOwner).startChat();
+    const client = capturedSessionClient(builtCallerOwner);
     const entered = gate();
     const release = gate();
     client.getContentGenerator().embedContent = async ({ texts }) => {
@@ -621,28 +629,32 @@ describe('auxiliary generation lifetime', () => {
 
   it('carries caller cancellation into the JSON transport', async () => {
     await openbuiltCaller('plain-text.jsonl');
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
     const controller = new AbortController();
     const entered = gate();
     const release = gate();
     let cancellation: AbortSignal | undefined;
-    builtCallerOwner.getAgentClient().getContentGenerator().generateContent =
-      async (request) => {
-        cancellation = request.abortSignal;
-        entered.release();
-        await release.promise;
-        const output = emptyModelOutput();
-        return {
-          ...output,
-          content: {
-            ...output.content,
-            blocks: [{ type: 'text', text: '{}' }],
-          },
-        };
+    capturedSessionClient(
+      builtCallerOwner,
+    ).getContentGenerator().generateContent = async (request) => {
+      cancellation = request.abortSignal;
+      entered.release();
+      await release.promise;
+      const output = emptyModelOutput();
+      return {
+        ...output,
+        content: {
+          ...output.content,
+          blocks: [{ type: 'text', text: '{}' }],
+        },
       };
-    const pending = builtCallerOwner
-      .getAgentClient()
-      .generateJson(contents(), {}, controller.signal, 'fake-model');
+    };
+    const pending = capturedSessionClient(builtCallerOwner).generateJson(
+      contents(),
+      {},
+      controller.signal,
+      'fake-model',
+    );
     await entered.promise;
     try {
       controller.abort();

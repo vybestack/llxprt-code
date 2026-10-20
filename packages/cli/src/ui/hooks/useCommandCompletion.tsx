@@ -15,7 +15,7 @@ import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 import type {
   PromptCompletion,
-  PromptContentGenerator,
+  PromptTextGenerator,
 } from './usePromptCompletion.js';
 import {
   usePromptCompletion,
@@ -340,7 +340,7 @@ export function useCommandCompletion(
   reverseSearchActive: boolean = false,
   shellModeActive: boolean,
   config: CliUiRuntime | undefined,
-  generateContent: PromptContentGenerator | null,
+  generateContent: PromptTextGenerator | null,
 ): UseCommandCompletionReturn {
   const dirs = useMemo(() => config?.directories() ?? [cwd], [config, cwd]);
 

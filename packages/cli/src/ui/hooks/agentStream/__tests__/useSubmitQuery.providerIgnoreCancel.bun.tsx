@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { submissionOperations } from './submission-operations.js';
 import { CredentialAuthority } from '../../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -91,8 +92,10 @@ import type {
 // The agents package is consumed ONLY through its public root (#3222): the
 // engine below is assembled by fromConfig adoption, never by reaching into
 // package internals.
+// The agents package is consumed ONLY through its public root (#3222): the
+// engine below is assembled by fromConfig adoption, never by reaching into
+// package internals.
 import {
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentEvent,

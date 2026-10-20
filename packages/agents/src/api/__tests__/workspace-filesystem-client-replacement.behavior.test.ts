@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -31,7 +35,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -159,7 +162,7 @@ describe('production filesystem roots', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -199,7 +202,7 @@ describe('production filesystem roots', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
@@ -207,13 +210,13 @@ describe('production filesystem roots', () => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), 'replacement-roots-')),
     );
-    const before = builtOwner.getAgentClient();
+    const before = capturedSessionClient(builtOwner);
     try {
       builtMcp.workspaceFilesystem.addDirectory(directory);
       await builtOwner.refreshAuth();
-      expect(before).not.toBe(builtOwner.getAgentClient());
+      expect(before).not.toBe(capturedSessionClient(builtOwner));
       expect(builtOwner.workspaceDirectories()).toContain(directory);
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
       const generate = FakeProvider.prototype.generateChatCompletion;
       const requests: string[] = [];
       const observation = spyOn(
@@ -223,13 +226,13 @@ describe('production filesystem roots', () => {
         requests.push(JSON.stringify(input));
         yield* generate.call(this, input);
       });
-      for await (const event of builtOwner
-        .getAgentClient()
-        .sendMessageStream(
-          'Observe current workspace',
-          new AbortController().signal,
-          'workspace-added',
-        )) {
+      for await (const event of capturedSessionClient(
+        builtOwner,
+      ).sendMessageStream(
+        'Observe current workspace',
+        new AbortController().signal,
+        'workspace-added',
+      )) {
         if (event.type === 'error') throw new Error(JSON.stringify(event));
       }
       expect(requests.join('\n')).toContain(directory);
@@ -237,14 +240,14 @@ describe('production filesystem roots', () => {
       builtMcp.workspaceFilesystem.setDirectories([builtConfig.getTargetDir()]);
       await builtOwner.refreshAuth();
       expect(builtOwner.workspaceDirectories()).not.toContain(directory);
-      await builtOwner.getAgentClient().startChat();
-      for await (const event of builtOwner
-        .getAgentClient()
-        .sendMessageStream(
-          'Observe removed workspace',
-          new AbortController().signal,
-          'workspace-removed',
-        )) {
+      await capturedSessionClient(builtOwner).startChat();
+      for await (const event of capturedSessionClient(
+        builtOwner,
+      ).sendMessageStream(
+        'Observe removed workspace',
+        new AbortController().signal,
+        'workspace-removed',
+      )) {
         if (event.type === 'error') throw new Error(JSON.stringify(event));
       }
       expect(requests.join('\n')).not.toContain(directory);

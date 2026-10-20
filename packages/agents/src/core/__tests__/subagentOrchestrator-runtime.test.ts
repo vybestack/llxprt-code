@@ -3,6 +3,8 @@ import {
   createSessionSettingsFixture,
   subagentSessionPorts,
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,33 +24,34 @@ const fixturePaths = installTestWorkspacePaths({
  * Load-balancer profile tests live in subagentOrchestrator-runtime.part2.test.ts.
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 import {
   ConfirmationOutcome,
   MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubAgentScope } from '../subagent.js';
-import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
-  makeForegroundConfig,
+  SubAgentScope,
+  type SubAgentScope as SubAgentScopeInstance,
+} from '../subagent.js';
+
+import {
   createRuntimeBundle,
   fixtureToolSelection,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
@@ -90,6 +93,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const scope = {
       runtimeContext: runtimeBundle.runtimeContext,
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
       getAgentId: () => 'planner-1',
     } as unknown as SubAgentScopeInstance;
     const scopeFactory = vi
@@ -98,7 +105,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings1),
 
@@ -131,7 +138,9 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const scopeArguments = scopeFactory.mock.calls[0];
     expect(scopeArguments[7]).toBe(runtimeBundle.runtimeContext);
     expect(scopeArguments[8]).toBe(runtimeBundle.contentGenerator);
-    expect(result.runtime).toBe(runtimeBundle);
+    expect(result.identity.runtimeId).toBe(
+      runtimeBundle.runtimeContext.state.runtimeId,
+    );
 
     expect(result.scope).toBe(scope);
     expect(result.agentId).toBe('planner-1');
@@ -157,7 +166,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig2 = config;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings2),
 
@@ -218,7 +227,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: credentials().authority,
       ...subagentSessionPorts(foregroundSettings3),
 
@@ -294,7 +303,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const foregroundConfig4 = makeForegroundConfig();
       const foregroundSettings4 =
         createSessionSettingsFixture(foregroundConfig4);
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
         credentialAuthority: credentials().authority,
         workspaceTrust: foregroundSettings4.workspaceTrust,
         createChildSettings: () =>
@@ -328,12 +337,8 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         expect(childConfig).not.toHaveProperty('taskToolRegistration');
         expect(childConfig).not.toHaveProperty('profileManager');
         expect(childConfig).not.toHaveProperty('subagentManager');
-        expect(result.runtime.providerAdapter.getActiveProvider().name).toBe(
-          childProfile.provider,
-        );
-        expect(result.scope.runtimeContext.state.runtimeId).toBe(
-          result.runtime.runtimeContext.state.runtimeId,
-        );
+        expect(result.identity.provider).toBe(childProfile.provider);
+        expect(result.identity.runtimeId).toBe(childConfig.getSessionId());
         expect(await credentials().listProviders(0)).toStrictEqual([]);
       } finally {
         await result.dispose();
@@ -373,7 +378,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig5 = makeForegroundConfig();
     const foregroundSettings5 = createSessionSettingsFixture(foregroundConfig5);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings5),
 
@@ -427,7 +432,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig6 = makeForegroundConfig();
     const foregroundSettings6 = createSessionSettingsFixture(foregroundConfig6);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings6),
 
@@ -492,7 +497,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundSettings7 = createSessionSettingsFixture(foregroundConfig7);
     const settingsService =
       foregroundSettings7.settingsOwner.createChildStore();
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings7),
       createChildSettings: () => settingsService,
@@ -563,7 +568,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         createSessionSettingsFixture(foregroundConfig8);
       const settingsService =
         foregroundSettings8.settingsOwner.createChildStore();
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
         credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings8.workspaceTrust,
         createChildSettings: () => settingsService,
@@ -642,7 +647,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig9 = makeForegroundConfig();
     const foregroundSettings9 = createSessionSettingsFixture(foregroundConfig9);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings9),
 
@@ -706,7 +711,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       createSessionSettingsFixture(foregroundConfig10);
     const settingsService =
       foregroundSettings10.settingsOwner.createChildStore();
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings10),
       createChildSettings: () => settingsService,
@@ -768,7 +773,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       createSessionSettingsFixture(foregroundConfig11);
     const settingsService =
       foregroundSettings11.settingsOwner.createChildStore();
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings11),
       createChildSettings: () => settingsService,
@@ -817,6 +822,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       .mockImplementation(async () => {
         sequence += 1;
         return {
+          dispose: async () => {},
           runtimeContext:
             sequence === 1
               ? firstBundle.runtimeContext
@@ -828,7 +834,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig12 = makeForegroundConfig();
     const foregroundSettings12 =
       createSessionSettingsFixture(foregroundConfig12);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings12),
 
@@ -887,7 +893,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig13 = makeForegroundConfig();
     const foregroundSettings13 =
       createSessionSettingsFixture(foregroundConfig13);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings13),
 
@@ -899,6 +905,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       foregroundConfig: foregroundConfig13,
       toolRegistry: fixtureToolSelection(),
       scopeFactory: vi.fn<typeof SubAgentScope.create>().mockResolvedValue({
+        dispose: async () => {},
         runtimeContext: bundle.runtimeContext,
         getAgentId: () => 'planner-dispose',
       } as unknown as SubAgentScopeInstance),

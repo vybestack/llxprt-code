@@ -1,77 +1,32 @@
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
+import { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import {
-  Config,
-  ConfigParameters,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-import {
-  beforeAll,
   afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
-  afterEach,
-  beforeEach,
   vi,
 } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import {
-  createAgentRuntimeFactoryBindings,
-  AgentRuntimeFactoryBindings,
-} from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
-import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
-import { fromConfig } from '../fromConfig.js';
+import { AgentConfig } from '../config-types.js';
+import { AgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+
+import { SkillPolicy } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
 import { z } from 'zod';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
-import { SkillPolicy } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
 
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
 describe('workspace registrar and skill reload root admission', () => {
   let promptDirectory: string;
 
@@ -91,35 +46,7 @@ describe('workspace registrar and skill reload root admission', () => {
 
   const credentials = useOwnedCredentials();
 
-  let callerConfig: Config;
-
-  let callerSettings: SettingsService;
-
-  let callerSettingsOwner: SessionSettingsOwner;
-
-  let callerPolicy: RuntimePolicyOwner;
-
-  let callerMcp: McpRuntimeOwner;
-
-  let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
-
-  let callerOwner: SessionClientOwner;
-
-  let callerClose: () => Promise<void>;
-
-  let callerFactories: AgentRuntimeFactoryBindings;
-
-  let callerRelease: AcquisitionRelease;
-
-  let callerFiles: ProviderFileLifecycle;
-
-  let callerRuntimeId: string;
-
-  let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-
-  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-
-  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
+  let caller: Awaited<ReturnType<typeof openSkillsCaller>>;
 
   async function openCaller(
     fixture: string,
@@ -132,177 +59,15 @@ describe('workspace registrar and skill reload root admission', () => {
     extensionLoader?: ExtensionLoader,
     skillOperations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'caller-adoption-')),
-    );
-    const selection: AgentConfig = {
-      provider: 'fake',
-      model: 'fake-model',
-      sessionId: randomUUID(),
-      ...overrides,
-      workingDir:
-        overrides.workingDir === undefined
-          ? directory
-          : await realpath(overrides.workingDir),
-    };
-    const parameters = { ...toConfigParameters(selection), ...skillSettings };
-    parameters.interactive = true;
-    if (overrides.hooks !== undefined) parameters.enableHooks = true;
-    if (
-      overrides.filesystemOwner === undefined &&
-      (overrides.harness?.includeProcessCwd ?? true)
-    )
-      parameters.includeDirectories = [
-        ...(parameters.includeDirectories ?? []),
-        process.cwd(),
-      ];
-    callerConfig = new Config(parameters);
-    callerFactories = {
-      ...createAgentRuntimeFactoryBindings(),
-      ...suppliedFactories,
-    };
-    callerSettings = new SettingsService();
-    for (const [key, value] of Object.entries(
-      callerConfig.getInitialSettings(),
-    ))
-      callerSettings.set(key, value);
-    callerPolicy = new RuntimePolicyOwner(callerConfig);
-    injectConfirmationForcingPolicy(callerPolicy.session.confirmation);
-    callerMcp = await buildTestMcpRuntime(
-      callerConfig,
-      callerPolicy.session.messageBus,
+    caller = await openSkillsCaller({
+      fixture: new URL('./fixtures/' + fixture, import.meta.url),
       overrides,
+      authority: credentials().authority,
+      factories: suppliedFactories,
+      parameters: skillSettings,
       extensionLoader,
-      callerPolicy,
-      skillOperations,
-    );
-    acquireCallerProviders();
-    const media = new SessionMediaOwner(
-      callerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    callerOwner = await SessionClientOwner.create(
-      callerConfig,
-      assembleTaskSchemaPolicy(callerSettings),
-      callerManager,
-      callerFactories.agentClientFactory,
-      media.store,
-      callerMcp.readInstructions,
-      callerMcp.workspacePaths,
-      callerSettingsOwner,
-      callerContent,
-      callerTokenizer,
-    );
-    callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
-      callerOAuth.composeRetryOperations(provider),
-    );
-    callerOwner.bindHooks();
-    callerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => callerOwner.dispose(),
-        () => callerRelease.close(),
-        () => media.dispose(),
-        () => callerMcp.dispose(),
-        () => callerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerManager,
-        callerOAuth,
-        callerRuntimeId,
-        callerTokenizer,
-        undefined,
-      );
-      await callerMcp.initialize();
-      await activateCallerClient(selection.activation);
-    } catch (primary) {
-      await cleanupAfterFailure(primary, callerClose);
-    }
-  }
-
-  function acquireCallerProviders(): void {
-    callerRuntimeId = 'caller-' + randomUUID();
-    callerRelease = new AcquisitionRelease();
-    callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-    callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
-    callerSettingsOwner.initializeProviderSelection(
-      callerConfig.getProvider(),
-      callerConfig.getModel(),
-    );
-    callerSettingsOwner.bindTelemetry(callerConfig);
-    callerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
+      operations: skillOperations,
     });
-    for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
-      callerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(callerFiles, scope),
-      );
-    callerManager = acquirePreferredProviderManager(
-      callerConfig,
-      callerSettings,
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      credentials().authority,
-      callerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(callerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    callerTokenizer = factoriesTokenizer;
-    callerContent = factoriesContent;
-    callerOAuth = acquirePreferredOAuth(
-      undefined,
-      callerPolicy.session.messageBus,
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerRuntimeId,
-      callerMcp.profileDefinitions,
-      credentials().authority,
-      callerRelease,
-      undefined,
-    );
-  }
-
-  async function activateCallerClient(
-    intent: ProviderActivationIntent = {
-      provider: callerConfig.getProvider(),
-      model: callerConfig.getModel(),
-    },
-  ): Promise<void> {
-    const activation = await executeProviderActivation(
-      callerConfig,
-      intent,
-      assembleProviderSwitch(
-        callerConfig,
-        callerSettings,
-        callerManager,
-        callerOAuth,
-        () => 'agent',
-        () => callerOwner.refreshAuth(),
-        callerSettingsOwner,
-      ),
-      callerSettings,
-      callerManager,
-      (method) => callerOwner.refreshAuth(method),
-      assembleModelSelection(callerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
   }
 
   let directory: string;
@@ -344,7 +109,7 @@ describe('workspace registrar and skill reload root admission', () => {
         registerTools: registerActivateSkillTool,
       },
     );
-    const failures = await callerMcp.awaitDiscovery();
+    const failures = await caller.mcp.awaitDiscovery();
     if (failures.size > 0)
       throw new Error(
         `Physical MCP discovery failed: ${JSON.stringify(Array.from(failures))}`,
@@ -353,7 +118,7 @@ describe('workspace registrar and skill reload root admission', () => {
 
   afterEach(async () => {
     try {
-      await callerClose();
+      await caller.close();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -378,9 +143,7 @@ describe('workspace registrar and skill reload root admission', () => {
     return { promise, release };
   }
 
-  function modelNames(
-    client: ReturnType<SessionClientOwner['getAgentClient']>,
-  ): string[] {
+  function modelNames(client: AgentClientContract): string[] {
     const parsed = z
       .object({
         generationConfig: z.object({
@@ -411,16 +174,16 @@ describe('workspace registrar and skill reload root admission', () => {
     turn = true,
   ): Promise<Awaited<ReturnType<typeof fromConfig>>> {
     const agent = await fromConfig(
-      callerConfig,
-      callerSettings,
+      caller.config,
+      caller.settings,
       {},
-      callerSettingsOwner,
-      callerManager,
+      caller.settingsOwner,
+      caller.manager,
       undefined,
       undefined,
-      callerMcp,
+      caller.mcp,
       undefined,
-      callerOwner.getAgentClient(),
+      caller.client,
     );
     if (turn)
       for await (const event of agent.stream('hello')) {
@@ -439,26 +202,23 @@ describe('workspace registrar and skill reload root admission', () => {
       return {};
     };
     try {
-      expect(modelNames(callerOwner.getAgentClient())).toStrictEqual(['alpha']);
+      expect(modelNames(caller.client)).toStrictEqual(['alpha']);
       await writeSkill('beta');
-      const accepted = callerMcp.workspaceSkills.operations.reload();
+      const accepted = caller.mcp.workspaceSkills.operations.reload();
       await entered.promise;
-      callerMcp.closeAdmission();
+      caller.mcp.closeAdmission();
       await expect(
-        callerMcp.workspaceSkills.operations.reload(),
+        caller.mcp.workspaceSkills.operations.reload(),
       ).rejects.toThrow(/closed|disposed/);
-      expect(modelNames(callerOwner.getAgentClient())).toStrictEqual(['alpha']);
+      expect(modelNames(caller.client)).toStrictEqual(['alpha']);
       released.release();
       await accepted;
-      expect(modelNames(callerOwner.getAgentClient())).toStrictEqual([
-        'alpha',
-        'beta',
-      ]);
-      expect(callerMcp.workspaceSkills.operations.find('beta')?.location).toBe(
+      expect(modelNames(caller.client)).toStrictEqual(['alpha', 'beta']);
+      expect(caller.mcp.workspaceSkills.operations.find('beta')?.location).toBe(
         join(directory, '.agents', 'skills', 'beta', 'SKILL.md'),
       );
-      await callerMcp.dispose();
-      expect(modelNames(callerOwner.getAgentClient())).toStrictEqual([]);
+      await caller.mcp.dispose();
+      expect(modelNames(caller.client)).toStrictEqual([]);
     } finally {
       released.release();
       await agent.dispose();
@@ -470,16 +230,14 @@ describe('workspace registrar and skill reload root admission', () => {
     const entered = gate();
     const released = gate();
     const primary = new Error('Held publication failed after mutation');
-    const publish = callerOwner
-      .getAgentClient()
-      .setTools.bind(callerOwner.getAgentClient());
+    const publish = caller.client.setTools.bind(caller.client);
     const publications: string[][] = [];
     let candidateHeld = false;
     const fault = vi
-      .spyOn(callerOwner.getAgentClient(), 'setTools')
+      .spyOn(caller.client, 'setTools')
       .mockImplementation(async (...args) => {
         await publish(...args);
-        const names = modelNames(callerOwner.getAgentClient());
+        const names = modelNames(caller.client);
         if (candidateHeld || names.includes('beta')) publications.push(names);
         if (!candidateHeld && names.includes('beta')) {
           candidateHeld = true;
@@ -491,24 +249,24 @@ describe('workspace registrar and skill reload root admission', () => {
     let disposal: Promise<void> | undefined;
     try {
       await writeSkill('beta');
-      const accepted = callerMcp.workspaceSkills.operations.reload();
+      const accepted = caller.mcp.workspaceSkills.operations.reload();
       const result = accepted.catch((error: unknown) => error);
       await entered.promise;
-      callerMcp.closeAdmission();
+      caller.mcp.closeAdmission();
       let retired = false;
-      disposal = callerMcp.dispose().then(() => {
+      disposal = caller.mcp.dispose().then(() => {
         retired = true;
       });
       await Promise.resolve();
       expect(retired).toBe(false);
       await expect(
-        callerMcp.workspaceSkills.operations.reload(),
+        caller.mcp.workspaceSkills.operations.reload(),
       ).rejects.toThrow(/closed|disposed/);
       released.release();
       expect(await result).toBe(primary);
       await disposal;
       expect(publications).toStrictEqual([['alpha', 'beta'], ['alpha'], []]);
-      expect(modelNames(callerOwner.getAgentClient())).toStrictEqual([]);
+      expect(modelNames(caller.client)).toStrictEqual([]);
     } finally {
       released.release();
       fault.mockRestore();
@@ -539,14 +297,14 @@ describe('workspace registrar and skill reload root admission', () => {
         await surviving.dispose();
         await expect(surviving.skills.reload()).rejects.toThrow('closed');
         await writeSkill('gamma');
-        await callerMcp.workspaceSkills.operations.reload();
+        await caller.mcp.workspaceSkills.operations.reload();
         expect(
-          callerMcp.workspaceSkills.operations
+          caller.mcp.workspaceSkills.operations
             .list()
             .map((skill) => skill.name)
             .sort(),
         ).toStrictEqual(['alpha', 'beta', 'gamma']);
-        expect(callerMcp.isStopped()).toBe(false);
+        expect(caller.mcp.isStopped()).toBe(false);
       } finally {
         await first.dispose();
         await second.dispose();
@@ -554,9 +312,3 @@ describe('workspace registrar and skill reload root admission', () => {
     },
   );
 });
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}

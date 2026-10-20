@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from './__tests__/helpers/provider-read-fixture.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -19,7 +20,6 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import { SessionProviderReads } from './session-provider-reads.js';
 import { assembleSettingsControl } from './control/settings-control.js';
 function settingsControl(owner: SessionSettingsOwner) {
   return assembleSettingsControl(
@@ -89,7 +89,7 @@ describe('runtimeAccessors', () => {
     const owner = rootsOwnedSettings('owner-runtime', settings);
 
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         owner,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -97,7 +97,7 @@ describe('runtimeAccessors', () => {
       ).getActiveModelName(),
     ).toBe('owner-model');
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         owner,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -113,7 +113,7 @@ describe('runtimeAccessors', () => {
     const first = rootsOwnedSettings('same-label', firstSettings);
     const second = rootsOwnedSettings('same-label', secondSettings);
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         first,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -121,7 +121,7 @@ describe('runtimeAccessors', () => {
       ).getActiveProviderName(),
     ).toBe('first-provider');
     expect(
-      new SessionProviderReads(
+      new ProviderReadFixture(
         second,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -133,7 +133,7 @@ describe('runtimeAccessors', () => {
   it('rejects an incomplete supplied owner rather than borrowing the ambient runtime', () => {
     const owner = {};
     expect(() =>
-      Reflect.construct(SessionProviderReads, [
+      Reflect.construct(ProviderReadFixture, [
         owner,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -143,13 +143,13 @@ describe('runtimeAccessors', () => {
 
   describe('explicit owner capabilities', () => {
     it('rejects missing owner without selecting a registered runtime', () => {
-      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
         'Provider reads require an explicit session owner',
       );
     });
     it('resolves the supplied owner and its provider manager separately', () => {
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -161,7 +161,7 @@ describe('runtimeAccessors', () => {
 
   describe('getActiveModelName', () => {
     it('should return model from config when available', () => {
-      const modelName = new SessionProviderReads(
+      const modelName = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -211,13 +211,13 @@ describe('runtimeAccessors', () => {
       second.set('activeProvider', 'openai');
       const firstOwner = ownersOwnedSettings('params-first', first);
       const secondOwner = ownersOwnedSettings('params-second', second);
-      const firstReads = new SessionProviderReads(
+      const firstReads = new ProviderReadFixture(
         firstOwner,
         mockRuntimeProviderManager,
         () => '',
         (provider) => first.getProviderSettings(provider),
       );
-      const secondReads = new SessionProviderReads(
+      const secondReads = new ProviderReadFixture(
         secondOwner,
         mockRuntimeProviderManager,
         () => '',
@@ -247,7 +247,7 @@ describe('runtimeAccessors', () => {
     it('returns the kimi alias sampling params for kimi-k3', () => {
       useProviderModel('kimi', 'kimi-k3');
 
-      const result = new SessionProviderReads(
+      const result = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -268,7 +268,7 @@ describe('runtimeAccessors', () => {
       useProviderModel('kimi', 'k3-256k');
 
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -281,7 +281,7 @@ describe('runtimeAccessors', () => {
       useProviderModel('openai', 'gpt-4');
 
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -293,7 +293,7 @@ describe('runtimeAccessors', () => {
     it('returns an empty array when there is no active provider', () => {
       mockSettingsService.set('activeProvider', undefined);
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -305,7 +305,7 @@ describe('runtimeAccessors', () => {
 
   describe('provider queries', () => {
     it('should list providers', () => {
-      const providers = new SessionProviderReads(
+      const providers = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -316,7 +316,7 @@ describe('runtimeAccessors', () => {
 
     it('reads owner selection before the manager cache', () => {
       mockSettingsService.set('activeProvider', 'selected-before-cache');
-      const name = new SessionProviderReads(
+      const name = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -326,7 +326,7 @@ describe('runtimeAccessors', () => {
     });
 
     it('should get active provider status', () => {
-      const status = new SessionProviderReads(
+      const status = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -445,7 +445,7 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = new SessionProviderReads(
+      const status = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -476,7 +476,7 @@ describe('runtimeAccessors', () => {
       });
 
       expect(() =>
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -488,7 +488,7 @@ describe('runtimeAccessors', () => {
     it('falls back to the active provider metadata when no provider name is configured', () => {
       configureFor({ providerName: '', model: '' });
 
-      const status = new SessionProviderReads(
+      const status = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -522,7 +522,7 @@ describe('runtimeAccessors', () => {
       configureFor({ providerName: '', model: '' });
 
       expect(() =>
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -551,7 +551,7 @@ describe('runtimeAccessors', () => {
       });
 
       expect(() =>
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -592,7 +592,7 @@ describe('runtimeAccessors', () => {
       configureFor({ providerName: '', model: '' });
 
       expect(() =>
-        new SessionProviderReads(
+        new ProviderReadFixture(
           mockConfig,
           mockRuntimeProviderManager,
           () => declaredModel,
@@ -604,7 +604,7 @@ describe('runtimeAccessors', () => {
 
   describe('accessor functions', () => {
     it('should get session token usage', () => {
-      const usage = new SessionProviderReads(
+      const usage = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -616,7 +616,7 @@ describe('runtimeAccessors', () => {
     });
 
     it('should get active provider metrics', () => {
-      const metrics = new SessionProviderReads(
+      const metrics = new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,
@@ -626,7 +626,7 @@ describe('runtimeAccessors', () => {
     });
 
     it('should list available models', async () => {
-      const models = await new SessionProviderReads(
+      const models = await new ProviderReadFixture(
         mockConfig,
         mockRuntimeProviderManager,
         () => declaredModel,

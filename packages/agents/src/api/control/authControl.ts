@@ -13,6 +13,8 @@
  * AuthKeysControl internally (injected with the same auth-state deps).
  */
 
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type {
   AgentAuthControl,
   AgentAuthKeysControl,
@@ -22,10 +24,8 @@ import type {
   AuthStatus,
 } from '../agent.js';
 import type { OAuthPromptHandler } from '../config-types.js';
-import type { AgentAuthState } from './authState.js';
 import { AuthKeysControl } from './authKeysControl.js';
-import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { AgentAuthState } from './authState.js';
 
 /**
  * The public auth control. OAuth login flows through the onOAuthPrompt handler
@@ -61,6 +61,8 @@ export class AuthControl implements AgentAuthControl {
     ) => Promise<number | undefined>,
     private readonly readHigherPriorityAuth: OAuthManager['getHigherPriorityAuth'],
     private readonly readBucketStatuses: OAuthManager['getAuthStatusWithBuckets'],
+    readonly subscribeBucketConsent: AgentAuthControl['subscribeBucketConsent'],
+    readonly respondToBucketConsent: AgentAuthControl['respondToBucketConsent'],
   ) {
     this.keys = new AuthKeysControl(
       authState,

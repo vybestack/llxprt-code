@@ -84,6 +84,16 @@ async function mountFooter(trustedFolder = true) {
     });
     return (
       <FooterRegion
+        readIdeMode={owner.ide.getIdeMode.bind(owner.ide)}
+        readIdeDiffingEnabled={() => owner.ide.readConnection().diffingEnabled}
+        subscribeIdeDiffing={(listener) =>
+          owner.ide.subscribeConnection(() => listener())
+        }
+        resolveIdeDiff={owner.ide.resolveDiff.bind(owner.ide)}
+        readIdeWorkspaceTrust={owner.ide.readWorkspaceTrust.bind(owner.ide)}
+        subscribeIdeWorkspaceTrust={owner.ide.subscribeWorkspaceTrust.bind(
+          owner.ide,
+        )}
         screenReaderEnabled={uiRuntime.app.getScreenReader()}
         disableLoadingPhrases={
           uiRuntime.app.getAccessibility().disableLoadingPhrases === true

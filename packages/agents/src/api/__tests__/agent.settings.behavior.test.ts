@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,7 +42,7 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { internalConfig } from './helpers/agentHarness.js';
 import * as fc from 'fast-check';
 
@@ -142,7 +147,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -252,7 +257,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('T3 internalConfig(agent) returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:internalConfig(agent) @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
@@ -268,7 +273,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(internalConfig(agent)).toBe(callerConfig);
       await agent.dispose();
@@ -290,7 +295,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('context-limit', 100000);
       const viaAgent = agent.getEphemeralSetting('context-limit');
@@ -316,7 +321,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('context-limit', '8000');
       const viaAgent = agent.getEphemeralSetting('context-limit');
@@ -342,7 +347,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('streaming', 'disabled');
       const viaAgent = agent.getEphemeralSetting('streaming');
@@ -368,7 +373,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('my-custom-key', 'v');
       const viaAgent = agent.getEphemeralSetting('my-custom-key');
@@ -394,7 +399,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('context-limit', 50000);
       agent.setEphemeralSetting('my-custom-key', 'abc');
@@ -422,7 +427,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
         /must resolve/,
@@ -446,7 +451,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       expect(() => agent.setEphemeralSetting('streaming', { x: 1 })).toThrow(
         /must resolve/,
@@ -470,7 +475,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       callerSettingsOwner.writeUserParameter('delegated-key', 42);
       expect(agent.getEphemeralSetting('delegated-key')).toStrictEqual(
@@ -495,7 +500,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('reverse-key', 'hello');
       expect(
@@ -520,7 +525,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       agent.setEphemeralSetting('context-limit', 250000);
       callerSettingsOwner.writeUserParameter('context-limit', 250000);
@@ -553,7 +558,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
               undefined,
               callerMcp,
               undefined,
-              callerOwner.getAgentClient(),
+              capturedSessionClient(callerOwner),
             );
             const value = JSON.parse(jsonValue);
             agent.setEphemeralSetting(key, value);
@@ -587,7 +592,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
               undefined,
               callerMcp,
               undefined,
-              callerOwner.getAgentClient(),
+              capturedSessionClient(callerOwner),
             );
             const value = JSON.parse(jsonValue);
             agent.setEphemeralSetting(key, value);
@@ -618,7 +623,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           agent.setEphemeralSetting('context-limit', limit);
           callerSettingsOwner.writeUserParameter('context-limit', limit);
@@ -649,7 +654,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
             undefined,
             callerMcp,
             undefined,
-            callerOwner.getAgentClient(),
+            capturedSessionClient(callerOwner),
           );
           agent.setEphemeralSetting('streaming', mode);
           callerSettingsOwner.writeUserParameter('streaming', mode);
@@ -682,7 +687,7 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
               undefined,
               callerMcp,
               undefined,
-              callerOwner.getAgentClient(),
+              capturedSessionClient(callerOwner),
             );
             const value = JSON.parse(jsonValue);
             callerSettingsOwner.writeUserParameter(key, value);

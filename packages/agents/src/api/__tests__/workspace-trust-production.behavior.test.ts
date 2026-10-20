@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { WorkspaceAuthorityComposition } from '../workspace-authority-composition.js';
@@ -8,7 +9,7 @@ import { WorkspaceAuthorityComposition } from '../workspace-authority-compositio
  */
 
 import { describe, expect, it } from 'bun:test';
-import { fromConfig, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { toConfigParameters } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   ApprovalMode,

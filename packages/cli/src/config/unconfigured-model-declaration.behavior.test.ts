@@ -45,7 +45,6 @@ describe('unconfigured CLI model declaration', () => {
         undefined,
         (value) => {
           operation = value;
-          value.takeSettingsOwner(store);
         },
       );
       expect(config.getModel()).toBe('declared-only-model');

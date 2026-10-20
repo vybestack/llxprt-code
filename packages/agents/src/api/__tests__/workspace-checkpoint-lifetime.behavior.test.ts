@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -66,7 +71,7 @@ import {
   processRestorableToolCalls,
   getToolCallDataSchema,
 } from '@vybestack/llxprt-code-core';
-import { fromConfig } from '../index.js';
+
 import { buildAgent } from './helpers/agentHarness.js';
 
 /**
@@ -172,7 +177,7 @@ describe('public Agent workspace checkpoint lifetime', () => {
       callerCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerCallerOwner = await SessionClientOwner.create(
+    callerCallerOwner = await createCapturedSessionOwner(
       callerCallerConfig,
       assembleTaskSchemaPolicy(callerCallerSettings),
       callerCallerManager,
@@ -292,7 +297,7 @@ describe('public Agent workspace checkpoint lifetime', () => {
     );
     requireCallerActivation(activation);
     await callerCallerOwner.initializeTools();
-    await callerCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerCallerOwner).startChat();
   }
 
   function useProject(): () => string {
@@ -469,7 +474,9 @@ describe('public Agent workspace checkpoint lifetime', () => {
         const operations = callerCallerMcp.workspaceCheckpoints.operations;
         expect(await operations.getCurrentCommitHash()).toBe(hash);
         callerCallerSettingsOwner.assertSettingsIdentity(callerCallerSettings);
-        expect(callerCallerOwner.getAgentClient().isInitialized()).toBe(true);
+        expect(capturedSessionClient(callerCallerOwner).isInitialized()).toBe(
+          true,
+        );
       } finally {
         await first.dispose();
         await second.dispose();

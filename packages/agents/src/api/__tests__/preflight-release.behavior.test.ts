@@ -1,8 +1,20 @@
-import * as assembly from '../providerSwitchAssembly.js';
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { observeActivationPreparation } from './helpers/activation-acquisition-capture.js';
+import { capturedActivation } from './helpers/activation-acquisition-capture.js';
+import {
+  fixtureAgentResources,
+  AgentResourceCapture,
+} from './helpers/agent-resource-capture.js';
+
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { spyOn } from 'bun:test';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -108,18 +120,15 @@ describe('preflight acquired lifetime', () => {
         configure.call(this, config);
         manager?.(this);
       });
-      const assemble = assembly.assembleAgentActivationBootstrap;
-      const activationObservation = spyOn(
-        assembly,
-        'assembleAgentActivationBootstrap',
-      ).mockImplementation(async (...args) => {
-        const activation = await assemble(...args);
-        if (activation.messageBus === undefined)
-          throw new Error('Missing policy bus');
-        policy?.(activation.messageBus);
-        oauth?.(activation.oauthManager);
-        return activation;
-      });
+
+      const activationObservation = observeActivationPreparation(
+        (activation, _state) => {
+          const bus = capturedActivation(activation).messageBus;
+          if (bus === undefined) throw new Error('Missing policy bus');
+          policy?.(bus);
+          oauth?.(capturedActivation(activation).oauthManager);
+        },
+      );
       try {
         await operation.preparePostConfiguration(
           config,
@@ -334,18 +343,25 @@ describe('preflight acquired lifetime', () => {
     cleanups.push(async () => {
       await activation.dispose();
     });
-    const agent = await AgentProfilePreflight.createForegroundAgent(
-      operation,
-      receipt.token,
-      intent,
-      {},
+    const resources = new AgentResourceCapture();
+    const retained = capturedSessionClient(
+      capturedActivation(activation).owner,
     );
-    agent.agentClient.assertProviderManager(manager);
+    resources.observe(retained);
+    resources.clients.push(retained);
+    const token = receipt.token;
+    const agent = await resources.construct(() =>
+      AgentProfilePreflight.createForegroundAgent(operation, token, intent, {}),
+    );
+    resources.bindAgent(agent);
+    fixtureAgentResources(agent)
+      .publishedClient(agent)
+      .assertProviderManager(manager);
     cleanups.push(() => agent.dispose());
     const before = policy.evaluate('read_file', {
       path: config.getTargetDir(),
     });
-    const bus = activation.messageBus;
+    const bus = capturedActivation(activation).messageBus;
     if (bus === undefined) throw new Error('Missing retained bus');
     let correlation: string | undefined;
     const unsubscribe = bus.subscribe<ToolConfirmationRequest>(

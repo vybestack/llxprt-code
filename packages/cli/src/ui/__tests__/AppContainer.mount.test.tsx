@@ -427,7 +427,6 @@ interface MockConfig {
   getLlxprtMdFileCount: () => number;
   getCoreMemoryFileCount: () => number;
   getIdeMode: () => boolean;
-  getIdeClient: () => { getCurrentIde: () => string | undefined };
   getScreenReader: () => boolean;
   isTrustedFolder: () => boolean;
 
@@ -455,7 +454,6 @@ function createMockConfig(overrides: Partial<MockConfig> = {}): MockConfig {
     getLlxprtMdFileCount: () => 0,
     getCoreMemoryFileCount: () => 0,
     getIdeMode: () => false,
-    getIdeClient: () => ({ getCurrentIde: () => undefined }),
     getScreenReader: () => false,
     isTrustedFolder: () => true,
 

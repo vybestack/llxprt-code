@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -38,11 +44,7 @@ import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
-import {
-  fromConfig,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
   captureProbe,
   agentClientDisposed,
@@ -100,21 +102,12 @@ function asRecord(v: unknown): RecordLike | null {
 
 /** Reaches the AgentImpl providerManager field (agentImpl.ts AgentDeps). */
 function captureProviderManager(agent: Agent): unknown {
-  const impl = asRecord(agent);
-  if (impl === null) {
-    return undefined;
-  }
-  const pm = impl['providerManager'] ?? impl['manager'];
-  return pm ?? undefined;
+  return fixtureAgentResources(agent).manager;
 }
 
 /** Reaches the AgentImpl messageBus field (agentImpl.ts AgentDeps). */
 function captureAgentMessageBus(agent: Agent): unknown {
-  const impl = asRecord(agent);
-  if (impl === null) {
-    return undefined;
-  }
-  return impl['messageBus'] ?? impl['bus'] ?? undefined;
+  return fixtureAgentResources(agent).messageBus;
 }
 
 /** Reaches the AgentImpl runtimeId field (agentImpl.ts AgentDeps). */
@@ -191,7 +184,7 @@ describe('fromConfig caller identities', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -301,7 +294,7 @@ describe('fromConfig caller identities', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   it('T1 fromConfig returns an Agent whose internalConfig(agent) === the SAME caller-supplied Config (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent) is the SAME Config instance', async () => {
@@ -318,7 +311,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         expect(internalConfig(agent)).toBe(config);
@@ -345,7 +338,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         agent.setEphemeralSetting('streaming', false);
@@ -374,7 +367,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -410,7 +403,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -439,7 +432,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -471,7 +464,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         expect(captureProviderManager(agent)).toBe(callerManager);
@@ -496,7 +489,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -527,7 +520,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         expect(captureProviderManager(agent)).toBe(callerManager);
@@ -556,7 +549,7 @@ describe('fromConfig caller identities', () => {
         callerBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -589,7 +582,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       try {
         const bus = captureAgentMessageBus(agent);
@@ -618,7 +611,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -687,7 +680,7 @@ describe('fromConfig caller identities', () => {
         callerBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,
@@ -723,7 +716,7 @@ describe('fromConfig caller identities', () => {
         undefined,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
         undefined,
         undefined,
         undefined,

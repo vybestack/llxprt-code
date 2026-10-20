@@ -1,14 +1,11 @@
+import type { BrowserListing } from './browserCatalogHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useMemo } from 'react';
-import {
-  SessionDiscovery,
-  validateSessionMediaPackage,
-  type LocalMediaStore,
-} from '@vybestack/llxprt-code-core';
+import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 import type { ContinueCommandOperations } from '../commands/continueCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
@@ -23,7 +20,9 @@ export function useContinueCommand(
   >,
   readChatsDir: () => string | null,
   readProjectHash: () => string | null,
-  mediaStore: LocalMediaStore | undefined,
+  listRawTargets: () => Promise<
+    Pick<BrowserListing, 'targets' | 'unreadableRecordings'>
+  >,
   recordingOwner: 'agent' | 'raw' | undefined,
 ) {
   return useMemo(
@@ -34,7 +33,7 @@ export function useContinueCommand(
         listOwnedTargets,
         readChatsDir,
         readProjectHash,
-        mediaStore,
+        listRawTargets,
         recordingOwner,
       ),
     [
@@ -43,7 +42,7 @@ export function useContinueCommand(
       listOwnedTargets,
       readChatsDir,
       readProjectHash,
-      mediaStore,
+      listRawTargets,
       recordingOwner,
     ],
   );
@@ -59,7 +58,9 @@ export function createContinueRegistration(
   >,
   readChatsDir: () => string | null,
   readProjectHash: () => string | null,
-  mediaStore: LocalMediaStore | undefined,
+  listRawTargets: () => Promise<
+    Pick<BrowserListing, 'targets' | 'unreadableRecordings'>
+  >,
   recordingOwner: 'agent' | 'raw' | undefined,
 ) {
   return createContinueCommand({
@@ -71,16 +72,12 @@ export function createContinueRegistration(
       if (chatsDir === null || projectHash === null)
         throw new Error('Session configuration is unavailable');
       if (recordingOwner === 'agent') return [...(await listOwnedTargets())];
-      const result = await SessionDiscovery.listContinueTargetsDetailed(
-        chatsDir,
-        projectHash,
-        mediaStore,
-      );
+      const result = await listRawTargets();
       warnUnreadableRecordings(
         '/continue completions',
         result.unreadableRecordings,
       );
-      return result.targets;
+      return [...result.targets];
     },
     validateSessionPackage: validateSessionMediaPackage,
   });

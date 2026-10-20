@@ -29,6 +29,8 @@ export function bindDiagnosticsReads(
   runtimeApiGetSessionTokenUsage: GetSessionTokenUsageOperation,
   runtimeApiProviderStatus: ProviderStatusOperation,
   oauth: OAuthControl,
+  readIdeMode: () => boolean,
+  readIdeAvailable: () => boolean,
 ): DiagnosticsCommandReads {
   return {
     isConfigured: config !== null,
@@ -52,8 +54,8 @@ export function bindDiagnosticsReads(
         theme: merged.ui.theme,
         defaultProfile: merged.defaultProfile,
         sandbox: merged.sandbox,
-        ideMode: config.getIdeMode(),
-        ideConnected: !!config.getIdeClient(),
+        ideMode: readIdeMode(),
+        ideConnected: readIdeAvailable(),
         mcpServers: Object.keys(config.getMcpServers() ?? {}),
         mcpServerCommand: config.getMcpServerCommand(),
         userMemory: config.getUserMemory(),

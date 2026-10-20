@@ -35,13 +35,13 @@ describe('session client stop admission', () => {
       finished = true;
     });
     try {
-      expect(() => built.agent.agentClient).toThrow(/disposed/);
+      await expect(built.agent.generateEmbedding(['late'])).rejects.toThrow(
+        /closed/,
+      );
       await expect(built.agent.sessionClient.refreshAuth()).rejects.toThrow(
         'Session settings owner is closed',
       );
-      expect(() =>
-        built.agent.sessionClient.createDetachedAgentClient('late'),
-      ).toThrow(/disposed/);
+      await expect(built.agent.generate('late')).rejects.toThrow(/closed/);
       expect(built.agent.dispose()).toBe(closing);
       await Promise.resolve();
       expect(finished).toBe(false);

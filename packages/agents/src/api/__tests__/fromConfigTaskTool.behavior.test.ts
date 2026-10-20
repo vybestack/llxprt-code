@@ -1,29 +1,34 @@
-import { CallerAgentRuntimeFactories } from './helpers/fixture-data.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
-import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
-import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
-import { requireInstructionReads } from '../../core/chat-system-prompt.js';
-import { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import {
-  fromConfig,
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
+import {
   createAgentClient,
-  createTaskRegistration,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
-import { drain, countType } from './helpers/agentHarness.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { requireInstructionReads } from '../../core/chat-system-prompt.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { countType, drain } from './helpers/agentHarness.js';
+import {
+  CallerAgentRuntimeFactories,
+  createCallerTaskRegistration,
+} from './helpers/fixture-data.js';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 /**
  * @license
@@ -182,7 +187,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       await callerMcp.initialize();
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
-      const agent: Agent = await fromConfig(
+      const agent: Agent = await captureAgentAdoption(
         builtFactorylessConfig,
         builtFactorylessSettings,
         { sessionId: runtimeId },
@@ -221,27 +226,6 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
   });
 
   it('T3b a caller-supplied registration is never overridden on a caller-initialized Config: the registration identity AND the registry tool instance survive adoption @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a caller-initialized Config whose registration already built the registry task tool @when:fromConfig({ config, sessionId, messageBus }) @then:getTaskToolRegistration() is STILL the caller-initialized descriptor and the registry task tool is STILL the pre-adoption instance (no re-registration)', async () => {
-    const callerRegistration = createTaskRegistration();
-    const callerFactories: CallerAgentRuntimeFactories = {
-      agentClientFactory: (
-        config,
-        runtimeState,
-        readMcpInstructions = () => undefined,
-        mediaStore,
-        workspacePaths,
-        instructions,
-      ) =>
-        createAgentClient(
-          config,
-          runtimeState,
-          readMcpInstructions,
-          mediaStore,
-          requirePaths(workspacePaths),
-          requireInstructionReads(instructions),
-        ),
-      taskToolRegistration: callerRegistration,
-    };
-
     const builtFactorylessPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
       new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
@@ -249,8 +233,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
     const builtFactorylessDirectory = await realpath(
       await mkdtemp(join(tmpdir(), 'factoryless-caller-')),
     );
-    const builtFactorylessSupplied: CallerAgentRuntimeFactories =
-      callerFactories;
+
     const builtFactorylessConfig = new Config(
       toConfigParameters({
         ...{
@@ -277,6 +260,32 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
     const builtFactorylessPolicy = new RuntimePolicyOwner(
       builtFactorylessConfig,
     );
+    const callerRegistration = createCallerTaskRegistration(
+      builtFactorylessConfig,
+      builtFactorylessSettingsOwner,
+      builtFactorylessPolicy.session.messageBus,
+    );
+    const callerFactories: CallerAgentRuntimeFactories = {
+      agentClientFactory: (
+        config,
+        runtimeState,
+        readMcpInstructions = () => undefined,
+        mediaStore,
+        workspacePaths,
+        instructions,
+      ) =>
+        createAgentClient(
+          config,
+          runtimeState,
+          readMcpInstructions,
+          mediaStore,
+          requirePaths(workspacePaths),
+          requireInstructionReads(instructions),
+        ),
+      taskToolRegistration: callerRegistration,
+    };
+    const builtFactorylessSupplied: CallerAgentRuntimeFactories =
+      callerFactories;
     const builtFactorylessTask = builtFactorylessSupplied.taskToolRegistration;
     const builtFactorylessFactories = {
       ...createAgentRuntimeFactoryBindings(),
@@ -313,7 +322,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       const preAdoptionRegistration = callerRegistration;
       expect(callerMcp.toolSelection.getTool('task')).toBeUndefined();
 
-      const agent: Agent = await fromConfig(
+      const agent: Agent = await captureAgentAdoption(
         builtFactorylessConfig,
         builtFactorylessSettings,
         { sessionId: runtimeId },
@@ -336,7 +345,9 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         builtFactorylessPolicy,
       );
       try {
-        const task = agent.agentClient.tools.getTool('task');
+        const task = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .tools.getTool('task');
         expect(task instanceof callerRegistration.toolClass).toBe(true);
         expect(agentToolNames(agent)).toContain('task');
       } finally {

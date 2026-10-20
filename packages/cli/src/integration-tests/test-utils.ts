@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,11 +23,8 @@ import type {
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import {
-  fromConfig,
-  type Agent,
-  McpRuntimeOwner,
-} from '@vybestack/llxprt-code-agents';
+import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { afterEach } from 'bun:test';
 
 function createTestOAuthBinding(): McpOAuthBinding {

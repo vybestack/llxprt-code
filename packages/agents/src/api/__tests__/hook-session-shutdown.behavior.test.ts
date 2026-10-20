@@ -1,4 +1,4 @@
-import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -181,10 +181,10 @@ describe('public Agent hook shutdown', () => {
       await withRecordingLifetimeFixture(
         async (agent, _config, _settingsOwner, _settings, _oauth, borrow) => {
           const peer = await borrow();
-          if (
-            !('ownerClient' in agent) ||
-            !(agent.ownerClient instanceof SessionClientOwner)
-          )
+          const owner = fixtureAgentResources(agent)
+            .sessionOwners.values()
+            .next().value;
+          if (owner === undefined)
             throw new Error('Missing real session client owner');
           const observed: string[] = [];
           const unsubscribe = agent.hooks.onHookExecution((request) => {
@@ -192,7 +192,7 @@ describe('public Agent hook shutdown', () => {
               observed.push(request.event);
           });
           try {
-            await agent.ownerClient.dispose();
+            await owner.dispose();
             await agent.dispose();
             await agent.dispose();
             const first: unknown[] = (await readFile(output, 'utf8'))
@@ -440,7 +440,9 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                 expect(await readFile(join(evidence, 'peer'), 'utf8')).toBe(
                   peer.getRuntimeId(),
                 );
-                expect(peer.getMessageBus()).toBe(retiring.getMessageBus());
+                expect(fixtureAgentResources(peer).messageBus).toBe(
+                  fixtureAgentResources(retiring).messageBus,
+                );
                 expect(settingsService.getAllGlobalSettings()).toBeDefined();
               } catch (error) {
                 bodyFailures.push(error);

@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -50,7 +55,6 @@ import {
 } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { fromConfig } from '../fromConfig.js';
 
 function requireActivationTool<T>(tool: T | undefined): T {
   if (tool === undefined) throw new Error('Missing production activation tool');
@@ -172,7 +176,7 @@ describe('shared production skill resource admission', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    firstCallerOwner = await SessionClientOwner.create(
+    firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -292,7 +296,7 @@ describe('shared production skill resource admission', () => {
     );
     requireCallerActivation(activation);
     await firstCallerOwner.initializeTools();
-    await firstCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(firstCallerOwner).startChat();
   }
 
   const secondCredentials = useOwnedCredentials();
@@ -378,7 +382,7 @@ describe('shared production skill resource admission', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    secondCallerOwner = await SessionClientOwner.create(
+    secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -498,7 +502,7 @@ describe('shared production skill resource admission', () => {
     );
     requireCallerActivation(activation);
     await secondCallerOwner.initializeTools();
-    await secondCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(secondCallerOwner).startChat();
   }
 
   for (const reverse of [false, true]) {
@@ -552,7 +556,7 @@ describe('shared production skill resource admission', () => {
           undefined,
           firstCallerMcp,
           undefined,
-          firstCallerOwner.getAgentClient(),
+          capturedSessionClient(firstCallerOwner),
         ),
         await fromConfig(
           secondCallerConfig,
@@ -564,7 +568,7 @@ describe('shared production skill resource admission', () => {
           undefined,
           secondCallerMcp,
           undefined,
-          secondCallerOwner.getAgentClient(),
+          capturedSessionClient(secondCallerOwner),
         ),
       ];
       try {

@@ -1,3 +1,4 @@
+import { SessionConversationBinding } from '../../session/session-conversation-binding.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -162,33 +163,52 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   };
 }
 
+class ConcurrencyConversation extends SessionConversationBinding {
+  constructor(client: AgentClientContract) {
+    super();
+    this.client = client;
+  }
+  protected assertConversationOpen(): void {}
+}
+
 function createSessionControl(
   config: FakeConfig,
   client: AgentClientContract,
   sessionId: string,
   mediaStore: LocalMediaStore,
 ): SessionControl {
+  const conversation = new ConcurrencyConversation(client);
   return new SessionControl(
-    config as unknown as ConstructorParameters<typeof SessionControl>[0],
+    {
+      storageRoot: config.getProjectRoot(),
+      projectRoot: config.getProjectRoot(),
+      projectTempDir: config.projectTempDir,
+      projectChatsDir: config.projectChatsDir,
+      persistenceQueueBytes: 1024 * 1024,
+    },
     mediaStore,
     () => config.getSessionRecordingQueueByteLimit(),
     () => [config.getProjectRoot()],
     'config',
     () => sessionId,
-    () => client,
+    conversation.nativeHistory,
     (operation) => operation(),
     () => {},
     async () => {
       await client.resetChat();
       return {
-        client,
         publish: () => {},
         retire: async () => {},
         discard: async () => {},
+        attachRecording: (integration, origin) => {
+          conversation.nativeHistory.subscribeRecording(integration, origin);
+        },
       };
     },
     () => 'fake',
     () => 'fake-model',
+    config.getSessionId,
+    config.adoptSessionId,
     config.persistence,
   );
 }

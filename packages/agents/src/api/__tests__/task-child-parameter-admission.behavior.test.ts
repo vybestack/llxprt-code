@@ -1,3 +1,4 @@
+import { captureAgentAdoption } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,7 +17,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
@@ -227,7 +227,7 @@ async function exercise(
     workspace = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
     const settingsService = new SettingsService();
     const settingsOwner = new SessionSettingsOwner(settingsService);
-    agent = await fromConfig(
+    agent = await captureAgentAdoption(
       config,
       settingsService,
       {

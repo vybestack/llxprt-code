@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -27,7 +28,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
   useRecordingPrompts();
   it('uses the agent-captured media store for recording and checkpoint replay after Config media access is disabled', async () => {
     await withRecordingLifetimeFixture(async (agent, config) => {
-      const mediaStore = requireMediaStore(agent.agentClient);
+      const mediaStore = requireMediaStore(
+        fixtureAgentResources(agent).publishedClient(agent),
+      );
       const media = await mediaStore.admit({
         bytes: new Uint8Array([1, 3, 5, 7]),
         mimeType: 'image/png',
@@ -97,7 +100,11 @@ describe('Agent session owner history restore and checkpoint names', () => {
         const replay = await replaySession(
           path,
           basename(config.projectTempDir),
-          { mediaStore: requireMediaStore(agent.agentClient) },
+          {
+            mediaStore: requireMediaStore(
+              fixtureAgentResources(agent).publishedClient(agent),
+            ),
+          },
         );
         expect(replay.ok).toBe(true);
         if (!replay.ok) throw new Error(replay.error);
@@ -142,7 +149,11 @@ describe('Agent session owner history restore and checkpoint names', () => {
         const replay = await replaySession(
           path,
           basename(config.projectTempDir),
-          { mediaStore: requireMediaStore(agent.agentClient) },
+          {
+            mediaStore: requireMediaStore(
+              fixtureAgentResources(agent).publishedClient(agent),
+            ),
+          },
         );
         if (!replay.ok) throw new Error(replay.error);
         const raw = await readFile(path, 'utf8');
@@ -179,7 +190,7 @@ describe('Agent session owner history restore and checkpoint names', () => {
       await expect(agent.session.restoreTurns(-1)).rejects.toThrow(
         'non-negative integer',
       );
-      const client = agent.agentClient;
+      const client = fixtureAgentResources(agent).publishedClient(agent);
       const original = client.restoreHistory.bind(client);
       const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
         async (...args) => {
@@ -200,7 +211,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
         path,
         basename(config.projectTempDir),
         {
-          mediaStore: requireMediaStore(agent.agentClient),
+          mediaStore: requireMediaStore(
+            fixtureAgentResources(agent).publishedClient(agent),
+          ),
         },
       );
       expect(replay.ok).toBe(true);

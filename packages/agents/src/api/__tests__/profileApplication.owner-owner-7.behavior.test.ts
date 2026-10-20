@@ -1,3 +1,8 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -29,7 +34,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -49,7 +53,7 @@ import { executeProviderActivation } from '../providerActivationExecutor.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig } from '../config-types.js';
-import { fromConfig, type Agent } from '../index.js';
+import { type Agent } from '../index.js';
 import { usePromptFixture } from './helpers/prompt-fixture.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
@@ -267,7 +271,7 @@ describe('public profile application ownership outside ALS', () => {
       a_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const a_builtCallerOwner = await SessionClientOwner.create(
+    const a_builtCallerOwner = await createCapturedSessionOwner(
       a_builtCallerConfig,
       assembleTaskSchemaPolicy(a_builtCallerSettings),
       a_builtCallerManager,
@@ -330,7 +334,7 @@ describe('public profile application ownership outside ALS', () => {
       );
       requireCallerActivation(a_activation);
       await a_builtCallerOwner.initializeTools();
-      await a_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(a_builtCallerOwner).startChat();
     } catch (a_primary) {
       await cleanupAfterFailure(a_primary, a_builtCallerClose);
     }
@@ -349,7 +353,7 @@ describe('public profile application ownership outside ALS', () => {
       a_builtCallerPolicy.session.messageBus,
       a_builtCallerMcp,
       undefined,
-      a_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(a_builtCallerOwner),
       a_builtCallerFiles,
       undefined,
       undefined,
@@ -474,7 +478,7 @@ describe('public profile application ownership outside ALS', () => {
       b_builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const b_builtCallerOwner = await SessionClientOwner.create(
+    const b_builtCallerOwner = await createCapturedSessionOwner(
       b_builtCallerConfig,
       assembleTaskSchemaPolicy(b_builtCallerSettings),
       b_builtCallerManager,
@@ -537,7 +541,7 @@ describe('public profile application ownership outside ALS', () => {
       );
       requireCallerActivation(b_activation);
       await b_builtCallerOwner.initializeTools();
-      await b_builtCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(b_builtCallerOwner).startChat();
     } catch (b_primary) {
       await cleanupAfterFailure(b_primary, b_builtCallerClose);
     }
@@ -556,7 +560,7 @@ describe('public profile application ownership outside ALS', () => {
       b_builtCallerPolicy.session.messageBus,
       b_builtCallerMcp,
       undefined,
-      b_builtCallerOwner.getAgentClient(),
+      capturedSessionClient(b_builtCallerOwner),
       b_builtCallerFiles,
       undefined,
       undefined,

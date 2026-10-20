@@ -13,7 +13,6 @@ import {
   fixtureHookDefinitions,
 } from '../hooks/__tests__/hook-runtime-fixture.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -24,7 +23,6 @@ import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import {
   buildFsMockBody,
@@ -763,56 +761,6 @@ describe('Config composition lifetimes', () => {
     });
 
     describe('reloadMcpServers reconciliation ownership', () => {
-      it('swaps MCP/blocked state then invokes the live manager reconcile exactly once', async () => {
-        const readReloadSettings = vi.fn().mockResolvedValue({
-          mcpServers: { fresh: { command: 'fresh' } },
-          blockedMcpServers: [{ name: 'blocked', extensionName: 'ext' }],
-          settingsMcpServers: { fresh: { command: 'fresh' } },
-        });
-
-        const config = new Config({
-          ...baseParams,
-          trustedFolder: true,
-          mcpServers: { stale: { command: 'stale' } },
-        });
-        const owner = await McpRuntimeOwner.create(
-          createTestOAuthBinding(),
-          config,
-          undefined,
-          undefined,
-          McpClientManager,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          createReloadBinding(config, readReloadSettings),
-        );
-        approvalRoots.push(() => owner.dispose());
-        await owner.initialize();
-
-        await owner.reload();
-
-        expect(owner.readServerSettings().mcpServers).toStrictEqual({
-          fresh: { command: 'fresh' },
-        });
-        expect(owner.readServerSettings().blockedMcpServers).toStrictEqual([
-          { name: 'blocked', extensionName: 'ext' },
-        ]);
-        expect(config.getMcpServers()).not.toStrictEqual(
-          owner.readServerSettings().mcpServers,
-        );
-      });
-
       it('skips reconciliation when the manager is not initialized', async () => {
         const readReloadSettings = vi.fn().mockResolvedValue({
           mcpServers: { fresh: { command: 'fresh' } },

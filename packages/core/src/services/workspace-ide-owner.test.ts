@@ -16,6 +16,7 @@ import {
 import { Config } from '../config/config.js';
 import { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { IdeCompanion } from '../tools-adapters/__tests__/ide-companion.js';
 
 function deferred(): { promise: Promise<void>; resolve(): void } {
   let resolve = (): void => {};
@@ -37,26 +38,63 @@ function config(): Config {
 
 describe('Explicit workspace IDE ownership', () => {
   it('uses distinct acquired clients for roots sharing the same Config and session label', async (): Promise<void> => {
+    const host = new IdeCompanion();
+    await host.start();
+    const environment = {
+      TERM_PROGRAM: process.env.TERM_PROGRAM,
+      LLXPRT_CODE_IDE_SERVER_PORT: process.env.LLXPRT_CODE_IDE_SERVER_PORT,
+      LLXPRT_CODE_IDE_WORKSPACE_PATH:
+        process.env.LLXPRT_CODE_IDE_WORKSPACE_PATH,
+    };
+    process.env.TERM_PROGRAM = 'vscode';
+    process.env.LLXPRT_CODE_IDE_SERVER_PORT = String(host.port);
+    process.env.LLXPRT_CODE_IDE_WORKSPACE_PATH = process.cwd();
     const declaration = config();
     const firstTrust = new WorkspaceTrustLifecycle({ localTrust: false });
     const peerTrust = new WorkspaceTrustLifecycle();
     const first = new WorkspaceIdeOwner(declaration, firstTrust, firstTrust);
     const peer = new WorkspaceIdeOwner(declaration, peerTrust, peerTrust);
-    await Promise.all([first.initialize(), peer.initialize()]);
-    expect(first.getClient()).not.toBe(peer.getClient());
-    await first.dispose();
-    expect(() => first.getClient()).toThrow('disposed');
-    expect(peer.getClient()?.getConnectionStatus().status).toBe(
-      IDEConnectionStatus.Disconnected,
-    );
-    await peerTrust.setTrustedFolderLive(false);
-    expect(peerTrust.isTrustedFolder()).toBe(false);
-    await Promise.all([
-      peer.dispose(),
-      firstTrust.dispose(),
-      peerTrust.dispose(),
-      declaration.dispose(),
-    ]);
+    try {
+      await Promise.all([first.initialize(), peer.initialize()]);
+      await first.connect();
+      expect(peer.readConnection().status).not.toBe(
+        first.readConnection().status,
+      );
+      await first.dispose();
+      await host.sessions[0].streamClosed.promise;
+      expect(() => first.readConnection()).toThrow('disposed');
+      expect(peer.readConnection().status).toBe(
+        IDEConnectionStatus.Disconnected,
+      );
+      await peer.connect();
+      expect(host.sessions).toHaveLength(2);
+      const path = '/workspace/peer.ts';
+      const result = peer.openDiff(path, 'draft');
+      await host.opened(path);
+      await host.decide(1, path, 'accepted');
+      expect(await result).toStrictEqual({
+        status: 'accepted',
+        content: 'edited',
+      });
+      await peer.disconnect();
+      await peer.whenSettled();
+      expect(peer.readWorkspaceTrust()).toBeUndefined();
+      await peerTrust.setTrustedFolderLive(false);
+      expect(peerTrust.isTrustedFolder()).toBe(false);
+    } finally {
+      await Promise.all([
+        first.dispose(),
+        peer.dispose(),
+        firstTrust.dispose(),
+        peerTrust.dispose(),
+        declaration.dispose(),
+      ]);
+      await host.close();
+      for (const [name, value] of Object.entries(environment)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   it('joins a client acquired after admission closes and installs no late trust authority', async (): Promise<void> => {

@@ -15,8 +15,6 @@ import {
   type SubagentDefinitionReads,
 } from '../services/workspace-definition-owner.js';
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-
 import type { WorkspacePathOperations } from '../services/workspace-filesystem-owner.js';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
@@ -531,8 +529,19 @@ describe('tool registry assembly', () => {
   // ─── #3222 review finding: reconcile must report ACTUAL registration ────────
   //
   describe('explicit task registration respects caller workspace ownership', () => {
-    function registration(): TaskToolRegistration {
-      return createTaskRegistration();
+    function registration(
+      config: Config,
+      settings: SessionSettingsOwner,
+      messageBus: MessageBus,
+    ): TaskToolRegistration {
+      return createTaskRegistration(config, {
+        messageBus,
+        readTaskPolicy: () => settings.readTaskPolicy(),
+        readGovernance: () => settings.readToolGovernance([]),
+        launchChild: async () => {
+          throw new Error('Registration-only scenario');
+        },
+      });
     }
 
     it('keeps an excluded task absent without modifying the existing caller catalog', async () => {
@@ -546,7 +555,7 @@ describe('tool registry assembly', () => {
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       expect(caller.registry.getTool('task')).toBeUndefined();
       expect(session.registry.getTool('task')).toBeUndefined();
@@ -569,13 +578,13 @@ describe('tool registry assembly', () => {
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       const second = await assembleFixtureToolRegistry(
         host,
         createConfigBoundary(),
         new MessageBus(),
-        registration(),
+        registration,
       );
       expect(caller.registry.getTool('task')).toBeUndefined();
       expect(first.registry.getTool('task')).toBeDefined();
@@ -593,7 +602,11 @@ describe('tool registry assembly', () => {
     host: ReturnType<typeof createHost>,
     config: Config,
     messageBus: Parameters<typeof createToolRegistry>[2],
-    registration?: TaskToolRegistration,
+    registration?: (
+      config: Config,
+      settings: SessionSettingsOwner,
+      messageBus: MessageBus,
+    ) => TaskToolRegistration,
     imageOperation?: ImageOperationRunner,
   ): Promise<
     Awaited<ReturnType<typeof createToolRegistry>> & {
@@ -626,53 +639,7 @@ describe('tool registry assembly', () => {
         root.scans,
         undefined,
         undefined,
-        registration === undefined
-          ? undefined
-          : {
-              ...registration,
-              create: (
-                config,
-                profiles,
-                subagents,
-                bus,
-                paths,
-                readMcpInstructions,
-              ) =>
-                registration.create(
-                  config,
-                  profiles,
-                  subagents,
-                  bus,
-                  paths,
-                  readMcpInstructions,
-                  emptyInstructionReads,
-                  () => settingsOwner.createChildStore(),
-                  () => settingsOwner.readTaskPolicy(),
-                  () => settingsOwner.readSubagentRunPolicy(),
-                  () => settingsOwner.readToolGovernance([]),
-                ),
-              buildArgs: (
-                config,
-                profiles,
-                subagents,
-                bus,
-                paths,
-                readMcpInstructions,
-              ) =>
-                registration.buildArgs(
-                  config,
-                  profiles,
-                  subagents,
-                  bus,
-                  paths,
-                  readMcpInstructions,
-                  emptyInstructionReads,
-                  () => settingsOwner.createChildStore(),
-                  () => settingsOwner.readTaskPolicy(),
-                  () => settingsOwner.readSubagentRunPolicy(),
-                  () => settingsOwner.readToolGovernance([]),
-                ),
-            },
+        registration?.(config, settingsOwner, messageBus),
         undefined,
         true,
         host.profileDefinitions,

@@ -21,7 +21,8 @@ import {
 type AppOwnerProps = Pick<
   AppContainerRuntimeProps,
   | 'session'
-  | 'mediaStore'
+  | 'readRawBrowserCatalog'
+  | 'deleteRawBrowserTarget'
   | 'bindRawBrowserSession'
   | 'isAgentClientPresent'
   | 'readHistory'
@@ -53,15 +54,22 @@ type AppOwnerProps = Pick<
 export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
   return {
     session: agent.session,
-    mediaStore: agent.agentClient.mediaStore,
-    isAgentClientPresent: () => Boolean(agent.agentClient),
+    readRawBrowserCatalog: async () => {
+      const result = await agent.session.listBrowserTargetsDetailed();
+      return {
+        ...result,
+        currentSessionId: agent.session.getSessionId(),
+        skippedCount: result.unreadableRecordings.length,
+      };
+    },
+    deleteRawBrowserTarget: async (target) => {
+      if (target.kind === 'checkpoint')
+        await agent.session.deleteCheckpoint(target.checkpointId);
+      else await agent.session.deleteSession(target.session.sessionId);
+    },
+    isAgentClientPresent: () => true,
     bindRawBrowserSession: (config, swaps, logger) =>
-      bindRawBrowserSession(
-        config,
-        () => agent.agentClient.getHistoryService(),
-        swaps,
-        logger,
-      ),
+      bindRawBrowserSession(config, agent.session, swaps, logger),
     readHistory: agent.getHistory.bind(agent),
     stream: agent.stream.bind(agent),
     injectSteer: agent.injectSteer.bind(agent),
@@ -74,8 +82,7 @@ export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
     disposeInput: agent.dispose.bind(agent),
     readApprovalMode: agent.getApprovalMode.bind(agent),
     setApprovalMode: agent.setApprovalMode.bind(agent),
-    generatePromptContent: (...args) =>
-      agent.agentClient.generateContent(...args),
+    generatePromptContent: agent.generate.bind(agent),
     readPolicyRules: bindPolicyRulesReader(
       agent.policy,
       agent.getApprovalMode.bind(agent),
@@ -89,20 +96,11 @@ export function appContainerBoundAgentProps(agent: Agent): AppOwnerProps {
       agent.session,
     ),
     metrics: agent.metrics,
-    subscribeHistoryTokens: bindHistoryTokenSubscription(
-      () =>
-        agent.agentClient.hasChatInitialized()
-          ? agent.agentClient.getHistoryService()
-          : null,
-      new DebugLogger('test:composition:tokens'),
+    subscribeHistoryTokens: agent.session.subscribeHistoryTokens.bind(
+      agent.session,
     ),
-    connectRecordingHistory: bindRecordingHistorySubscription(
-      () =>
-        agent.agentClient.hasChatInitialized()
-          ? agent.agentClient.getHistoryService()
-          : null,
-      new DebugLogger('test:composition:recording'),
-    ),
+    connectRecordingHistory: (recording) =>
+      agent.session.connectRecordingHistory(() => recording.current),
     readProviderMetrics: agent.providerReads.getActiveProviderMetrics.bind(
       agent.providerReads,
     ),
@@ -117,7 +115,7 @@ function unavailableOperation(): never {
 }
 
 export function appContainerTestAgentProps(
-  owner: Pick<Agent, 'workspace' | 'agentClient'>,
+  owner: Pick<Agent, 'workspace' | 'session'>,
 ): AppOwnerProps {
   return {
     session: {
@@ -128,15 +126,11 @@ export function appContainerTestAgentProps(
       resume: unavailableOperation,
       flushRecording: async () => {},
     },
-    mediaStore: owner.agentClient.mediaStore,
-    isAgentClientPresent: () => Boolean(owner.agentClient),
+    readRawBrowserCatalog: unavailableOperation,
+    deleteRawBrowserTarget: unavailableOperation,
+    isAgentClientPresent: () => true,
     bindRawBrowserSession: (config, swaps, logger) =>
-      bindRawBrowserSession(
-        config,
-        () => owner.agentClient.getHistoryService(),
-        swaps,
-        logger,
-      ),
+      bindRawBrowserSession(config, owner.session, swaps, logger),
     readHistory: async () => [],
     stream: unavailableOperation,
     injectSteer: () => {},

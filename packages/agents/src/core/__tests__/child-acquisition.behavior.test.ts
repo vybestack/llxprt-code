@@ -1,23 +1,79 @@
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { realpath } from 'node:fs/promises';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
-  MessageBusType,
   ConfirmationOutcome,
+  MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
+import { describe, expect, it } from 'bun:test';
+import { realpath } from 'node:fs/promises';
 import { withDisposalJoinFixture } from '../../api/__tests__/helpers/async-child-disposal-join-fixture.js';
+import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
 
 describe('child acquired resource lifetime', () => {
   const credentials = useOwnedCredentials();
+
+  it('joins an accepted child HTTP run before releasing its credentials and leaves its same-label sibling usable', async () => {
+    await withDisposalJoinFixture(async (fixture) => {
+      const orchestrator = createTestChildOrchestrator({
+        credentialAuthority: credentials().authority,
+        workspaceTrust: fixture.workspaceTrust,
+        createChildSettings: () => fixture.settingsOwner.createChildStore(),
+        readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
+        toolRegistry: fixture.client.tools,
+        workspacePaths: fixture.workspacePaths,
+        instructions: fixture.instructionReads,
+        foregroundConfig: fixture.config,
+        subagentManager: fixture.agent.workspace.subagentDefinitions,
+        profileManager: fixture.agent.workspace.profileDefinitions,
+        messageBus: new MessageBus(),
+        readMcpInstructions: fixture.readMcpInstructions,
+      });
+      const first = await orchestrator.launch({ name: 'disposal-child' });
+      const sibling = await orchestrator.launch({ name: 'disposal-child' });
+      fixture.manager.registerTask({
+        id: first.agentId,
+        subagentName: 'disposal-child',
+        goalPrompt: 'Observe direct child disposal',
+        abortController: new AbortController(),
+      });
+      const running = first.scope.runNonInteractive(new ContextState());
+      const settled = running.catch(() => undefined);
+      try {
+        await fixture.entered.promise;
+        let closed = false;
+        const closing = first.dispose().then(() => {
+          closed = true;
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        expect(closed).toBe(false);
+        expect(credentials().keySnapshot()).toStrictEqual([0, 0]);
+        expect(fixture.signal()?.aborted).toBe(true);
+        fixture.releaseWork();
+        await settled;
+        await closing;
+        expect(credentials().keySnapshot()).toStrictEqual([1, 0]);
+        await sibling.scope.runNonInteractive(new ContextState());
+        expect(sibling.scope.output.terminate_reason).not.toBe('ERROR');
+        expect(sibling.scope.output.final_message).toContain('child completed');
+        expect(fixture.settingsOwner.readSelectedModel()).toBe('parent-model');
+      } finally {
+        fixture.releaseWork();
+        await settled;
+        await first.dispose();
+        await sibling.dispose();
+        fixture.manager.cancelTask(first.agentId);
+      }
+      expect(credentials().keySnapshot()).toStrictEqual([1, 1]);
+    });
+  }, 30000);
 
   it('joins acquired key cleanup when child token acquisition fails without retiring parent resources', async () => {
     await withDisposalJoinFixture(async (fixture) => {
@@ -35,12 +91,12 @@ describe('child acquired resource lifetime', () => {
         }
       })();
       const bus = new MessageBus();
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
         credentialAuthority: authority,
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.agent.agentClient.tools,
+        toolRegistry: fixture.client.tools,
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,
@@ -79,12 +135,12 @@ describe('child acquired resource lifetime', () => {
 
   it('joins concurrent whole-child disposal exactly once and preserves its borrowed parent', async () => {
     await withDisposalJoinFixture(async (fixture) => {
-      const orchestrator = new SubagentOrchestrator({
+      const orchestrator = createTestChildOrchestrator({
         credentialAuthority: credentials().authority,
         workspaceTrust: fixture.workspaceTrust,
         createChildSettings: () => fixture.settingsOwner.createChildStore(),
         readRunPolicy: () => fixture.settingsOwner.readSubagentRunPolicy(),
-        toolRegistry: fixture.agent.agentClient.tools,
+        toolRegistry: fixture.client.tools,
         workspacePaths: fixture.workspacePaths,
         instructions: fixture.instructionReads,
         foregroundConfig: fixture.config,
@@ -94,7 +150,7 @@ describe('child acquired resource lifetime', () => {
         readMcpInstructions: fixture.readMcpInstructions,
       });
       const child = await orchestrator.launch({ name: 'disposal-child' });
-      expect(child.runtime.runtimeContext.state.model).toBe('child-model');
+      expect(child.identity.model).toBe('child-model');
       expect(credentials().keySnapshot()).toStrictEqual([0]);
       expect(credentials().snapshot()).toStrictEqual([0]);
       const closing = [child.dispose(), child.dispose(), child.dispose()];

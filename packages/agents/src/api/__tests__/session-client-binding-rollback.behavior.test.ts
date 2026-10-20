@@ -1,3 +1,8 @@
+import { spyOn } from 'bun:test';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -35,6 +40,7 @@ import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
  */
 import { describe, expect, it } from 'bun:test';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { AgentClient } from '../../core/client.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 
@@ -71,7 +77,7 @@ async function bindingOwner(
   gate: ReturnType<typeof createGate>,
   entered: ReturnType<typeof createGate>,
 ): Promise<SessionClientOwner> {
-  const owner = await SessionClientOwner.create(
+  const owner = await createCapturedSessionOwner(
     builtConfig,
     assembleTaskSchemaPolicy(builtSettings),
     builtManager,
@@ -105,6 +111,7 @@ async function bindingOwner(
 async function checkRollback(
   authority: Parameters<typeof acquirePreferredProviderManager>[5],
   operation: (owner: SessionClientOwner) => Promise<unknown>,
+  temporary = false,
 ): Promise<readonly number[]> {
   const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
   process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
@@ -193,7 +200,7 @@ async function checkRollback(
     builtConfig.projectTempDir,
     1024 * 1024,
   );
-  const builtOwner = await SessionClientOwner.create(
+  const builtOwner = await createCapturedSessionOwner(
     builtConfig,
     assembleTaskSchemaPolicy(builtSettings),
     builtManager,
@@ -223,6 +230,15 @@ async function checkRollback(
       else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
     }
   };
+  let replayProvider: FakeProvider | undefined;
+  const register = builtManager.registerProvider;
+  const registration = spyOn(
+    builtManager,
+    'registerProvider',
+  ).mockImplementation((provider) => {
+    if (provider instanceof FakeProvider) replayProvider = provider;
+    return register.call(builtManager, provider);
+  });
   try {
     await preparePreferredProviderCompletion(
       builtConfig,
@@ -237,11 +253,25 @@ async function checkRollback(
     await builtMcp.initialize();
     await builtOwner.initializeTools();
     await builtOwner.refreshAuth();
-    await builtOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtOwner).startChat();
   } catch (primary) {
     await cleanupAfterFailure(primary, closeEngine);
+  } finally {
+    registration.mockRestore();
   }
 
+  if (temporary) {
+    const provider = replayProvider;
+    if (provider === undefined)
+      throw new Error('Rollback fixture requires its replay provider');
+    provider.name = 'gemini';
+    builtManager.registerProvider(provider);
+    builtManager.setActiveProvider('gemini');
+    builtSettingsOwner.initializeProviderSelection(
+      'gemini',
+      builtConfig.getModel(),
+    );
+  }
   const gate = createGate();
   const entered = createGate();
   const clients: BindingFailureClient[] = [];
@@ -258,7 +288,7 @@ async function checkRollback(
     gate,
     entered,
   );
-  const previous = owner.getAgentClient();
+  const previous = capturedSessionClient(owner);
   let settled = false;
   const pending = operation(owner).then(
     () => undefined,
@@ -272,7 +302,7 @@ async function checkRollback(
     await Promise.resolve();
     await Promise.resolve();
     expect(settled).toBe(false);
-    expect(owner.getAgentClient()).toBe(previous);
+    expect(capturedSessionClient(owner)).toBe(previous);
     gate.release();
     const failure = await pending;
     expect(failure).toBeInstanceOf(AggregateError);
@@ -306,14 +336,20 @@ describe('Session candidate binding rollback', () => {
   it('joins profile-candidate cleanup and reports both failures without replacing the live client', async () => {
     expect(
       await checkRollback(credentials().authority, (owner) =>
-        owner.prepareProfileClientReplacement(),
+        owner.prepareProfileActivation(new AbortController().signal),
       ),
     ).toStrictEqual([1, 1]);
   }, 30000);
   it('joins detached-client cleanup and reports both failures', async () => {
     expect(
-      await checkRollback(credentials().authority, (owner) =>
-        owner.createDetachedAgentClient('held-detached'),
+      await checkRollback(
+        credentials().authority,
+        (owner) =>
+          owner.generateText('held-detached', undefined, {
+            transcriptPath: () => undefined,
+            persistSemanticMediaPurge: async () => {},
+          }),
+        true,
       ),
     ).toStrictEqual([1, 1]);
   }, 30000);

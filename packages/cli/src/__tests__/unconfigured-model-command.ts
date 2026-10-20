@@ -383,6 +383,7 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
         null,
         () => undefined,
         () => 0,
+        () => '',
       ),
     ),
     policiesCommand: createPoliciesCommand({ getPolicyInfo: () => null }),

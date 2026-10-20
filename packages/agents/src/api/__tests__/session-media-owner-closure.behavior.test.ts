@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -56,7 +62,7 @@ import {
   requireMediaStore,
 } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import { fromConfig } from '../fromConfig.js';
+
 import { Agent } from '../agent.js';
 
 /**
@@ -218,7 +224,7 @@ describe('public Agent session media ownership closure', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -338,7 +344,7 @@ describe('public Agent session media ownership closure', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('rejects an unpersisted sibling reference despite identical project and session labels', async () => {
@@ -357,8 +363,12 @@ describe('public Agent session media ownership closure', () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const firstStore = requireMediaStore(first.agentClient);
-      const secondStore = requireMediaStore(second.agentClient);
+      const firstStore = requireMediaStore(
+        fixtureAgentResources(first).publishedClient(first),
+      );
+      const secondStore = requireMediaStore(
+        fixtureAgentResources(second).publishedClient(second),
+      );
       const reference = firstMedia(await second.getHistory());
       await secondStore.reserve(reference, 'external-test-lease');
       await first.setHistory([]);
@@ -393,7 +403,9 @@ describe('public Agent session media ownership closure', () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const store = requireMediaStore(first.agentClient);
+      const store = requireMediaStore(
+        fixtureAgentResources(first).publishedClient(first),
+      );
       const reference = firstMedia(await first.getHistory());
       await first.dispose();
       await expect(store.readVerified(reference)).rejects.toThrow(/closed/i);
@@ -448,9 +460,9 @@ describe('public Agent session media ownership closure', () => {
   it('preserves the adopted Config, client and caller-owned media lifetime', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
     await builtCallerOwner.refreshAuth(undefined);
-    const client = builtCallerOwner.getAgentClient();
+    const client = capturedSessionClient(builtCallerOwner);
     await client.startChat();
-    const store = requireMediaStore(builtCallerOwner.getAgentClient());
+    const store = requireMediaStore(capturedSessionClient(builtCallerOwner));
     const agent = await fromConfig(
       builtCallerConfig,
       builtCallerSettings,
@@ -461,12 +473,12 @@ describe('public Agent session media ownership closure', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       expect({
         retainedConfig: internalConfig(agent) === builtCallerConfig,
-        retainedClient: builtCallerOwner.getAgentClient() === client,
+        retainedClient: capturedSessionClient(builtCallerOwner) === client,
       }).toStrictEqual({ retainedConfig: true, retainedClient: true });
       await ingest(agent, 'AQIDBA==');
       const history = await agent.getHistory();

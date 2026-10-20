@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,7 +13,7 @@ import { once } from 'node:events';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
-import { createAgent, fromConfig, type Agent } from '../index.js';
+import { createAgent, type Agent } from '../index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';

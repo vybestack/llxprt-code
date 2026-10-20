@@ -10,17 +10,17 @@ import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { TaskTool } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
   ContextState,
   SubagentTerminateMode,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool } from './task.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -73,9 +73,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
       });
 
       const invocation = tool.build({
@@ -136,9 +136,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
       });
 
       const invocation = tool.build({
@@ -209,9 +209,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
       });
 
       const invocation = tool.build({
@@ -274,9 +274,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': -1,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
       });
 
       const invocation = tool.build({
@@ -347,9 +347,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
         isInteractiveEnvironment: () => true,
       });
 
@@ -417,9 +417,9 @@ describe('TaskTool', () => {
           'task-default-timeout-seconds': 60,
           'task-max-timeout-seconds': 120,
         }),
-        readMcpInstructions: () => undefined,
+
         messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
+        launchChild: (request, signal) => orchestrator.launch(request, signal),
       });
 
       const abortController = new AbortController();
@@ -444,9 +444,9 @@ describe('TaskTool', () => {
   it('validates required parameters', () => {
     const tool = new TaskTool(config, {
       ...createTaskPolicyFixture({}),
-      readMcpInstructions: () => undefined,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () => {
+      launchChild: async () => {
         throw new Error('should not be called');
       },
     });

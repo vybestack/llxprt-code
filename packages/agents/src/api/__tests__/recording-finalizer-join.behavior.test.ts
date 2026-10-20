@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -46,7 +52,7 @@ import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
-import { fromConfig, type Agent } from '../index.js';
+import { type Agent } from '../index.js';
 import { promises as fs } from 'node:fs';
 import { setImmediate } from 'node:timers/promises';
 import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
@@ -173,7 +179,7 @@ describe('public Agent recording finalizer join', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -288,7 +294,7 @@ describe('public Agent recording finalizer join', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   async function withRecordingFinalizerFixture(
@@ -310,7 +316,7 @@ describe('public Agent recording finalizer join', () => {
       callerPolicy.session.messageBus,
       callerMcp,
       undefined,
-      callerOwner.getAgentClient(),
+      capturedSessionClient(callerOwner),
       undefined,
       undefined,
       undefined,
@@ -403,7 +409,9 @@ describe('public Agent recording finalizer join', () => {
     it(`joins accepted persistence before releasing recording ownership${failWrite ? ' and retains its original failure' : ''}`, async () => {
       await withRecordingFinalizerFixture(
         async (agent, chatsDir, sessionId) => {
-          const history = agent.agentClient.getHistoryService();
+          const history = fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService();
           if (!history) throw new Error('Missing real history service');
           const baseline = recordingEvents.map((event) =>
             history.listenerCount(event),

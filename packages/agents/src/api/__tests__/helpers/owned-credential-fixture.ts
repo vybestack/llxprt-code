@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, beforeEach } from 'bun:test';
+import { afterEach, beforeEach, spyOn } from 'bun:test';
 import { ProxyTokenStore } from '@vybestack/llxprt-code-auth/proxy/proxy-token-store.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-auth';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -130,4 +130,38 @@ export function useOwnedCredentials(): () => OwnedCredentialFixture {
     }
   });
   return () => fixture;
+}
+
+export function failCredentialProxyShutdown(error: Error): {
+  mockRestore(): void;
+} {
+  const stop = CredentialProxyServer.prototype.stop;
+  return spyOn(CredentialProxyServer.prototype, 'stop').mockImplementationOnce(
+    async function (this: CredentialProxyServer): Promise<void> {
+      await stop.call(this);
+      throw error;
+    },
+  );
+}
+
+export function observeCredentialProxyStarts(): {
+  servers: CredentialProxyServer[];
+  endpoints: string[];
+  mockRestore(): void;
+} {
+  const servers: CredentialProxyServer[] = [];
+  const endpoints: string[] = [];
+  const start = CredentialProxyServer.prototype.start;
+  const capture = spyOn(
+    CredentialProxyServer.prototype,
+    'start',
+  ).mockImplementation(async function (
+    this: CredentialProxyServer,
+  ): Promise<string> {
+    servers.push(this);
+    const endpoint = await start.call(this);
+    endpoints.push(endpoint);
+    return endpoint;
+  });
+  return { servers, endpoints, mockRestore: () => capture.mockRestore() };
 }

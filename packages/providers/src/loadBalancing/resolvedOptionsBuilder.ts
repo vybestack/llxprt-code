@@ -1,3 +1,4 @@
+import { applyAdmittedReasoning } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -162,7 +163,7 @@ function buildResolvedSubProfileOptions(
     ...(ctx.memberParameters ? { modelParameters: ctx.memberParameters } : {}),
     resolved: {
       ...resolvedWithoutAuth,
-      model: subProfile.model,
+      model: ctx.memberParameters?.modelOverride ?? subProfile.model,
       ...(typeof subProfile.baseURL === 'string' &&
         subProfile.baseURL !== '' && { baseURL: subProfile.baseURL }),
       ...(typeof subProfile.authToken === 'string' &&
@@ -216,7 +217,10 @@ function createDelegateInvocation(
     modelParams: ctx.memberParameters?.modelParams,
     modelParamsProviderName: ctx.memberParameters?.providerName,
     providerName: subProfile.providerName,
-    ephemeralsSnapshot,
+    ephemeralsSnapshot: applyAdmittedReasoning(
+      ephemeralsSnapshot,
+      ctx.memberParameters?.reasoning,
+    ),
     telemetry: options.resolved?.telemetry,
     metadata: options.metadata,
     signal: getRequestSignal(options),

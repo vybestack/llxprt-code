@@ -4,13 +4,7 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
 import { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 /**
@@ -18,14 +12,14 @@ import { TaskLaunchOwner } from '../session/task-launch-owner.js';
  * Split from task.async.test.ts to stay under file-level max-lines.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { TaskTool, type TaskToolParams } from './task.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
-import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool, type TaskToolParams } from './task.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -61,18 +55,15 @@ describe('TaskTool', () => {
         false,
       );
       const tool = new TaskTool(configWithDisabledGlobalAsync, {
-        createChildSettings: () =>
-          settingsRoot.settingsOwner.createChildStore(),
         readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
-        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+
         readGovernance: () =>
           settingsRoot.settingsOwner.readToolGovernance(
             config.getExcludeTools() ?? [],
           ),
-        workspacePaths: fixturePaths(),
-        readMcpInstructions: () => undefined,
-        instructions: emptyInstructionReads,
-        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+
+        launchChild: (request, signal) =>
+          (({}) as SubagentOrchestrator).launch(request, signal),
         messageBus,
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
@@ -109,18 +100,15 @@ describe('TaskTool', () => {
         false,
       );
       const tool = new TaskTool(configWithDisabledProfileAsync, {
-        createChildSettings: () =>
-          settingsRoot.settingsOwner.createChildStore(),
         readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
-        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+
         readGovernance: () =>
           settingsRoot.settingsOwner.readToolGovernance(
             config.getExcludeTools() ?? [],
           ),
-        workspacePaths: fixturePaths(),
-        readMcpInstructions: () => undefined,
-        instructions: emptyInstructionReads,
-        orchestratorFactory: () => ({}) as SubagentOrchestrator,
+
+        launchChild: (request, signal) =>
+          (({}) as SubagentOrchestrator).launch(request, signal),
         messageBus,
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
@@ -171,19 +159,19 @@ describe('TaskTool', () => {
         true,
       );
       const tool = new TaskTool(configWithEnabledAsync, {
-        createChildSettings: () =>
-          settingsRoot.settingsOwner.createChildStore(),
         readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
-        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+
         readGovernance: () =>
           settingsRoot.settingsOwner.readToolGovernance(
             config.getExcludeTools() ?? [],
           ),
-        workspacePaths: fixturePaths(),
-        readMcpInstructions: () => undefined,
-        instructions: emptyInstructionReads,
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         messageBus,
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
@@ -227,19 +215,19 @@ describe('TaskTool', () => {
       const configWithoutSettings = config;
 
       const tool = new TaskTool(configWithoutSettings, {
-        createChildSettings: () =>
-          settingsRoot.settingsOwner.createChildStore(),
         readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
-        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+
         readGovernance: () =>
           settingsRoot.settingsOwner.readToolGovernance(
             config.getExcludeTools() ?? [],
           ),
-        workspacePaths: fixturePaths(),
-        readMcpInstructions: () => undefined,
-        instructions: emptyInstructionReads,
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+
+        launchChild: (request, signal) =>
+          (
+            ({
+              launch: launchMock,
+            }) as unknown as SubagentOrchestrator
+          ).launch(request, signal),
         messageBus,
         taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,

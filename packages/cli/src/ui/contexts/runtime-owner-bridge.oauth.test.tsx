@@ -1,7 +1,9 @@
 import {
-  assembleSessionAuthentication,
-  fromConfig,
-} from '@vybestack/llxprt-code-agents';
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { assembleSessionAuthentication } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -54,7 +56,6 @@ import {
   cleanupAfterFailure,
   runCleanupSteps,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { FileOAuthSettingsProvider } from '../../../../providers/src/auth/file-oauth-settings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { Colors } from '../colors.js';
@@ -224,7 +225,7 @@ describe('interactive runtime owner bridge', () => {
       firstCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const firstCallerOwner = await SessionClientOwner.create(
+    const firstCallerOwner = await createCapturedSessionOwner(
       firstCallerConfig,
       assembleTaskSchemaPolicy(firstCallerSettings),
       firstCallerManager,
@@ -287,7 +288,7 @@ describe('interactive runtime owner bridge', () => {
       );
       requireCallerActivation(activation);
       await firstCallerOwner.initializeTools();
-      await firstCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(firstCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, firstCallerClose);
     }
@@ -406,7 +407,7 @@ describe('interactive runtime owner bridge', () => {
       secondCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const secondCallerOwner = await SessionClientOwner.create(
+    const secondCallerOwner = await createCapturedSessionOwner(
       secondCallerConfig,
       assembleTaskSchemaPolicy(secondCallerSettings),
       secondCallerManager,
@@ -469,7 +470,7 @@ describe('interactive runtime owner bridge', () => {
       );
       requireCallerActivation(activation);
       await secondCallerOwner.initializeTools();
-      await secondCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(secondCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, secondCallerClose);
     }
@@ -512,7 +513,7 @@ describe('interactive runtime owner bridge', () => {
     const left = render(
       <OAuthControlProvider
         control={assembleSessionAuthentication(firstCallerOAuth, (provider) => {
-          const instance = a.providerManager.getProviderByName(provider);
+          const instance = firstCallerManager.getProviderByName(provider);
           if (
             instance &&
             'clearClientCache' in instance &&
@@ -529,7 +530,7 @@ describe('interactive runtime owner bridge', () => {
         control={assembleSessionAuthentication(
           secondCallerOAuth,
           (provider) => {
-            const instance = b.providerManager.getProviderByName(provider);
+            const instance = secondCallerManager.getProviderByName(provider);
             if (
               instance &&
               'clearClientCache' in instance &&

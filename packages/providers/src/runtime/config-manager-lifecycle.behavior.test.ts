@@ -1,3 +1,5 @@
+import { AdoptedProviderFixture } from '../../../agents/src/api/__tests__/helpers/adopted-provider-fixture.js';
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,13 +10,10 @@ import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquis
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { configureProviderTokenizer } from '../composition/index.js';
-import {
-  acquireAdoptedProviderManager,
-  activateAdoptedProviders,
-} from '../../../agents/src/api/adopted-provider-assembly.js';
+
 import { acquirePreferredOAuth } from '../../../agents/src/api/preferred-provider-acquisition.js';
 import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
-import { acquireAdoptedOAuth } from '../../../agents/src/api/adopted-provider-assembly.js';
+
 import {
   createSessionAuthPolicyReader,
   createOwnedTokenStoreClose,
@@ -27,8 +26,6 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import { createFileOAuthSettingsProvider } from '../auth/index.js';
 
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -149,7 +146,7 @@ describe('Config-independent provider owner lifecycle', () => {
   });
 
   it('rejects a missing listing owner without consulting another session', () => {
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
   });
@@ -191,13 +188,14 @@ describe('Config-independent provider owner lifecycle', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'borrowed-manager'),
     );
-    const adopted = acquireAdoptedProviderManager(
-      manager,
+    const adopted = new AdoptedProviderFixture(
       ownerConfig,
       settings,
+      'borrowed-manager',
+    ).acquireManager(
+      manager,
       ownerSettingsOwner,
       files,
-      'borrowed-manager',
       credentials().authority,
       release,
     );
@@ -214,13 +212,14 @@ describe('Config-independent provider owner lifecycle', () => {
       undefined,
     );
     try {
-      await activateAdoptedProviders(
+      await new AdoptedProviderFixture(
         ownerConfig,
         settings,
+        'borrowed-manager',
+      ).activate(
         ownerSettingsOwner,
         adopted,
         oauth,
-        'borrowed-manager',
         false,
         configureProviderTokenizer(manager),
       );
@@ -261,13 +260,14 @@ describe('Config-independent provider owner lifecycle', () => {
     release.acquire('files', () =>
       releaseAdoptedFileScope(files, 'owned-manager'),
     );
-    const manager = acquireAdoptedProviderManager(
-      undefined,
+    const manager = new AdoptedProviderFixture(
       ownerConfig,
       ownerSettings,
+      'owned-manager',
+    ).acquireManager(
+      undefined,
       ownerSettingsOwner,
       files,
-      'owned-manager',
       credentials().authority,
       release,
     );
@@ -289,13 +289,14 @@ describe('Config-independent provider owner lifecycle', () => {
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
     try {
-      await activateAdoptedProviders(
+      await new AdoptedProviderFixture(
         ownerConfig,
         ownerSettings,
+        'owned-manager',
+      ).activate(
         ownerSettingsOwner,
         manager,
         oauth,
-        'owned-manager',
         false,
         configureProviderTokenizer(manager),
       );
@@ -372,35 +373,38 @@ describe('Config-independent provider owner lifecycle', () => {
       ownerConfig,
     );
     try {
-      const finalManager = acquireAdoptedProviderManager(
-        earlyManager,
+      const finalManager = new AdoptedProviderFixture(
         ownerConfig,
         settings,
+        'shared-label',
+      ).acquireManager(
+        earlyManager,
         ownerSettingsOwner,
         files,
-        'shared-label',
         credentials().authority,
         release,
       );
-      const finalOAuth = acquireAdoptedOAuth(
+      const finalOAuth = new AdoptedProviderFixture(
+        ownerConfig,
+        settings,
+        'shared-label',
+      ).acquireOAuth(
         earlyOAuth,
         undefined,
         bus,
-        ownerConfig,
-        settings,
         finalManager,
-        'shared-label',
         undefined,
         credentials().authority,
         release,
       );
-      await activateAdoptedProviders(
+      await new AdoptedProviderFixture(
         ownerConfig,
         settings,
+        'shared-label',
+      ).activate(
         ownerSettingsOwner,
         finalManager,
         finalOAuth,
-        'shared-label',
         false,
         configureProviderTokenizer(earlyManager),
       );

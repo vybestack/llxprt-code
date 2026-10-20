@@ -14,7 +14,6 @@ import type { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { iContentToHistoryItems } from '../utils/iContentToHistoryItems.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import {
-  performResume,
   type ResumeContext,
   type PerformResumeResult,
   type RecordingSwapCallbacks,
@@ -88,20 +87,27 @@ type BrowserSessionReads = Pick<
   | 'getModel'
   | 'directories'
   | 'adoptSessionId'
+  | 'sessionPersistence'
 >;
 
 export function bindRawBrowserSession(
   config: BrowserSessionReads,
-  readHistoryService: () => ResumeContext['historyService'],
+  history: ResumeContext['history'],
   callbacks: RecordingSwapCallbacks | undefined,
   logger: DebugLogger,
 ): ((target: ContinueTarget) => Promise<PerformResumeResult>) | null {
   if (callbacks === undefined) return null;
-  return (target) =>
-    performResume(
-      target.kind === 'session'
-        ? target.session.sessionId
-        : target.checkpointId,
+  return (target) => {
+    if (!config.sessionPersistence)
+      throw new Error('CLI session persistence is unavailable');
+    return config.sessionPersistence.resumeRecording(
+      {
+        type: 'perform_resume',
+        sessionRef:
+          target.kind === 'session'
+            ? target.session.sessionId
+            : target.checkpointId,
+      },
       {
         chatsDir: join(config.getProjectTempDir(), 'chats'),
         projectHash: getProjectHash(config.getProjectRoot()),
@@ -110,9 +116,10 @@ export function bindRawBrowserSession(
         currentModel: config.getModel(),
         workspaceDirs: [...config.directories()],
         recordingCallbacks: callbacks,
-        historyService: readHistoryService(),
+        history,
         adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
         logger,
       },
     );
+  };
 }

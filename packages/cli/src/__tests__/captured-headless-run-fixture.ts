@@ -23,10 +23,7 @@ import {
   resolveContentPrefixIdentity,
   createCliModelIdentityRuntime,
 } from '../ui/utils/modelIdentity.js';
-import {
-  isProviderConfigured,
-  reportUnconfiguredProviderError,
-} from '../unconfiguredProviderGuard.js';
+import { reportUnconfiguredProviderError } from '../unconfiguredProviderGuard.js';
 
 export function captureNonInteractiveRun(
   config: Config,
@@ -35,7 +32,7 @@ export function captureNonInteractiveRun(
   flush: () => void | Promise<void>,
 ) {
   return createNonInteractiveRun(
-    () => isProviderConfigured(agent.providerManager),
+    agent.hasActiveProvider,
     () => reportUnconfiguredProviderError(config),
     () => config.getOutputFormat(),
     () => config.getDebugMode(),

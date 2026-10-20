@@ -17,17 +17,10 @@ import * as path from 'node:path';
 import type { MessageActionReturn } from './types.js';
 import type { DumpcontextCommandOperations } from './dumpcontextCommand.js';
 
-type AgentHistoryService = NonNullable<
-  ReturnType<Agent['agentClient']['getHistoryService']>
->;
-
 export interface DumpcontextOwnerBindings {
   readonly readMode: () => unknown;
   readonly writeMode: (mode: Exclude<DumpMode, 'now' | 'status'>) => void;
-  readonly readHistory: () => {
-    readonly messages: ReturnType<AgentHistoryService['getAll']>;
-    readonly chronology: ReturnType<AgentHistoryService['getChronologyTrace']>;
-  } | null;
+  readonly readHistory: Agent['session']['readHistorySnapshot'];
   readonly readProvider: () => {
     readonly providerName: string;
     readonly activeModel: string | undefined;

@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -223,7 +227,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -345,7 +349,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('(a) API-key auth via cliOverrides.key activates the provider and authenticates', async () => {
@@ -406,9 +410,9 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       expect(result.authFailed).toBe(false);
       // The provider branch ran refreshAuth, producing a content generator
       // config — a real signal auth materialized (not just authFailed=false).
-      expect(await activatedReply(builtCallerOwner.getAgentClient())).toBe(
-        'a plain text reply',
-      );
+      expect(
+        await activatedReply(capturedSessionClient(builtCallerOwner)),
+      ).toBe('a plain text reply');
       expect(configActiveProvider(builtCallerManager)).toBe('fake');
     } finally {
       await builtCallerClose();

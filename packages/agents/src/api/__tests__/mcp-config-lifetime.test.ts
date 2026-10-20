@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -154,7 +158,7 @@ describe('MCP Config lifetime deletion', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -274,7 +278,7 @@ describe('MCP Config lifetime deletion', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   it('closes owner instruction and resource admission without disposing caller Config', async () => {
@@ -467,7 +471,9 @@ describe('MCP Config lifetime deletion', () => {
   }, 30000);
 
   it('rejects late instruction-consuming requests on a disposed borrowed facade', async () => {
-    const { fromConfig } = await import('../fromConfig.js');
+    const { adoptFixture: fromConfig } = await import(
+      './helpers/adoption-fixture.js'
+    );
     await openbuiltCaller('plain-text.jsonl');
     const agent = await fromConfig(
       builtCallerConfig,
@@ -479,7 +485,7 @@ describe('MCP Config lifetime deletion', () => {
       undefined,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
       await agent.dispose();

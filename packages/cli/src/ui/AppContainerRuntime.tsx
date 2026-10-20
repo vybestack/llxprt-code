@@ -1,3 +1,4 @@
+import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,6 +10,19 @@ import type {
   SubscribeCommandChanges,
 } from '../services/commandRegistryOperations.js';
 
+import {
+  DefaultAppLayout,
+  type DefaultAppLayoutProps,
+} from './layouts/DefaultAppLayout.js';
+import {
+  AppCommandsProvider,
+  type AppCommandBindings,
+} from './contexts/AppCommandsContext.js';
+import { TerminalProvider } from './stores/terminal/TerminalContext.js';
+import { TurnProvider } from './stores/turn/TurnContext.js';
+import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
+import { DialogProvider } from './stores/dialog/DialogContext.js';
+import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
 import type { RegisteredHistoryReads } from './hooks/useRegisteredHistoryCommands.js';
 
 import type { CredentialCommandRegistration } from './hooks/credentialCommandRegistration.js';
@@ -40,7 +54,6 @@ import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 
 import type React from 'react';
 import type {
-  MessageBus,
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
@@ -54,10 +67,6 @@ import type { LoadedSettings } from '../config/settings.js';
 import type { AppState, AppAction } from './reducers/appReducer.js';
 import type { OperationLifecycleRegistry } from './hooks/agentStream/operationLifecycle.js';
 import type { MemoryTelemetryController } from './hooks/memoryTrend/memoryTelemetry.js';
-import {
-  DefaultAppLayout,
-  type DefaultAppLayoutProps,
-} from './layouts/DefaultAppLayout.js';
 import type {
   AppBootstrapProps,
   AppBootstrapResult,
@@ -83,24 +92,15 @@ import {
   createDialogOpeners,
   type DialogOpeners,
 } from './stores/dialog/dialogOpeners.js';
-import { DialogProvider } from './stores/dialog/DialogContext.js';
 import {
   createTerminalStore,
   type TerminalStore,
 } from './stores/terminal/terminalStore.js';
-import { TerminalProvider } from './stores/terminal/TerminalContext.js';
 import { createTurnStore, type TurnStore } from './stores/turn/turnStore.js';
-import { TurnProvider } from './stores/turn/TurnContext.js';
 import {
   createSettingsProfileStore,
   type SettingsProfileStore,
 } from './stores/settings/settingsStore.js';
-import { SettingsProfileProvider } from './stores/settings/SettingsContext.js';
-import {
-  AppCommandsProvider,
-  type AppCommandBindings,
-} from './contexts/AppCommandsContext.js';
-import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
 import { useRef, useMemo, useCallback } from 'react';
 import { useBound } from './hooks/agentStream/useStreamOwnerCallbacks.js';
 import { useBrowserCatalogCommands } from './hooks/useBrowserCatalogCommands.js';
@@ -123,6 +123,7 @@ import { useSlashCommandProcessorCore } from './hooks/useSlashCommandProcessorCo
 import type { HistoryItem } from './types.js';
 import {
   useInputAgentOperations,
+  useInputReadOperations,
   useInputStreamPolicy,
 } from './inputOwnerBindings.js';
 import { getInteractiveTranscriptPath } from './transcriptPath.js';
@@ -132,6 +133,10 @@ const debug = new DebugLogger('llxprt:ui:appcontainer');
 export interface AppContainerRuntimeProps
   extends Pick<
     UseSlashCommandProcessorCoreArgs,
+    | 'registerIdeCommand'
+    | 'readIdeDisplayName'
+    | 'readIdeMode'
+    | 'readIdeAvailable'
     | 'registerWorkspaceCommands'
     | 'registerChatCommands'
     | 'registerSubagentCommand'
@@ -145,6 +150,17 @@ export interface AppContainerRuntimeProps
     | 'startCommandSession'
     | 'listCommandTools'
   > {
+  subscribeBucketConsent?: Agent['auth']['subscribeBucketConsent'];
+  respondToBucketConsent?: Agent['auth']['respondToBucketConsent'];
+  subscribeHookPhase?: Agent['hooks']['subscribeExecutionPhase'];
+  readCurrentIde: AppBootstrapProps['readCurrentIde'];
+  readIdeContext: AppDialogsParams['readIdeContext'];
+  subscribeIdeContext: AppDialogsParams['subscribeIdeContext'];
+  readIdeDiffingEnabled: DefaultAppLayoutProps['readIdeDiffingEnabled'];
+  subscribeIdeDiffing: DefaultAppLayoutProps['subscribeIdeDiffing'];
+  resolveIdeDiff: DefaultAppLayoutProps['resolveIdeDiff'];
+  readIdeWorkspaceTrust: DefaultAppLayoutProps['readIdeWorkspaceTrust'];
+  subscribeIdeWorkspaceTrust: DefaultAppLayoutProps['subscribeIdeWorkspaceTrust'];
   triggerSessionStart: AppBootstrapProps['triggerSessionStart'];
   appendHistory: AppBootstrapProps['appendHistory'];
   recordRecordingEvent: AppBootstrapProps['recordRecordingEvent'];
@@ -158,11 +174,12 @@ export interface AppContainerRuntimeProps
   readBuiltinCommands: ReadBuiltinCommands;
   loadRegisteredCommands: LoadRegisteredCommands;
   subscribeCommandChanges: SubscribeCommandChanges;
-  uiRuntime: Omit<UiRuntime, 'agentClientSource'>;
+  uiRuntime: UiRuntime;
   slashCommandRuntime: SlashCommandRuntime;
   session: Parameters<typeof useInputBrowserCommands>[0] &
     Parameters<typeof useInputAgentOperations>[10];
-  mediaStore: Parameters<typeof useInputBrowserCommands>[4];
+  readRawBrowserCatalog: Parameters<typeof useInputBrowserCommands>[4];
+  deleteRawBrowserTarget: Parameters<typeof useInputBrowserCommands>[5];
   bindRawBrowserSession: (
     config: Parameters<typeof bindRawBrowserSession>[0],
     swaps: Parameters<typeof bindRawBrowserSession>[2],
@@ -192,7 +209,6 @@ export interface AppContainerRuntimeProps
   resumedHistory?: IContent[];
   version: string;
   terminalBackgroundColor?: string;
-  runtimeMessageBus?: MessageBus;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
@@ -314,6 +330,8 @@ function useAppDialogsRuntime(
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
     currentIDE: bootstrap.currentIDE,
+    readIdeContext: props.readIdeContext,
+    subscribeIdeContext: props.subscribeIdeContext,
   });
 }
 
@@ -334,7 +352,8 @@ function useInputBindings(
     config,
     props.recordingOwner,
     recordingSwapCallbacks,
-    props.mediaStore,
+    props.readRawBrowserCatalog,
+    props.deleteRawBrowserTarget,
     props.bindRawBrowserSession,
     turnStore,
     dialogStore,
@@ -384,7 +403,7 @@ function useInputBindings(
       runtime.hooks,
       runtime.app,
       props.isAgentClientPresent,
-      runtime.ide,
+      props.readIdeMode,
       runtime.shell,
       runtime.mcp,
       useBound(config, config.refreshMemory),
@@ -418,6 +437,10 @@ function useAppInputRuntime(
     subscribeCommandChanges: props.subscribeCommandChanges,
     ...props.historyReads,
     config: props.slashCommandRuntime,
+    registerIdeCommand: props.registerIdeCommand,
+    readIdeMode: props.readIdeMode,
+    readIdeAvailable: props.readIdeAvailable,
+    readIdeDisplayName: props.readIdeDisplayName,
     registerWorkspaceCommands: props.registerWorkspaceCommands,
     registerChatCommands: props.registerChatCommands,
     registerSubagentCommand: props.registerSubagentCommand,
@@ -463,7 +486,7 @@ function useBootstrapMemoryReads(memory: UiRuntime['memory']) {
 
 export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
   debug.debug('AppContainer architecture active (v2)');
-  const { uiRuntime, slashCommandRuntime: config, settings, metrics } = props;
+  const { uiRuntime, slashCommandRuntime: config, settings } = props;
   const stores = useAppStores(config);
   const { recordingIntegrationRef, recordingSwapCallbacks } =
     useRecordingInfrastructure(
@@ -472,31 +495,9 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       props.initialLockHandle,
       props.recordingOwner,
     );
-  const bootstrap = useBootstrapRuntime(
-    {
-      ...useBootstrapMemoryReads(uiRuntime.memory),
-      triggerSessionStart: props.triggerSessionStart,
-      appendHistory: props.appendHistory,
-      recordRecordingEvent: props.recordRecordingEvent,
-      setTokenTrackingMetrics: useBound(
-        metrics,
-        metrics.setTokenTrackingMetrics,
-      ),
-      readProviderMetrics: props.readProviderMetrics,
-      readSessionTokenUsage: props.readSessionTokenUsage,
-      subscribeHistoryTokens: props.subscribeHistoryTokens,
-      resumedHistory: props.resumedHistory,
-      version: props.version,
-      memoryController: props.memoryController,
-    },
-    settings.merged,
+  const bootstrap = useApplicationBootstrap(
+    props,
     stores,
-    uiRuntime.ephemeral,
-    uiRuntime.shell,
-    uiRuntime.ide,
-    uiRuntime.app,
-    props.connectRecordingHistory,
-    props.recordingOwner,
     recordingIntegrationRef,
   );
   const dialogs = useAppDialogsRuntime(
@@ -512,53 +513,50 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     recordingIntegrationRef,
     recordingSwapCallbacks,
   );
-  const layout = useAppLayout({
-    uiRuntime,
-    settings,
-    clearConsoleMessagesState: bootstrap.clearConsoleMessagesState,
-    turnStore: stores.turnStore,
-    store: stores.dialogStore,
-    terminalStore: stores.terminalStore,
-    settingsStore: stores.settingsStore,
-  });
-  return renderAppRuntimeView(
-    props.runtimeMessageBus,
-    config,
-    props.version,
-    uiRuntime.app.getScreenReader(),
-    uiRuntime.app.getAccessibility().disableLoadingPhrases === true,
-    uiRuntime.app.getDebugMode(),
-    bootstrap,
-    settings,
-    props.startupWarnings,
-    layout,
-    useAppCommands(dialogs, input, layout, stores.terminalStore),
+  const layout = useApplicationLayout(
+    props,
+    bootstrap.clearConsoleMessagesState,
     stores,
-    useTranscriptReader(
-      props.recordingOwner,
-      recordingSwapCallbacks,
-      props.readAgentRecordingPath,
-    ),
+  );
+  return (
+    <AppRuntimeView
+      subscribeBucketConsent={props.subscribeBucketConsent}
+      respondToBucketConsent={props.respondToBucketConsent}
+      subscribeHookPhase={props.subscribeHookPhase}
+      readIdeMode={props.readIdeMode}
+      readIdeDiffingEnabled={props.readIdeDiffingEnabled}
+      subscribeIdeDiffing={props.subscribeIdeDiffing}
+      resolveIdeDiff={props.resolveIdeDiff}
+      readIdeWorkspaceTrust={props.readIdeWorkspaceTrust}
+      subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
+      slashCommandRuntime={config}
+      version={props.version}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
+      settings={settings}
+      startupWarnings={props.startupWarnings ?? []}
+      nightly={bootstrap.nightly}
+      updateInfo={bootstrap.updateInfo}
+      mainControlsRef={layout.mainControlsRef}
+      rootUiRef={layout.rootUiRef}
+      pendingHistoryItemRef={layout.pendingHistoryItemRef}
+      contextFileNames={layout.contextFileNames}
+      appCommands={useAppCommands(dialogs, input, layout, stores.terminalStore)}
+      dialogStore={stores.dialogStore}
+      terminalStore={stores.terminalStore}
+      turnStore={stores.turnStore}
+      settingsStore={stores.settingsStore}
+      getTranscriptFilePath={useTranscriptReader(
+        props.recordingOwner,
+        recordingSwapCallbacks,
+        props.readAgentRecordingPath,
+      )}
+    />
   );
 };
-
-function useTranscriptReader(
-  recordingOwner: 'agent' | 'raw' | undefined,
-  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
-  readAgentRecordingPath: () => string | undefined,
-): () => string | undefined {
-  return useCallback(
-    () =>
-      getInteractiveTranscriptPath(
-        recordingOwner,
-        readAgentRecordingPath,
-        () =>
-          recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
-          undefined,
-      ),
-    [recordingOwner, recordingSwapCallbacks, readAgentRecordingPath],
-  );
-}
 
 interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   appCommands: AppCommandBindings;
@@ -597,6 +595,76 @@ function AppRuntimeView({
   );
 }
 
+function useApplicationLayout(
+  { uiRuntime, settings }: AppContainerRuntimeProps,
+  clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'],
+  stores: ReturnType<typeof useAppStores>,
+): ReturnType<typeof useAppLayout> {
+  return useAppLayout({
+    uiRuntime,
+    settings,
+    clearConsoleMessagesState,
+    turnStore: stores.turnStore,
+    store: stores.dialogStore,
+    terminalStore: stores.terminalStore,
+    settingsStore: stores.settingsStore,
+  });
+}
+
+function useTranscriptReader(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
+  readAgentRecordingPath: () => string | undefined,
+): () => string | undefined {
+  return useCallback(
+    () =>
+      getInteractiveTranscriptPath(
+        recordingOwner,
+        readAgentRecordingPath,
+        () =>
+          recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
+          undefined,
+      ),
+    [recordingOwner, recordingSwapCallbacks, readAgentRecordingPath],
+  );
+}
+
+function useApplicationBootstrap(
+  props: AppContainerRuntimeProps,
+  stores: ReturnType<typeof useAppStores>,
+  recordingIntegrationRef: UseRecordingInfrastructureResult['recordingIntegrationRef'],
+): AppBootstrapResult {
+  const { uiRuntime, metrics, settings } = props;
+  return useBootstrapRuntime(
+    {
+      ...useBootstrapMemoryReads(uiRuntime.memory),
+      readIdeMode: props.readIdeMode,
+      triggerSessionStart: props.triggerSessionStart,
+      appendHistory: props.appendHistory,
+      recordRecordingEvent: props.recordRecordingEvent,
+      setTokenTrackingMetrics: useBound(
+        metrics,
+        metrics.setTokenTrackingMetrics,
+      ),
+      readProviderMetrics: props.readProviderMetrics,
+      readSessionTokenUsage: props.readSessionTokenUsage,
+      subscribeHistoryTokens: props.subscribeHistoryTokens,
+      resumedHistory: props.resumedHistory,
+      version: props.version,
+      memoryController: props.memoryController,
+    },
+    settings.merged,
+    stores,
+    uiRuntime.ephemeral,
+    uiRuntime.shell,
+    props.readCurrentIde,
+    uiRuntime.app,
+    props.connectRecordingHistory,
+    props.recordingOwner,
+    recordingIntegrationRef,
+  );
+}
+
 function useInputBrowserCommands(
   session: Parameters<typeof useBrowserCatalogCommands>[0] &
     Pick<Agent['session'], 'resume'>,
@@ -605,7 +673,8 @@ function useInputBrowserCommands(
     Parameters<typeof resolveEmojiFilterMode>[0],
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingSwapCallbacks: UseRecordingInfrastructureResult['recordingSwapCallbacks'],
-  mediaStore: Agent['agentClient']['mediaStore'],
+  readRawCatalog: Parameters<typeof useBrowserCatalogCommands>[3],
+  deleteRawTarget: CliSessionPersistencePort['deleteBrowserTarget'],
   bindRawSession: AppContainerRuntimeProps['bindRawBrowserSession'],
   turnStore: TurnStore,
   dialogStore: DialogStore,
@@ -615,8 +684,12 @@ function useInputBrowserCommands(
     session,
     recordingOwner,
     config,
-    recordingSwapCallbacks,
-    mediaStore,
+    readRawCatalog,
+    (target) =>
+      deleteRawTarget(
+        target,
+        recordingSwapCallbacks?.getCurrentRecording() ?? null,
+      ),
   );
   const resumeBrowserTarget = useMemo(() => {
     const close = () => dialogStore.commands.closeDialog('sessionBrowser');
@@ -725,31 +798,6 @@ function useInputCommandView(
 }
 function noop(): void {}
 
-function useInputReadOperations(
-  hooks: UiRuntime['hooks'],
-  app: UiRuntime['app'],
-  isAgentClientPresent: () => boolean,
-  ide: UiRuntime['ide'],
-  shell: UiRuntime['shell'],
-  mcp: UiRuntime['mcp'],
-  refreshMemory: SlashCommandRuntime['refreshMemory'],
-  readDebugMode: () => boolean,
-) {
-  return {
-    refreshMemory,
-    readDebugMode,
-    endInputHookSession: useBound(hooks, hooks.endHookSession),
-    readInitialPrompt: useBound(app, app.getQuestion),
-    isAgentClientPresent,
-    readIdeMode: useBound(ide, ide.getIdeMode),
-    readInteractiveShellEnabled: useBound(
-      shell,
-      shell.getEnableInteractiveShell,
-    ),
-    readMcpServers: useBound(mcp, mcp.getMcpServers),
-  };
-}
-
 function buildInputView(
   stores: ReturnType<typeof useAppStores>,
   settings: LoadedSettings,
@@ -782,46 +830,4 @@ function buildInputView(
     appDispatch,
     operationLifecycle,
   };
-}
-
-function renderAppRuntimeView(
-  runtimeMessageBus: MessageBus | undefined,
-  slashCommandRuntime: DefaultAppLayoutProps['slashCommandRuntime'],
-  version: string,
-  screenReaderEnabled: boolean,
-  disableLoadingPhrases: boolean,
-  debugMode: boolean,
-  bootstrap: AppBootstrapResult,
-  settings: LoadedSettings,
-  startupWarnings: string[] | undefined,
-  layout: ReturnType<typeof useAppLayout>,
-  commands: AppCommandBindings,
-  stores: ReturnType<typeof useAppStores>,
-  readTranscript: () => string | undefined,
-): React.ReactNode {
-  const { dialogStore, terminalStore, turnStore, settingsStore } = stores;
-  return (
-    <AppRuntimeView
-      runtimeMessageBus={runtimeMessageBus}
-      slashCommandRuntime={slashCommandRuntime}
-      version={version}
-      screenReaderEnabled={screenReaderEnabled}
-      disableLoadingPhrases={disableLoadingPhrases}
-      debugMode={debugMode}
-      settings={settings}
-      startupWarnings={startupWarnings ?? []}
-      nightly={bootstrap.nightly}
-      updateInfo={bootstrap.updateInfo}
-      mainControlsRef={layout.mainControlsRef}
-      rootUiRef={layout.rootUiRef}
-      pendingHistoryItemRef={layout.pendingHistoryItemRef}
-      contextFileNames={layout.contextFileNames}
-      appCommands={commands}
-      dialogStore={dialogStore}
-      terminalStore={terminalStore}
-      turnStore={turnStore}
-      settingsStore={settingsStore}
-      getTranscriptFilePath={readTranscript}
-    />
-  );
 }

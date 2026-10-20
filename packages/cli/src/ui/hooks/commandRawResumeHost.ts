@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { join } from 'node:path';
-import {
-  getProjectHash,
-  importSessionMediaPackage,
-} from '@vybestack/llxprt-code-core';
+import { getProjectHash } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
@@ -33,8 +30,8 @@ type ResumeSessionReads = Pick<
 
 export function bindCommandRawResume(
   config: ResumeSessionReads | null,
-  persistence: CliSessionPersistencePort | undefined,
-  readHistoryService: () => ResumeContext['historyService'],
+  persistence: Pick<CliSessionPersistencePort, 'resumeRecording'> | undefined,
+  history: ResumeContext['history'],
   callbacks: RecordingSwapCallbacks | undefined,
   logger: DebugLogger,
   resume: typeof performResume,
@@ -44,36 +41,19 @@ export function bindCommandRawResume(
   if (config === null || callbacks === undefined) return null;
   return (action) => {
     if (!persistence) throw new Error('CLI session persistence is unavailable');
-    const mediaStore = persistence.mediaStore;
-    if (!mediaStore) throw new Error('CLI session media store is unavailable');
-    const context: ResumeContext = {
+    const context: Omit<ResumeContext, 'mediaStore' | 'persistenceFactory'> = {
       chatsDir: join(config.projectTempDir, 'chats'),
       projectHash: getProjectHash(config.getProjectRoot()),
       currentSessionId: config.getSessionId(),
       currentProvider: config.getProvider() ?? 'unknown',
       currentModel: config.getModel(),
       workspaceDirs: [...config.directories()],
-      mediaStore,
       maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-      persistenceFactory: (sessionId) => persistence.forRecording(sessionId),
       recordingCallbacks: callbacks,
-      historyService: readHistoryService(),
+      history,
       adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
       logger,
     };
-    return (async () =>
-      action.sessionPackage === undefined
-        ? resume(action.sessionRef, context)
-        : importSessionMediaPackage(
-            action.sessionPackage,
-            context.chatsDir,
-            context.projectHash,
-            mediaStore,
-            async (imported) => {
-              const result = await resume(imported.sessionId, context);
-              if (!result.ok) throw new Error(result.error);
-              return result;
-            },
-          ))();
+    return persistence.resumeRecording(action, context, resume);
   };
 }

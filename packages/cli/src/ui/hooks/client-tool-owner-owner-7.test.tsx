@@ -1,3 +1,11 @@
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from '../../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import {
+  capturedSessionClient,
+  createCapturedSessionOwner,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +33,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import {
   beforeAll,
@@ -48,7 +55,7 @@ import { AgentConfig } from '../../../../agents/src/api/config-types.js';
 import { act } from 'react';
 import { renderHook, cleanup } from '../../__tests__/render.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import {
   type CompletedToolCall,
@@ -235,7 +242,7 @@ describe('Agent-owned CLI client tools', () => {
       configCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    const configCallerOwner = await SessionClientOwner.create(
+    const configCallerOwner = await createCapturedSessionOwner(
       configCallerConfig,
       assembleTaskSchemaPolicy(configCallerSettings),
       configCallerManager,
@@ -298,7 +305,7 @@ describe('Agent-owned CLI client tools', () => {
       );
       requireCallerActivation(activation);
       await configCallerOwner.initializeTools();
-      await configCallerOwner.getAgentClient().startChat();
+      await capturedSessionClient(configCallerOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, configCallerClose);
     }
@@ -341,7 +348,7 @@ describe('Agent-owned CLI client tools', () => {
       configCallerPolicy.session.messageBus,
       configCallerMcp,
       undefined,
-      configCallerOwner.getAgentClient(),
+      capturedSessionClient(configCallerOwner),
       undefined,
       undefined,
       undefined,
@@ -365,10 +372,10 @@ describe('Agent-owned CLI client tools', () => {
       undefined,
       undefined,
       undefined,
-      (_config, _bus, tools) => tools.registerTool(record),
+      (tools) => tools.registerTool(record),
     );
     agents.push(agent);
-    await agent.agentClient.startChat();
+    await fixtureAgentResources(agent).publishedClient(agent).startChat();
     const openClientChannel = () => agent.tools.openClientChannel();
     const subscribeChildTools: Agent['tools']['subscribeChildTools'] = (
       callbacks,
@@ -401,7 +408,7 @@ describe('Agent-owned CLI client tools', () => {
           configCallerPolicy.session.messageBus,
           configCallerMcp,
           undefined,
-          configCallerOwner.getAgentClient(),
+          capturedSessionClient(configCallerOwner),
           undefined,
           undefined,
           undefined,
@@ -425,7 +432,7 @@ describe('Agent-owned CLI client tools', () => {
           undefined,
           undefined,
           undefined,
-          (_config, _bus, tools) => tools.registerTool(record),
+          (tools) => tools.registerTool(record),
         ),
       agent,
       hook,
@@ -439,7 +446,9 @@ describe('Agent-owned CLI client tools', () => {
 
   it('renders real model tools without rescheduling them through the client channel', async () => {
     const a = await owner('model');
-    let provider: unknown = a.agent.providerManager.getProviderByName('fake');
+    let provider: unknown = fixtureAgentResources(
+      a.agent,
+    ).manager.getProviderByName('fake');
     while (
       typeof provider === 'object' &&
       provider !== null &&

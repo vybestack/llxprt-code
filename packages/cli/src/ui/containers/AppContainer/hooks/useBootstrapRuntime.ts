@@ -8,7 +8,6 @@ import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 import { resolveEmojiFilterMode } from '../../../utils/iContentToHistoryItems.js';
-import { registerCleanup } from '../../../../utils/cleanup.js';
 import { useBound } from '../../../hooks/agentStream/useStreamOwnerCallbacks.js';
 import type { RecordingHistorySubscription } from './historyTokenSubscriptions.js';
 import {
@@ -31,12 +30,13 @@ type BootstrapInputs = Pick<
   | 'resumedHistory'
   | 'version'
   | 'memoryController'
+  | 'readIdeMode'
 >;
 
 function useBootstrapReads(
   ephemeral: UiRuntime['ephemeral'],
   shell: UiRuntime['shell'],
-  ide: UiRuntime['ide'],
+  readCurrentIde: AppBootstrapProps['readCurrentIde'],
   app: UiRuntime['app'],
 ) {
   return {
@@ -45,18 +45,7 @@ function useBootstrapReads(
       [ephemeral],
     ),
     readTerminalBackground: useBound(shell, shell.getTerminalBackground),
-    readCurrentIde: useCallback(
-      () => ide.getIdeClient()?.getCurrentIde(),
-      [ide],
-    ),
-    readIdeMode: useBound(ide, ide.getIdeMode),
-    registerIdeCleanup: useCallback(() => {
-      const ideClient = ide.getIdeClient();
-      if (ideClient !== undefined)
-        registerCleanup(() => {
-          void ideClient.disconnect();
-        });
-    }, [ide]),
+    readCurrentIde,
     readDebugMode: useBound(app, app.getDebugMode),
   };
 }
@@ -70,7 +59,7 @@ export function useBootstrapRuntime(
   >,
   ephemeral: UiRuntime['ephemeral'],
   shell: UiRuntime['shell'],
-  ide: UiRuntime['ide'],
+  readCurrentIde: AppBootstrapProps['readCurrentIde'],
   app: UiRuntime['app'],
   connectRecordingHistory: RecordingHistorySubscription,
   recordingOwner: 'agent' | 'raw' | undefined,
@@ -87,7 +76,7 @@ export function useBootstrapRuntime(
     historyMaxItems: settings.ui.historyMaxItems,
     historyMaxBytes: settings.ui.historyMaxBytes,
     hasSeenIdeIntegrationNudge: settings.hasSeenIdeIntegrationNudge,
-    ...useBootstrapReads(ephemeral, shell, ide, app),
+    ...useBootstrapReads(ephemeral, shell, readCurrentIde, app),
     recordFeedback: useCallback(
       (severity, message) => {
         if (recordingOwner === 'agent') {

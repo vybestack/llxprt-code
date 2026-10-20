@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
@@ -14,7 +15,6 @@ import { Agent } from '../agent.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license

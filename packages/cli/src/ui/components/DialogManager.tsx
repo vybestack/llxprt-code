@@ -63,6 +63,11 @@ import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
   config: CliUiRuntime;
   settings: LoadedSettings;
 }
@@ -277,6 +282,8 @@ function renderPayloadStoreDialog(
     case 'permissions':
       return (
         <PermissionsModifyTrustDialog
+          readIdeWorkspaceTrust={ctx.readIdeWorkspaceTrust}
+          subscribeIdeWorkspaceTrust={ctx.subscribeIdeWorkspaceTrust}
           onExit={() => close('permissions')}
           addItem={addItem}
           config={config}
@@ -467,16 +474,33 @@ function renderDialogBody(
   config: CliUiRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
+  readIdeWorkspaceTrust: () => boolean | undefined,
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void,
 ) {
   return renderStoreBackedDialog(
     state.activeStoreDialog,
-    { uiState, uiActions, settings, config, addItem },
+    {
+      uiState,
+      uiActions,
+      settings,
+      config,
+      addItem,
+      readIdeWorkspaceTrust,
+      subscribeIdeWorkspaceTrust,
+    },
     state,
   );
 }
 
 // Props for DialogManager
-export const DialogManager = ({ config, settings }: DialogManagerProps) => {
+export const DialogManager = ({
+  config,
+  settings,
+  readIdeWorkspaceTrust,
+  subscribeIdeWorkspaceTrust,
+}: DialogManagerProps) => {
   const uiState = useDialogData();
   const uiActions = useAppCommands();
   const runtimeGetActiveProviderName = useGetActiveProviderName();
@@ -490,5 +514,14 @@ export const DialogManager = ({ config, settings }: DialogManagerProps) => {
   );
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
-  return renderDialogBody(uiState, uiActions, settings, config, addItem, state);
+  return renderDialogBody(
+    uiState,
+    uiActions,
+    settings,
+    config,
+    addItem,
+    state,
+    readIdeWorkspaceTrust,
+    subscribeIdeWorkspaceTrust,
+  );
 };

@@ -1,4 +1,3 @@
-import { cliSkillOperations } from '../../config/configBuilder.js';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -11,10 +10,9 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
-import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { discoverAgentSkills } from '@vybestack/llxprt-code-agents';
 
 import type { CommandModule } from 'yargs';
-import { discoverSkillsForConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { loadSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
@@ -46,40 +44,35 @@ export async function handleList(showAll = false) {
     workspaceDir,
   );
 
-  const mcpRuntime = await McpRuntimeOwner.create(
-    {
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
-      ),
-      openBrowser: defaultBrowserLauncher,
-    },
-    config,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    cliSkillOperations(config),
-  );
   let skills;
   try {
-    skills = await discoverSkillsForConfig(
-      { list: (all) => mcpRuntime.workspaceSkills.operations.list(all) },
-      () => mcpRuntime.initialize(),
+    skills = await discoverAgentSkills(
+      {
+        workingDir: config.getTargetDir(),
+        debugMode: config.getDebugMode(),
+        trustedFolder: config.initialWorkspaceTrust,
+        skillsEnabled: config.isSkillsSupportEnabled(),
+        disabledSkills: config.getDisabledSkills(),
+        adminSkillsEnabled: config.isAdminSkillsEnabled(),
+        extensions: config.getExtensions(),
+        mcpEnabled: settings.merged.admin?.mcp?.enabled ?? true,
+        mcpServers: config.getMcpServers(),
+        mcpServerCommand: config.getMcpServerCommand(),
+        allowedMcpServers: config.getAllowedMcpServers(),
+        blockedMcpServers: config.getBlockedMcpServers(),
+        includeDirectories: config.getConfiguredIncludeDirectories(),
+        initialSettings: config.getInitialSettings(),
+      },
+      {
+        oauth: {
+          tokenStorage: new MCPOAuthTokenStorage(
+            new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+          ),
+          openBrowser: defaultBrowserLauncher,
+        },
+      },
     );
   } finally {
-    await mcpRuntime.dispose();
     await config.dispose();
   }
 

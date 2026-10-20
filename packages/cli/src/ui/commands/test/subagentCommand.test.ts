@@ -11,27 +11,6 @@ void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeBridge: getRuntimeBridgeMock,
 }));
 
-let generateAutoPromptOverride: ((...args: unknown[]) => unknown) | null = null;
-
-const actual = { ...(await import('../../utils/autoPromptGenerator.js')) };
-void vi.mock('../../utils/autoPromptGenerator.js', () => {
-  // Capture the real function before mock.module patches the namespace
-  // in place — otherwise actual.generateAutoPrompt becomes the override
-  // itself, causing infinite recursion.
-  const realGenerateAutoPrompt = actual.generateAutoPrompt;
-  return {
-    ...actual,
-    generateAutoPrompt: (...args: unknown[]) => {
-      if (generateAutoPromptOverride) {
-        return generateAutoPromptOverride(...args);
-      }
-      return realGenerateAutoPrompt(
-        ...(args as Parameters<typeof actual.generateAutoPrompt>),
-      );
-    },
-  };
-});
-
 /**
  * COMPLETION SYSTEM REQUIREMENTS
  *
@@ -51,7 +30,8 @@ void vi.mock('../../utils/autoPromptGenerator.js', () => {
 import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
+import { usePromptTransport } from '../../../__tests__/prompt-transport-fixture.js';
+import { useRecordingPrompts } from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -654,13 +634,12 @@ describe('subagentCommand', () => {
    * @requirement:REQ-003
    */
   describe('saveCommand - auto mode @requirement:REQ-003', () => {
+    useRecordingPrompts();
+    const transport = usePromptTransport();
     let context: CommandOwnerFixture;
     let subagentManager: SubagentManager;
     let profileManager: ProfileManager;
     let tempDir: string;
-    let mockAgentClient: {
-      generateDirectMessage: ReturnType<typeof vi.fn>;
-    };
 
     const autoConfigs: Config[] = [];
     beforeEach(async () => {
@@ -688,16 +667,6 @@ describe('subagentCommand', () => {
         subagentManager,
       });
 
-      // Mock AgentClient
-      mockAgentClient = {
-        generateDirectMessage: vi.fn().mockResolvedValue({
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'Auto generated prompt' }],
-          },
-        }),
-      };
-
       const config = new Config({
         sessionId: crypto.randomUUID(),
         cwd: tempDir,
@@ -706,33 +675,20 @@ describe('subagentCommand', () => {
         debugMode: false,
       });
       autoConfigs.push(config);
-      const owner = await createUiSessionOwner(config);
       context.services.config = composeFixtureRuntime(config);
-      Object.assign(owner.agentClient, mockAgentClient);
-      context.services.agent = createMockCommandContext({
-        services: { agent: { ...owner, getProvider: () => 'openai' } },
-      }).services.agent;
+      context.services.agent = transport().agent;
     });
 
     afterEach(async () => {
       await autoConfigs.pop()?.dispose();
       await fs.rm(tempDir, { recursive: true, force: true });
-      generateAutoPromptOverride = null;
     });
 
     it('should generate system prompt using LLM', async () => {
-      // Mock LLM response
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'text',
-              text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
-            },
-          ],
-        },
-      });
+      transport().respondWith([
+        'You are an expert Python debugger ',
+        'specializing in finding and fixing bugs.',
+      ]);
 
       const args = 'testagent testprofile auto "expert Python debugger"';
       // Access the save subcommand directly from the imported module
@@ -741,18 +697,16 @@ describe('subagentCommand', () => {
         args,
       );
 
-      // Verify LLM was called
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledTimes(1);
-      const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
-      expect(callArgs.message).toMatch(testRegex('expert Python debugger', ''));
-      expect(callArgs.message).toMatch(testRegex('system prompt', 'i'));
-      expect(callArgs.config).toStrictEqual({
-        toolConfig: {
-          functionCallingConfig: {
-            mode: 'NONE',
-          },
-        },
-      });
+      expect(transport().requests()).toHaveLength(1);
+      const callArgs = transport().requests()[0];
+      expect(JSON.stringify(callArgs.messages)).toMatch(
+        testRegex('expert Python debugger', ''),
+      );
+      expect(JSON.stringify(callArgs.messages)).toMatch(
+        testRegex('system prompt', 'i'),
+      );
+      expect(callArgs.tools).toBeUndefined();
+      expect(callArgs.tool_choice).toBeUndefined();
 
       // Verify success message type and content
       const message = ensureMessage(result);
@@ -767,10 +721,7 @@ describe('subagentCommand', () => {
     });
 
     it('should handle LLM generation failure', async () => {
-      // Mock LLM error
-      mockAgentClient.generateDirectMessage.mockRejectedValue(
-        new Error('Network error'),
-      );
+      transport().failWith('Network error');
 
       const args = 'testagent testprofile auto "expert debugger"';
       const result = await findSubCommand('save', context).action!(
@@ -781,28 +732,13 @@ describe('subagentCommand', () => {
       const message = ensureMessage(result);
       expect(message.messageType).toBe('error');
       expect(message.content).toMatch(testRegex('Network error', ''));
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: {
-            toolConfig: {
-              functionCallingConfig: {
-                mode: 'NONE',
-              },
-            },
-          },
-        }),
-        expect.any(String),
-      );
+      expect(transport().requests()).toHaveLength(1);
+      expect(transport().requests()[0].tools).toBeUndefined();
+      expect(transport().requests()[0].tool_choice).toBeUndefined();
     });
 
     it('should handle empty LLM response', async () => {
-      // Mock empty response
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: '' }],
-        },
-      });
+      transport().respondWith(['']);
 
       const args = 'testagent testprofile auto "expert debugger"';
       const result = await findSubCommand('save', context).action!(
@@ -815,36 +751,19 @@ describe('subagentCommand', () => {
       expect(message.content).toMatch(
         testRegex('empty.*response|manual mode', 'i'),
       );
-      expect(mockAgentClient.generateDirectMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          config: {
-            toolConfig: {
-              functionCallingConfig: {
-                mode: 'NONE',
-              },
-            },
-          },
-        }),
-        expect.any(String),
-      );
+      expect(transport().requests()).toHaveLength(1);
+      expect(transport().requests()[0].tools).toBeUndefined();
+      expect(transport().requests()[0].tool_choice).toBeUndefined();
     });
 
     it('saves auto-generated prompt via generateAutoPrompt utility', async () => {
       const generatedText =
         'You are an expert prompt engineer specializing in prompt creation.';
 
-      context.services.agent = createMockCommandContext({
-        services: {
-          agent: {
-            ...(await createUiSessionOwner()),
-            getProvider: () => 'gemini',
-          },
-        },
-      }).services.agent;
-
-      generateAutoPromptOverride = vi.fn().mockResolvedValue(generatedText);
-
-      const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
+      transport().respondWith([
+        'You are an expert prompt engineer ',
+        'specializing in prompt creation.',
+      ]);
 
       const args = 'testagent testprofile auto "expert prompt"';
       const actionResult = await findSubCommand('save', context).action!(
@@ -852,43 +771,36 @@ describe('subagentCommand', () => {
         args,
       );
 
-      expect(generateAutoPromptOverride).toHaveBeenCalledWith(
+      expect(transport().requests()).toHaveLength(1);
+      expect(JSON.stringify(transport().requests()[0].messages)).toContain(
         'expert prompt',
-        expect.any(Function),
       );
-      expect(saveSpy).toHaveBeenCalledWith(
-        'testagent',
-        'testprofile',
-        generatedText,
-      );
+      expect(await subagentManager.loadSubagent('testagent')).toMatchObject({
+        name: 'testagent',
+        profile: 'testprofile',
+        systemPrompt: generatedText,
+      });
       const actionMessage = ensureMessage(actionResult);
       expect(actionMessage.messageType).toBe('info');
       expect(actionMessage.content).toContain('Subagent');
     });
 
     it('should use correct prompt template for LLM', async () => {
-      mockAgentClient.generateDirectMessage.mockResolvedValue({
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'Generated prompt' }],
-        },
-      });
+      transport().respondWith(['Generated ', 'prompt']);
 
       const description = 'expert code reviewer';
       const args = `testagent testprofile auto "${description}"`;
       await findSubCommand('save', context).action!(context, args);
 
-      const callArgs = mockAgentClient.generateDirectMessage.mock.calls[0][0];
+      const message = JSON.stringify(transport().requests()[0].messages);
 
       // Verify prompt includes description
-      expect(callArgs.message).toContain(description);
+      expect(message).toContain(description);
 
       // Verify prompt includes instructions
-      expect(callArgs.message).toMatch(testRegex('comprehensive', 'i'));
-      expect(callArgs.message).toMatch(
-        testRegex('role.*capabilities.*behavior', 'i'),
-      );
-      expect(callArgs.message).toMatch(testRegex('output.*only', 'i'));
+      expect(message).toMatch(testRegex('comprehensive', 'i'));
+      expect(message).toMatch(testRegex('role.*capabilities.*behavior', 'i'));
+      expect(message).toMatch(testRegex('output.*only', 'i'));
     });
   });
 });

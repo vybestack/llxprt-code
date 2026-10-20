@@ -1,3 +1,7 @@
+import { bindTurnModel } from '../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
+import { bindSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
+import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
 import { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -53,18 +57,30 @@ describe('standalone loop execution lifetime', () => {
     settings.bindTelemetry(config);
     const runner = createAgenticLoop({
       config,
-      messageBus: policy.session.messageBus,
-      agentClient: client,
-      telemetry: RootTelemetry.prepare({
-        enabled: false,
-        sessionId: 'runner',
-        maxBytes: 1024,
-        maxFiles: 1,
-      }),
-      taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager(5)),
       readShellJobSettings: () => ({ maxBackgroundJobs: 5, logMaxBytes: 1024 }),
-      readExecutionPolicy: () => settings.readToolExecutionPolicy(),
-      getToolGovernance: () => settings.readToolGovernance([]),
+      ...bindTurnModel(client),
+      taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager(5)),
+      acquireTools: (decorateScheduler) =>
+        new TurnToolExecutionOwner(
+          policy.session.messageBus,
+          undefined,
+          bindSchedulerOwner(
+            config,
+            policy.session.messageBus,
+            false,
+            client.tools,
+            decorateScheduler((options) => new CoreToolScheduler(options)),
+            () => settings.readToolExecutionPolicy(),
+            () => settings.readToolGovernance([]),
+            undefined,
+            RootTelemetry.prepare({
+              enabled: false,
+              sessionId: 'runner',
+              maxBytes: 1024,
+              maxFiles: 1,
+            }),
+          ),
+        ),
     });
     roots.push(() =>
       runCleanupSteps([

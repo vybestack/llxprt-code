@@ -1,5 +1,9 @@
-import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+import {
+  runInteractiveIteration,
+  buildSubagentInitialMessages,
+} from './subagent-interactive-iteration.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 /**
@@ -13,11 +17,7 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
 
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
-import {
-  InteractiveOutputCounter,
-  processInteractiveStreamEvent,
-  readInteractiveOutputTokens,
-} from './subagent-interactive-output.js';
+import { consumeInteractiveTurnOutput } from './subagent-interactive-output.js';
 
 /**
  * @plan PLAN-20251028-STATELESS6.P08
@@ -34,7 +34,10 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import {
+  executeToolCall,
+  type ToolExecutionConfig,
+} from './nonInteractiveToolExecutor.js';
 import { Turn, type ToolCallRequestInfo } from './turn.js';
 
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -45,24 +48,19 @@ import type {
   ReadonlySettingsSnapshot,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
+import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
 import { type ChatSession } from './chatSession.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import { providerNameOrDefault } from './subagentAdmissionForwarding.js';
 import {
-  forwardNonInteractiveAdmission,
-  providerNameOrDefault,
-} from './subagentAdmissionForwarding.js';
-import {
-  checkGoalCompletion,
-  checkOutputBudget,
-  checkTerminationConditions,
+  checkInteractiveGoal,
   handleExecutionError,
   initInteractiveScheduler,
-  processInteractiveTextResponse,
-  recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
-import type { executeNonInteractiveRun } from './subagentNonInteractive.js';
+import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import {
   buildRuntimeFunctionDeclarations,
   createChatObject,
@@ -79,9 +77,12 @@ import {
   classifyToolCompletions,
   finalizeOutput,
   handleEmitValueCall,
+  processFunctionCalls,
   recordFatalToolError,
   recordSuccessfulToolExecution,
+  resolveToolName,
   type InteractiveToolMarker,
+  type NonInteractiveToolExecutionResult,
 } from './subagentToolProcessing.js';
 import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
@@ -138,6 +139,9 @@ export class SubAgentScope {
   onMessage?: (message: string) => void;
 
   private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  private activeRun: Promise<void> | undefined;
+  private disposal: Promise<void> | undefined;
+  private closed = false;
 
   /** @plan PLAN-20251028-STATELESS6.P08, PLAN-20260303-MESSAGEBUS.P01 */
   private constructor(
@@ -156,7 +160,7 @@ export class SubAgentScope {
     private readonly providerFileLifecycle: object | undefined,
     private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
     private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
-    private readonly messageBus?: MessageBus,
+    private readonly messageBus: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
     settingsSnapshot?: ReadonlySettingsSnapshot,
@@ -204,7 +208,7 @@ export class SubAgentScope {
     instructions: InstructionReadOperations,
     workspacePaths: WorkspacePathOperations,
     readMcpInstructions: () => string | undefined,
-    messageBus: MessageBus | undefined,
+    messageBus: MessageBus,
     settingsSnapshot: ReadonlySettingsSnapshot | undefined,
     environmentContextLoader: EnvironmentContextLoader | undefined,
     readApprovalMode: (() => ApprovalMode) | undefined,
@@ -358,42 +362,21 @@ export class SubAgentScope {
     return { chat, abortController, functionDeclarations };
   }
 
-  private buildInitialMessages(context: ContextState): IContent[] {
-    const behaviourPrompts =
-      (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
-    const initialInstruction =
-      behaviourPrompts.length > 0
-        ? behaviourPrompts.join('\n')
-        : 'Follow the task directives provided in the system prompt.';
-
-    return [
-      iContentFromBlocks([{ type: 'text', text: initialInstruction }], 'human'),
-    ];
-  }
-
   /**
    * Executes the subagent in interactive mode by routing tool calls through the
    * shared CoreToolScheduler. Tests may supply a custom schedulerFactory to
    * observe scheduling behaviour without touching the real scheduler.
    */
-  private async runInteractiveGoalCheckLoop(
-    execCtx: ExecutionLoopContext,
-    startTime: number,
-    turnCounter: number,
-    currentTurn: number,
-  ): Promise<IContent[] | null> {
-    const recheck = checkTerminationConditions(turnCounter, startTime, execCtx);
-    if (recheck.shouldStop) return null;
-
-    const todoReminder = await buildTodoCompletionPrompt(
-      this.runtimeContext,
-      this.subagentId,
-      this.logger,
-    );
-    return checkGoalCompletion(execCtx, todoReminder, currentTurn);
+  runInteractive(
+    context: ContextState,
+    options?: SubagentExecutionOptions,
+  ): Promise<void> {
+    if (this.closed)
+      return Promise.reject(new Error('Subagent scope is disposed'));
+    return this.trackRun(() => this.runInteractiveOwned(context, options));
   }
 
-  async runInteractive(
+  private async runInteractiveOwned(
     context: ContextState,
     options?: SubagentExecutionOptions,
   ): Promise<void> {
@@ -407,7 +390,7 @@ export class SubAgentScope {
     const execCtx = this.buildExecCtx();
     const startTime = Date.now();
     let turnCounter = 0;
-    let currentMessages = this.buildInitialMessages(context);
+    let currentMessages = buildSubagentInitialMessages(context);
 
     try {
       const { scheduler, schedulerDispose: releaseScheduler } =
@@ -416,15 +399,38 @@ export class SubAgentScope {
 
       let keepRunning = true;
       while (keepRunning) {
-        const iteration = await this.runInteractiveLoopIteration(
-          chat,
-          currentMessages,
-          abortController,
+        const iteration = await runInteractiveIteration(
           turnCounter,
           startTime,
           execCtx,
-          scheduler,
-          modelParameters,
+          abortController.signal,
+          {
+            runTurn: () =>
+              this.runInteractiveTurn(
+                chat,
+                currentMessages,
+                abortController,
+                turnCounter,
+                execCtx,
+                modelParameters,
+              ),
+            processTools: (calls) =>
+              this.handleInteractiveToolCalls(
+                calls,
+                scheduler,
+                chat,
+                abortController,
+                execCtx,
+              ),
+            checkGoal: (nextTurn, currentTurn) =>
+              checkInteractiveGoal(
+                execCtx,
+                startTime,
+                nextTurn,
+                currentTurn,
+                () => this.readTodoCompletionPrompt(),
+              ),
+          },
         );
         if (iteration.action === 'abort') {
           return;
@@ -454,94 +460,13 @@ export class SubAgentScope {
    * Extracting the loop body keeps the caller loop to a single control
    * branch (no break/continue) and avoids the always-truthy while(true).
    */
-  private async runInteractiveLoopIteration(
-    chat: ChatSession,
-    currentMessages: IContent[],
-    abortController: AbortController,
-    turnCounter: number,
-    startTime: number,
-    execCtx: ExecutionLoopContext,
-    scheduler: {
-      schedule: (
-        req: ToolCallRequestInfo | ToolCallRequestInfo[],
-        signal: AbortSignal,
-        hookOwner?: HookExecutionOwner,
-      ) => Promise<void> | void;
-      awaitCompletedCalls: (
-        signal?: AbortSignal,
-      ) => Promise<CompletedToolCall[]>;
-    },
-    modelParameters?: AdmittedModelParameters,
-  ): Promise<
-    | { action: 'stop' }
-    | { action: 'abort' }
-    | { action: 'continue'; messages: IContent[]; turnCounter: number }
-  > {
-    const check = checkTerminationConditions(turnCounter, startTime, execCtx);
-    if (check.shouldStop) return { action: 'stop' };
-
-    const nextTurnCounter = turnCounter + 1;
-    const {
-      responseParts,
-      textResponse,
-      currentTurn,
-      reportedOutputTokens,
-      outputCharacterCount,
-    } = await this.runInteractiveTurn(
-      chat,
-      currentMessages,
-      abortController,
-      turnCounter,
-      execCtx,
-      modelParameters,
-    );
-    if (abortController.signal.aborted === true) return { action: 'abort' };
-
-    recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
-    // Budget only. The turn and time limits are checked at the top of the loop,
-    // so that tool calls the model emitted on its last allowed turn still run.
-    if (checkOutputBudget(execCtx).shouldStop) return { action: 'stop' };
-
-    processInteractiveTextResponse(textResponse, execCtx);
-
-    const toolMessages = await this.handleInteractiveToolCalls(
-      responseParts,
-      scheduler,
-      chat,
-      abortController,
-      execCtx,
-    );
-    if (toolMessages) {
-      return {
-        action: 'continue',
-        messages: toolMessages,
-        turnCounter: nextTurnCounter,
-      };
-    }
-
-    const nextMessages = await this.runInteractiveGoalCheckLoop(
-      execCtx,
-      startTime,
-      nextTurnCounter,
-      currentTurn,
-    );
-    if (!nextMessages) return { action: 'stop' };
-    return {
-      action: 'continue',
-      messages: nextMessages,
-      turnCounter: nextTurnCounter,
-    };
-  }
-
   private async initScheduler(options: SubagentExecutionOptions | undefined) {
     const messageBus = this.messageBus;
     const registry = this.toolExecutorContext.getToolRegistry();
     if (registry === undefined) throw new Error('Missing child tool selection');
     return initInteractiveScheduler(options, {
-      createSchedulerOwner: (callbacks) => {
-        if (!messageBus)
-          throw new Error('Child scheduler requires its message bus');
-        return assembleSchedulerOwner(this.subagentId, {
+      createSchedulerOwner: (callbacks) =>
+        assembleSchedulerOwner(this.subagentId, {
           telemetry: this.toolExecutorContext.telemetry,
           config: this.config,
           messageBus,
@@ -552,8 +477,7 @@ export class SubAgentScope {
             this.toolExecutorContext.readExecutionPolicy(),
           toolContextInteractiveMode: true,
           ...callbacks,
-        });
-      },
+        }),
       onMessage: this.onMessage,
       messageBus: this.messageBus,
       subagentId: this.subagentId,
@@ -594,32 +518,15 @@ export class SubAgentScope {
         );
     const blocks = currentMessages[0]?.blocks ?? [];
 
-    let textResponse = '';
-    let reportedOutputTokens: number | undefined;
-    const outputCounter = new InteractiveOutputCounter();
-    try {
-      const stream = turn.run(blocks, abortController.signal, modelParameters);
-      for await (const event of stream) {
-        if (abortController.signal.aborted === true) break;
-        outputCounter.add(event);
-        reportedOutputTokens =
-          readInteractiveOutputTokens(event) ?? reportedOutputTokens;
-        const eventText = processInteractiveStreamEvent(event, execCtx);
-        textResponse += eventText;
-      }
-    } catch (error) {
-      if (abortController.signal.aborted === true) {
-        throw createAbortError();
-      }
-      throw error;
-    }
-
+    const output = await consumeInteractiveTurnOutput(
+      turn.run(blocks, abortController.signal, modelParameters),
+      abortController.signal,
+      execCtx,
+    );
     return {
       responseParts: [...turn.pendingToolCalls],
-      textResponse,
       currentTurn,
-      reportedOutputTokens,
-      outputCharacterCount: outputCounter.total,
+      ...output,
     };
   }
 
@@ -796,44 +703,127 @@ export class SubAgentScope {
    * @plan PLAN-20251028-STATELESS6.P08
    * @requirement REQ-STAT6-001.1
    */
-  async runNonInteractive(context: ContextState): Promise<void> {
-    await forwardNonInteractiveAdmission({
-      admit: this.admitModelParameters,
-      prepare: async () => {
-        const setup = await this.prepareRun(context);
-        return setup
-          ? {
-              ...setup,
-              functionDeclarations:
-                setup.functionDeclarations as unknown as Parameters<
-                  typeof executeNonInteractiveRun
-                >[1],
-            }
-          : null;
-      },
-      buildExecCtx: () => this.buildExecCtx(),
-      initialMessages: () => this.buildInitialMessages(context),
-      context: (modelParameters) => ({
+  runNonInteractive(context: ContextState): Promise<void> {
+    if (this.closed)
+      return Promise.reject(new Error('Subagent scope is disposed'));
+    return this.trackRun(() => this.runNonInteractiveOwned(context));
+  }
+
+  private async runNonInteractiveOwned(context: ContextState): Promise<void> {
+    const admitted = this.admitModelParameters?.();
+    const modelParameters =
+      admitted === undefined ? undefined : Object.freeze({ ...admitted });
+    const setup = await this.prepareRun(context);
+    if (!setup) return;
+    const { chat, abortController, functionDeclarations } = setup;
+    await executeNonInteractiveRun(
+      functionDeclarations,
+      abortController,
+      buildSubagentInitialMessages(context),
+      Date.now(),
+      this.buildExecCtx(),
+      {
         output: this.output,
         subagentId: this.subagentId,
         name: this.name,
-        runtimeContext: this.runtimeContext,
+        sessionId: this.runtimeContext.state.sessionId,
         logger: this.logger,
-        config: this.config,
         runConfig: this.runConfig,
-        outputConfig: this.outputConfig,
-        toolExecutorContext: this.toolExecutorContext,
-        messageBus: this.messageBus,
-        hookOwner: this.hookOwner,
+        ...(this.outputConfig === undefined
+          ? {}
+          : { outputConfig: this.outputConfig }),
         modelParameters,
-      }),
-      cleanup: () => {
+        streamTimeoutPolicy: chat.getStreamTimeoutPolicy(),
+        imagePayloadBudgetBytes: this.config.getImagePayloadBudgetBytes(),
+        streamModel: (message, tools, signal, promptId, parameters) =>
+          chat.sendMessageStream(
+            {
+              message,
+              modelParameters: parameters,
+              hookOwner: this.hookOwner,
+              config: { abortSignal: signal, tools },
+            },
+            promptId,
+          ),
+        executeToolCalls: (calls, controller, promptId, allowedToolNames) =>
+          processFunctionCalls(
+            calls,
+            controller,
+            promptId,
+            {
+              output: this.output,
+              ...(this.outputConfig === undefined
+                ? {}
+                : { outputConfig: this.outputConfig }),
+              subagentId: this.subagentId,
+              logger: this.logger,
+              imagePayloadBudgetBytes: this.config.getImagePayloadBudgetBytes(),
+              executeToolCall: (request, signal) =>
+                this.executeNonInteractiveToolCall(request, signal),
+            },
+            allowedToolNames,
+          ),
+        readTodoCompletionPrompt: () => this.readTodoCompletionPrompt(),
+      },
+      () => {
         this.clearTimeoutHandle();
         this.parentAbortCleanup?.();
         this.parentAbortCleanup = undefined;
         this.activeAbortController = null;
       },
-    });
+    );
+  }
+
+  private async executeNonInteractiveToolCall(
+    request: ToolCallRequestInfo,
+    signal: AbortSignal,
+  ): Promise<NonInteractiveToolExecutionResult> {
+    const registry = this.toolExecutorContext.getToolRegistry();
+    if (registry === undefined) throw new Error('Missing child tool selection');
+    const completed = await executeToolCall(
+      (callbacks) =>
+        assembleSchedulerOwner(this.subagentId, {
+          telemetry: this.toolExecutorContext.telemetry,
+          config: this.config,
+          messageBus: this.messageBus,
+          toolRegistry: registry,
+          readApprovalMode: this.toolExecutorContext.readApprovalMode,
+          getToolGovernance: () => this.toolExecutorContext.readGovernance(),
+          readExecutionPolicy: () =>
+            this.toolExecutorContext.readExecutionPolicy(),
+          toolContextInteractiveMode: false,
+          ...callbacks,
+        }),
+      request,
+      signal,
+      this.hookOwner,
+    );
+    return { status: completed.status, response: completed.response };
+  }
+
+  private async readTodoCompletionPrompt(): Promise<string | null> {
+    const sessionId = this.runtimeContext.state.sessionId;
+    if (!sessionId) return null;
+    try {
+      const dataDirResolver = () => Storage.getGlobalDataDir();
+      let todos = await new LocalTodoStore(
+        sessionId,
+        { dataDirResolver },
+        this.subagentId,
+      ).readTodos();
+      if (todos.length === 0) {
+        todos = await new LocalTodoStore(sessionId, {
+          dataDirResolver,
+        }).readTodos();
+      }
+      return buildTodoCompletionPrompt(todos);
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   private buildExecCtx(): ExecutionLoopContext {
@@ -844,7 +834,12 @@ export class SubAgentScope {
       outputConfig: this.outputConfig,
       emojiFilter: this.emojiFilter,
       textToolParser: this.textToolParser,
-      toolsView: this.runtimeContext.tools,
+      resolveToolName: (rawName) =>
+        resolveToolName(
+          rawName,
+          (name) =>
+            this.runtimeContext.tools.getToolMetadata(name) !== undefined,
+        ),
       logger: this.logger,
       onMessage: this.onMessage,
     };
@@ -878,7 +873,22 @@ export class SubAgentScope {
    *
    * Safe to call multiple times.
    */
-  dispose(): void {
+  private trackRun(operation: () => Promise<void>): Promise<void> {
+    if (this.activeRun !== undefined)
+      return Promise.reject(new Error('Subagent scope is already running'));
+    const run = operation();
+    this.activeRun = run;
+    void run
+      .finally(() => {
+        if (this.activeRun === run) this.activeRun = undefined;
+      })
+      .catch(() => undefined);
+    return run;
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
+    this.closed = true;
     // 1. Cancel any active operations
     if (
       this.activeAbortController &&
@@ -891,13 +901,15 @@ export class SubAgentScope {
       this.activeAbortController.abort();
     }
     this.activeAbortController = null;
-
-    // 2. Clean up parent abort signal event listeners
-    if (this.parentAbortCleanup) {
-      this.parentAbortCleanup();
-      this.parentAbortCleanup = undefined;
-    }
-
-    this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
+    const activeRun = this.activeRun;
+    this.disposal = (async () => {
+      await activeRun?.catch(() => undefined);
+      if (this.parentAbortCleanup) {
+        this.parentAbortCleanup();
+        this.parentAbortCleanup = undefined;
+      }
+      this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
+    })();
+    return this.disposal;
   }
 }

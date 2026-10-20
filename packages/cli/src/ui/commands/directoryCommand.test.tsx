@@ -21,7 +21,10 @@ import {
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import {
+  uiFixtureResources,
+  createUiSessionOwner,
+} from '../../__tests__/uiSessionOwner.js';
 import type { SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
@@ -55,6 +58,12 @@ function rejectDirectory(
   };
 }
 
+async function createDirectoryOwner() {
+  const owner = await createUiSessionOwner();
+  const client = uiFixtureResources(owner).client;
+  return { addDirectoryContext: () => client.addDirectoryContext() };
+}
+
 describe('directoryCommand', () => {
   let mockContext: CommandOwnerFixture;
   let mockConfig: Config;
@@ -64,9 +73,9 @@ describe('directoryCommand', () => {
       bindDirectoryCommand(
         mockContext.services.config ?? null,
         async () => {
-          const client = mockContext.services.agent?.agentClient;
-          if (!client) throw new Error('Session agent is unavailable');
-          await client.addDirectoryContext();
+          const agent = mockContext.services.agent;
+          if (agent === null) throw new Error('Session agent is unavailable');
+          await agent.addDirectoryContext();
         },
         bindDirectoryChangeRecording(
           mockContext.recordingOwner,
@@ -131,7 +140,7 @@ describe('directoryCommand', () => {
         },
         agent: createMockCommandContext({
           services: {
-            agent: { agentClient: (await createUiSessionOwner()).agentClient },
+            agent: await createDirectoryOwner(),
           },
         }).services.agent,
         settings: {
@@ -295,9 +304,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
@@ -351,9 +358,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
@@ -397,9 +402,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
@@ -449,9 +452,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
@@ -523,9 +524,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
@@ -589,9 +588,7 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: {
-                agentClient: (await createUiSessionOwner()).agentClient,
-              },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },

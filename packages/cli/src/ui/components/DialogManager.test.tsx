@@ -396,7 +396,12 @@ function DialogManagerHarness({
   return (
     <AppCommandsProvider value={commands}>
       <DialogProvider store={store}>
-        <DialogManager config={config} settings={createMockSettings({})} />
+        <DialogManager
+          readIdeWorkspaceTrust={() => undefined}
+          subscribeIdeWorkspaceTrust={() => () => {}}
+          config={config}
+          settings={createMockSettings({})}
+        />
       </DialogProvider>
     </AppCommandsProvider>
   );

@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { createAgent } from '../createAgent.js';
+
 import type { Agent } from '../agent.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { projectCurrentSequenceModel } from '../agentStatsProjector.js';
@@ -123,7 +125,9 @@ describe('Agent current sequence model delegation', () => {
       throw new Error('Missing originally acquired client');
     sequenceForNextClient = 'claude-x';
     await agent.session.startNewSession();
-    expect(agent.agentClient).not.toBe(previous);
+    expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+      previous,
+    );
     previous.sequenceModel = 'retired-client-model';
     expect(agent.getCurrentSequenceModel()).toBe('claude-x');
   });

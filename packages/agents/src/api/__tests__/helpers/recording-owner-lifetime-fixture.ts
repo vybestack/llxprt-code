@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,7 +36,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { spyOn, beforeAll, afterAll } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -59,8 +63,11 @@ import {
   MemoryTokenStore,
   makeExpiredToken,
 } from '../../../../../providers/src/auth/__tests__/behavioral/test-utils.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { captureAgentAdoption as fromConfig } from './agent-resource-capture.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 export interface RecordingRefreshBarrier {
   readonly entered: (signal: AbortSignal) => void;
@@ -75,6 +82,11 @@ type RecordingScenario = (
   oauthManager: OAuthManager,
   borrow: () => Promise<Agent>,
   chatsDir: string,
+  history: HistoryService,
+  resources: {
+    readonly client: AgentClientContract;
+    readonly media: LocalMediaStore;
+  },
 ) => Promise<void>;
 
 class RecordingLifetime {
@@ -84,6 +96,7 @@ class RecordingLifetime {
   #selectedOAuth!: OAuthManager;
   #restoreTransport: () => void = () => {};
   #borrowedClient!: AgentClientContract;
+  #media!: LocalMediaStore;
   constructor(private readonly credentials: OwnedCredentialFixture) {}
 
   #config!: Config;
@@ -177,8 +190,9 @@ class RecordingLifetime {
       this.#config.projectTempDir,
       1024 * 1024 * 1024,
     );
+    this.#media = media.store;
     this.acquiredPrefix.push(() => media.dispose());
-    this.#owner = await SessionClientOwner.create(
+    this.#owner = await createCapturedSessionOwner(
       this.#config,
       assembleTaskSchemaPolicy(this.#settings),
       this.#manager,
@@ -297,7 +311,7 @@ class RecordingLifetime {
     );
     requireCallerActivation(activation);
     await this.#owner.initializeTools();
-    await this.#owner.getAgentClient().startChat();
+    await capturedSessionClient(this.#owner).startChat();
   }
 
   private async pauseRefresh(barrier: RecordingRefreshBarrier): Promise<void> {
@@ -397,8 +411,11 @@ class RecordingLifetime {
     const failures: unknown[] = [];
     try {
       this.#selectedOAuth = this.#oAuth;
-      this.#borrowedClient = this.#owner.getAgentClient();
+      this.#borrowedClient = capturedSessionClient(this.#owner);
       if (refreshBarrier) await this.pauseRefresh(refreshBarrier);
+      const history = this.#borrowedClient.getChat().getHistoryService();
+      if (history === null)
+        throw new Error('Recording fixture requires initialized history');
       await scenario(
         await this.borrow(),
         this.#config,
@@ -407,6 +424,8 @@ class RecordingLifetime {
         this.#selectedOAuth,
         this.borrow,
         this.#config.projectChatsDir,
+        history,
+        { client: this.#borrowedClient, media: this.#media },
       );
     } catch (error) {
       failures.push(error);

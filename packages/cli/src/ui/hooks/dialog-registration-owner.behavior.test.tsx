@@ -69,6 +69,10 @@ describe('application dialog operation ownership', () => {
               suppressStartupWelcome: true,
               shouldShowIdePrompt: false,
               currentIDE: undefined,
+              readIdeContext: current.ide.readContext.bind(current.ide),
+              subscribeIdeContext: current.ide.subscribeContext.bind(
+                current.ide,
+              ),
             },
             {
               recordRecordingEvent: current.session.recordRecordingEvent.bind(
@@ -78,11 +82,6 @@ describe('application dialog operation ownership', () => {
                 current.setProvider(provider, undefined, { autoOAuth: false }),
               listTools: current.tools.list.bind(current.tools),
               readProvider: current.getProvider.bind(current),
-              readPromptClient: () => current.agentClient,
-              createDetachedPromptClient:
-                current.sessionClient.createDetachedAgentClient.bind(
-                  current.sessionClient,
-                ),
               readPolicyRules: bindPolicyRulesReader(current.policy, () =>
                 runtime.getApprovalMode(),
               ),

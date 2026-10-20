@@ -8,7 +8,6 @@ import {
   type RecordingIntegration,
   type IContent,
   type LockHandle,
-  type MessageBus,
   type TelemetrySettings,
   resolvePerfSettings,
   getProjectHash,
@@ -299,7 +298,6 @@ function buildRenderElement(
   settings: LoadedSettings,
   startupWarnings: string[],
   version: string,
-  runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
   resumedHistory: IContent[] | undefined,
   initialRecordingService: SessionRecordingService | undefined,
@@ -335,7 +333,6 @@ function buildRenderElement(
       providerAliasRefresh={agent.providerReads.refreshAliases}
       oauthControl={agent.authentication}
       settings={settings}
-      runtimeMessageBus={runtimeMessageBus}
       startupWarnings={startupWarnings}
       version={version}
       terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
@@ -386,7 +383,6 @@ export interface OwnerInteractiveStartup {
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >;
   readonly recordingOwner: 'agent';
-  readonly runtimeMessageBus?: MessageBus;
   readonly resumedHistory?: IContent[];
   readonly suppressStartupWelcome?: boolean;
 }
@@ -395,7 +391,6 @@ export interface RawInteractiveStartup {
   readonly recordingOwner: 'raw';
   readonly runtimeSettings: SessionSettingsOperations;
   readonly sessionPersistence: CliSessionPersistencePort | undefined;
-  readonly runtimeMessageBus?: MessageBus;
   readonly recordingIntegration?: RecordingIntegration;
   readonly resumedHistory?: IContent[];
   readonly initialRecordingService?: SessionRecordingService;
@@ -530,7 +525,6 @@ export type CommitInteractiveStartupArgs = {
   readonly version: string;
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
-  readonly runtimeMessageBus?: MessageBus;
   readonly resumedHistory?: IContent[];
   readonly suppressStartupWelcome?: boolean;
 } & (
@@ -651,7 +645,6 @@ export async function commitInteractiveStartup(
         args.settings,
         args.startupWarnings,
         args.version,
-        args.runtimeMessageBus,
         args.recordingIntegration,
         args.resumedHistory,
         args.initialRecordingService,

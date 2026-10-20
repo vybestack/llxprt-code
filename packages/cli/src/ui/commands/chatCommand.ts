@@ -5,7 +5,6 @@
  */
 
 import React from 'react';
-import { dirname } from 'node:path';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import type {
@@ -16,12 +15,10 @@ import type {
 } from './types.js';
 import { composeChatCommand } from './chatCommandShape.js';
 import {
-  CheckpointService,
   HistoryMutationService,
-  SessionDiscovery,
   type ContinueTarget,
+  type UnreadableRecording,
   type IContent,
-  type LocalMediaStore,
   type SessionRecordingService,
   type TextBlock,
   type ThinkingBlock,
@@ -46,7 +43,18 @@ export interface ChatRecordingOperations {
   readonly getRecording: () => SessionRecordingService | null;
   readonly getProjectHash: () => string | null;
   readonly getChatsDir: () => string | null;
-  readonly getMediaStore: () => LocalMediaStore | undefined;
+  readonly listTargets: () => Promise<{
+    targets: ContinueTarget[];
+    unreadableRecordings: readonly UnreadableRecording[];
+  }>;
+  readonly saveCheckpoint: (name: string, overwrite: boolean) => Promise<void>;
+  readonly deleteCheckpoint: (target: CheckpointTarget) => Promise<void>;
+  readonly renameCheckpoint: (
+    target: CheckpointTarget,
+    name: string,
+    overwrite: boolean,
+  ) => Promise<void>;
+  readonly nameSession: (name: string, overwrite: boolean) => Promise<void>;
   /** Live chat history, or null when no chat has been initialized. */
   readonly getChatHistory: () => readonly IContent[] | null;
   readonly replaceChatHistory: (history: IContent[]) => Promise<void>;
@@ -86,11 +94,7 @@ async function listProjectCheckpoints(
   if (projectHash === null) return [];
   const chatsDir = operations.getChatsDir();
   if (chatsDir === null) return [];
-  const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-    chatsDir,
-    projectHash,
-    operations.getMediaStore(),
-  );
+  const detailed = await operations.listTargets();
   warnUnreadableRecordings('/chat checkpoints', detailed.unreadableRecordings);
   return detailed.targets.filter(
     (target): target is CheckpointTarget => target.kind === 'checkpoint',
@@ -206,12 +210,7 @@ function createSaveAction(
     }
 
     try {
-      await new CheckpointService(operations.getMediaStore()).createCheckpoint(
-        recording,
-        projectHash,
-        tag,
-        context.overwriteConfirmed === true,
-      );
+      await operations.saveCheckpoint(tag, context.overwriteConfirmed === true);
       return {
         type: 'message',
         messageType: 'info',
@@ -254,23 +253,7 @@ async function deleteCheckpointTarget(
   operations: ChatRecordingOperations,
   target: CheckpointTarget,
 ): Promise<void> {
-  const recording = operations.getRecording();
-  const service = new CheckpointService(operations.getMediaStore());
-  if (recording?.getSessionId() === target.source.sessionId) {
-    await service.deleteCheckpoint(
-      recording,
-      target.source.projectHash,
-      target.checkpointId,
-    );
-    return;
-  }
-  await service.deleteCheckpointClosed(
-    target.source.filePath,
-    target.source.projectHash,
-    operations.getChatsDir() ?? dirname(target.source.filePath),
-    target.source.sessionId,
-    target.checkpointId,
-  );
+  await operations.deleteCheckpoint(target);
 }
 
 function createDeleteAction(
@@ -336,30 +319,10 @@ async function renameCheckpointTarget(
   operations: ChatRecordingOperations,
   target: CheckpointTarget,
   newName: string,
-  projectHash: string,
+  _projectHash: string,
   overwrite: boolean,
 ): Promise<void> {
-  const recording = operations.getRecording();
-  const service = new CheckpointService(operations.getMediaStore());
-  if (recording?.getSessionId() === target.source.sessionId) {
-    await service.renameCheckpoint(
-      recording,
-      projectHash,
-      target.checkpointId,
-      newName,
-      overwrite,
-    );
-    return;
-  }
-  await service.renameCheckpointClosed(
-    target.source.filePath,
-    projectHash,
-    operations.getChatsDir() ?? dirname(target.source.filePath),
-    target.source.sessionId,
-    target.checkpointId,
-    newName,
-    overwrite,
-  );
+  await operations.renameCheckpoint(target, newName, overwrite);
 }
 
 function createRenameAction(
@@ -607,12 +570,7 @@ function createNameAction(
     }
 
     try {
-      await new CheckpointService(operations.getMediaStore()).setSessionName(
-        recording,
-        projectHash,
-        name,
-        context.overwriteConfirmed === true,
-      );
+      await operations.nameSession(name, context.overwriteConfirmed === true);
       return {
         type: 'message',
         messageType: 'info',

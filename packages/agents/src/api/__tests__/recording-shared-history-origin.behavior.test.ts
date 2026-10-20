@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -88,7 +89,9 @@ describe('shared history recording origin', () => {
           { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
         ]);
         await agent.session.setRecording({ enabled: true });
-        const history = agent.agentClient.getHistoryService();
+        const history = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getHistoryService();
         await drain(agent.stream('A-before-profile-marker'));
         await agent.profiles.applySnapshot({
           version: 1,
@@ -135,7 +138,9 @@ describe('shared history recording origin', () => {
         ]);
         await agent.session.setRecording({ enabled: true });
         await drain(agent.stream('external-reuse-marker'));
-        const history = agent.agentClient.getHistoryService();
+        const history = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getHistoryService();
         if (!history) throw new Error('Missing history');
         const reused = history
           .getAll()
@@ -174,7 +179,9 @@ describe('shared history recording origin', () => {
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
-        const history = agent.agentClient.getHistoryService();
+        const history = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getHistoryService();
         if (!history) throw new Error('Missing shared history');
         await history.addBatch([
           {
@@ -329,7 +336,9 @@ describe('shared history recording origin', () => {
         await agent.session.setRecording({ enabled: true });
         await new Promise((resolve) => setTimeout(resolve, 1100));
         await sibling.session.setRecording({ enabled: true });
-        const history = agent.agentClient.getHistoryService();
+        const history = fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getHistoryService();
         if (!history) throw new Error('Missing shared history');
         await expect(
           history.addBatch(

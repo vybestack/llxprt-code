@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from './__tests__/helpers/provider-read-fixture.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -12,7 +13,7 @@ import {
   installOwnedConfig,
   installBorrowedConfigSettings,
 } from '../../../providers/src/__tests__/helpers/session-settings-owner-fixture.js';
-import { SessionProviderReads } from './session-provider-reads.js';
+
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 
 const acquireSettings = installBorrowedConfigSettings();
@@ -49,7 +50,7 @@ describe('provider status owner binding', () => {
     const secondOwner = acquireSettings(secondConfig, secondSettings);
     try {
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           firstOwner,
           new TestRuntimeProviderManager(),
           () => firstConfig.getModel(),
@@ -60,7 +61,7 @@ describe('provider status owner binding', () => {
         modelName: 'first-model',
       });
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           secondOwner,
           new TestRuntimeProviderManager(),
           () => secondConfig.getModel(),
@@ -83,7 +84,7 @@ describe('provider status owner binding', () => {
     acquireSettings(firstConfig, firstSettings);
     try {
       expect(
-        new SessionProviderReads(
+        new ProviderReadFixture(
           new SessionSettingsOwner(new SettingsService()),
           new TestRuntimeProviderManager(),
           () => '',

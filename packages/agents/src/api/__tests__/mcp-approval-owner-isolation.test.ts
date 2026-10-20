@@ -1,4 +1,9 @@
 import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import {
   RuntimePolicyOwner,
   SessionPolicyOwner,
 } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -36,7 +41,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -54,7 +58,6 @@ import { AgentConfig } from '../config-types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { Agent, AgentToolHandle } from '../agent.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -266,7 +269,7 @@ describe('MCP public tool approval owner isolation', () => {
           builtCallerConfig.projectTempDir,
           1024 * 1024 * 1024,
         );
-        const builtCallerOwner = await SessionClientOwner.create(
+        const builtCallerOwner = await createCapturedSessionOwner(
           builtCallerConfig,
           assembleTaskSchemaPolicy(builtCallerSettings),
           builtCallerManager,
@@ -331,7 +334,7 @@ describe('MCP public tool approval owner isolation', () => {
             );
             requireCallerActivation(activation);
             await builtCallerOwner.initializeTools();
-            await builtCallerOwner.getAgentClient().startChat();
+            await capturedSessionClient(builtCallerOwner).startChat();
           } catch (primary) {
             await cleanupAfterFailure(primary, builtCallerClose);
           }
@@ -359,7 +362,7 @@ describe('MCP public tool approval owner isolation', () => {
           builtCallerPolicy.session.messageBus,
           builtCallerMcp,
           undefined,
-          builtCallerOwner.getAgentClient(),
+          capturedSessionClient(builtCallerOwner),
           undefined,
           undefined,
           undefined,
@@ -618,7 +621,7 @@ describe('MCP public tool approval owner isolation', () => {
           ownerCCallerConfig.projectTempDir,
           1024 * 1024 * 1024,
         );
-        const ownerCCallerOwner = await SessionClientOwner.create(
+        const ownerCCallerOwner = await createCapturedSessionOwner(
           ownerCCallerConfig,
           assembleTaskSchemaPolicy(ownerCCallerSettings),
           ownerCCallerManager,
@@ -683,7 +686,7 @@ describe('MCP public tool approval owner isolation', () => {
             );
             requireCallerActivation(activation);
             await ownerCCallerOwner.initializeTools();
-            await ownerCCallerOwner.getAgentClient().startChat();
+            await capturedSessionClient(ownerCCallerOwner).startChat();
           } catch (primary) {
             await cleanupAfterFailure(primary, ownerCCallerClose);
           }

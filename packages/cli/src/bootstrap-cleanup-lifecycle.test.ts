@@ -1,9 +1,14 @@
+import { adoptFixture } from '../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+
+import { capturedSessionClient } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import * as activationCapture from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 import {
   expectInvalidReceipt,
   expectStartupAdmissionClosed,
   StartupExit,
   expectClosed,
   requireReceipt,
+  transferActivation,
   type ObservedBootstrap,
 } from './__tests__/startup-activation-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -20,8 +25,12 @@ import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
 } from './config/profileBootstrap.js';
-import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,10 +51,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as agents from '@vybestack/llxprt-code-agents';
 import * as stdio from '@vybestack/llxprt-code-core/utils/stdio.js';
-import {
-  assembleAgentActivationBootstrap,
-  createAgent,
-} from '@vybestack/llxprt-code-agents';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 import commandExists from 'command-exists';
 import * as acp from '@vybestack/llxprt-code-zed-acp';
 import * as sandbox from './utils/sandbox.js';
@@ -108,39 +114,35 @@ describe('real startup activation owner cleanup', () => {
     observed = [];
     exitReceiptChecks = [];
     probeReceipts = false;
-    const assemble = assembleAgentActivationBootstrap;
+
     restore.push(
-      spyOn(agents, 'assembleAgentActivationBootstrap').mockImplementation(
-        async (...args) => {
-          const operation = await assemble(...args);
-          const observation: ObservedBootstrap = {
-            config: args[0],
-            settingsService: args[1],
-            providerManager: args[2],
-            operation,
-          };
-          observed.push(observation);
-          const preflight = operation.preflight.bind(operation);
-          restore.push(
-            spyOn(operation, 'preflight').mockImplementation(async (intent) => {
-              const result = await preflight(intent);
-              if (result.token) {
-                observation.receipt = { operation, token: result.token };
-                observation.intent = intent;
-              }
-              return result;
-            }),
-          );
-          return operation;
-        },
-      ),
+      activationCapture.observeActivationPreparation((operation, state) => {
+        const observation: ObservedBootstrap = {
+          config: state.config,
+          settingsService: state.settingsService,
+          providerManager: state.manager,
+          operation,
+        };
+        observed.push(observation);
+        const preflight = operation.preflight.bind(operation);
+        restore.push(
+          spyOn(operation, 'preflight').mockImplementation(async (intent) => {
+            const result = await preflight(intent);
+            if (result.token) {
+              observation.receipt = { operation, token: result.token };
+              observation.intent = intent;
+            }
+            return result;
+          }),
+        );
+      }),
     );
     restore.push(
       spyOn(process, 'exit').mockImplementation((code) => {
         for (const owner of observed) {
           expectStartupAdmissionClosed(owner);
           if (probeReceipts && owner.receipt) {
-            const check = agents.fromConfig(
+            const check = adoptFixture(
               owner.config,
               owner.settingsService,
               { sessionId: '', activation: requireReceipt(owner).activation },
@@ -266,12 +268,14 @@ describe('real startup activation owner cleanup', () => {
       spyOn(acp, 'runZedIntegration').mockImplementation(async () => {
         expect(observed).toHaveLength(1);
         expect(
-          observed[0].operation.sessionClient
-            .getAgentClient()
-            .hasChatInitialized(),
+          capturedSessionClient(
+            activationCapture.capturedActivation(observed[0].operation).owner,
+          ).hasChatInitialized(),
         ).toBe(false);
         expect(
-          observed[0].operation.sessionClient.getAgentClient(),
+          capturedSessionClient(
+            activationCapture.capturedActivation(observed[0].operation).owner,
+          ),
         ).toBeDefined();
         const preflight = await observed[0].operation.preflight({
           authMode: 'none',
@@ -328,9 +332,9 @@ describe('real startup activation owner cleanup', () => {
           expect(observed).toHaveLength(2);
           expect(observed[1].settingsService).toBe(observed[0].settingsService);
           expect(
-            observed[0].operation.sessionClient
-              .getAgentClient()
-              .hasChatInitialized(),
+            capturedSessionClient(
+              activationCapture.capturedActivation(observed[0].operation).owner,
+            ).hasChatInitialized(),
           ).toBe(false);
           expectStartupAdmissionClosed(observed[1]);
           if (!probeReceipts) await expectClosed(observed[1]);
@@ -435,18 +439,14 @@ describe('real startup activation owner cleanup', () => {
         credentialAuthority,
       );
 
-      let transferredActivation: AgentActivationOperation | undefined;
-      preflight.transferActivation((operation) => {
-        transferredActivation = operation;
-      });
-      if (transferredActivation === undefined)
-        throw new Error('Missing activation operation');
-      const activationOperation = transferredActivation;
+      const activationOperation = transferActivation(preflight);
       callerPolicy = new RuntimePolicyOwner(
         config,
-        activationOperation.workspaceTrust,
+        activationCapture.capturedActivation(
+          activationOperation,
+        ).workspaceTrust,
         undefined,
-        activationOperation.messageBus,
+        activationCapture.capturedActivation(activationOperation).messageBus,
       );
       const policy = callerPolicy;
       registerCleanup(() => activationOperation.dispose());
@@ -457,13 +457,13 @@ describe('real startup activation owner cleanup', () => {
         argv,
         activationOperation,
       );
-      const agent = await agents.fromConfig(
+      const agent = await adoptFixture(
         config,
         callerSettings,
         { activation: activation.intent },
         callerOwner,
         manager,
-        activationOperation.oauthManager,
+        activationCapture.capturedActivation(activationOperation).oauthManager,
         undefined,
         undefined,
         {
@@ -475,7 +475,8 @@ describe('real startup activation owner cleanup', () => {
           })(),
         },
         undefined,
-        activationOperation.providerFileLifecycle,
+        activationCapture.capturedActivation(activationOperation)
+          .providerFileLifecycle,
         undefined,
         undefined,
         undefined,
@@ -484,14 +485,20 @@ describe('real startup activation owner cleanup', () => {
         policy,
       );
       registerCleanup(() => agent.dispose());
-      await activationOperation.workspaceTrust.setTrustedFolderLive(true);
+      await activationCapture
+        .capturedActivation(activationOperation)
+        .workspaceTrust.setTrustedFolderLive(true);
       config.setApprovalMode(ApprovalMode.YOLO);
-      await activationOperation.workspaceTrust.setTrustedFolderLive(false);
+      await activationCapture
+        .capturedActivation(activationOperation)
+        .workspaceTrust.setTrustedFolderLive(false);
       expect(agent.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
       await runExitCleanup();
       await expectClosed(observed[0]);
       await expect(
-        activationOperation.workspaceTrust.setTrustedFolderLive(false),
+        activationCapture
+          .capturedActivation(activationOperation)
+          .workspaceTrust.setTrustedFolderLive(false),
       ).rejects.toThrow('disposed');
       await manager.setActiveProvider('fake');
       expect(preflight.getActiveProviderName()).toBe('fake');
@@ -689,12 +696,7 @@ describe('real startup activation owner cleanup', () => {
       credentialAuthority,
       preflight,
     );
-    let transferredActivation: AgentActivationOperation | undefined;
-    preflight.transferActivation((operation) => {
-      transferredActivation = operation;
-    });
-    if (transferredActivation === undefined)
-      throw new Error('Missing activation operation');
+    transferActivation(preflight);
     const invalidChatsDir = resolve(directory, 'not-a-directory');
     await writeFile(invalidChatsDir, 'a file');
     const disposed = new Set<Config>();
@@ -741,12 +743,7 @@ describe('real startup activation owner cleanup', () => {
       credentialAuthority,
       preflight,
     );
-    let transferredActivation: AgentActivationOperation | undefined;
-    preflight.transferActivation((operation) => {
-      transferredActivation = operation;
-    });
-    if (transferredActivation === undefined)
-      throw new Error('Missing activation operation');
+    transferActivation(preflight);
     await handleSessionListAndDelete(
       { listSessions: false, deleteSession: '' },
       new Storage(directory).getProjectChatsDir(),

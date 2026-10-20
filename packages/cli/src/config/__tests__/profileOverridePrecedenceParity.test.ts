@@ -1,5 +1,10 @@
-import * as agents from '@vybestack/llxprt-code-agents';
-import { spyOn } from 'bun:test';
+import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,6 +34,21 @@ const retainedSettingsOwners: SessionSettingsOwner[] = [];
  *     (only when --provider is NOT explicit)
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P13
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
+/**
+ * Task 1.6 – Profile + CLI override precedence parity tests
+ *
+ * Locks:
+ *   - --provider with --key/--keyfile/--baseurl creates synthetic profile
+ *   - Profile ephemeral settings are skipped when --provider is explicit
+ *   - CLI model override is re-applied after provider switch (observable via config.getModel())
+ *   - Profile source chain: --profile-load CLI > LLXPRT_PROFILE env > settings.defaultProfile
+ *     (only when --provider is NOT explicit)
+ */
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -167,14 +187,9 @@ async function runConfig(
     )
       providerSelections.push(newValue);
   });
-  const assemble = agents.assembleAgentActivationBootstrap;
-  const observation = spyOn(
-    agents,
-    'assembleAgentActivationBootstrap',
-  ).mockImplementation(async (...args) => {
-    const operation = await assemble(...args);
-    providerManager = args[2];
-    return operation;
+
+  const observation = observeActivationPreparation((operation, state) => {
+    providerManager = state.manager;
   });
   const config = await loadCliConfig(
     settings,
@@ -189,7 +204,6 @@ async function runConfig(
     new CredentialAuthority(),
     await loadPrecedenceProviderContributions(),
     (operation) => {
-      operation.takeSettingsOwner(runtimeSettingsService);
       retainedActivationOperations.push(operation);
     },
   );

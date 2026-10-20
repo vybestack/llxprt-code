@@ -28,7 +28,7 @@ describe('registered continuation discovery', () => {
       session.listBrowserTargets.bind(session),
       () => owner.workspace.getWorkingDirectory(),
       () => 'same-label',
-      owner.agentClient.mediaStore,
+      session.listBrowserTargetsDetailed.bind(session),
       'agent',
     );
     await sibling.dispose();

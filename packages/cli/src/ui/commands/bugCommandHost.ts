@@ -12,14 +12,12 @@ export function bindBugCommand(
   config: CliUiRuntime | null,
   getConversationHistory: BugCommandOperations['getConversationHistory'],
   addItem: UseHistoryManagerReturn['addItem'],
+  getIdeDisplayName: () => string,
 ): BugCommandOperations {
   return {
     getModel: () => config?.getModel() ?? 'Unknown',
     getReportUrlTemplate: () => config?.getBugCommand()?.urlTemplate,
-    getIdeDisplayName: () =>
-      config?.getIdeMode() === true
-        ? (config.getIdeClient()?.getDetectedIdeDisplayName() ?? '')
-        : '',
+    getIdeDisplayName,
     getConversationHistory,
     addItem,
   };

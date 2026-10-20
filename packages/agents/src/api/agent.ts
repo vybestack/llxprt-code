@@ -1,3 +1,5 @@
+import type { BucketAuthConsentRequest } from './auth-consent-contract.js';
+export type { BucketAuthConsentRequest } from './auth-consent-contract.js';
 import type { AgentSessionAuthentication } from './control/session-authentication.js';
 import type { AgentProviderFileOperations } from './provider-file-domain.js';
 import type { AgentModelParametersControl } from './model-parameters.js';
@@ -16,6 +18,8 @@ import type {
   SubagentDefinitionReads,
   SubagentDefinitionWrites,
   WorkspaceCheckpointOperations,
+  ChronologyTraceEntry,
+  RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 import type {
@@ -23,7 +27,6 @@ import type {
   WorkspaceSearchOperations,
   WorkspaceTextOperations,
 } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @plan:PLAN-20260617-COREAPI.P05
  * @requirement:REQ-001, REQ-017
@@ -38,13 +41,13 @@ import type { AgentProfileApplication } from './profileApplicationAssembly.js';
 import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 
 import type { SessionRecordingEvent } from './control/recordSessionEvent.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { AgentInput, GenerateOptions } from './generation-options.js';
+export type { AgentInput, GenerateOptions } from './generation-options.js';
 import type {
   ApprovalMode,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   HookEventName,
   HookInput,
@@ -60,7 +63,6 @@ import type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type {
-  RuntimeProviderManager,
   RuntimeModel,
   ApiKeyUpdateResult,
   PolicyDecision,
@@ -88,13 +90,6 @@ export type Unsubscribe = () => void;
 export type AgentMessage = IContent;
 export type AgentHistoryItem = IContent;
 
-export type AgentInput =
-  | string
-  | readonly ContentBlock[]
-  | Readonly<{ readonly text: string; readonly role?: 'user' | 'system' }>
-  | IContent
-  | readonly IContent[];
-
 export type McpDiscoveryMode = 'await' | 'skip';
 
 export type AuthStatus =
@@ -121,15 +116,6 @@ export interface TurnOptions {
   readonly promptId?: string;
   readonly maxTurns?: number;
   readonly mcpDiscovery?: McpDiscoveryMode;
-}
-
-export interface GenerateOptions {
-  readonly model?: string;
-  readonly config?: Readonly<Record<string, unknown>>;
-  readonly signal?: AbortSignal;
-  readonly promptId?: string;
-  readonly readHistory?: boolean;
-  readonly writeHistory?: boolean;
 }
 
 export interface AgentResult {
@@ -707,6 +693,10 @@ export interface AgentAuthKeysControl {
 }
 
 export interface AgentAuthControl {
+  subscribeBucketConsent(
+    listener: (request: BucketAuthConsentRequest) => void,
+  ): Unsubscribe;
+  respondToBucketConsent(correlationId: string, confirmed: boolean): void;
   login(provider: string, opts?: { readonly bucket?: string }): Promise<void>;
   logout(
     provider: string,
@@ -744,7 +734,14 @@ export interface AgentSessionControl {
    */
   resume(
     target: 'latest' | string,
-    options?: { readonly prefix?: boolean },
+    options?: {
+      readonly prefix?: boolean;
+      readonly startup?: boolean;
+      readonly onStartupRestoreFailure?: (
+        sessionId: string,
+        reason: string,
+      ) => void;
+    },
   ): Promise<readonly AgentHistoryItem[]>;
   /** Creates a durable branch point in the active recording. */
   createCheckpoint(
@@ -756,6 +753,19 @@ export interface AgentSessionControl {
     readonly remainingHistory: readonly AgentHistoryItem[];
     readonly itemsRemoved: number;
   }>;
+  /** Native values only; chronology and media references are preserved. */
+  readHistorySnapshot(): {
+    readonly messages: IContent[];
+    readonly chronology: ChronologyTraceEntry[];
+  } | null;
+  isHistoryInitialized(): boolean;
+  readInitializedHistory(): readonly IContent[] | null;
+  replaceHistory(history: readonly IContent[]): Promise<void>;
+  subscribeHistoryTokens(publish: (count: number) => void): Unsubscribe;
+  attachRecordingHistory(recording: RecordingIntegration): void;
+  connectRecordingHistory(
+    readRecording: () => RecordingIntegration | null,
+  ): Unsubscribe;
   /** Reads live conversation history through the session owner. */
   getHistory(): Promise<readonly AgentHistoryItem[]>;
   /**
@@ -824,7 +834,18 @@ export interface AgentSessionStartResult {
   readonly additionalContext?: string;
 }
 
+export type HookExecutionPhase =
+  | {
+      readonly phase: 'start';
+      readonly eventName: string;
+      readonly correlationId: string;
+    }
+  | { readonly phase: 'end'; readonly correlationId: string };
+
 export interface AgentHookControl {
+  subscribeExecutionPhase(
+    listener: (phase: HookExecutionPhase) => void,
+  ): Unsubscribe;
   onHookExecution(
     cb: (req: HookExecutionRequest, resp: HookExecutionResponse) => void,
   ): Unsubscribe;
@@ -1056,10 +1077,7 @@ export interface Agent extends AgentProviderFileOperations {
     readonly runImageOperation: ImageOperationRunner;
     refreshAuth(authMethod?: string): Promise<void>;
     publishTools(): Promise<void>;
-    createDetachedAgentClient(id?: string): Promise<AgentClientContract>;
   };
-  readonly agentClient: AgentClientContract;
-  readonly providerManager: RuntimeProviderManager;
   captureProfile(): Profile;
   saveProfileSnapshot(
     name: string,
@@ -1132,7 +1150,6 @@ export interface Agent extends AgentProviderFileOperations {
    * @plan:PLAN-20270110-ISSUE2378.P01
    * @requirement:REQ-2378-001
    */
-  getMessageBus(): MessageBus;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
   getEphemeralSetting(key: string): unknown;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
@@ -1183,6 +1200,7 @@ export interface Agent extends AgentProviderFileOperations {
   getStats(): SessionStats;
   onStats(cb: (stats: SessionStats) => void): Unsubscribe;
 
+  /** Runs model hooks without a tool loop; history reads and writes are opt-in. */
   generate(input: AgentInput, opts?: GenerateOptions): Promise<string>;
   generateJson(
     contents: readonly AgentMessage[],

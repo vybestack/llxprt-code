@@ -1,3 +1,4 @@
+import { capturedActivation } from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -114,17 +115,16 @@ async function makeOperation(
   );
   return {
     preflight: preflightMock,
-    workspaceDefinitions: operation.workspaceDefinitions,
-    workspaceTrust: operation.workspaceTrust,
-    trustCleanup: operation.trustCleanup,
-    workspaceMemory: operation.workspaceMemory,
-    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
-    workspaceFilesystem: operation.workspaceFilesystem,
+    workspaceDefinitions: capturedActivation(operation).workspaceDefinitions,
+    workspaceTrust: capturedActivation(operation).workspaceTrust,
+    trustCleanup: capturedActivation(operation).trustCleanup,
+    workspaceMemory: capturedActivation(operation).workspaceMemory,
+    workspaceMemoryOwnership:
+      capturedActivation(operation).workspaceMemoryOwnership,
+    workspaceFilesystem: capturedActivation(operation).workspaceFilesystem,
     sessionClient: operation.sessionClient,
-    takeMediaOwner: operation.takeMediaOwner.bind(operation),
-    settingsOwnerOwnership: operation.settingsOwnerOwnership,
-    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
-    takeSessionClient: operation.takeSessionClient.bind(operation),
+    settingsOwnerOwnership:
+      capturedActivation(operation).settingsOwnerOwnership,
     dispose: () => operation.dispose(),
   };
 }

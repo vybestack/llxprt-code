@@ -1,3 +1,12 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -51,14 +60,9 @@ import {
   createTestProvider,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  buildAgent,
-  drain,
-  internalConfig,
-  internalSettingsOwner,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain, internalConfig } from './helpers/agentHarness.js';
 
 async function settleEngineRelease(
   steps: ReadonlyArray<() => void | Promise<void>>,
@@ -186,7 +190,7 @@ describe('explicit provider owner construction', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -308,7 +312,7 @@ describe('explicit provider owner construction', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const credentials = useOwnedCredentials();
@@ -329,7 +333,7 @@ describe('explicit provider owner construction', () => {
 
   it('adopts an initialized caller Config and exact explicit manager without manager discovery', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
-    const client = builtCallerOwner.getAgentClient();
+    const client = capturedSessionClient(builtCallerOwner);
     await client.startChat();
     Object.defineProperty(builtCallerConfig, 'getProviderManager', {
       configurable: true,
@@ -342,12 +346,12 @@ describe('explicit provider owner construction', () => {
         builtCallerSettings;
       const optionsConfig: Parameters<typeof fromConfig>[0] = builtCallerConfig;
       const optionsAgentClient: Parameters<typeof fromConfig>[9] =
-        builtCallerOwner.getAgentClient();
+        capturedSessionClient(builtCallerOwner);
       const optionsProviderManager: Parameters<typeof fromConfig>[4] =
         builtCallerManager;
       const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
         builtCallerMcp;
-      const agent = await fromConfig(
+      const agent = await captureAgentAdoption(
         optionsConfig,
         optionsSettingsService,
         {},
@@ -361,8 +365,8 @@ describe('explicit provider owner construction', () => {
       );
       try {
         expect(internalConfig(agent)).toBe(builtCallerConfig);
-        expect(agent.providerManager).toBe(builtCallerManager);
-        expect(client).toBe(builtCallerOwner.getAgentClient());
+        expect(fixtureAgentResources(agent).manager).toBe(builtCallerManager);
+        expect(client).toBe(capturedSessionClient(builtCallerOwner));
         const events = await drain(agent.stream('Adopt the explicit owner'));
         expect(events.some((event) => event.type === 'text')).toBe(true);
         await agent.dispose();
@@ -380,7 +384,7 @@ describe('explicit provider owner construction', () => {
 
   it('keeps the caller client usable after explicit-owner activation failure', async () => {
     await openbuiltCaller('multi-turn-text.jsonl');
-    const client = builtCallerOwner.getAgentClient();
+    const client = capturedSessionClient(builtCallerOwner);
     await client.startChat();
     Object.defineProperty(builtCallerConfig, 'getProviderManager', {
       configurable: true,
@@ -393,7 +397,7 @@ describe('explicit provider owner construction', () => {
         builtCallerSettings;
       const optionsConfig: Parameters<typeof fromConfig>[0] = builtCallerConfig;
       const optionsAgentClient: Parameters<typeof fromConfig>[9] =
-        builtCallerOwner.getAgentClient();
+        capturedSessionClient(builtCallerOwner);
       const optionsProviderManager: Parameters<typeof fromConfig>[4] =
         builtCallerManager;
       const optionsMcpRuntime: Parameters<typeof fromConfig>[7] =
@@ -402,7 +406,7 @@ describe('explicit provider owner construction', () => {
         Parameters<typeof fromConfig>[2]
       >['activation'] = { provider: 'missing-provider', authMode: 'auto' };
       await expect(
-        fromConfig(
+        captureAgentAdoption(
           optionsConfig,
           optionsSettingsService,
           { activation: { ...optionsActivation, authMode: 'auto' } },
@@ -425,8 +429,8 @@ describe('explicit provider owner construction', () => {
   });
 
   it('publishes telemetry changes to an explicit lifecycle subscriber without manager ownership', async () => {
-    const built = await buildAgent('multi-turn-text.jsonl');
-    const settings = internalSettingsOwner(built.agent);
+    await openbuiltCaller('multi-turn-text.jsonl');
+    const settings = builtCallerSettingsOwner;
     const observed: boolean[] = [];
     const unsubscribe = settings.onTelemetrySettingsChange(() =>
       observed.push(settings.readTelemetrySettings().enabled === true),
@@ -438,7 +442,7 @@ describe('explicit provider owner construction', () => {
       await settings.updateTelemetrySettings({ enabled: false });
       expect(observed).toHaveLength(1);
     } finally {
-      await built.cleanup();
+      await builtCallerClose();
     }
   });
 
@@ -453,7 +457,7 @@ describe('explicit provider owner construction', () => {
     callerOAuth.registerProvider(createTestProvider('fake'));
     await callerOAuth.toggleOAuthEnabled('fake');
     try {
-      const agent = await fromConfig(
+      const agent = await captureAgentAdoption(
         builtCallerConfig,
         builtCallerSettings,
         {},
@@ -463,7 +467,7 @@ describe('explicit provider owner construction', () => {
         undefined,
         builtCallerMcp,
         undefined,
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerFiles,
         undefined,
         undefined,

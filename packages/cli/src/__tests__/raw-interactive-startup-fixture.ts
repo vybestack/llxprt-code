@@ -7,7 +7,6 @@ import type {
   Config,
   IContent,
   LockHandle,
-  MessageBus,
   RecordingIntegration,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
@@ -23,7 +22,6 @@ export function startInteractiveUI(
   settings: LoadedSettings,
   startupWarnings: string[],
   workspaceRoot: string,
-  runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
   resumedHistory?: IContent[],
   initialRecordingService?: SessionRecordingService,
@@ -47,7 +45,6 @@ export function startInteractiveUI(
       recordingOwner,
       runtimeSettings,
       sessionPersistence,
-      runtimeMessageBus,
       recordingIntegration,
       resumedHistory,
       initialRecordingService,

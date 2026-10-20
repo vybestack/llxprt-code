@@ -26,10 +26,8 @@ import {
   ExitCodes,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
-  type RuntimeProviderManager,
   type Config,
   type IContent,
-  type MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 
@@ -117,7 +115,6 @@ import {
 } from './cliProviderInit.js';
 import {
   guardUnconfiguredProvider,
-  isProviderConfigured,
   reportUnconfiguredProviderError,
 } from './unconfiguredProviderGuard.js';
 import {
@@ -315,22 +312,18 @@ class ForegroundSessionHost {
     const agent = await this.#foreground;
     await connectIdeClientIfEnabled(
       () => agent.ide.getIdeMode(),
-      async () => {
-        const ideClient = agent.ide.getIdeClient();
-        if (ideClient) await ideClient.connect();
-      },
+      agent.ide.setIdeClientConnected.bind(agent.ide),
     );
     const warnings: string[] = [];
     const history = await setupOwnerSessionRecording(
       this.config,
       agent.session,
-      () => agent.agentClient.mediaStore,
+      agent.session.listBrowserTargetsDetailed.bind(agent.session),
       this.argv,
       this.bootstrapSelection,
       warnings,
     );
     const input = this.config.getQuestion();
-    const bus = agent.getMessageBus();
     await dispatchInteractiveOrNonInteractive(
       input,
       () =>
@@ -340,7 +333,7 @@ class ForegroundSessionHost {
       warnings,
       () => getUserStartupWarnings(this.settings.merged),
       async (startupWarnings) => {
-        await this.launchInteractive(startupWarnings, history, bus);
+        await this.launchInteractive(startupWarnings, history);
       },
       () => this.config.getOutputFormat(),
       (initialInput) =>
@@ -364,12 +357,12 @@ class ForegroundSessionHost {
       this.config,
       this.settings,
       runExitCleanup,
-      agent.providerManager,
+      agent.hasActiveProvider,
       (key, value) => agent.setEphemeralSetting(key, value),
     );
     return {
       run: createNonInteractiveRun(
-        () => isProviderConfigured(agent.providerManager),
+        agent.hasActiveProvider,
         () => reportUnconfiguredProviderError(validated),
         () => validated.getOutputFormat(),
         () => validated.getDebugMode(),
@@ -462,7 +455,6 @@ class ForegroundSessionHost {
   private async launchInteractive(
     warnings: string[],
     history: IContent[] | null,
-    bus: MessageBus,
   ): Promise<void> {
     const agent = await this.#foreground;
     await startInteractiveUI(
@@ -476,7 +468,6 @@ class ForegroundSessionHost {
         runtimeSettings: this.preflight,
         skillOperations: this.#skillOperations,
         restartExtension: this.#restartExtension,
-        runtimeMessageBus: bus,
         resumedHistory: history ?? undefined,
         suppressStartupWelcome: hasExplicitProviderProfileSelector(this.argv),
       },
@@ -505,15 +496,15 @@ class ForegroundSessionHost {
  * 3. Agent construction (fromConfig): `constructAgentWithSpinner(config)` builds
  *    the SINGLE foreground Agent via `createForegroundAgent` → `fromConfig`,
  *    which OWNS Config.initialize() and the one session MessageBus (built from
- *    the Config's policy engine, exposed via `agent.getMessageBus()`) and
+ *    the Config's policy engine) and
  *    ADOPTS the preflight activation state without re-running a second
  *    activation sequence. Runtime state/context seeding, provider wiring, policy
  *    engine, and scheduler singletons all live behind that public API, not in
  *    CLI code. IDE connect and session recording run just after (they depend on
  *    initialize()).
  * 4. Render/Run: the ONE Agent is threaded into the interactive UI or reused by
- *    the non-interactive stream; consumers read the session bus from
- *    `agent.getMessageBus()` instead of a separately-threaded bus.
+ *    the non-interactive stream; UI consent and hook display bind named
+ *    operations on the Agent auth and hook controls.
  *
  * Zed/ACP is the exception: it runs its own runtime and constructs per-session
  * Agents via `fromConfig` internally, so no foreground Agent is built for it.
@@ -620,9 +611,9 @@ async function exitIfAuthenticationFailed(authFailed: boolean): Promise<void> {
 
 async function stopIfUnconfigured(
   config: Config,
-  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'>,
+  hasActiveProvider: () => boolean,
 ): Promise<void> {
-  await guardUnconfiguredProvider(config, runExitCleanup, manager);
+  await guardUnconfiguredProvider(config, runExitCleanup, hasActiveProvider);
 }
 
 async function prepareForegroundPreflight(
@@ -682,7 +673,7 @@ async function activateForegroundProvider(
   argv: ParsedCliArgs,
   preflight: AgentProfilePreflight,
 ): Promise<ConfiguredProviderActivationResult> {
-  await stopIfUnconfigured(config, preflight);
+  await stopIfUnconfigured(config, preflight.hasActiveProvider.bind(preflight));
   return activateConfiguredProvider(config, preflight, argv, preflight);
 }
 

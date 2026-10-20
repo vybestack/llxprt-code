@@ -3,10 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  createConsentOwner,
+  createHookControlDeps,
+} from '../../__tests__/ui-consent-hook-owners.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act, cloneElement, useState } from 'react';
-import { describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { setEnv, restoreEnv } from '@vybestack/llxprt-code-test-utils';
 
 interface Fiber {
@@ -71,9 +75,16 @@ const { createTerminalStore } = await import(
 const { createTurnStore } = await import('../stores/turn/turnStore.js');
 const { createDialogStore } = await import('../stores/dialog/dialogStore.js');
 
-async function mountLayout(
-  runtimeMessageBus?: InstanceType<typeof MessageBus>,
-) {
+const consentHookCleanups: Array<() => void> = [];
+
+async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
+  const auth =
+    borrowedBus === undefined ? undefined : createConsentOwner(borrowedBus);
+  const hooks =
+    borrowedBus === undefined
+      ? undefined
+      : createHookControlDeps({ messageBus: borrowedBus }).control;
+  if (hooks) consentHookCleanups.push(() => hooks.detach());
   const terminal = createTerminalStore();
   const turn = createTurnStore({
     history: [{ id: 1, type: 'user', text: 'committed transcript' }],
@@ -99,7 +110,15 @@ async function mountLayout(
   );
   const layout = (
     <DefaultAppLayout
-      runtimeMessageBus={runtimeMessageBus}
+      readIdeMode={() => false}
+      readIdeDiffingEnabled={() => false}
+      subscribeIdeDiffing={() => () => {}}
+      resolveIdeDiff={async () => {}}
+      readIdeWorkspaceTrust={() => undefined}
+      subscribeIdeWorkspaceTrust={() => () => {}}
+      subscribeBucketConsent={auth?.subscribeBucketConsent.bind(auth)}
+      respondToBucketConsent={auth?.respondToBucketConsent.bind(auth)}
+      subscribeHookPhase={hooks?.subscribeExecutionPhase.bind(hooks)}
       screenReaderEnabled={uiRuntime.app.getScreenReader()}
       disableLoadingPhrases={
         uiRuntime.app.getAccessibility().disableLoadingPhrases === true
@@ -140,6 +159,9 @@ async function mountLayout(
 }
 
 describe('production layout render isolation', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it('keeps the transcript and static parent idle on dialog, clock, and geometry updates', async () => {
     renders.clear();
     setEnv('DEV', 'true');
@@ -198,6 +220,9 @@ describe('production layout render isolation', () => {
 });
 
 describe('store migration regressions', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it.each([true, false])(
     'shows bucket authentication requests only when the layout receives the bus (provided: %s)',
     async (provided) => {

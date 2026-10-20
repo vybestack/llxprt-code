@@ -20,7 +20,12 @@ import type {
   ToolGovernance,
 } from '@vybestack/llxprt-code-tools';
 import { AgenticLoop } from '../core/agenticLoop/AgenticLoop.js';
-import type { AgenticLoopOptions } from '../core/agenticLoop/types.js';
+import type {
+  AgenticLoopOptions,
+  ApprovalHandler,
+} from '../core/agenticLoop/types.js';
+import { TurnToolExecutionOwner } from './turn-tool-execution-owner.js';
+import { bindTurnModel } from './bind-turn-model.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import {
   bindSchedulerOwner,
@@ -50,7 +55,7 @@ export class SessionExecutionOwner {
     private readonly readGovernance: () => ToolGovernance,
     private readonly trust: Pick<WorkspaceTrustControlPort, 'isTrustedFolder'>,
     private readonly scheduler: SchedulerConstruction | undefined,
-    private readonly approval: AgenticLoopOptions['approvalHandler'],
+    private readonly approval: ApprovalHandler | undefined,
     private readonly display: AgenticLoopOptions['displayCallbacks'],
   ) {}
 
@@ -311,24 +316,26 @@ export class SessionExecutionOwner {
   private construct(client: AgentClientContract): AgenticLoop {
     const interactiveMode = this.config.isInteractive();
     return new AgenticLoop({
-      agentClient: client,
+      ...bindTurnModel(client),
       config: this.config,
-      messageBus: this.messageBus,
-      createSchedulerOwner: bindSchedulerOwner(
-        this.config,
+      tools: new TurnToolExecutionOwner(
         this.messageBus,
-        interactiveMode,
-        this.selection,
-        this.scheduler ?? ((options) => new CoreToolScheduler(options)),
-        () => this.settings.readToolExecutionPolicy(),
-        this.readGovernance,
-        () =>
-          this.trust.isTrustedFolder()
-            ? this.config.getApprovalMode()
-            : ApprovalMode.DEFAULT,
-        this.settings.telemetry,
+        this.approval,
+        bindSchedulerOwner(
+          this.config,
+          this.messageBus,
+          interactiveMode,
+          this.selection,
+          this.scheduler ?? ((options) => new CoreToolScheduler(options)),
+          () => this.settings.readToolExecutionPolicy(),
+          this.readGovernance,
+          () =>
+            this.trust.isTrustedFolder()
+              ? this.config.getApprovalMode()
+              : ApprovalMode.DEFAULT,
+          this.settings.telemetry,
+        ),
       ),
-      approvalHandler: this.approval,
       displayCallbacks: this.display,
       interactiveMode,
     });

@@ -1,3 +1,11 @@
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import type { SessionClientOwner } from '../../../agents/src/session/session-client-owner.js';
+import { capturedSessionClient } from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { AgentClient } from '../../../agents/src/core/client.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import type {
   AgentActivationOperation,
   Agent,
@@ -44,12 +52,27 @@ function setupOwnerSessionRecording(
   return setupOwnerSessionRecordingCore(
     config,
     agent.session,
-    () => agent.agentClient.mediaStore,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
     argv,
     selection,
     warnings,
   );
 }
+
+const historyReaders: AgentClient[] = [];
+const managerReaders: ProviderManager[] = [];
+const readHistory = AgentClient.prototype.getHistory;
+const listProviders = ProviderManager.prototype.listProviders;
+AgentClient.prototype.getHistory = async function () {
+  const history = await readHistory.call(this);
+  historyReaders.push(this);
+  return history;
+};
+ProviderManager.prototype.listProviders = function () {
+  const providers = listProviders.call(this);
+  managerReaders.push(this);
+  return providers;
+};
 
 const scenario = z.enum(['record', 'profile', 'resume']).parse(process.argv[2]);
 const directory = z.string().parse(process.argv[3]);
@@ -79,12 +102,14 @@ async function bootstrap() {
     undefined,
     undefined,
   );
-  const config = await bootstrapRuntimeAndConfig(
-    settings,
-    argv,
-    directory,
-    credentialAuthority,
-    preflight,
+  const config = await captureActivationConstruction(() =>
+    bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      credentialAuthority,
+      preflight,
+    ),
   );
   let transferredActivation: AgentActivationOperation | undefined;
   preflight.transferActivation((operation) => {
@@ -117,9 +142,9 @@ async function stream(agent: Agent, prompt: string): Promise<AgentEvent[]> {
   return events;
 }
 
-function ownerClosed(owner: { getAgentClient: () => unknown }): boolean {
+function ownerClosed(owner: SessionClientOwner): boolean {
   try {
-    owner.getAgentClient();
+    capturedSessionClient(owner);
     return false;
   } catch (error) {
     if (!(error instanceof Error) || !/disposed/i.test(error.message))
@@ -138,7 +163,7 @@ async function record() {
     argv,
   } = await bootstrap();
   try {
-    const owner = activationOperation.sessionClient;
+    const owner = capturedActivation(activationOperation).owner;
     const agent = await createForegroundAgent(
       preflight,
       requireForegroundReceipt(activation),
@@ -148,10 +173,14 @@ async function record() {
     );
     try {
       await setupOwnerSessionRecording(config, agent, argv, null);
-      const ownerAdopted = agent.agentClient === owner.getAgentClient();
+      await agent.getHistory();
+      const foregroundClient = historyReaders.at(-1);
+      if (foregroundClient === undefined)
+        throw new Error('No foreground history receiver was observed');
+      const ownerAdopted = foregroundClient === capturedSessionClient(owner);
       await verifyFilesystemAdoption(
         agent,
-        activationOperation.workspaceFilesystem,
+        capturedActivation(activationOperation).workspaceFilesystem,
       );
       const events = await stream(agent, 'local recorded prompt');
       const path = agent.session.getRecording().path;
@@ -196,8 +225,8 @@ async function profile() {
   const { config, preflight, activationOperation, credentialAuthority, argv } =
     await bootstrap();
   try {
-    const owner = activationOperation.sessionClient;
-    const store = owner.getAgentClient().mediaStore;
+    const owner = capturedActivation(activationOperation).owner;
+    const store = capturedSessionClient(owner).mediaStore;
     const baseUrl = preflight.readSelectedEndpoint();
     if (typeof baseUrl !== 'string')
       throw new Error('Missing local profile URL');
@@ -216,10 +245,14 @@ async function profile() {
       {},
     );
     try {
-      const ownerAdopted = agent.agentClient === owner.getAgentClient();
+      await agent.getHistory();
+      const foregroundClient = historyReaders.at(-1);
+      if (foregroundClient === undefined)
+        throw new Error('No foreground history receiver was observed');
+      const ownerAdopted = foregroundClient === capturedSessionClient(owner);
       await verifyFilesystemAdoption(
         agent,
-        activationOperation.workspaceFilesystem,
+        capturedActivation(activationOperation).workspaceFilesystem,
       );
       const borrowedSurface = [
         'config',
@@ -233,9 +266,13 @@ async function profile() {
       const events = await stream(agent, 'profile-controlled prompt');
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing profile recording path');
+      const providers = runtime.listProviders();
+      const foregroundManager = managerReaders.at(-1);
+      if (foregroundManager === undefined)
+        throw new Error('No foreground provider-list receiver was observed');
       const providerAdopted = (() => {
         try {
-          owner.getAgentClient().assertProviderManager(agent.providerManager);
+          capturedSessionClient(owner).assertProviderManager(foregroundManager);
           return true;
         } catch {
           return false;
@@ -245,12 +282,12 @@ async function profile() {
         headless,
         authFailed: activation.authFailed,
         ownerAdopted,
-        mediaAdopted: agent.agentClient.mediaStore === store,
+        mediaAdopted: foregroundClient.mediaStore === store,
         providerAdopted,
         borrowedSurface,
         runtimeHasManager: 'providerManager' in runtime,
         activeProvider: runtime.getActiveProviderName(),
-        providers: runtime.listProviders(),
+        providers,
         events,
         path,
       };
@@ -324,8 +361,12 @@ async function resume() {
       firstEvents,
       events,
       path,
-      firstOwnerClosed: ownerClosed(first.activationOperation.sessionClient),
-      ownerClosed: ownerClosed(next.activationOperation.sessionClient),
+      firstOwnerClosed: ownerClosed(
+        capturedActivation(first.activationOperation).owner,
+      ),
+      ownerClosed: ownerClosed(
+        capturedActivation(next.activationOperation).owner,
+      ),
     };
   } finally {
     await nextAgent.dispose();
@@ -342,7 +383,12 @@ try {
     JSON.stringify(result),
   );
 } finally {
-  await runExitCleanup();
+  try {
+    await runExitCleanup();
+  } finally {
+    AgentClient.prototype.getHistory = readHistory;
+    ProviderManager.prototype.listProviders = listProviders;
+  }
 }
 
 async function verifyFilesystemAdoption(

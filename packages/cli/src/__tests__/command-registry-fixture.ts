@@ -3,9 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createIdeCommand } from '../ui/commands/ideCommand.js';
+import { bindIdeCommand } from '../ui/commands/ideCommandHost.js';
 import { bindCommandRawResume } from '../ui/hooks/commandRawResumeHost.js';
 import { performResume } from '../services/performResume.js';
 import { slashCommandLogger } from '../ui/hooks/slashCommandProcessor.js';
+import { createMockSettings } from './render.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { bindChatOwnerOperations } from '../ui/commands/chatCommandHost.js';
 import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
@@ -38,6 +41,7 @@ export function createCommandRegistryFixture(
     },
   );
   return {
+    ...createFixtureIdeBindings(agent),
     readBuiltinCommands: (owners: Parameters<ReadBuiltinCommands>[0]) =>
       createBuiltin(owners).loadCommandsSync(),
     loadRegisteredCommands: createRegisteredCommandLoader(
@@ -68,11 +72,7 @@ export function createCommandRegistryFixture(
     ),
     subscribeCommandChanges: config
       ? createCommandChangeSubscription(
-          (listener) => {
-            const ide = config.getIdeClient();
-            ide?.addStatusChangeListener(listener);
-            return () => ide?.removeStatusChangeListener(listener);
-          },
+          (listener) => agent?.ide.subscribeConnection(() => listener()),
           (listener) => agent?.mcp.subscribeStatus(listener),
         )
       : () => undefined,
@@ -157,6 +157,7 @@ export function createCommandRegistrationFixture(
         unavailableOwner,
         unavailableOwner,
         unavailableOwner,
+        () => '',
       ),
     registerChatCommands: (owner) => ({
       chatCommand: owner === 'agent' ? chatCommand : fixtureCommand('chat'),
@@ -169,7 +170,7 @@ export function createCommandRegistrationFixture(
       bindCommandRawResume(
         config,
         config?.sessionPersistence,
-        () => agent?.agentClient.getHistoryService() ?? null,
+        agent?.session,
         callbacks,
         slashCommandLogger,
         performResume,
@@ -180,5 +181,52 @@ export function createCommandRegistrationFixture(
     startNewCommandSession: async () => {},
     startCommandSession: async () => ({}),
     listCommandTools: () => [],
+  };
+}
+
+function createFixtureIdeBindings(agent: Agent | null) {
+  return {
+    readCurrentIde: () => agent?.ide.readConnection().currentIde,
+    readIdeContext: () => agent?.ide.readContext(),
+    subscribeIdeContext: (
+      listener: Parameters<Agent['ide']['subscribeContext']>[0],
+    ) => agent?.ide.subscribeContext(listener) ?? (() => {}),
+    readIdeWorkspaceTrust: () => agent?.ide.readWorkspaceTrust(),
+    subscribeIdeWorkspaceTrust: (
+      listener: Parameters<Agent['ide']['subscribeWorkspaceTrust']>[0],
+    ) => agent?.ide.subscribeWorkspaceTrust(listener) ?? (() => {}),
+    readIdeMode: () => agent?.ide.getIdeMode() ?? false,
+    readIdeAvailable: () => agent?.ide.readConnection().available ?? false,
+    readIdeDisplayName: () =>
+      agent?.ide.getIdeMode() === true
+        ? (agent.ide.readConnection().detectedIdeDisplayName ?? '')
+        : '',
+    readIdeDiffingEnabled: () =>
+      agent?.ide.readConnection().diffingEnabled ?? false,
+    subscribeIdeDiffing: (listener: () => void) =>
+      agent?.ide.subscribeConnection(() => listener()) ?? (() => {}),
+    resolveIdeDiff: async (
+      filePath: string,
+      outcome: 'accepted' | 'rejected',
+    ) => {
+      await agent?.ide.resolveDiff(filePath, outcome);
+    },
+    registerIdeCommand: (
+      addItem: UseSlashCommandProcessorCoreArgs['addItem'],
+    ) => {
+      if (agent === null) return null;
+      const ide = agent.ide;
+      return createIdeCommand(
+        bindIdeCommand(
+          ide.readConnection.bind(ide),
+          ide.readContext.bind(ide),
+          ide.setIdeMode.bind(ide),
+          ide.setIdeClientConnected.bind(ide),
+          ide.setIdeClientDisconnected.bind(ide),
+          createMockSettings({}),
+          addItem,
+        ),
+      );
+    },
   };
 }

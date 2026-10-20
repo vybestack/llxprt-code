@@ -3,7 +3,6 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 export interface ToolFormatState {
@@ -35,7 +34,9 @@ export interface AgentToolFormatControl {
 export function assembleToolFormatControl(
   readToolFormat: SessionSettingsOwner['readToolFormat'],
   writeToolFormat: SessionSettingsOwner['writeToolFormat'],
-  readProvider: RuntimeProviderManager['getActiveProvider'],
+  readProvider: () =>
+    | { readonly name: string; readonly toolFormat: string | null }
+    | undefined,
   assertReadAdmission: () => void,
   assertWriteAdmission: () => void,
 ): AgentToolFormatControl {
@@ -48,9 +49,7 @@ export function assembleToolFormatControl(
     const isAutoDetected = !override || override === 'auto';
     return {
       providerName: provider.name,
-      currentFormat: isAutoDetected
-        ? (provider.getToolFormat?.() ?? null)
-        : override,
+      currentFormat: isAutoDetected ? provider.toolFormat : override,
       override: isAutoDetected ? null : override,
       isAutoDetected,
     };

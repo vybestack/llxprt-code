@@ -1,4 +1,9 @@
-import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -30,7 +35,7 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../../../agents/src/core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import type { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { fileURLToPath } from 'node:url';
 import { buildTestMcpRuntime } from '../../../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
@@ -195,7 +200,7 @@ class TelemetryCleanup {
       1024 * 1024 * 1024,
     );
     this.rollbackSteps.push(() => media.dispose());
-    this.#owner = await SessionClientOwner.create(
+    this.#owner = await createCapturedSessionOwner(
       this.#config,
       assembleTaskSchemaPolicy(this.#settings),
       this.#manager,
@@ -313,7 +318,7 @@ class TelemetryCleanup {
     );
     requireCallerActivation(activation);
     await this.#owner.initializeTools();
-    await this.#owner.getAgentClient().startChat();
+    await capturedSessionClient(this.#owner).startChat();
   }
   private prepareCleanupFailure(directory: string, outfile: string): void {
     this.#manager.registerProvider(

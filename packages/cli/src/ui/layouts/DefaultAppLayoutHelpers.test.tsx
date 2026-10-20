@@ -58,6 +58,10 @@ function buildHistory(...ids: number[]): HistoryItem[] {
 function renderStaticItems(history: HistoryItem[]): React.ReactElement[] {
   const { result } = renderHook(() =>
     useStaticItems(
+      () => false,
+      () => false,
+      () => () => {},
+      async () => {},
       config,
       settings,
       '1.0.0',

@@ -216,7 +216,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     const result = await guardUnconfiguredProvider(
       makeConfig(true, false),
       cleanupFn,
-      { hasActiveProvider: () => true },
+      () => true,
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     const result = await guardUnconfiguredProvider(
       makeConfig(false, true),
       cleanupFn,
-      { hasActiveProvider: () => false },
+      () => false,
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -236,9 +236,11 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
 
   it('exits with code 52 when unconfigured and non-interactive', async () => {
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), cleanupFn, {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(
+        makeConfig(false, false),
+        cleanupFn,
+        () => false,
+      ),
     ).rejects.toThrow('process.exit(52) called');
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
@@ -256,7 +258,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       guardResult: guardUnconfiguredProvider(
         makeConfig(false, false),
         cleanupFn,
-        { hasActiveProvider: () => false },
+        () => false,
       ),
       stderrChunks,
     };
@@ -278,9 +280,11 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       .fn()
       .mockRejectedValue(new Error('cleanup failed'));
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), failingCleanup, {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(
+        makeConfig(false, false),
+        failingCleanup,
+        () => false,
+      ),
     ).rejects.toThrow('process.exit(52) called');
     expect(failingCleanup).toHaveBeenCalledTimes(1);
   });

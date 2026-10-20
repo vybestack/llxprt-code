@@ -1,8 +1,13 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { describe, expect, it, vi, beforeAll, afterAll } from 'bun:test';
 import { mkdtemp, writeFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fromConfig } from '../fromConfig.js';
+
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -30,7 +35,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
@@ -154,7 +158,7 @@ describe('admitted instruction publication disposal', () => {
         callerConfig.projectTempDir,
         1024 * 1024,
       );
-      const callerOwner = await SessionClientOwner.create(
+      const callerOwner = await createCapturedSessionOwner(
         callerConfig,
         assembleTaskSchemaPolicy(callerSettings),
         callerManager,
@@ -194,7 +198,7 @@ describe('admitted instruction publication disposal', () => {
         await callerMcp.initialize();
         await callerOwner.initializeTools();
         await callerOwner.refreshAuth();
-        await callerOwner.getAgentClient().startChat();
+        await capturedSessionClient(callerOwner).startChat();
       } catch (primary) {
         await cleanupAfterFailure(primary, callerClose);
       }
@@ -209,7 +213,7 @@ describe('admitted instruction publication disposal', () => {
         callerMessageBus,
         callerMcp,
         undefined,
-        callerOwner.getAgentClient(),
+        capturedSessionClient(callerOwner),
       );
       const peer = await fromConfig(
         callerConfig,
@@ -223,7 +227,7 @@ describe('admitted instruction publication disposal', () => {
       );
       const entered = gate();
       const release = gate();
-      const client = callerOwner.getAgentClient();
+      const client = capturedSessionClient(callerOwner);
       const assemble = client.updateSystemInstruction.bind(client);
       let publishedCharacters = 0;
       const observer = vi

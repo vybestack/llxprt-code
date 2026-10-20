@@ -12,19 +12,18 @@ import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { ShellJobOwner } from '../../session/shell-job-owner.js';
 import { type Agent, buildAgent } from './helpers/agentHarness.js';
 import { deferred, deadline } from './helpers/shell-owner-gate.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 
 function owners(agent: Agent): {
   tasks: TaskLaunchOwner;
   shell: ShellJobOwner;
 } {
-  if (
-    !('taskLaunchOwner' in agent) ||
-    !(agent.taskLaunchOwner instanceof TaskLaunchOwner)
-  )
+  const { taskOwner, shellOwner } = fixtureAgentResources(agent);
+  if (!(taskOwner instanceof TaskLaunchOwner))
     throw new Error('Expected task owner');
-  if (!('shellOwner' in agent) || !(agent.shellOwner instanceof ShellJobOwner))
+  if (!(shellOwner instanceof ShellJobOwner))
     throw new Error('Expected shell owner');
-  return { tasks: agent.taskLaunchOwner, shell: agent.shellOwner };
+  return { tasks: taskOwner, shell: shellOwner };
 }
 
 describe('new sessions exclude background work', () => {

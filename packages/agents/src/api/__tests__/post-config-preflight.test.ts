@@ -1,6 +1,20 @@
-import * as assembly from '../providerSwitchAssembly.js';
+import { observeActivationPreparation } from './helpers/activation-acquisition-capture.js';
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from './helpers/activation-acquisition-capture.js';
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+
+import { AgentClient } from '../../core/client.js';
+import { gate } from './helpers/async-child-disposal-join-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { spyOn } from 'bun:test';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,14 +35,17 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { prepareAgentPreflight } from '../profile-preflight.js';
 import { AgentProfilePreflight } from '../profile-preflight.js';
-import type { AgentActivationOperation } from '../activationPreflightState.js';
+import {
+  AgentActivationBootstrap,
+  type AgentActivationOperation,
+} from '../activationPreflightState.js';
 
-function transfer(operation: AgentProfilePreflight): AgentActivationOperation {
+function transfer(operation: AgentProfilePreflight): AgentActivationBootstrap {
   let activation: AgentActivationOperation | undefined;
   operation.transferActivation((selected) => {
     activation = selected;
   });
-  if (activation === undefined)
+  if (!(activation instanceof AgentActivationBootstrap))
     throw new Error('Missing transferred activation');
   return activation;
 }
@@ -157,25 +174,25 @@ describe('post-config preflight ownership', () => {
         stages.push('manager');
         onManagerReady?.();
       });
-      const assemble = assembly.assembleAgentActivationBootstrap;
-      const activationObservation = spyOn(
-        assembly,
-        'assembleAgentActivationBootstrap',
-      ).mockImplementation(async (...args) => {
-        if (args[16] === undefined)
-          throw new Error('Missing acquired file owner');
-        expect(args[3]).not.toBeNull();
-        stages.push('oauth', 'files');
-        return assemble(...args);
-      });
+
+      const activationObservation = observeActivationPreparation(
+        (operation, state) => {
+          if (state.providerFileLifecycle === undefined)
+            throw new Error('Missing acquired file owner');
+          expect(state.oauthManager).not.toBeNull();
+          stages.push('oauth', 'files');
+        },
+      );
       try {
-        await operation.preparePostConfiguration(
-          config,
-          filesystem,
-          memory,
-          trust,
-          () => trust.dispose(),
-          supplied,
+        await captureActivationConstruction(() =>
+          operation.preparePostConfiguration(
+            config,
+            filesystem,
+            memory,
+            trust,
+            () => trust.dispose(),
+            supplied,
+          ),
         );
       } finally {
         policyObservation.mockRestore();
@@ -197,6 +214,209 @@ describe('post-config preflight ownership', () => {
   }
 
   for (const borrowed of [false, true]) {
+    it(`joins accepted foreground acquisition before activation disposal completes (borrowed ${borrowed})`, async () => {
+      await withPreflight(borrowed, async (operation, prepare, supplied) => {
+        await prepare();
+        const intent = { provider: 'openai', authMode: 'none' } as const;
+        const result = await operation.preflight(intent);
+        if (result.token === undefined)
+          throw new Error('Missing activation receipt');
+        const activation = transfer(operation);
+        const tokenizer = capturedActivation(activation).owner.tokenizerFactory;
+        if (tokenizer.prepareTokenizer === undefined)
+          throw new Error('Missing acquired tokenizer');
+        const prepareTokenizer = tokenizer.prepareTokenizer.bind(tokenizer);
+        const entered = gate();
+        const released = gate();
+        const held = spyOn(tokenizer, 'prepareTokenizer').mockImplementation(
+          async (...args) => {
+            entered.release();
+            await released.promise;
+            return prepareTokenizer(...args);
+          },
+        );
+        const publication = AgentProfilePreflight.createForegroundAgent(
+          operation,
+          result.token,
+          intent,
+          {},
+        );
+        void publication.catch(() => undefined);
+        await entered.promise;
+        let closed = false;
+        const closing = Promise.resolve(activation.dispose()).then(() => {
+          closed = true;
+        });
+        void closing.catch(() => undefined);
+        try {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(closed).toBe(false);
+          released.release();
+          await expect(publication).rejects.toMatchObject({
+            name: 'AbortError',
+          });
+          await closing;
+          supplied?.writeUserParameter('context-limit', 16384);
+          expect(supplied?.readNamedParameter('context-limit')).toBe(
+            borrowed ? 16384 : undefined,
+          );
+          await expect(activation.readHistory()).rejects.toThrow('disposed');
+        } finally {
+          released.release();
+          held.mockRestore();
+          await Promise.allSettled([publication, closing]);
+        }
+      });
+    });
+  }
+
+  it('denies foreground construction synchronously once its owning admission closes', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const intent = { provider: 'openai', authMode: 'none' } as const;
+      const result = await operation.preflight(intent);
+      if (result.token === undefined)
+        throw new Error('Missing activation receipt');
+      const activation = transfer(operation);
+      activation.closeForegroundAdmission();
+      let synchronousFailure: unknown;
+      const create = AgentActivationBootstrap.prototype.createForeground;
+      const observation = spyOn(
+        AgentActivationBootstrap.prototype,
+        'createForeground',
+      ).mockImplementation(function (this: AgentActivationBootstrap, ...args) {
+        try {
+          return create.call(this, ...args);
+        } catch (error) {
+          synchronousFailure = error;
+          throw error;
+        }
+      });
+      try {
+        await expect(
+          AgentProfilePreflight.createForegroundAgent(
+            operation,
+            result.token,
+            intent,
+            {},
+          ),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+        expect(synchronousFailure).toMatchObject({ name: 'AbortError' });
+        expect(await activation.readHistory()).toStrictEqual([]);
+      } finally {
+        observation.mockRestore();
+      }
+    });
+  });
+
+  it('publishes the acquired session without distributing individual owners', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const intent = { provider: 'openai', authMode: 'none' } as const;
+      const result = await operation.preflight(intent);
+      if (result.token === undefined)
+        throw new Error('Missing activation receipt');
+      const activation = transfer(operation);
+      const history = await activation.readHistory();
+      const agent = await AgentProfilePreflight.createForegroundAgent(
+        operation,
+        result.token,
+        intent,
+        {},
+      );
+      try {
+        expect(await agent.getHistory()).toStrictEqual(history);
+        expect(agent.listTools().length).toBeGreaterThan(0);
+        await expect(activation.readHistory()).rejects.toThrow('disposed');
+      } finally {
+        await agent.dispose();
+      }
+    });
+  });
+
+  it('joins an accepted history snapshot before transferring the foreground session', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const intent = { provider: 'openai', authMode: 'none' } as const;
+      const result = await operation.preflight(intent);
+      if (result.token === undefined)
+        throw new Error('Missing activation receipt');
+      const activation = transfer(operation);
+      const entered = gate();
+      const released = gate();
+      const getHistory = AgentClient.prototype.getHistory;
+      const observation = spyOn(
+        AgentClient.prototype,
+        'getHistory',
+      ).mockImplementation(async function (this: AgentClient) {
+        const history = await getHistory.call(this);
+        entered.release();
+        await released.promise;
+        return history;
+      });
+      const history = activation.readHistory();
+      await entered.promise;
+      observation.mockRestore();
+      let transferred = false;
+      const pending = AgentProfilePreflight.createForegroundAgent(
+        operation,
+        result.token,
+        intent,
+        {},
+      ).then((agent) => {
+        transferred = true;
+        return agent;
+      });
+      void pending.catch(() => undefined);
+      const lateRead = activation.readHistory();
+      void lateRead.catch(() => undefined);
+      try {
+        expect(transferred).toBe(false);
+        released.release();
+        await expect(lateRead).rejects.toThrow('disposed');
+        const agent = await pending;
+        try {
+          expect(await agent.getHistory()).toStrictEqual(await history);
+          expect(agent.listTools().length).toBeGreaterThan(0);
+        } finally {
+          await agent.dispose();
+        }
+      } finally {
+        observation.mockRestore();
+        released.release();
+        await history;
+        const agent = await pending;
+        await agent.dispose();
+      }
+    });
+  });
+
+  it('keeps preflight history with the adopted session and closes captured reads on retirement', async () => {
+    await withPreflight(false, async (operation, prepare) => {
+      await prepare();
+      const intent = { provider: 'openai', authMode: 'none' } as const;
+      const result = await operation.preflight(intent);
+      if (result.token === undefined)
+        throw new Error('Missing activation receipt');
+      const activation = transfer(operation);
+      const history = await activation.readHistory();
+      const agent = await AgentProfilePreflight.createForegroundAgent(
+        operation,
+        result.token,
+        intent,
+        {},
+      );
+      try {
+        expect(await agent.getHistory()).toStrictEqual(history);
+        expect(agent.listTools().length).toBeGreaterThan(0);
+        await expect(activation.readHistory()).rejects.toThrow('disposed');
+      } finally {
+        await agent.dispose();
+      }
+    });
+  });
+
+  for (const borrowed of [false, true]) {
     it(`constructs the foreground Agent privately from its accepted activation (borrowed ${borrowed})`, async () => {
       await withPreflight(borrowed, async (operation, prepare, supplied) => {
         await prepare();
@@ -205,10 +425,20 @@ describe('post-config preflight ownership', () => {
         if (result.token === undefined)
           throw new Error('Missing activation receipt');
         const activation = transfer(operation);
-        const bus = activation.messageBus;
+        const bus = capturedActivation(activation).messageBus;
         if (bus === undefined)
           throw new Error('Missing activation message bus');
-        const client = activation.sessionClient.getAgentClient();
+        const client = capturedSessionClient(
+          capturedActivation(activation).owner,
+        );
+        const subscribedBuses: MessageBus[] = [];
+        const subscribe = bus.subscribe.bind(bus);
+        const subscription = spyOn(bus, 'subscribe').mockImplementation(
+          function (this: MessageBus, ...args) {
+            subscribedBuses.push(this);
+            return subscribe(...args);
+          },
+        );
         const agent = await AgentProfilePreflight.createForegroundAgent(
           operation,
           result.token,
@@ -216,7 +446,7 @@ describe('post-config preflight ownership', () => {
           {},
         );
         try {
-          expect(agent.getMessageBus()).toBe(bus);
+          expect(subscribedBuses.slice(-1).values().next().value).toBe(bus);
           expect(
             (await agent.getHistory()).length -
               (await client.getHistory()).length,
@@ -234,6 +464,7 @@ describe('post-config preflight ownership', () => {
             ),
           ).rejects.toThrow('already');
         } finally {
+          subscription.mockRestore();
           await agent.dispose();
         }
         supplied?.writeUserParameter('context-limit', 8192);
@@ -261,14 +492,16 @@ describe('post-config preflight ownership', () => {
       const activation = transfer(operation);
       try {
         expect(
-          activation.sessionClient.getAgentClient().getContentGeneratorConfig()
-            ?.model,
+          capturedSessionClient(
+            capturedActivation(activation).owner,
+          ).getContentGeneratorConfig()?.model,
         ).toBe('profile-selected-model');
         expect(operation.readNamedParameter('context-limit')).toBe(4096);
         await operation.finishPostConfiguration();
         expect(
-          activation.sessionClient.getAgentClient().getContentGeneratorConfig()
-            ?.model,
+          capturedSessionClient(
+            capturedActivation(activation).owner,
+          ).getContentGeneratorConfig()?.model,
         ).toBe('profile-selected-model');
       } finally {
         await activation.dispose();
@@ -291,11 +524,11 @@ describe('post-config preflight ownership', () => {
         expect(result.switchError).toBeUndefined();
         const activation = transfer(operation);
         try {
-          expect(activation.settingsOwnerOwnership).toBe(
+          expect(capturedActivation(activation).settingsOwnerOwnership).toBe(
             borrowed ? 'borrowed' : 'transferred',
           );
-          expect(activation.messageBus).toBe(
-            activation.oauthManager?.runtimeMessageBus,
+          expect(capturedActivation(activation).messageBus).toBe(
+            capturedActivation(activation).oauthManager?.runtimeMessageBus,
           );
           await operation.finishPostConfiguration();
           await operation.dispose();

@@ -1,3 +1,5 @@
+import { capturedActivation } from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { capturedSessionClient } from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type {
   Agent,
@@ -97,12 +99,14 @@ describe('Runtime Provider Switching Integration', () => {
     preflight.transferActivation((activation) => {
       close = () => activation.dispose();
       expect(() =>
-        activation.sessionClient.getAgentClient().assertConfig(config),
+        capturedSessionClient(
+          capturedActivation(activation).owner,
+        ).assertConfig(config),
       ).not.toThrow();
       expect(() =>
-        activation.sessionClient
-          .getAgentClient()
-          .assertProviderManager(providerManager),
+        capturedSessionClient(
+          capturedActivation(activation).owner,
+        ).assertProviderManager(providerManager),
       ).not.toThrow();
     });
     try {

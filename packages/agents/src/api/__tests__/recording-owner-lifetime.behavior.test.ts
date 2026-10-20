@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -289,7 +290,9 @@ describe('recording owner lifetime', () => {
               blocks: [{ type: 'text', text: 'subscription-failure-seed' }],
             },
           ]);
-          const history = agent.agentClient.getHistoryService();
+          const history = fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService();
           if (history === null)
             throw new Error('Borrowed agent has no history event source');
           const failure = new Error(

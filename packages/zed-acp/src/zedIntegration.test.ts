@@ -1,3 +1,9 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { AgentResourceCapture } from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
 import { internalConfig } from '../../agents/src/api/__tests__/helpers/agentHarness.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -255,16 +261,28 @@ describe('ZedAgent.newSession', () => {
 
   it('creates independent Agent sessions with session-scoped configs', async () => {
     const capturedConfigs: Config[] = [];
-    const capturedManagers: Array<Agent['providerManager']> = [];
+    const capturedManagers: RuntimeProviderManager[] = [];
     const capturedAgents: Agent[] = [];
     mockCreateAgent.mockImplementation(
       async (
         ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
       ) => {
-        const agent = await actual.createAgentFromSettingsSnapshot(...args);
+        const capture = new AgentResourceCapture();
+        const agent = await capture.construct(() =>
+          actual.createAgentFromSettingsSnapshot(
+            {
+              ...args[0],
+              runtimeFactoryBindings: capture.factories(
+                args[0].runtimeFactoryBindings,
+              ),
+            },
+            args[1],
+          ),
+        );
+        capture.bindAgent(agent);
         capturedAgents.push(agent);
         capturedConfigs.push(internalConfig(agent));
-        capturedManagers.push(agent.providerManager);
+        capturedManagers.push(capture.manager);
         return agent;
       },
     );
@@ -447,7 +465,7 @@ describe('ZedAgent.authenticate credential cache', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -567,7 +585,7 @@ describe('ZedAgent.authenticate credential cache', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   const builtReleases: Array<() => Promise<void>> = [];

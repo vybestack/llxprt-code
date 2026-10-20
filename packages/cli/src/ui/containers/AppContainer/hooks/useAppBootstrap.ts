@@ -41,7 +41,6 @@ export interface AppBootstrapProps {
   readTerminalBackground: () => string | undefined;
   readCurrentIde: () => IdeInfo | undefined;
   readIdeMode: () => boolean;
-  registerIdeCleanup: () => void;
   readDebugMode: () => boolean;
   triggerSessionStart: UseSessionInitializationParams['triggerSessionStart'];
   appendHistory: (content: IContent) => Promise<void>;
@@ -195,12 +194,6 @@ function useBootstrapHistory(props: AppBootstrapProps) {
   };
 }
 
-function useIdeClientCleanup(registerIdeCleanup: () => void): void {
-  useEffect(() => {
-    registerIdeCleanup();
-  }, [registerIdeCleanup]);
-}
-
 function useMirroredTokenMetrics(
   settingsStore: SettingsProfileStore,
   tokenMetrics: ReturnType<typeof useTokenMetricsTracking>['tokenMetrics'],
@@ -223,7 +216,6 @@ function useBootstrapEvents(
   const oauthControl = useOAuthControl();
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = props.readCurrentIde();
-  useIdeClientCleanup(props.registerIdeCleanup);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
     !props.readIdeMode() &&

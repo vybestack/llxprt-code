@@ -1,3 +1,4 @@
+import { AdoptedProviderFixture } from './helpers/adopted-provider-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,7 +22,7 @@ import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
-import { acquireAdoptedOAuth } from '../adopted-provider-assembly.js';
+
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import {
   MemoryTokenStore,
@@ -82,14 +83,15 @@ describe('provider switch assembly', () => {
       credentials().authority,
       settingsOwner,
     );
-    const adoptedOAuth = acquireAdoptedOAuth(
+    const adoptedOAuth = new AdoptedProviderFixture(
+      config,
+      settings,
+      'same-label',
+    ).acquireOAuth(
       oauth,
       undefined,
       policy.session.messageBus,
-      config,
-      settings,
       manager,
-      'same-label',
       undefined,
       credentials().authority,
       new AcquisitionRelease(),

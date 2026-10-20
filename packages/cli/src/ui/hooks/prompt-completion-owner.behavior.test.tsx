@@ -5,7 +5,6 @@
  */
 import { useMemo, act } from 'react';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import type { IContent, ModelOutput } from '@vybestack/llxprt-code-core';
 import { describe, expect, it, vi, afterEach } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -16,7 +15,11 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
 
-function useOwnedCompletion(owner: Agent, invocationAgent: Agent) {
+function useOwnedCompletion(
+  owner: Agent,
+  invocationAgent: Agent,
+  observe: (completion: Promise<string>) => void,
+) {
   const buffer = useTextBuffer({
     initialText: 'Create a guide for',
     initialCursorOffset: 18,
@@ -33,16 +36,15 @@ function useOwnedCompletion(owner: Agent, invocationAgent: Agent) {
       },
     },
   });
-  const generateContent = useMemo(() => {
-    const provider = owner.providerManager.getActiveProvider();
-    if (!provider) throw new Error('Fixture provider missing');
-    return async (contents: IContent[]): Promise<ModelOutput> => {
-      const blocks: IContent['blocks'] = [];
-      for await (const chunk of provider.generateChatCompletion(contents))
-        blocks.push(...chunk.blocks);
-      return { content: { speaker: 'ai', blocks } };
-    };
-  }, [owner]);
+  const generateContent = useMemo(
+    (): Agent['generate'] =>
+      (...args) => {
+        const completion = owner.generate(...args);
+        observe(completion);
+        return completion;
+      },
+    [owner, observe],
+  );
   return useCommandCompletion(
     true,
     buffer,
@@ -83,20 +85,36 @@ describe('prompt completion ownership', () => {
     const owner = await makeOwner('owner');
     process.env.LLXPRT_FAKE_RESPONSES = siblingResponses;
     const sibling = await makeOwner('sibling');
+    let pending: Promise<string> | undefined;
+    const observe = (completion: Promise<string>): void => {
+      pending = completion;
+    };
+    const finish = async (): Promise<void> => {
+      if (pending === undefined)
+        throw new Error('Debounce did not admit the registered completion');
+      await act(async () => {
+        await pending;
+      });
+      pending = undefined;
+    };
     vi.useFakeTimers();
-    const first = renderHook(() => useOwnedCompletion(owner, sibling));
+    const first = renderHook(() => useOwnedCompletion(owner, sibling, observe));
     await act(async () => {
       await advanceTimersByTimeAsync(251);
     });
+    await finish();
     expect(first.result.current.text).toBe(
       'Create a guide for registered workspace',
     );
     first.unmount();
     await owner.dispose();
-    const second = renderHook(() => useOwnedCompletion(sibling, owner));
+    const second = renderHook(() =>
+      useOwnedCompletion(sibling, owner, observe),
+    );
     await act(async () => {
       await advanceTimersByTimeAsync(251);
     });
+    await finish();
     expect(second.result.current.text).toBe(
       'Create a guide for sibling workspace',
     );

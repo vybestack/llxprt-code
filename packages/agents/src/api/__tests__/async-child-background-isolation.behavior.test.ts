@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +25,6 @@ import {
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentEvent,

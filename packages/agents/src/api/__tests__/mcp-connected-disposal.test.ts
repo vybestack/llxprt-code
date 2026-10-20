@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   Config,
@@ -58,7 +64,6 @@ import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/co
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { get } from 'node:http';
 import { buildAgent } from './helpers/agentHarness.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -205,7 +210,7 @@ describe('connected MCP disposal', () => {
       builtCallerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    builtCallerOwner = await SessionClientOwner.create(
+    builtCallerOwner = await createCapturedSessionOwner(
       builtCallerConfig,
       assembleTaskSchemaPolicy(builtCallerSettings),
       builtCallerManager,
@@ -325,7 +330,7 @@ describe('connected MCP disposal', () => {
     );
     requireCallerActivation(activation);
     await builtCallerOwner.initializeTools();
-    await builtCallerOwner.getAgentClient().startChat();
+    await capturedSessionClient(builtCallerOwner).startChat();
   }
 
   let directory = '';
@@ -362,7 +367,9 @@ describe('connected MCP disposal', () => {
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {
-      const tools = built.agent.agentClient.tools;
+      const tools = fixtureAgentResources(built.agent).publishedClient(
+        built.agent,
+      ).tools;
       expect(
         tools
           .getAllTools()
@@ -415,10 +422,12 @@ describe('connected MCP disposal', () => {
       builtCallerPolicy.session.messageBus,
       builtCallerMcp,
       undefined,
-      builtCallerOwner.getAgentClient(),
+      capturedSessionClient(builtCallerOwner),
     );
     try {
-      expect(agent.getMessageBus()).toBe(builtCallerPolicy.session.messageBus);
+      expect(fixtureAgentResources(agent).messageBus).toBe(
+        builtCallerPolicy.session.messageBus,
+      );
       expect(new Set([builtCallerMcp.toolSelection, catalog]).size).toBe(1);
       expect(
         before.split('\n').filter((line) => line === 'tools/list'),

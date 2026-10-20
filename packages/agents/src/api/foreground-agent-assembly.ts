@@ -1,242 +1,176 @@
-import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
-import {
-  createAgentAuthState,
-  type AgentAuthState,
-} from './control/authState.js';
-import type { McpControl } from './control/mcpControl.js';
-import { WorkspaceControl } from './control/workspaceControl.js';
-import { assembleIdeControl } from './control/ideControl.js';
-import { LspControl } from './control/lspControl.js';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { CoreToolScheduler } from '../core/coreToolScheduler.js';
-import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
-import { withChildToolDisplay } from '../session/childToolAssembly.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { WorkspaceSkillOperations } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { ChildToolDisplay } from '../session/childToolDisplay.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
 import { ShellJobOwner } from '../session/shell-job-owner.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
+
 import {
-  assembleTaskOwner,
-  cleanupFailedShellBootstrap,
-} from './agent-shell-assembly.js';
+  ApprovalMode,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  Agent,
+  AgentInput,
+  AgentMemoryControl,
+  AgentMessage,
+  CompressionResult,
+  GenerateOptions,
+  ProviderInfo,
+  TurnOptions,
+} from './agent.js';
+import type { StableDisplayCallbacksHolder } from './agentBootstrap.js';
+import { buildProviderInfos } from './agentBootstrap.js';
 import {
-  buildFacadeState,
-  createStableDisplayCallbacks,
-  recordOwnership,
-  type StableDisplayCallbacksHolder,
-  type StableEditorCallbacksHolder,
-} from './agentBootstrap.js';
-import type { AgentAuth } from './config-types.js';
+  assembleAgentShutdown,
+  collectDisposalError,
+  disposeAgentObservers,
+  disposeConfigInfrastructure,
+  disposeOAuthManager,
+  disposeWorkspaceFacades,
+  finishOwnedHooks,
+  joinAgentWork,
+  joinCapturedRun,
+} from './agentDisposeHelpers.js';
+import type { AgentAuth, EditorCallbacks } from './config-types.js';
+import type { AuthControl } from './control/authControl.js';
+import { type AgentAuthState } from './control/authState.js';
+import { type HookControl } from './control/hooks.js';
+import type { IdeControl } from './control/ideControl.js';
+import { LspControl } from './control/lspControl.js';
+import type { McpControl } from './control/mcpControl.js';
+import { PolicyControl } from './control/policyControl.js';
+import type { SessionControl } from './control/sessionControl.js';
+import { SkillsControl } from './control/skillsControl.js';
+import type { TasksControl } from './control/tasksControl.js';
+import { createTasksControl } from './control/tasksControl.js';
+import type { ToolControl } from './control/toolControl.js';
+import { assembleToolKeys } from './control/toolKeysControl.js';
+import { assembleDirectProviderAdmission } from './directProviderAdmission.js';
+import type { AgentEvent } from './event-types.js';
+import { ForegroundRunLifecycle } from './foregroundRunLifecycle.js';
+import type { AgentMcpOperations } from './mcpRuntimeAssembly.js';
+import { createNewSessionAdmission } from './new-session-admission.js';
+import { assembleProfilePersistence } from './profilePersistenceAssembly.js';
+import { createRecordingExecution } from './recordingExecution.js';
 import {
-  assembleSessionAuthentication,
-  clearProviderAuthenticationCache,
-} from './control/session-authentication.js';
-import { assembleModelSelection } from './model-selection.js';
-import { setActiveModel } from './providerMutations.js';
+  idleClient,
+  initializeProviderState,
+  resetIdleChat,
+} from './session-control-assembly.js';
+import { SessionProviderOwner } from './session-provider-reads.js';
+import type {
+  SessionCleanupAction,
+  SessionLifecycle,
+} from './sessionLifecycle.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  Config,
-  RuntimeProviderManager,
+
+import {
+  type WorkspaceDefinitionOwner,
+  type WorkspaceTrustControlPort,
 } from '@vybestack/llxprt-code-core';
-import { openBrowserSecurely } from '@vybestack/llxprt-code-core';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import {
-  KeychainTokenStorage,
-  MCPOAuthTokenStorage,
-} from '@vybestack/llxprt-code-mcp';
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+
+import { type WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { type WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
-import { runCleanupSteps } from '../core/subagent-cleanup.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
+import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import { type SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import { withChildToolDisplay } from '../session/childToolAssembly.js';
+
 import {
-  AgentActivationBootstrap,
-  type ActivationPreflightToken,
-} from './activationPreflightState.js';
-import type { Agent } from './agent.js';
+  assembleTaskOwner,
+  cleanupFailedShellBootstrap,
+} from './agent-shell-assembly.js';
+
+import {
+  buildFacadeState,
+  createStableDisplayCallbacks,
+  recordOwnership,
+  type StableEditorCallbacksHolder,
+} from './agentBootstrap.js';
 import { AgentImpl } from './agentImpl.js';
-import type {
-  AgentForegroundHost,
-  AgentSchedulerHandle,
-  ProviderActivationIntent,
-} from './config-types.js';
-import { resolveSchedulerFactory } from './createAgent.js';
-import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
-import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
-import { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
-import { createTaskRegistration } from './runtimeFactories.js';
-import { DEFAULT_SKILL_OPERATIONS } from './workspace-skill-assembly.js';
+import { type AgentSchedulerHandle } from './config-types.js';
+import { createAgentAuthState } from './control/authState.js';
+import { assembleIdeControl } from './control/ideControl.js';
 
-export class ForegroundAgentAssembly {
-  private mcp: McpRuntimeOwner | undefined;
-  private client: SessionClientOwner | undefined;
-  private media: SessionMediaOwner | undefined;
-  private agent: Agent | undefined;
-  private readonly cancellation = new AbortController();
-  private readonly bus;
-  constructor(
-    private readonly operation: AgentActivationBootstrap,
-    private readonly config: Config,
-    private readonly token: ActivationPreflightToken,
-    private readonly intent: ProviderActivationIntent,
-    private readonly host: AgentForegroundHost,
-    private readonly settings: SettingsService,
-    private readonly settingsOwner: SessionSettingsOwner,
-    private readonly manager: RuntimeProviderManager,
-    private readonly oauth: OAuthManager,
-    private readonly policy: RuntimePolicyOwner | undefined,
-    private readonly authority: CredentialAuthority,
-    private readonly releaseProviders: () => Promise<void>,
-  ) {
-    this.bus = operation.messageBus;
-  }
-  closeAdmission(): void {
-    this.cancellation.abort();
-  }
-  async dispose(): Promise<void> {
-    await this.agent?.dispose();
-  }
-  async assemble(): Promise<Agent> {
-    const { config, token, intent, host } = this;
-    let broker: ReturnType<typeof assembleHostGitHubBroker>;
-    try {
-      broker = assembleHostGitHubBroker(host);
-      await this.#constructForegroundMcp();
-      if (this.mcp === undefined)
-        throw new Error('Foreground MCP is not acquired');
-      this.cancellation.signal.throwIfAborted();
-      const client = this.operation.takeSessionClient(config);
-      this.client = client;
-      this.media = this.operation.takeMediaOwner(config);
-      this.operation.takeSettingsOwner(this.settings);
-      client.bindHostGitHub(broker);
-      client.bindMcpRuntime(
-        this.mcp,
-        createTaskRegistration(this.authority),
-        this.mcp.profileDefinitions,
-        this.mcp.subagentDefinitions,
-      );
-      if (!client.hasHookComposition()) client.bindHooks();
-      await this.mcp.initialize();
-      await client.initializeTools();
-      this.cancellation.signal.throwIfAborted();
-      AgentActivationBootstrap.consume(
-        { operation: this.operation, token },
-        config,
-        intent,
-        this.manager,
-        this.settings,
-      );
-      const agent = await this.#finishForeground();
-      this.agent = agent;
-      this.cancellation.signal.throwIfAborted();
-      await this.operation.dispose();
-      host.onSkills?.(this.mcp.workspaceSkills.operations);
-      host.onExtensionRestart?.(
-        this.mcp.extensionOperations.restart.bind(this.mcp.extensionOperations),
-      );
-      return agent;
-    } catch (primary) {
-      const agent = this.agent;
-      if (agent !== undefined) {
-        try {
-          await agent.dispose();
-        } catch (cleanup) {
-          throw new AggregateError(
-            [primary, cleanup],
-            'Foreground publication and cleanup failed',
-          );
-        }
-        throw primary;
-      }
-      return cleanupFailedAdoption(
-        primary,
-        () =>
-          runCleanupSteps([
-            () => this.releaseProviders(),
-            () => this.operation.dispose(),
-            () => broker?.cleanupFailedConstruction(),
-            () => config.dispose(),
-          ]),
-        this.mcp?.dispose.bind(this.mcp),
-        this.media?.dispose.bind(this.media),
-        this.client?.dispose.bind(this.client),
-      );
-    }
-  }
+import { resolveSchedulerFactory } from '../session/assembleSchedulerOwner.js';
+import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
+import {
+  assembleSessionAuthentication,
+  clearProviderAuthenticationCache,
+} from './control/session-authentication.js';
+import { assembleForegroundWorkspace } from './foreground-workspace-control.js';
+import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import { assembleModelSelection } from './model-selection.js';
+import { setActiveModel } from './providerMutations.js';
+const UNCONFIGURED_AGENT_MESSAGE =
+  'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
 
-  async #constructForegroundMcp(): Promise<void> {
-    const transport = this.host.mcpHost;
-    const mcp = await McpRuntimeOwner.create(
-      {
-        getAuthProviderFactory: transport?.getAuthProviderFactory,
-        tokenStorage: new MCPOAuthTokenStorage(
-          new KeychainTokenStorage(
-            'llxprt-cli-mcp-oauth',
-            transport?.emitFeedback,
-          ),
-        ),
-        openBrowser: transport?.openBrowser ?? openBrowserSecurely,
-      },
-      this.config,
-      this.bus,
-      { emitFeedback: transport?.emitFeedback },
-      undefined,
-      undefined,
-      this.policy,
-      'caller',
-      undefined,
-      'runtime',
-      this.operation.workspaceFilesystem,
-      'runtime',
-      {
-        owner: this.operation.workspaceMemory,
-        ownership:
-          this.operation.workspaceMemoryOwnership === 'transferred'
-            ? 'runtime'
-            : 'caller',
-      },
-      this.operation.workspaceDefinitions,
-      'runtime',
-      this.operation.workspaceTrust,
-      undefined,
-      this.operation.trustCleanup,
-      {
-        reloadPolicy:
-          this.host.skillPolicy ?? DEFAULT_SKILL_OPERATIONS.reloadPolicy,
-        registerTools:
-          this.host.registerSkillTools ??
-          DEFAULT_SKILL_OPERATIONS.registerTools,
-      },
-      this.settingsOwner.readMcpSettingsBinding(),
-    );
-    this.mcp = mcp;
-  }
+export abstract class ForegroundAgentAssembly extends SessionProviderOwner {
+  readonly #constructionCancellation = new AbortController();
 
-  async #finishForeground(): Promise<Agent> {
+  protected closeConstructionAdmission(): void {
+    this.#constructionCancellation.abort();
+  }
+  protected mediaOwner: SessionMediaOwner | undefined;
+  protected ownsSessionClient = true;
+  protected ownsSettings = true;
+  protected ownsMemory = false;
+  protected providerFileLifecycle!: ProviderFileLifecycle | undefined;
+  protected ownedSessionClient!: SessionClientOwner;
+  protected workspaceFilesystem!: WorkspaceFilesystemOwner;
+  protected workspaceMemory!: WorkspaceMemoryOwner;
+  protected ownsFilesystem!: boolean;
+  protected settingsOwner!: SessionSettingsOwner;
+  protected settingsOwnerOwnership!: 'borrowed' | 'transferred';
+  protected workspaceDefinitions!: WorkspaceDefinitionOwner;
+  protected ownsDefinitions!: boolean;
+  protected workspaceTrust!: WorkspaceTrustControlPort;
+  protected trustCleanup!: (() => Promise<void>) | undefined;
+  protected oauthManager!: OAuthManager | undefined;
+  protected messageBus!: MessageBus | undefined;
+  protected workspaceMemoryOwnership!: 'borrowed' | 'transferred';
+  protected foregroundMcp: McpRuntimeOwner | undefined;
+  protected foregroundSettings!: SettingsService;
+  protected foregroundManager!: RuntimeProviderManager;
+  protected foregroundOAuth!: OAuthManager;
+  protected releaseForegroundProviders!: () => Promise<void>;
+  protected assertConstructionOpen(): void {
+    this.#constructionCancellation.signal.throwIfAborted();
+  }
+  protected async finishForeground(): Promise<Agent> {
     const handles: AgentSchedulerHandle[] = [];
     const provider =
-      this.manager.getActiveProviderName() ?? this.config.getProvider() ?? '';
+      this.foregroundManager.getActiveProviderName() ??
+      this.config.getProvider() ??
+      '';
     const model =
       this.settingsOwner.readSelectedModel() ?? this.config.getModel();
-    await this.operation.tokenizerFactory.prepareTokenizer?.(provider, model);
+    await this.ownedSessionClient.tokenizerFactory.prepareTokenizer?.(
+      provider,
+      model,
+    );
+    this.assertConstructionOpen();
     return this.#acquireFacade(
       { provider, model },
-      admittedEndpoint(this.settings, provider),
+      admittedEndpoint(this.foregroundSettings, provider),
       handles,
       resolveSchedulerFactory(false, undefined, handles),
     );
   }
-
   async #acquireFacade(
     parsed: Parameters<typeof buildFacadeState>[0] & {
       readonly auth?: AgentAuth;
@@ -245,17 +179,20 @@ export class ForegroundAgentAssembly {
     handles: AgentSchedulerHandle[],
     scheduler: SchedulerConstruction | undefined,
   ): Promise<Agent> {
-    if (this.client === undefined)
-      throw new Error('Foreground client is not acquired');
-    const tasks = assembleTaskOwner(this.settings, undefined);
+    const tasks = assembleTaskOwner(this.foregroundSettings, undefined);
     const shell = new ShellJobOwner(() =>
-      resolveShellJobSettings(this.settings),
+      resolveShellJobSettings(this.foregroundSettings),
     );
     const child = new ChildToolDisplay();
     const display: StableDisplayCallbacksHolder = {};
     try {
       const editors = { editorCallbacks: {} };
-      this.client.initializeExecution(
+      this.ownedSessionClient.toolCatalog.bindChildExecution(
+        child,
+        tasks,
+        shell,
+      );
+      this.ownedSessionClient.initializeExecution(
         withChildToolDisplay(
           scheduler ?? ((options) => new CoreToolScheduler(options)),
           child,
@@ -279,64 +216,19 @@ export class ForegroundAgentAssembly {
       return cleanupFailedShellBootstrap(primary, tasks, shell);
     }
   }
-  #constructMcpControl(auth: AgentAuthState): McpControl {
-    if (this.client === undefined || this.mcp === undefined)
-      throw new Error('Foreground controls are not acquired');
-    return buildOwnedMcpControl(
-      this.mcp.readServerSettings.bind(this.mcp),
-      this.client.toolCatalog.selection,
-      this.mcp.listPrompts.bind(this.mcp),
-      this.mcp.listResources.bind(this.mcp),
-      this.mcp.readOAuthCredentials.bind(this.mcp),
-      this.mcp.performOAuth.bind(this.mcp),
-      this.mcp.status.bind(this.mcp),
-      this.mcp.refresh.bind(this.mcp),
-      this.mcp.reload.bind(this.mcp),
-      (server) => auth.mcpAuth.has(server),
-      (server) => auth.mcpAuth.add(server),
-      () => this.#refreshClientTools(),
-      this.mcp.subscribeStatus.bind(this.mcp),
-      this.mcp.findResource.bind(this.mcp),
-      this.mcp.readResource.bind(this.mcp),
-    );
-  }
-  #refreshClientTools(): Promise<void> {
-    if (this.client === undefined)
-      throw new Error('Foreground client is not acquired');
-    return this.client.getAgentClient().setTools();
-  }
   async #selectModel(model: string): Promise<void> {
     await setActiveModel(
       model,
       assembleModelSelection(this.settingsOwner),
-      this.settings,
-      this.manager.getActiveProvider(),
+      this.foregroundSettings,
+      this.foregroundManager.getActiveProvider(),
     );
   }
   #authentication(): Agent['authentication'] {
-    return assembleSessionAuthentication(this.oauth, (provider) =>
+    return assembleSessionAuthentication(this.foregroundOAuth, (provider) =>
       clearProviderAuthenticationCache(
-        this.manager.getProviderByName(provider),
+        this.foregroundManager.getProviderByName(provider),
       ),
-    );
-  }
-  #constructWorkspace(): WorkspaceControl {
-    if (this.mcp === undefined)
-      throw new Error('Foreground workspace is not acquired');
-    return new WorkspaceControl(
-      this.mcp.profileDefinitions,
-      this.mcp.profileWrites,
-      this.mcp.subagentDefinitions,
-      this.mcp.subagentWrites,
-      this.mcp.checkpointOperations,
-      this.mcp.workspaceIgnore,
-      this.mcp.workspaceSearch,
-      this.mcp.workspaceFiles,
-      this.mcp.workspacePaths.contains,
-      this.mcp.workspacePaths.directories,
-      this.mcp.addWorkspaceDirectory,
-      this.config.getTargetDir(),
-      this.config.getProjectRoot(),
     );
   }
   #constructFacade(
@@ -351,7 +243,7 @@ export class ForegroundAgentAssembly {
     editors: StableEditorCallbacksHolder,
     display: StableDisplayCallbacksHolder,
   ): Agent {
-    if (this.client === undefined || this.mcp === undefined)
+    if (this.foregroundMcp === undefined)
       throw new Error('Foreground facade is not acquired');
     const runtimeState = buildFacadeState(
       parsed,
@@ -359,54 +251,619 @@ export class ForegroundAgentAssembly {
       this.config.getSessionId(),
     );
     const ownership = recordOwnership({
-      runtimeHandle: { cleanup: () => this.releaseProviders() },
+      runtimeHandle: { cleanup: () => this.releaseForegroundProviders() },
       injectedSchedulerHandles: handles,
       configOwnership: 'agent',
-      disposeMcpRuntime: this.mcp.dispose.bind(this.mcp),
+      disposeMcpRuntime: this.foregroundMcp.dispose.bind(this.foregroundMcp),
     });
-    const history =
-      this.client.getAgentClient().getHistoryService() ?? new HistoryService();
-    this.client.getAgentClient().storeHistoryServiceForReuse(history);
+    this.ownedSessionClient.initializeConversation();
     const auth = createAgentAuthState();
-    return new AgentImpl(
-      this.settingsOwner,
-      this.client,
-      this.mcp.workspaceSkills.operations,
-      undefined,
-      this.media,
-      tasks,
-      shell,
-      this.#constructWorkspace(),
-      assembleIdeControl(
-        this.mcp.trust,
-        this.mcp.ide,
-        () => editors.editorCallbacks,
-      ),
-      new LspControl(this.mcp.lspInspection),
-      this.mcp.awaitDiscovery.bind(this.mcp),
-      this.mcp.closeAdmission.bind(this.mcp),
-      this.#constructMcpControl(auth),
-      auth,
+    this.facadeSettingsOwner = this.settingsOwner;
+    this.facadeSessionOwner = this.ownedSessionClient;
+    this.facadeWorkspaceSkills = this.foregroundMcp.workspaceSkills.operations;
+    this.facadeMediaOwner = this.mediaOwner;
+    this.facadeTaskOwner = tasks;
+    this.facadeShellOwner = shell;
+    this.workspace = assembleForegroundWorkspace(
+      this.foregroundMcp,
       this.config,
-      this.manager,
-      this.oauth,
-      () => (this.config.isInteractive() ? 'cli-interactive' : 'agent'),
-      this.settings,
-      this.config.getSessionId(),
-      () => this.releaseProviders(),
-      this.client.messageBus,
-      runtimeState,
-      ownership,
-      'config',
-      this.client.getAgentClient.bind(this.client),
-      history,
-      editors,
-      display,
-      undefined,
-      parsed.auth,
-      child,
-      (model) => this.#selectModel(model),
-      this.#authentication(),
+    );
+    this.ide = assembleIdeControl(
+      this.foregroundMcp.trust,
+      this.foregroundMcp.ide,
+      () => editors.editorCallbacks,
+    );
+    this.lsp = new LspControl(this.foregroundMcp.lspInspection);
+    this.awaitMcpDiscovery = this.foregroundMcp.awaitDiscovery.bind(
+      this.foregroundMcp,
+    );
+    this.closeMcpAdmission = this.foregroundMcp.closeAdmission.bind(
+      this.foregroundMcp,
+    );
+    this.mcp = assembleForegroundMcpControl(
+      this.foregroundMcp,
+      this.ownedSessionClient.toolCatalog.selection,
+      auth,
+      () => this.ownedSessionClient.refreshToolDefinitions(),
+    );
+    this.facadeAuthState = auth;
+    this.facadeProviderManager = this.foregroundManager;
+    this.facadeOAuth = this.foregroundOAuth;
+    this.facadeRuntimeKind = () =>
+      this.config.isInteractive() ? 'cli-interactive' : 'agent';
+    this.facadeSettingsService = this.foregroundSettings;
+    this.facadeRuntimeId = this.config.getSessionId();
+    this.closeRuntime = () => this.releaseForegroundProviders();
+
+    this.facadeRuntimeState = runtimeState;
+    this.facadeOwnership = ownership;
+    this.sessionIdentityOwnership = 'config';
+
+    this.facadeEditors = editors;
+    this.facadeDisplay = display;
+    this.onOAuthPrompt = undefined;
+    this.initialAuth = parsed.auth;
+    this.childDisplay = child;
+    this.selectOwnerModel = (model) => this.#selectModel(model);
+    this.authentication = this.#authentication();
+    return this.initializeFacade();
+  }
+  protected facadeWorkspaceSkills!: WorkspaceSkillOperations;
+  protected facadeMediaOwner!: SessionMediaOwner | undefined;
+  protected facadeTaskOwner!: TaskLaunchOwner;
+  protected facadeShellOwner!: ShellJobOwner;
+  protected ide!: IdeControl;
+  protected lsp!: LspControl;
+  protected awaitMcpDiscovery!: AgentMcpOperations['awaitDiscovery'];
+  protected closeMcpAdmission!: () => void;
+  protected mcp!: McpControl;
+  protected facadeRuntimeKind!: () => RuntimeKind;
+  protected facadeRuntimeId!: string;
+  protected closeRuntime!: () => Promise<void> | void;
+  protected sessionIdentityOwnership!: 'config' | 'facade';
+
+  protected facadeEditors!: {
+    editorCallbacks: EditorCallbacks;
+  };
+  protected facadeDisplay!: StableDisplayCallbacksHolder;
+  protected childDisplay!: ChildToolDisplay | undefined;
+  protected authentication!: Agent['authentication'];
+
+  protected metrics!: Agent['metrics'];
+
+  readonly listAvailableModels: Agent['listAvailableModels'] = (provider) =>
+    this.facadeProviderManager.getAvailableModels(
+      provider ?? this.getProviderStatus().provider,
+    );
+  protected facadeSessionOperations!: Agent['sessionClient'];
+  private profilePersistence!: ReturnType<typeof assembleProfilePersistence>;
+  protected captureProfile!: Agent['captureProfile'];
+  protected saveProfileSnapshot!: Agent['saveProfileSnapshot'];
+  protected deleteProfileByName!: Agent['deleteProfileByName'];
+  protected getActiveProfileName!: Agent['getActiveProfileName'];
+  protected setDefaultProfileName!: Agent['setDefaultProfileName'];
+  protected getRuntimeDiagnosticsSnapshot!: Agent['getRuntimeDiagnosticsSnapshot'];
+  protected tools!: ToolControl;
+  protected auth!: AuthControl;
+  protected session!: SessionControl;
+  protected hooks!: HookControl;
+  protected policy!: PolicyControl;
+  protected tasks!: TasksControl;
+  protected memory!: AgentMemoryControl;
+  protected skills!: SkillsControl;
+  private constructSessionClient(): Agent['sessionClient'] {
+    return idleClient(
+      this.facadeSessionOwner.operations,
+      this.coordinator,
+      () => this.rebuild(),
     );
   }
+  private constructProfilePersistence(): ReturnType<
+    typeof assembleProfilePersistence
+  > {
+    return assembleProfilePersistence(
+      () => this.config.getModel(),
+      () => this.config.getProvider(),
+      this.facadeSettingsService,
+      this.facadeProviderManager,
+      () => this.facadeSettingsOwner.captureNamedParameters(),
+      this.workspace.profileWrites,
+    );
+  }
+  private constructTools(): ToolControl {
+    const assertSessionAdmission = (): void =>
+      this.coordinator.assertNoCommit();
+    this.facadeTaskOwner.bindSessionAdmission(assertSessionAdmission);
+    this.facadeShellOwner.bindSessionAdmission(assertSessionAdmission);
+    return this.facadeSessionOwner.createToolControl(
+      assertSessionAdmission,
+      this.childDisplay,
+      this.facadeEditors,
+      this.facadeDisplay,
+      assembleToolKeys(),
+    );
+  }
+
+  private buildSessionControl(): SessionControl {
+    return this.facadeSessionOwner.createSessionControl(
+      this.sessionIdentityOwnership,
+      () => this.facadeRuntimeId,
+      createNewSessionAdmission(
+        this.facadeTaskOwner,
+        this.facadeShellOwner,
+        this.coordinator,
+        this.tools,
+        () => this.assertProfileIdle(),
+      ),
+      () => this.coordinator.closeAdmission(),
+      () => this.rebuild(),
+      () => this.providerState.provider,
+      () => this.getModel(),
+    );
+  }
+
+  /**
+   * Builds the HookControl wired to the live Config (HookSystem + enable flag)
+   * and the SHARED MessageBus, so onHookExecution observes bus-mediated hook
+   * executions and triggerSessionStart/triggerSessionEnd fire the real
+   * lifecycle hooks.
+   * @plan:PLAN-20260617-COREAPI.P23
+   * @requirement:REQ-015
+   */
+  private releaseHooks!: () => Promise<void>;
+
+  private buildHookControl(): HookControl {
+    return this.facadeSessionOwner.createHookControl(this.session);
+  }
+
+  /**
+   * Builds the McpControl wired to read the per-agent mcpAuth set plus the
+   * Core-owned MCP runtime capabilities (runtime-status snapshot, refresh,
+   * reload) and tool registry so listServers/status/toolsByServer/
+   * discoveryState/refresh project the REAL discovery surface without
+   * agents reaching the concrete manager.
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   * @requirement:REQ-019
+   */
+
+  /**
+   * Awaits MCP discovery readiness before a model turn (the discovery gate).
+   * The wait is bounded by the manager so a never-settling server cannot hang
+   * the turn. Per-server discovery failures are NON-FATAL: the turn proceeds
+   * with whatever tools are available and each failed server is surfaced as a
+   * warning notice (issue #2516). `mcpDiscovery:'skip'` opts out (returns no
+   * failures without awaiting). Non-blocking methods (mcp.status/discoveryState,
+   * listTools) remain callable throughout.
+   *
+   * @plan:PLAN-20260617-COREAPI.P22
+   * @requirement:REQ-013
+   * @requirement:REQ-019
+   */
+
+  /**
+   * Injects a mid-turn steer message into the active agent loop. Delegates to
+   * the current loop's injectSteer. No-op when no loop is running.
+   */
+  injectSteer(text: string): void {
+    this.activeRun?.loop?.injectSteer(text);
+  }
+
+  /**
+   * Streams AgentEvents by delegating to the current loop's run().
+   * @plan:PLAN-20260617-COREAPI.P15
+   * @requirement:REQ-003
+   * @pseudocode createAgent.md steps 130-148 (loop drives the turn)
+   */
+  stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent> {
+    const admission = assembleDirectProviderAdmission(
+      this.facadeSettingsService,
+      this.facadeProviderManager,
+      () => this.getModel(),
+    );
+    return new ForegroundRunLifecycle(
+      createRecordingExecution(
+        this.session,
+        this.readHookSessionId,
+        this.facadeSessionOwner.hookOperations,
+      ),
+      () => this.profiles.isApplying(),
+      () => this.isProviderReady(),
+      (run) => this.coordinator.admit(run),
+      (run) => this.coordinator.release(run),
+      () => this.facadeSessionOwner.resolveExecution(),
+      () => admission.admit(),
+      () => this.awaitMcpDiscovery(),
+      this.tools.notifyConfirmation.bind(this.tools),
+      this.tools.notifyToolUpdate.bind(this.tools),
+    ).stream(input, opts);
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 1-4
+   */
+  getApprovalMode(): ApprovalMode {
+    return this.ide.isTrustedFolder()
+      ? this.config.getApprovalMode()
+      : ApprovalMode.DEFAULT;
+  }
+
+  /**
+   * @plan:PLAN-20260622-COREAPIGAP.P04
+   * @requirement:REQ-001
+   * @pseudocode lines 10-17
+   */
+  setApprovalMode(mode: ApprovalMode): void {
+    if (!this.ide.isTrustedFolder() && mode !== ApprovalMode.DEFAULT)
+      throw new Error(
+        'Cannot enable privileged approval modes in an untrusted folder.',
+      );
+    this.config.setApprovalMode(mode);
+  }
+
+  /**
+   * Resets the chat through the durable history-clear path while recording is
+   * active, preserving its initial history prefix. Without recording, delegates to the
+   * client's full reset contract.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-010
+   */
+  async resetChat(): Promise<void> {
+    this.assertProfileIdle();
+    await resetIdleChat(this.coordinator, this.session, () =>
+      this.facadeSessionOwner.conversation.resetChat(),
+    );
+  }
+
+  /**
+   * Explicitly triggers history compression via the chat contract's
+   * performCompression, mapping the fine-grained PerformCompressionResult enum
+   * to the public CompressionResult.status and capturing token counts (from the
+   * HistoryService) only when the history was actually compressed. The public
+   * original/new token counts are guaranteed monotonic (original >= new) on the
+   * 'compressed' path.
+   * @plan:PLAN-20260617-COREAPI.P20
+   * @requirement:REQ-011
+   */
+  async compress(opts?: {
+    readonly promptId?: string;
+  }): Promise<CompressionResult> {
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    // Ensure the chat is initialized before accessing it: setHistory can run
+    // before the first turn (startChat is otherwise lazy on first turn).
+    return this.facadeSessionOwner.compressHistory(
+      opts?.promptId ?? `compress-${Date.now()}`,
+      this.session,
+      this.facadeSessionOwner.hookOperations,
+    );
+  }
+
+  /**
+   * Side-channel single-shot generation. Delegates to the client's detached
+   * direct-message path. History reads and writes are opt-in, and generation
+   * does not run a tool loop. Returns the response
+   * text (empty string when the model emits no text part).
+   * @plan:PLAN-20260617-COREAPI.P21
+   * @requirement:REQ-012
+   */
+  async generate(input: AgentInput, opts?: GenerateOptions): Promise<string> {
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    return this.facadeSessionOwner.generateText(
+      input,
+      opts,
+      createRecordingExecution(
+        this.session,
+        () => this.session.getSessionId(),
+        this.facadeSessionOwner.hookOperations,
+      ),
+      assembleDirectProviderAdmission(
+        this.facadeSettingsService,
+        this.facadeProviderManager,
+        this.getModel,
+      ).admit(),
+    );
+  }
+
+  /**
+   * Side-channel structured (JSON) generation. Delegates to the client's
+   * generateJson contract against a snapshot copy of the supplied contents —
+   * detached from the live conversation history.
+   * @plan:PLAN-20260617-COREAPI.P21
+   * @requirement:REQ-012
+   */
+  async generateJson(
+    contents: readonly AgentMessage[],
+    schema: Readonly<Record<string, unknown>>,
+    opts?: GenerateOptions,
+  ): Promise<Record<string, unknown>> {
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    return this.facadeSessionOwner.generateJson(
+      contents,
+      schema,
+      opts?.model ?? this.getModel(),
+      opts?.signal,
+    );
+  }
+
+  /**
+   * Side-channel embedding generation. Delegates to the client's
+   * generateEmbedding contract against a snapshot copy of the input texts —
+   * detached from the live conversation history.
+   * @plan:PLAN-20260617-COREAPI.P21
+   * @requirement:REQ-012
+   */
+  async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    return this.facadeSessionOwner.generateEmbedding(texts);
+  }
+
+  /**
+   * Returns a concrete ProviderInfo[] from the runtime provider manager.
+   * @plan:PLAN-20260617-COREAPI.P15
+   * @requirement:REQ-017
+   */
+  listProviders(): readonly ProviderInfo[] {
+    const names = this.facadeProviderManager.listProviders();
+    return buildProviderInfos(names, new Set(names));
+  }
+
+  /**
+   * Rebuilds the cached AgenticLoop bound to the CURRENT client (AgenticLoop
+   * caches its constructor client and never re-resolves).
+   * @plan:PLAN-20260617-COREAPI.P16
+   * @requirement:REQ-004
+   * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
+   */
+  protected readonly rebuild = (): void =>
+    this.facadeSessionOwner.rebuildExecution();
+
+  /**
+   * Provider readiness: true when the manager reports an active provider.
+   * Used by the fail-closed guards on stream/generate/generateJson/
+   * generateEmbedding/compress/setModel to prevent model-dependent operations
+   * when no provider is configured.
+   */
+
+  private readonly readHookSessionId = (): string =>
+    this.session.getSessionId();
+
+  /**
+   * Full ordered dispose / teardown. Idempotent; collects every teardown
+   * failure into an errors[] accumulator (never short-circuiting on a single
+   * failure) and throws {@link AggregateDisposeError} at the END if any step
+   * failed. Tears down ONLY resources createAgent owns — caller-supplied
+   * resources are left untouched. The teardown order follows the authoritative
+   * pseudocode exactly:
+   *   20    fire SessionEnd lifecycle hook (REQ-015)
+   *   30    abort the facade-owned active-run controller
+   *   40-47 dispose facade-held injected-factory scheduler/coordinator handles
+   *   50-52 unsubscribe every recorded bus subscription + detach hooks
+   *   55    runtimeHandle.cleanup() (unregister runtime context)
+   *   60    config.dispose() (agentClient)
+   *   70    config.shutdownLspService() (NET-NEW) + set lspShutDown marker
+   *   80    extensions teardown (NET-NEW, headless no-op) + extensionsDisposed
+   *   81-83 release every session lock (NET-NEW) + sessionLocksReleased
+   *   90-92 oauthManager.dispose?() (defensive; runtimeHandle.cleanup may own it)
+   *   100   throw AggregateDisposeError(errors) if any step failed
+   *
+   * @plan:PLAN-20260617-COREAPI.P24
+   * @requirement:REQ-016
+   * @requirement:REQ-015
+   * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
+   */
+  private lifecycle?: SessionLifecycle;
+
+  private disposeAgent(): Promise<void> {
+    this.lifecycle ??= this.createShutdownLifecycle();
+    return this.lifecycle.dispose();
+  }
+
+  private stopShutdownAdmissions(): readonly SessionCleanupAction[] {
+    return [
+      () => {
+        this.facadeOwnership.disposed = true;
+      },
+      () => this.facadeSessionOwner.closeAdmission(),
+      () => this.facadeTaskOwner.closeAdmissionAndAbort(),
+      () => this.facadeSessionOwner.closeHookAdmission(),
+      () => this.hooks.closeAdmission(),
+      () => this.profilePersistence.closeAdmission(),
+      () => this.closeMcpAdmission(),
+      () => this.facadeShellOwner.closeAdmission(),
+      () => this.skills.closeAdmission(),
+      () => this.workspace.closeAdmission(),
+      () => this.session.closeAdmission(),
+      () => this.ide.closeAdmission(),
+    ];
+  }
+
+  private createShutdownLifecycle(): SessionLifecycle {
+    const run = this.activeRun;
+    return assembleAgentShutdown(
+      this.stopShutdownAdmissions(),
+      [
+        () => this.facadeSessionOwner.joinAuxiliaryShutdown(),
+        () => this.facadeSessionOwner.closeImageAdmission(),
+        () => this.facadeSessionOwner.toolCatalog.closeAdmission(),
+        () => this.tools.dispose(),
+      ],
+      [
+        () => run?.controller.abort(),
+        () => this.facadeSessionOwner.abortExecution(),
+      ],
+      [() => this.coordinator.dispose(), () => this.facadeShellOwner.dispose()],
+      (errors) =>
+        joinAgentWork(
+          () => this.profiles.cancelAndJoin(),
+          () => this.mcp.cancelAndJoin(),
+          () => this.facadeTaskOwner.hasPendingWork(),
+          () => this.facadeTaskOwner.join(),
+          () => this.facadeOwnership.disposeMcpRuntime?.(),
+          errors,
+        ),
+      (errors) => joinCapturedRun(run, errors),
+      () => this.profilePersistence.join(),
+      async (errors) => {
+        await finishOwnedHooks(
+          () => this.hooks.finishSessionEnd(),
+          this.releaseHooks,
+          errors,
+        );
+        await disposeAgentObservers(
+          this.facadeOwnership.injectedSchedulerHandles,
+          () => this.hooks.detach(),
+          () =>
+            disposeWorkspaceFacades(
+              () => this.skills.dispose(),
+              () => this.workspace.dispose(),
+            ),
+          undefined,
+          errors,
+        );
+        await collectDisposalError(errors, () => this.session.dispose());
+      },
+      (errors) => this.releaseShutdownResources(errors),
+    );
+  }
+
+  private async releaseShutdownResources(errors: unknown[]): Promise<void> {
+    await collectDisposalError(errors, () => this.facadeSessionOwner.dispose());
+    await collectDisposalError(errors, this.closeRuntime);
+    await disposeConfigInfrastructure(
+      this.facadeOwnership.configOwnership === 'caller'
+        ? undefined
+        : () => this.config.dispose(),
+      this.facadeMediaOwner?.dispose.bind(this.facadeMediaOwner),
+      errors,
+    );
+    if (this.facadeOwnership.configOwnership !== 'caller')
+      this.facadeOwnership.lspShutDown = true;
+    this.facadeOwnership.extensionsDisposed = true;
+    for (const lock of this.facadeOwnership.sessionLocks)
+      await collectDisposalError(errors, () => lock.release());
+    this.facadeOwnership.sessionLocksReleased = true;
+    await collectDisposalError(errors, () =>
+      disposeOAuthManager(this.facadeOAuth),
+    );
+  }
+  protected initializeFacade(): Agent {
+    this.switchProvider = this.constructProviderSwitch(this.facadeRuntimeKind);
+    this.metrics = this.facadeSettingsOwner.telemetry.localMetrics;
+    this.initializeProviderReads();
+    this.facadeSessionOperations = this.constructSessionClient();
+    this.profilePersistence = this.constructProfilePersistence();
+    this.captureProfile = this.profilePersistence.captureProfile;
+    this.saveProfileSnapshot = this.profilePersistence.saveProfileSnapshot;
+    this.deleteProfileByName = this.profilePersistence.deleteProfileByName;
+    this.getActiveProfileName = this.profilePersistence.getActiveProfileName;
+    this.setDefaultProfileName = this.profilePersistence.setDefaultProfileName;
+    this.getRuntimeDiagnosticsSnapshot =
+      this.profilePersistence.getRuntimeDiagnosticsSnapshot;
+    this.providerState = initializeProviderState(
+      this.facadeRuntimeState,
+      this.initialAuth,
+      this.facadeAuthState,
+    );
+    this.tools = this.constructTools();
+    this.profiles = this.constructProfiles();
+    this.auth = this.buildAuthControl();
+    this.session = this.buildSessionControl();
+    this.hooks = this.buildHookControl();
+    this.policy = new PolicyControl(this.facadeSessionOwner.policyInspection);
+    this.tasks = createTasksControl(
+      this.facadeTaskOwner,
+      this.facadeShellOwner,
+    );
+    this.skills = new SkillsControl(this.facadeWorkspaceSkills);
+    this.memory = this.facadeSessionOwner.memoryOperations;
+    this.releaseHooks = this.facadeSessionOwner.transferHookRelease();
+    return this.publishFacade();
+  }
+  private publishFacade(): Agent {
+    return new AgentImpl(
+      this.facadeSessionOwner.createProviderFileOperations(() =>
+        this.coordinator.assertSettingsAdmission(),
+      ),
+      {
+        workspace: this.workspace,
+        ide: this.ide,
+        lsp: this.lsp,
+        mcp: this.mcp,
+        runtimeId: this.facadeRuntimeId,
+        authentication: this.authentication,
+        execution: this.execution,
+        modelParameters: this.modelParameters,
+        settings: this.settings,
+        conversation: this.facadeSessionOwner.conversation,
+        getStats: () => this.facadeSessionOwner.readStats(this.metrics),
+        onStats: (cb) => this.facadeSessionOwner.observeStats(cb, this.metrics),
+        toolFormat: this.toolFormat,
+        metrics: this.metrics,
+        providerReads: this.providerReads,
+        hasActiveProvider: this.hasActiveProvider,
+        getProviderContextLimit: this.getProviderContextLimit,
+        listAvailableModels: this.listAvailableModels,
+        sessionClient: this.facadeSessionOperations,
+        captureProfile: this.captureProfile,
+        saveProfileSnapshot: this.saveProfileSnapshot,
+        deleteProfileByName: this.deleteProfileByName,
+        getActiveProfileName: this.getActiveProfileName,
+        setDefaultProfileName: this.setDefaultProfileName,
+        getRuntimeDiagnosticsSnapshot: this.getRuntimeDiagnosticsSnapshot,
+        tools: this.tools,
+        profiles: this.profiles,
+        auth: this.auth,
+        session: this.session,
+        hooks: this.hooks,
+        policy: this.policy,
+        tasks: this.tasks,
+        memory: this.memory,
+        skills: this.skills,
+        injectSteer: this.injectSteer.bind(this),
+        stream: this.stream.bind(this),
+        getProvider: this.getProvider,
+        setProvider: this.setProvider.bind(this),
+        getProviderStatus: this.getProviderStatus,
+        getModel: this.getModel,
+        setModel: this.setModel.bind(this),
+        getApprovalMode: this.getApprovalMode.bind(this),
+        setApprovalMode: this.setApprovalMode.bind(this),
+        getModelParams: this.getModelParams,
+        resetChat: this.resetChat.bind(this),
+        compress: this.compress.bind(this),
+        generate: this.generate.bind(this),
+        generateJson: this.generateJson.bind(this),
+        generateEmbedding: this.generateEmbedding.bind(this),
+        listProviders: this.listProviders.bind(this),
+        dispose: this.disposeAgent.bind(this),
+      },
+    );
+  }
+}
+
+export function assembleForegroundMcpControl(
+  workspace: McpRuntimeOwner,
+  selection: Parameters<typeof buildOwnedMcpControl>[1],
+  auth: AgentAuthState,
+  refreshTools: () => Promise<void>,
+): McpControl {
+  return buildOwnedMcpControl(
+    workspace.readServerSettings.bind(workspace),
+    selection,
+    workspace.listPrompts.bind(workspace),
+    workspace.listResources.bind(workspace),
+    workspace.readOAuthCredentials.bind(workspace),
+    workspace.performOAuth.bind(workspace),
+    workspace.status.bind(workspace),
+    workspace.refresh.bind(workspace),
+    workspace.reload.bind(workspace),
+    (server) => auth.mcpAuth.has(server),
+    (server) => auth.mcpAuth.add(server),
+    refreshTools,
+    workspace.subscribeStatus.bind(workspace),
+    workspace.findResource.bind(workspace),
+    workspace.readResource.bind(workspace),
+  );
 }

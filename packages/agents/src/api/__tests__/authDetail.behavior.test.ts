@@ -1,3 +1,7 @@
+import {
+  MessageBusType,
+  type BucketAuthConfirmationRequest,
+} from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,6 +31,7 @@ import type {
   OAuthProvider,
   TokenStore,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { MessageBus } from '@vybestack/llxprt-code-core';
 import { AuthControl } from '../control/authControl.js';
 import { createAgentAuthState } from '../control/authState.js';
 import type { AuthStatus } from '../agent.js';
@@ -134,6 +139,7 @@ async function makeManager(): Promise<{
 }
 
 function makeControl(mgr: OAuthManager): AuthControl {
+  const bus = new MessageBus();
   return new AuthControl(
     createAgentAuthState(),
     () => PROVIDER,
@@ -152,6 +158,13 @@ function makeControl(mgr: OAuthManager): AuthControl {
     async (provider) => (await mgr.peekStoredToken(provider))?.expiry,
     (provider) => mgr.getHigherPriorityAuth(provider),
     (provider) => mgr.getAuthStatusWithBuckets(provider),
+    (listener) =>
+      bus.subscribe<BucketAuthConfirmationRequest>(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        listener,
+      ),
+    (correlationId, confirmed) =>
+      bus.respondToBucketAuthConfirmation(correlationId, confirmed),
   );
 }
 

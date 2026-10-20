@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -132,7 +136,7 @@ describe('provider switch commit publication', () => {
       callerConfig.projectTempDir,
       1024 * 1024 * 1024,
     );
-    callerOwner = await SessionClientOwner.create(
+    callerOwner = await createCapturedSessionOwner(
       callerConfig,
       assembleTaskSchemaPolicy(callerSettings),
       callerManager,
@@ -242,7 +246,7 @@ describe('provider switch commit publication', () => {
     );
     requireCallerActivation(activation);
     await callerOwner.initializeTools();
-    await callerOwner.getAgentClient().startChat();
+    await capturedSessionClient(callerOwner).startChat();
   }
 
   let profileStore: ProfileDefinitionReads & ProfileDefinitionWrites;
@@ -303,7 +307,7 @@ describe('provider switch commit publication', () => {
   });
 
   it('retains the committed provider and replacement client when a publication observer fails', async () => {
-    const previous = callerOwner.getAgentClient();
+    const previous = capturedSessionClient(callerOwner);
     const failure = new Error('publication observer rejected');
     const observe = (): never => {
       throw failure;
@@ -316,9 +320,11 @@ describe('provider switch commit publication', () => {
       await expect(profileSwitch('anthropic')).rejects.toBe(failure);
       expect(callerManager.getActiveProviderName()).toBe('anthropic');
       expect(callerSettingsOwner.readSelectedProvider()).toBe('anthropic');
-      expect(previous).not.toBe(callerOwner.getAgentClient());
-      await callerOwner.getAgentClient().startChat();
-      expect(callerOwner.getAgentClient().hasChatInitialized()).toBe(true);
+      expect(previous).not.toBe(capturedSessionClient(callerOwner));
+      await capturedSessionClient(callerOwner).startChat();
+      expect(capturedSessionClient(callerOwner).hasChatInitialized()).toBe(
+        true,
+      );
       expect(callerSettings.getProviderSettings('anthropic').model).toBe(
         callerSettingsOwner.readSelectedModel(),
       );

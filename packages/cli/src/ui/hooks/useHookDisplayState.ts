@@ -5,17 +5,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import {
-  MessageBusType,
-  type MessageBus,
-  type HookExecutionRequest,
-  type HookExecutionResponse,
-} from '@vybestack/llxprt-code-core';
+import type { AgentHookControl } from '@vybestack/llxprt-code-agents';
 import type { ActiveHook } from '../types.js';
 
 /**
  * Hook to track actively executing hooks for UI display.
- * Subscribes to MessageBus HOOK_EXECUTION_REQUEST/RESPONSE events.
+ * Observes correlated execution phases from the hook owner.
  */
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
@@ -23,52 +18,34 @@ import type { ActiveHook } from '../types.js';
  * @requirement REQ-D01-003
  * @pseudocode lines 122-133
  */
-export function useHookDisplayState(messageBus?: MessageBus): ActiveHook[] {
+export function useHookDisplayState(
+  subscribeExecutionPhase?: AgentHookControl['subscribeExecutionPhase'],
+): ActiveHook[] {
   const [activeHooks, setActiveHooks] = useState<ActiveHook[]>([]);
 
   useEffect(() => {
-    if (!messageBus) {
-      return undefined;
-    }
-
-    const requestSubscription = messageBus.subscribe(
-      MessageBusType.HOOK_EXECUTION_REQUEST,
-      (message: HookExecutionRequest) => {
-        const { eventName, correlationId } = message.payload;
-        if (eventName) {
+    if (!subscribeExecutionPhase) return undefined;
+    return subscribeExecutionPhase((phase) => {
+      const { correlationId } = phase;
+      if (phase.phase === 'start') {
+        const { eventName } = phase;
+        if (eventName)
           setActiveHooks((prev) => [
             ...prev,
-            {
-              name: eventName,
-              eventName,
-              correlationId,
-            },
+            { name: eventName, eventName, correlationId },
           ]);
-        }
-      },
-    );
-
-    const responseSubscription = messageBus.subscribe(
-      MessageBusType.HOOK_EXECUTION_RESPONSE,
-      (message: HookExecutionResponse) => {
-        const corrId = message.payload.correlationId;
-        if (corrId) {
-          setActiveHooks((prev) => {
-            const idx = prev.findIndex((h) => h.correlationId === corrId);
-            if (idx >= 0) {
-              return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-            }
-            return prev;
-          });
-        }
-      },
-    );
-
-    return () => {
-      requestSubscription();
-      responseSubscription();
-    };
-  }, [messageBus]);
+      } else {
+        setActiveHooks((prev) => {
+          const idx = prev.findIndex(
+            (hook) => hook.correlationId === correlationId,
+          );
+          return idx >= 0
+            ? [...prev.slice(0, idx), ...prev.slice(idx + 1)]
+            : prev;
+        });
+      }
+    });
+  }, [subscribeExecutionPhase]);
 
   return activeHooks;
 }

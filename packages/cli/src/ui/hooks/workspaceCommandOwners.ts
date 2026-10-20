@@ -52,30 +52,27 @@ export function createWorkspaceCommandOwners(
   recordDirectoriesChanged: DirectoryCommandOperations['recordDirectoriesChanged'],
   runImageOperation: ImageCommandOperations['runImageOperation'],
   getConversationHistory: BugCommandOperations['getConversationHistory'],
+  readIdeName: () => string,
 ) {
+  const policy = bindPoliciesCommand(
+    readPolicyRules,
+    readDefaultDecision,
+    readNonInteractive,
+  );
   return {
     memoryCommand: createMemoryCommand(
       bindMemoryCommand(config, addItem, setMemoryFileCount),
     ),
     bugCommand: createBugCommand(
-      bindBugCommand(config, getConversationHistory, addItem),
+      bindBugCommand(config, getConversationHistory, addItem, readIdeName),
     ),
-    policiesCommand: createPoliciesCommand(
-      bindPoliciesCommand(
-        readPolicyRules,
-        readDefaultDecision,
-        readNonInteractive,
-      ),
-    ),
-    hooksCommand: createHooksCommand(
-      {
-        listHooks: () => listHooks?.() ?? [],
-        isConfigured: config !== null,
-        isAvailable: listHooks !== null,
-        enable: enableHook,
-        disable: disableHook,
-        setDisabledHooks,
-      },
+    policiesCommand: createPoliciesCommand(policy),
+    hooksCommand: registerHooks(
+      config !== null,
+      listHooks,
+      enableHook,
+      disableHook,
+      setDisabledHooks,
       addItem,
     ),
     taskCommand: createRegisteredTaskCommand(
@@ -133,6 +130,27 @@ function createRegisteredToolsCommand(
     listTools === null
       ? null
       : { listTools, readSetting, writeSetting, refreshToolSchema },
+    addItem,
+  );
+}
+
+function registerHooks(
+  isConfigured: boolean,
+  listHooks: Agent['hooks']['listHooks'] | null,
+  enable: Agent['hooks']['enable'],
+  disable: Agent['hooks']['disable'],
+  setDisabledHooks: Agent['hooks']['setDisabledHooks'],
+  addItem: UseHistoryManagerReturn['addItem'],
+) {
+  return createHooksCommand(
+    {
+      listHooks: () => listHooks?.() ?? [],
+      isConfigured,
+      isAvailable: listHooks !== null,
+      enable,
+      disable,
+      setDisabledHooks,
+    },
     addItem,
   );
 }

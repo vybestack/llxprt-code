@@ -1,3 +1,9 @@
+import { captureActivationAcquisition as assembleAgentActivationBootstrap } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -25,7 +31,6 @@ import {
   runCleanupSteps,
   cleanupAfterFailure,
 } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
@@ -34,13 +39,9 @@ import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
 import { executeProviderActivation } from '../providerActivationExecutor.js';
-import {
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
-} from '../providerSwitchAssembly.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { assembleModelSelection } from '../model-selection.js';
 import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
-import { fromConfig } from '../fromConfig.js';
 
 /**
  * @license
@@ -222,7 +223,7 @@ describe('fromConfig admission before resource effects', () => {
         builtCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const builtCallerOwner = await SessionClientOwner.create(
+      const builtCallerOwner = await createCapturedSessionOwner(
         builtCallerConfig,
         assembleTaskSchemaPolicy(builtCallerSettings),
         builtCallerManager,
@@ -285,7 +286,7 @@ describe('fromConfig admission before resource effects', () => {
         );
         requireCallerActivation(activation);
         await builtCallerOwner.initializeTools();
-        await builtCallerOwner.getAgentClient().startChat();
+        await capturedSessionClient(builtCallerOwner).startChat();
       } catch (primary) {
         await cleanupAfterFailure(primary, builtCallerClose);
       }
@@ -411,7 +412,7 @@ describe('fromConfig admission before resource effects', () => {
         otherCallerConfig.projectTempDir,
         1024 * 1024 * 1024,
       );
-      const otherCallerOwner = await SessionClientOwner.create(
+      const otherCallerOwner = await createCapturedSessionOwner(
         otherCallerConfig,
         assembleTaskSchemaPolicy(otherCallerSettings),
         otherCallerManager,
@@ -474,7 +475,7 @@ describe('fromConfig admission before resource effects', () => {
         );
         requireCallerActivation(activation);
         await otherCallerOwner.initializeTools();
-        await otherCallerOwner.getAgentClient().startChat();
+        await capturedSessionClient(otherCallerOwner).startChat();
       } catch (primary) {
         await cleanupAfterFailure(primary, otherCallerClose);
       }
@@ -486,7 +487,7 @@ describe('fromConfig admission before resource effects', () => {
         builtCallerOAuth,
         () => 'agent',
         'borrowed',
-        builtCallerOwner.getAgentClient(),
+        capturedSessionClient(builtCallerOwner),
         builtCallerMcp,
         undefined,
         undefined,

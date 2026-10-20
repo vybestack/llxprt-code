@@ -1,3 +1,9 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -26,14 +32,13 @@ import { buildAgentClientFactory } from '../agentBootstrap.js';
 import { randomUUID } from 'node:crypto';
 import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 
 import { fileURLToPath } from 'node:url';
-import { fromConfig } from '../fromConfig.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -141,7 +146,7 @@ describe('Explicit session client lifetime', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -181,12 +186,12 @@ describe('Explicit session client lifetime', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, builtClose);
     }
 
-    const client = builtOwner.getAgentClient();
+    const client = capturedSessionClient(builtOwner);
     const agent = await fromConfig(
       builtConfig,
       builtSettings,
@@ -207,7 +212,9 @@ describe('Explicit session client lifetime', () => {
         },
       ]);
       await agent.setModel('replacement-model');
-      expect(agent.agentClient).not.toBe(client);
+      expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+        client,
+      );
       expect(
         (await agent.getHistory()).filter((item) => item.speaker === 'human'),
       ).toHaveLength(1);
@@ -314,7 +321,7 @@ describe('Explicit session client lifetime', () => {
       leftConfig.projectTempDir,
       1024 * 1024,
     );
-    const leftOwner = await SessionClientOwner.create(
+    const leftOwner = await createCapturedSessionOwner(
       leftConfig,
       assembleTaskSchemaPolicy(leftSettings),
       leftManager,
@@ -354,7 +361,7 @@ describe('Explicit session client lifetime', () => {
       await leftMcp.initialize();
       await leftOwner.initializeTools();
       await leftOwner.refreshAuth();
-      await leftOwner.getAgentClient().startChat();
+      await capturedSessionClient(leftOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, leftClose);
     }
@@ -446,7 +453,7 @@ describe('Explicit session client lifetime', () => {
       rightConfig.projectTempDir,
       1024 * 1024,
     );
-    const rightOwner = await SessionClientOwner.create(
+    const rightOwner = await createCapturedSessionOwner(
       rightConfig,
       assembleTaskSchemaPolicy(rightSettings),
       rightManager,
@@ -486,7 +493,7 @@ describe('Explicit session client lifetime', () => {
       await rightMcp.initialize();
       await rightOwner.initializeTools();
       await rightOwner.refreshAuth();
-      await rightOwner.getAgentClient().startChat();
+      await capturedSessionClient(rightOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, rightClose);
     }
@@ -503,7 +510,7 @@ describe('Explicit session client lifetime', () => {
           leftMessageBus,
           leftMcp,
           undefined,
-          leftOwner.getAgentClient(),
+          capturedSessionClient(leftOwner),
         ),
       ).rejects.toThrow(/different ProviderManager/i);
     } finally {

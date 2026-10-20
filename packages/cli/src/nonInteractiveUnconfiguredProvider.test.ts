@@ -1,3 +1,4 @@
+import { adoptFixture } from '../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -403,18 +404,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       runtimeSettings,
     );
 
-    await runNonInteractive({
-      hasActiveProvider: () => providerManager.hasActiveProvider(),
-      acquireAgent: () =>
-        fromConfig(
-          config,
-          runtimeSettings.store,
-          {
-            activation: buildNonInteractiveActivationIntent(
-              config,
-              makeSettings(),
-            ),
-          },
+    fromConfigMock.mockImplementation(
+      (suppliedConfig, store, intent, authority) =>
+        adoptFixture(
+          suppliedConfig,
+          store,
+          intent,
           runtimeSettings.owner,
           providerManager,
           undefined,
@@ -427,6 +422,22 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
           undefined,
           undefined,
           undefined,
+          authority,
+        ),
+    );
+
+    await runNonInteractive({
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: buildNonInteractiveActivationIntent(
+              config,
+              makeSettings(),
+            ),
+          },
           credentialAuthority,
         ),
       runtimeSettings: runtimeSettings.owner,
@@ -450,18 +461,12 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       runtimeSettings,
     );
 
-    await runNonInteractive({
-      hasActiveProvider: () => providerManager.hasActiveProvider(),
-      acquireAgent: () =>
-        fromConfig(
-          config,
-          runtimeSettings.store,
-          {
-            activation: buildNonInteractiveActivationIntent(
-              config,
-              makeSettings(),
-            ),
-          },
+    fromConfigMock.mockImplementation(
+      (suppliedConfig, store, intent, authority) =>
+        adoptFixture(
+          suppliedConfig,
+          store,
+          intent,
           runtimeSettings.owner,
           providerManager,
           undefined,
@@ -474,6 +479,22 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
           undefined,
           undefined,
           undefined,
+          authority,
+        ),
+    );
+
+    await runNonInteractive({
+      hasActiveProvider: () => providerManager.hasActiveProvider(),
+      acquireAgent: () =>
+        fromConfig(
+          config,
+          runtimeSettings.store,
+          {
+            activation: buildNonInteractiveActivationIntent(
+              config,
+              makeSettings(),
+            ),
+          },
           credentialAuthority,
         ),
       runtimeSettings: runtimeSettings.owner,

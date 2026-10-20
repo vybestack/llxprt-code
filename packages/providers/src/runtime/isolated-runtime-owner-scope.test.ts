@@ -1,3 +1,4 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,8 +11,12 @@ import { tmpdir } from 'node:os';
 import { Config } from '@vybestack/llxprt-code-core';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
-import { fromConfig } from '../../../agents/src/api/fromConfig.js';
+
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+  AgentResourceCapture,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 import type { Agent } from '../../../agents/src/api/agent.js';
 import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
@@ -121,7 +126,7 @@ describe('isolated runtime owner activation', () => {
   it('requires the explicit SDK owner even when an isolated owner is active', async () => {
     await openConfigs();
     await openFirst('sdk-owner');
-    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
       'Provider reads require an explicit session owner',
     );
     expect('providerManager' in firstConfig).toBe(false);
@@ -131,7 +136,9 @@ describe('isolated runtime owner activation', () => {
     await openConfigs();
     await Promise.all([openFirst('shared-label'), openSecond('shared-label')]);
     expect('providerManager' in firstConfig).toBe(false);
-    expect(first.providerManager).not.toBe(second.providerManager);
+    expect(fixtureAgentResources(first).manager).not.toBe(
+      fixtureAgentResources(second).manager,
+    );
     await first.dispose();
     expect('providerManager' in secondConfig).toBe(false);
   });
@@ -209,6 +216,7 @@ describe('isolated runtime owner activation', () => {
       maxBytes: 512 * 1024 * 1024,
     });
     let admittedConfig: Config | undefined;
+    const acquisition = new AgentResourceCapture();
     first = await fromConfig(
       firstConfig,
       firstSettings,
@@ -223,7 +231,7 @@ describe('isolated runtime owner activation', () => {
       files,
       undefined,
       undefined,
-      undefined,
+      acquisition.factories(undefined),
       undefined,
       credentials().authority,
       undefined,
@@ -243,7 +251,8 @@ describe('isolated runtime owner activation', () => {
       undefined,
       undefined,
       undefined,
-      (config) => {
+      () => {
+        const config = acquisition.config;
         expect(config).toBe(firstConfig);
         admittedConfig = config;
         observed.push('callback-owner');

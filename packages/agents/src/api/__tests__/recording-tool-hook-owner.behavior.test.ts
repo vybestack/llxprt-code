@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
@@ -80,8 +81,10 @@ describe('borrowed facade tool hook owner routing', () => {
           borrow,
         ) => {
           const b = await borrow();
-          expect(a.getMessageBus()).toBe(b.getMessageBus());
-          expect(a.agentClient).toBeDefined();
+          expect(fixtureAgentResources(a).messageBus).toBe(
+            fixtureAgentResources(b).messageBus,
+          );
+          expect(fixtureAgentResources(a).publishedClient(a)).toBeDefined();
           await a.setHistory([
             {
               speaker: 'human',

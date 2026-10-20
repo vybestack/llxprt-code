@@ -1,13 +1,15 @@
-import type { AgentSchedulerFactory } from '../../config-types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { stripSandboxSegment } from './fixtureRoot.js';
 import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { AgentSchedulerFactory } from '../../config-types.js';
+import { createTaskRegistration } from '../../runtimeFactories.js';
+import { stripSandboxSegment } from './fixtureRoot.js';
 
 /**
  * @license
@@ -61,5 +63,22 @@ export function requireFixturePaths(
     throw new Error('Fixture factory requires workspace paths');
   return paths;
 }
-export type { Config, MessageBus };
 export type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
+export type { Config, MessageBus };
+
+export function createCallerTaskRegistration(
+  config: Config,
+  settings: SessionSettingsOwner,
+  messageBus: MessageBus,
+): TaskToolRegistration {
+  return createTaskRegistration(config, {
+    messageBus,
+    readTaskPolicy: () => settings.readTaskPolicy(),
+    readGovernance: () => settings.readToolGovernance([]),
+    launchChild: async () => {
+      throw new Error(
+        'This adoption scenario does not supply child definitions',
+      );
+    },
+  });
+}

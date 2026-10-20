@@ -6,6 +6,7 @@
 
 import {
   IdeClient,
+  type DiffUpdateResult,
   type IdeContext,
   type IDEConnectionStatus,
   type IdeInfo,
@@ -25,7 +26,6 @@ export interface WorkspaceIdeConnection {
 }
 
 export interface WorkspaceIdePort {
-  getClient(): IdeClient | undefined;
   isEnabled(): boolean;
   setEnabled(enabled: boolean): void;
   readConnection(): WorkspaceIdeConnection;
@@ -42,6 +42,7 @@ export interface WorkspaceIdePort {
   ): () => void;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  openDiff(filePath: string, newContent?: string): Promise<DiffUpdateResult>;
   resolveDiff(
     filePath: string,
     outcome: 'accepted' | 'rejected',
@@ -142,11 +143,6 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
     this.enabled = enabled;
   }
 
-  getClient(): IdeClient | undefined {
-    this.assertConfig(this.configIdentity);
-    return this.client;
-  }
-
   readConnection(): WorkspaceIdeConnection {
     this.assertConfig(this.configIdentity);
     const client = this.client;
@@ -210,6 +206,16 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
   async disconnect(): Promise<void> {
     this.assertConfig(this.configIdentity);
     await this.client?.disconnect();
+  }
+
+  async openDiff(
+    filePath: string,
+    newContent?: string,
+  ): Promise<DiffUpdateResult> {
+    this.assertConfig(this.configIdentity);
+    if (this.client === undefined)
+      throw new Error('IDE client is not available');
+    return this.client.openDiff(filePath, newContent);
   }
 
   async resolveDiff(

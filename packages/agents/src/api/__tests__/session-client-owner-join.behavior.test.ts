@@ -1,3 +1,8 @@
+import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
 import { cleanupProviderScope } from '../../session/session-client-cleanup.js';
 import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -38,6 +43,16 @@ import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
@@ -49,10 +64,6 @@ import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { writeFile, access, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AgentClient } from '../../core/client.js';
-
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-
-import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 describe('Session owner cleanup joining', () => {
   const credentials = useOwnedCredentials();
@@ -144,7 +155,7 @@ describe('Session owner cleanup joining', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -184,7 +195,7 @@ describe('Session owner cleanup joining', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -220,7 +231,7 @@ describe('Session owner cleanup joining', () => {
         }
       }
     }
-    const owner = await SessionClientOwner.create(
+    const owner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       manager,
@@ -348,7 +359,7 @@ describe('Session owner cleanup joining', () => {
       builtConfig.projectTempDir,
       1024 * 1024,
     );
-    const builtOwner = await SessionClientOwner.create(
+    const builtOwner = await createCapturedSessionOwner(
       builtConfig,
       assembleTaskSchemaPolicy(builtSettings),
       builtManager,
@@ -388,7 +399,7 @@ describe('Session owner cleanup joining', () => {
       await builtMcp.initialize();
       await builtOwner.initializeTools();
       await builtOwner.refreshAuth();
-      await builtOwner.getAgentClient().startChat();
+      await capturedSessionClient(builtOwner).startChat();
     } catch (primary) {
       await cleanupAfterFailure(primary, closeEngine);
     }
@@ -427,12 +438,14 @@ describe('Session owner cleanup joining', () => {
       (provider) => builtOAuth.composeRetryOperations(provider),
       (id) => cleanupProviderScope(lifecycle, id),
     );
-    const candidate = await builtOwner.prepareProfileClientReplacement();
+    const candidate = await builtOwner.prepareProfileActivation(
+      new AbortController().signal,
+    );
     candidate.publish();
     await candidate.retire();
     await access(file);
     expect(lifecycle.snapshot().retainedFiles).toBe(1);
-    const operation = new AgentActivationBootstrap(
+    const operation = prepareActivationFixture(
       builtConfig,
       builtManager,
       async () => ({ authFailed: false, infoMessages: [] }),

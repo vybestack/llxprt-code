@@ -24,10 +24,9 @@ import {
   type ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type { SessionSchedulerOwner } from '../../session/sessionSchedulerOwner.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { TurnToolExecutionOwner } from '../../session/turn-tool-execution-owner.js';
 
 /**
  * @requirement REQ-LOOP-001
@@ -119,32 +118,26 @@ export interface AgenticLoopRuntime {
  * @requirement REQ-LOOP-002
  * Construction options for {@link AgenticLoop}.
  *
- * Three injection points:
- *  - **Runtime**: `config` carries session/model access. Pure engine
- *    logic — never touches UI.
- *  - **Approval**: the optional `approvalHandler`, invoked only on `ASK_USER`.
- *  - **Display**: the optional {@link DisplayCallbacks}, forwarded to the
- *    scheduler so an embedding UI (e.g. the CLI) can observe tool/output
- *    updates and drive editor flows without colliding with the loop's
- *    completion ownership.
+ * Model streaming and tool-history writes are execution-bound operations.
+ * `config` supplies only session/budget reads. The tool execution owner holds
+ * approval subscriptions and scheduling leases for this generation; callers
+ * do not distribute the client or confirmation bus through these options.
+ * Display callbacks observe tool/output updates without owning completion.
  */
 export interface AgenticLoopOptions {
-  createSchedulerOwner: (
-    callbacks: SchedulerCallbacks,
-  ) => SessionSchedulerOwner;
-  /** Single-turn turn primitive (`sendMessageStream`) and history sink. */
-  agentClient: AgentClientContract;
-  /** Carries session id and current model identity. */
+  streamModel: (
+    message: AgentMessageInput,
+    signal: AbortSignal,
+    promptId: string,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
+  ) => AsyncGenerator<ServerAgentStreamEvent>;
+  recordToolHistory: (calls: CompletedToolCall[]) => Promise<void>;
   config: AgenticLoopRuntime;
-  /** Confirmation bus the scheduler's ConfirmationCoordinator publishes to. */
-  messageBus: MessageBus;
-  /** Optional handler resolving ASK_USER confirmations. See {@link ApprovalHandler}. */
-  approvalHandler?: ApprovalHandler;
+  tools: TurnToolExecutionOwner;
   /**
-   * Whether the scheduler runs in interactive mode. When `false` (default) the
-   * scheduler is configured for non-interactive/subagent contexts. When `true`,
-   * tool context sees interactive mode (enabling editor support and live
-   * progress display).
+   * Describes the interactive mode captured by the bound tool execution.
+   * Interactive tool contexts enable editor support and live progress display.
    */
   interactiveMode?: boolean;
   /**

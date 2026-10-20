@@ -28,7 +28,7 @@ import type { LoadedSettings } from '../../../../config/settings.js';
 
 export interface AppLayoutParams {
   // From bootstrap
-  uiRuntime: Omit<UiRuntime, 'agentClientSource'>;
+  uiRuntime: UiRuntime;
   settings: LoadedSettings;
   clearConsoleMessagesState: AppBootstrapResult['clearConsoleMessagesState'];
   /**

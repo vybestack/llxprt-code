@@ -8,7 +8,7 @@ import type { AgentStreamInputs } from './hooks/agentStream/useAgentStream.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { useContentIdentityReader } from './hooks/agentStream/useStreamOwnerCallbacks.js';
-import type { UiRuntime } from './cliUiRuntime.js';
+import type { SlashCommandRuntime, UiRuntime } from './cliUiRuntime.js';
 import { resolveEmojiFilterMode } from './utils/iContentToHistoryItems.js';
 import {
   useBound,
@@ -134,5 +134,30 @@ export function useInputStreamPolicy(
     readShellExecutionConfig: useBound(shell, shell.getShellExecutionConfig),
     readPtyWidth: useBound(shell, shell.getPtyTerminalWidth),
     readPtyHeight: useBound(shell, shell.getPtyTerminalHeight),
+  };
+}
+
+export function useInputReadOperations(
+  hooks: UiRuntime['hooks'],
+  app: UiRuntime['app'],
+  isAgentClientPresent: () => boolean,
+  readIdeMode: () => boolean,
+  shell: UiRuntime['shell'],
+  mcp: UiRuntime['mcp'],
+  refreshMemory: SlashCommandRuntime['refreshMemory'],
+  readDebugMode: () => boolean,
+) {
+  return {
+    refreshMemory,
+    readDebugMode,
+    endInputHookSession: useBound(hooks, hooks.endHookSession),
+    readInitialPrompt: useBound(app, app.getQuestion),
+    isAgentClientPresent,
+    readIdeMode,
+    readInteractiveShellEnabled: useBound(
+      shell,
+      shell.getEnableInteractiveShell,
+    ),
+    readMcpServers: useBound(mcp, mcp.getMcpServers),
   };
 }

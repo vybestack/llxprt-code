@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,7 +19,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { fromConfig, type Agent } from '../index.js';
+import { type Agent } from '../index.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
 
@@ -439,12 +441,16 @@ describe('explicit adopted session settings on a shared Config', () => {
       expect(await second.generate('Detached second')).toContain(
         'Request completed.',
       );
-      expect(first.agentClient.getContentGeneratorConfig()?.model).toBe(
-        'detached-first-model',
-      );
-      expect(second.agentClient.getContentGeneratorConfig()?.model).toBe(
-        'detached-second-model',
-      );
+      expect(
+        fixtureAgentResources(first)
+          .publishedClient(first)
+          .getContentGeneratorConfig()?.model,
+      ).toBe('detached-first-model');
+      expect(
+        fixtureAgentResources(second)
+          .publishedClient(second)
+          .getContentGeneratorConfig()?.model,
+      ).toBe('detached-second-model');
       expect(
         endpoint
           .requests()

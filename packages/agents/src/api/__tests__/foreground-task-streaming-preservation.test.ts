@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +20,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
@@ -158,9 +158,7 @@ writeFileSync('task-hook-late', 'privileged');
         ...args: Parameters<SubagentOrchestrator['launch']>
       ) {
         const launched = await actualLaunch.apply(this, args);
-        launchedSessionIds.push(
-          launched.runtime.runtimeContext.state.sessionId,
-        );
+        launchedSessionIds.push(launched.identity.sessionId);
         return launched;
       });
       restoreLaunchObservation = () => observation.mockRestore();
