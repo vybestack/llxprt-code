@@ -316,13 +316,29 @@ export class SessionControl implements AgentSessionControl {
   private publishAdopted(
     result: Pick<ResumeResult, 'recording' | 'lockHandle'>,
     integration: RecordingIntegration,
-  ): void {
+  ): () => void {
+    const previous = {
+      recording: this.recording,
+      integration: this.integration,
+      integrationNeedsSubscribe: this.integrationNeedsSubscribe,
+      currentLockHandle: this.currentLockHandle,
+      recordingSessionId: this.recordingSessionId,
+      adoptedPath: this.adoptedPath,
+    };
     this.recording = result.recording;
     this.integration = integration;
     this.integrationNeedsSubscribe = false;
     this.currentLockHandle = result.lockHandle;
     this.recordingSessionId = result.recording.getSessionId();
     this.adoptedPath = result.recording.getFilePath();
+    return () => {
+      this.recording = previous.recording;
+      this.integration = previous.integration;
+      this.integrationNeedsSubscribe = previous.integrationNeedsSubscribe;
+      this.currentLockHandle = previous.currentLockHandle;
+      this.recordingSessionId = previous.recordingSessionId;
+      this.adoptedPath = previous.adoptedPath;
+    };
   }
 
   /**

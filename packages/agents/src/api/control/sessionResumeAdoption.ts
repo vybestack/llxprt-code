@@ -27,7 +27,7 @@ export async function adoptSessionResume(
     lock: LockHandle | null;
     sessionId: string;
   },
-  publish: (integration: RecordingIntegration) => void,
+  publish: (integration: RecordingIntegration) => () => void,
   owner: object,
   discardOnFailure = false,
 ): Promise<void> {
@@ -37,6 +37,7 @@ export async function adoptSessionResume(
     deps.persistence.forRecording(result.recording.getSessionId()),
   );
   let adoptionAttempted = false;
+  let restorePublication: (() => void) | undefined;
   try {
     if (client.getHistoryService() === null) await client.resumeChat([]);
     const history = client.getHistoryService();
@@ -55,9 +56,10 @@ export async function adoptSessionResume(
           adoptionAttempted = true;
         },
       );
-      publish(integration);
+      restorePublication = publish(integration);
     });
   } catch (error) {
+    restorePublication?.();
     const filePath = discardOnFailure ? result.recording.getFilePath() : null;
     const failures = await cleanupSessionResources(
       integration,
