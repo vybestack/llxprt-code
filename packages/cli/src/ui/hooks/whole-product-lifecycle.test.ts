@@ -7,10 +7,14 @@ import {
   compressAndPackage,
   reopen,
 } from '../../__tests__/support/whole-product-lifecycle.js';
-import { verifyReleased } from '../../__tests__/support/whole-product-observer.js';
+import {
+  verifyReleased,
+  finalArtifacts,
+  lifecycleReceipt,
+} from '../../__tests__/support/whole-product-observer.js';
 
 describe('whole-product native lifecycle', () => {
-  it('keeps sends, tools, CLI forks, live resume, compression, packages and cold reopen durable together', async () => {
+  it('keeps sends, tools, CLI forks, live resume, compression, child journals, packages and cold reopen durable together', async () => {
     const fixture = await wholeProductFixture();
     try {
       const checkpoint = await sendAndCheckpoint(fixture);
@@ -18,7 +22,13 @@ describe('whole-product native lifecycle', () => {
       const imported = await compressAndPackage(fixture, branch);
       await reopen(fixture, imported);
       await verifyReleased([branch.source, branch.fork, imported.path]);
+      await finalArtifacts([branch.source, branch.fork, imported.path]);
       expect(new Set([branch.source, branch.fork, imported.path]).size).toBe(3);
+      await lifecycleReceipt(fixture.root, [
+        branch.source,
+        branch.fork,
+        imported.path,
+      ]);
     } finally {
       await fixture.close();
     }

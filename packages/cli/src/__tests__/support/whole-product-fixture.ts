@@ -62,11 +62,32 @@ async function responseFixture(root: string): Promise<string> {
       },
     ],
   };
+  const task = {
+    chunks: [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'lifecycle-child',
+            name: 'task',
+            parameters: {
+              subagent_name: 'w24-child',
+              goal_prompt: 'Create the child receipt and report completion.',
+              tool_whitelist: ['write_file'],
+            },
+          },
+        ],
+      },
+    ],
+  };
   await writeFile(
     path,
-    [reply, tool, ...Array.from({ length: 30 }, () => reply)]
-      .map((turn) => JSON.stringify(turn))
-      .join('\n') + '\n',
+    Array.from({ length: 32 }, (_, index): string => {
+      if (index === 1) return JSON.stringify(tool);
+      if (index === 6) return JSON.stringify(task);
+      return JSON.stringify(reply);
+    }).join('\n') + '\n',
   );
   return path;
 }
@@ -119,7 +140,7 @@ export async function wholeProductFixture(): Promise<WholeProductFixture> {
       workingDir: root,
       interactive: true,
       folderTrust: true,
-      coreTools: ['write_file'],
+      coreTools: ['write_file', 'task'],
       approvalMode: ApprovalMode.YOLO,
       harness: { forceConfirmations: false, includeProcessCwd: false },
       telemetry: { enabled: false },

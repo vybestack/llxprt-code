@@ -5,8 +5,10 @@ import { join } from 'node:path';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { send, type WholeProductFixture } from './whole-product-fixture.js';
+import { runChild } from './whole-product-child.js';
 import {
   activePath,
+  lockedRecordingPath,
   nativeRows,
   verifyCheckpoint,
   verifyFacts,
@@ -27,10 +29,12 @@ export async function sendAndCheckpoint(
   const agent = fixture.live;
   await agent.session.setRecording({ enabled: true });
   expect(agent.session.getRecording().enabled).toBe(true);
+  await agent.session.recordRecordingTitle('W24 durable lifecycle');
+  const path = await lockedRecordingPath(agent);
+  await verifyFacts(path, agent.session.getSessionId(), fixture.root);
+  expect(await nativeRows(path)).toStrictEqual([]);
   await send(agent, 'Remember the lifecycle receipt.');
-  const path = await activePath(agent);
-  await verifyFacts(path, agent.session.getSessionId());
-  expect(await nativeRows(path)).toHaveLength(2);
+  expect(await nativeRows(await activePath(agent))).toHaveLength(2);
   const events = await send(
     agent,
     'Write the lifecycle receipt to receipt.txt.',
@@ -92,7 +96,7 @@ export async function forkAndSwitch(
   const fork = await activePath(agent);
   expect(fork).not.toBe(checkpoint.path);
   await verifyFork(fork);
-  await verifyFacts(fork, agent.session.getSessionId());
+  await verifyFacts(fork, agent.session.getSessionId(), fixture.root, null);
   expect(await nativeRows(fork)).toStrictEqual(checkpoint.rows);
   expect(fixture.displayed().map((item) => item.type)).toStrictEqual([
     'user',
@@ -142,6 +146,10 @@ export async function compressAndPackage(
   ).toBe(false);
   await verifyCheckpoint(branch.source);
   expect(await nativeRows(branch.fork)).toStrictEqual(branch.forkRows);
+  await runChild(fixture, branch.source);
+  const exportedRows = await nativeRows(branch.source);
+  expect(exportedRows.length).toBe(rows.length + 4);
+  expect(await nativeRows(branch.fork)).toStrictEqual(branch.forkRows);
   const destination = join(fixture.root, 'portable-package');
   await fixture.command(`/continue export w24-source ${destination}`);
   await agent.session.importSession(destination);
@@ -149,12 +157,12 @@ export async function compressAndPackage(
   const id = agent.session.getSessionId();
   expect(id).not.toBe('w24-source');
   expect(path).not.toBe(branch.source);
-  expect(await nativeRows(path)).toStrictEqual(rows);
-  expect(await nativeRows(branch.source)).toStrictEqual(rows);
-  await verifyFacts(path, id);
+  expect(await nativeRows(path)).toStrictEqual(exportedRows);
+  expect(await nativeRows(branch.source)).toStrictEqual(exportedRows);
+  await verifyFacts(path, id, fixture.root, 'W24 durable lifecycle', []);
   await verifyReleased([branch.source, branch.fork]);
   await recordingArtifacts(path);
-  return { path, id, rows };
+  return { path, id, rows: exportedRows };
 }
 
 export async function reopen(
@@ -174,6 +182,13 @@ export async function reopen(
   }
   expect(replayed).toBe(imported.rows.length);
   expect(await activePath(agent)).toBe(imported.path);
+  await verifyFacts(
+    imported.path,
+    imported.id,
+    fixture.root,
+    'W24 durable lifecycle',
+    [],
+  );
   await verifyCheckpoint(imported.path);
   await send(agent, 'Continue after cold reopen.');
   expect(await nativeRows(await activePath(agent))).toHaveLength(

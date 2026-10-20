@@ -1,0 +1,561 @@
+{
+  "status": "W24 partial: first common lifecycle accepted; performance obligations remain",
+  "startingHead": "52a0749bc3ed2f9d65a358d8ed4525e776edda1c",
+  "firstGreenCommit": "75883b724",
+  "raw": "tmp/854-notes/p4/w24/lifecycle-run-a",
+  "sourceBindings": [
+    {
+      "path": "packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts",
+      "sha256": "939b99c84587efb54e2252c499c0ceec78c305706dcbfee5aca9f77af6680d50"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+      "sha256": "ff56377f84f79f4c9209df0de05ff9f7aa0d788761b97b48ec0cea36c649793d"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-child.ts",
+      "sha256": "1fd575bc1d7ca559d6106af39b16a4061391b50ba072295fb144d9890d362418"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-lifecycle.ts",
+      "sha256": "843aad8f8b3628662fed865a6b79be5fff3c5568b2b112245853547bc6c10f08"
+    },
+    {
+      "path": "packages/cli/src/__tests__/support/whole-product-observer.ts",
+      "sha256": "0748602d3aff1f130f74428544287dc763c28a4392cf3f65434f7746d255970c"
+    }
+  ],
+  "frozenTrackedPackageSources": 7376,
+  "frozenNewChildSources": 1,
+  "manifests": [
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/final-child-source-before.sha256",
+      "sha256": "a33f1f88002e3789c1770c176166c79c6809d6fa80910bfbc9a73f8e27ae4b96"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/final-child-new-before.sha256",
+      "sha256": "4f59b3479138f859e64a4485e299967237f667a91acccc04f47616ecf5155d5a"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/final-child-source-check.log",
+      "sha256": "44c3801854511000f71d7d3a086d2c1bbc4da03a7d815d98adb33f0756fac2c1"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/final-child-new-check.log",
+      "sha256": "0456216f7d492a6781babbd777f0b6e11984f87c56bcded4369cdc987994cd85"
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/function-sizes.txt",
+      "sha256": "1853557b532c453530f5322ca274be14b8f4b8c493a5808e0becefa2d47e5ccc"
+    }
+  ],
+  "executions": 8,
+  "testPasses": 28,
+  "assertions": 484,
+  "failures": 0,
+  "skips": 0,
+  "scopedGates": 11,
+  "runtime": {
+    "bun": "1.3.14",
+    "platform": "darwin"
+  },
+  "runs": [
+    {
+      "phase": "start",
+      "name": "accepted-child-old-whole-product-lifecycle",
+      "pid": 27100,
+      "driver": 27097,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-lifecycle.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "backend": "old",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-old-whole-product-lifecycle.log",
+      "sha256": "41d37ce864a3f6431c5ff2d44523f654ae6f61aa9b3f5f28a15445396ce0bc46"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-old-native-command-protocol",
+      "pid": 27141,
+      "driver": 27097,
+      "args": ["bun", "test", "src/ui/hooks/native-command-protocol.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "backend": "old",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-old-native-command-protocol.log",
+      "sha256": "a201a2253fed561d63f06c2620b57baffe122edaeba2f5b3d91e90212a43735d"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-old-package-native",
+      "pid": 27179,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "test",
+        "src/recording/session-media-package.journal.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-old-package-native.log",
+      "sha256": "3c9a51769d9c5d79986efcb7c57d78aa3e8364e993e4b0e7f36764025686ef28"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-old-child-owner",
+      "pid": 27187,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "test",
+        "src/core/__tests__/subagent-child-config-journal-integration.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "backend": "old",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-old-child-owner.log",
+      "sha256": "db388c5cf407031e51a35772fc612f1851844f5e23cdc25724a2dbfb4c7bbf5f"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-journal-whole-product-lifecycle",
+      "pid": 27202,
+      "driver": 27097,
+      "args": ["bun", "test", "src/ui/hooks/whole-product-lifecycle.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "backend": "journal",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-journal-whole-product-lifecycle.log",
+      "sha256": "e1e31886819d37e57f298a532d6c03dadf951d6754771f7056639f96c1d4501b"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-journal-native-command-protocol",
+      "pid": 27233,
+      "driver": 27097,
+      "args": ["bun", "test", "src/ui/hooks/native-command-protocol.test.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/cli",
+      "backend": "journal",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-journal-native-command-protocol.log",
+      "sha256": "8a04f5082169528ec76de1631354853c68f5cf356da399b936ccd2a492e2a944"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-journal-package-native",
+      "pid": 27264,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "test",
+        "src/recording/session-media-package.journal.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-journal-package-native.log",
+      "sha256": "d487e758e3bc7e7e556c77bafd016c03b913026266d62839e42cc07ca3b1d7f5"
+    },
+    {
+      "phase": "start",
+      "name": "accepted-child-journal-child-owner",
+      "pid": 27272,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "test",
+        "src/core/__tests__/subagent-child-config-journal-integration.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "backend": "journal",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-accepted-child-journal-child-owner.log",
+      "sha256": "a248424df64fd8afd7a8956e0ab181b48ddbec692de79cc293ef8332f1f422bb"
+    },
+    {
+      "phase": "start",
+      "name": "build-types-child",
+      "pid": 27282,
+      "driver": 27097,
+      "args": ["npm", "run", "build:types"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-build-types-child.log",
+      "sha256": "9e8c0ef0a2cda0482790d71350a5f6c4590599786dc17bf4c1f4b6a778519b77"
+    },
+    {
+      "phase": "start",
+      "name": "types-core-child-final",
+      "pid": 28346,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-types-core-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "types-agents-child-final",
+      "pid": 28451,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-types-agents-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "types-cli-child-final",
+      "pid": 28556,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/cli/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-types-cli-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "test-types-agents-child-final",
+      "pid": 28739,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-test-types-agents-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "test-types-cli-child-final",
+      "pid": 28829,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/cli/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-test-types-cli-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "lint-child-final",
+      "pid": 28922,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "eslint",
+        "packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-child.ts",
+        "packages/cli/src/__tests__/support/whole-product-lifecycle.ts",
+        "packages/cli/src/__tests__/support/whole-product-observer.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-lint-child-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "phase": "start",
+      "name": "format-child-final",
+      "pid": 29054,
+      "driver": 27097,
+      "args": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts",
+        "packages/cli/src/__tests__/support/whole-product-fixture.ts",
+        "packages/cli/src/__tests__/support/whole-product-child.ts",
+        "packages/cli/src/__tests__/support/whole-product-lifecycle.ts",
+        "packages/cli/src/__tests__/support/whole-product-observer.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-format-child-final.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "phase": "start",
+      "name": "affected-graph-child-final",
+      "pid": 29058,
+      "driver": 27097,
+      "args": ["bun", "scripts/check-affected-test-shards.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-affected-graph-child-final.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "phase": "start",
+      "name": "audit-child-final",
+      "pid": 29080,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/854-notes/p4/w24/lifecycle-run-a/audit-child-accepted"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-audit-child-final.log",
+      "sha256": "1697835878bafd3dcdca05d5e9f29bc9d5708ac32b3a45d220dc3c78b62e2b06"
+    },
+    {
+      "phase": "start",
+      "name": "smoke-journal-child-final",
+      "pid": 29117,
+      "driver": 27097,
+      "args": [
+        "bun",
+        "scripts/start.ts",
+        "--profile-load",
+        "lunahigh",
+        "write me a haiku and nothing else"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "backend": "journal",
+      "log": "tmp/854-notes/p4/w24/lifecycle-run-a/final-smoke-journal-child-final.log",
+      "sha256": "249162a7cb5253bf5b14046f1baad052c4922561a2d921c0bda82091ac12d183"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr/lifecycle-proof.json",
+      "sha256": "0514778c66a0528d971d20939d8021cf568b47d7f3a2f833a5873e897d732955",
+      "child": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr/child-proof.json",
+      "childSha256": "389bfa8dd0063fdd8c8663eb9f1181284d36ae1d3466c67e1351708f7e5a4abf",
+      "pid": 27100,
+      "recordings": [
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr/logs/tmp/8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7/chats/session-2026-10-20T13-00-59-98fa69ec-549e-459e-b39b-4b49713cc38d-w24-source.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "w24-source",
+              "start": {
+                "startTime": "2026-10-20T13:00:59.066Z",
+                "projectHash": "8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7",
+                "workspaceDirs": [
+                  "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr"
+                ],
+                "kind": "main",
+                "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [
+                "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr"
+              ],
+              "title": "W24 durable lifecycle"
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 9,
+            "fileSize": 79301
+          },
+          "checkpoints": [
+            {
+              "checkpointId": "bfcd3591-4e6b-4aa6-a9f6-7b4abe00dba8",
+              "name": "w24-cut",
+              "sequence": 7,
+              "createdAtMs": 1792501259346
+            }
+          ]
+        },
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr/logs/tmp/8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7/chats/session-2026-10-20T13-00-59-3b304e62-bff3-478e-997a-8735347fb0d0-5e456e38-e38.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "5e456e38-e38d-4951-9abd-5a1fe737a516",
+              "start": {
+                "startTime": "2026-10-20T13:00:59.389Z",
+                "projectHash": "8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7",
+                "workspaceDirs": [
+                  "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr"
+                ],
+                "kind": "main"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [
+                "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr"
+              ],
+              "title": null,
+              "name": null
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 8,
+            "fileSize": 27101
+          },
+          "checkpoints": []
+        },
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-sUESQr/logs/tmp/8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7/chats/session-imported-8af0bce9-4eda-474e-818a-596d7630d255.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "8af0bce9-4eda-474e-818a-596d7630d255",
+              "start": {
+                "startTime": "2026-10-20T13:00:59.066Z",
+                "projectHash": "8e529957b899636777217ebbebb227c754ba8a5ace583a3d5bff812b14db25c7",
+                "workspaceDirs": [],
+                "kind": "main"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [],
+              "title": "W24 durable lifecycle"
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 11,
+            "fileSize": 89905
+          },
+          "checkpoints": [
+            {
+              "checkpointId": "bfcd3591-4e6b-4aa6-a9f6-7b4abe00dba8",
+              "name": "w24-cut",
+              "sequence": 7,
+              "createdAtMs": 1792501259346
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS/lifecycle-proof.json",
+      "sha256": "c4bdf05dcc6e12546849acb21cb73ff1176a6408224c1c0b48bd4c9247d171c0",
+      "child": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS/child-proof.json",
+      "childSha256": "fd1a8322007445f746400918e3bb58c17943fbe4959a30362727a09d9b68c060",
+      "pid": 27202,
+      "recordings": [
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS/logs/tmp/d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06/chats/session-2026-10-20T13-01-04-78658003-94fb-483c-ba48-00e029f1d951-w24-source.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "w24-source",
+              "start": {
+                "startTime": "2026-10-20T13:01:04.511Z",
+                "projectHash": "d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06",
+                "workspaceDirs": [
+                  "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS"
+                ],
+                "kind": "main",
+                "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [
+                "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS"
+              ],
+              "title": "W24 durable lifecycle"
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 9,
+            "fileSize": 79302
+          },
+          "checkpoints": [
+            {
+              "checkpointId": "7eddf39a-670b-4a07-a283-d09c0591aece",
+              "name": "w24-cut",
+              "sequence": 7,
+              "createdAtMs": 1792501264757
+            }
+          ]
+        },
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS/logs/tmp/d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06/chats/session-2026-10-20T13-01-04-ae385006-a788-4e67-bf9a-6bd7b6f21647-0f571258-428.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "0f571258-4287-41e4-8508-3cc839c84b4e",
+              "start": {
+                "startTime": "2026-10-20T13:01:04.799Z",
+                "projectHash": "d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06",
+                "workspaceDirs": [
+                  "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS"
+                ],
+                "kind": "main"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [
+                "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS"
+              ],
+              "title": null,
+              "name": null
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 8,
+            "fileSize": 27101
+          },
+          "checkpoints": []
+        },
+        {
+          "path": "tmp/854-notes/p4/w24/lifecycle-run-a/fixtures/whole-product-XZCwtS/logs/tmp/d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06/chats/session-imported-d6dea1cf-799e-4c5a-b94e-265543fdb508.llxj",
+          "facts": {
+            "facts": {
+              "sessionId": "d6dea1cf-799e-4c5a-b94e-265543fdb508",
+              "start": {
+                "startTime": "2026-10-20T13:01:04.511Z",
+                "projectHash": "d5819b0588ef3a5690c3e444a515f2a91f47e76c8315660454992616eb375e06",
+                "workspaceDirs": [],
+                "kind": "main"
+              },
+              "provider": "fake",
+              "model": "fake-model",
+              "directories": [],
+              "title": "W24 durable lifecycle"
+            },
+            "preview": "Remember the lifecycle receipt.",
+            "rows": 11,
+            "fileSize": 89906
+          },
+          "checkpoints": [
+            {
+              "checkpointId": "7eddf39a-670b-4a07-a283-d09c0591aece",
+              "name": "w24-cut",
+              "sequence": 7,
+              "createdAtMs": 1792501264757
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "absentRecordedPids": [
+    98874, 5637, 27100, 27097, 27141, 27179, 27187, 27202, 27233, 27264, 27272,
+    27282, 28346, 28451, 28556, 28739, 28829, 28922, 29054, 29058, 29080, 29117,
+    22986, 22983, 23015, 23039, 23073, 23110, 24179, 24262, 24416, 24579, 24661,
+    24742, 24875, 24876, 24921, 24975
+  ],
+  "audit": {
+    "path": "tmp/854-notes/p4/w24/lifecycle-run-a/audit-child-accepted/findings.tsv",
+    "sha256": "92711c7704570f9f146b4766471759505c27da21e2d4dcf93f299aa6bcfc2a42",
+    "touchedFindings": 0
+  },
+  "limits": [
+    "No full-package or affected-shard execution claim",
+    "No 50-turn whole-product retained-heap/trap proof or write-amplification measurement yet",
+    "No recorder-as-primary topology decision yet",
+    "Eight unchanged W23 planning/header RED cases remain phases 5/6 through 7",
+    "Existing phase-4 provider spools/compression candidates remain W26/phase-6 work",
+    "Package and test-only metadata receipts are intentional artifacts, not whole-session history JSON snapshots",
+    "Old default unchanged; no W24/W25/W26 completion"
+  ],
+  "review": "Review skipped per Andrew 2026-10-09"
+}
