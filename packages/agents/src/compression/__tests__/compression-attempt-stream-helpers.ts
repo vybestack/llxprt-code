@@ -36,6 +36,7 @@ export function attemptHandler(
   service: HistoryService,
   hook: AttemptHook,
 ): CompressionHandler {
+  service.syncTotalTokens(0);
   const runtime = buildRuntimeContext(service, {
     compressionStrategy: 'top-down-truncation',
   });

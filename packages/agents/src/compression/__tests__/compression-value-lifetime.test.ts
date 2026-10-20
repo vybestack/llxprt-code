@@ -6,9 +6,11 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { join } from 'node:path';
 import { compressionValueDigest } from './compression-value-fixture.js';
+import { withCompressionValueRecorder } from './support/compression-value-recorder-fixture.js';
 import { middleoutRow, middleoutSetup } from './middleout-disk-helpers.js';
 import {
   ValueCompressionHistory,
@@ -27,7 +29,8 @@ class ObservedValueHistory extends ValueCompressionHistory {
     const snapshot = await super.openDumpSnapshot();
     const weak = this.sourceRows;
     return {
-      ...snapshot,
+      chronology: () => snapshot.chronology(),
+      close: () => snapshot.close(),
       async *rows(): AsyncGenerator<IContent, void, unknown> {
         for await (const row of snapshot.rows()) {
           weak.push(new WeakRef(row));
@@ -61,14 +64,6 @@ async function suspendPublication(history: ObservedValueHistory): Promise<{
   const release = valueGate();
   const failure = new Error('production value callback failed');
   const state = { acknowledged: false, callbacks: 0, published: 0 };
-  await history.registerMediaOwner(
-    mediaParticipant((input) => ({
-      publish: () => {
-        for (const _row of input.next) state.published++;
-      },
-      rollback: () => undefined,
-    })),
-  );
   const transform = history.detachedValues.transform;
   history.detachedValues.transform = (candidate, model, options) => {
     const observe = (row: IContent): void => {
@@ -94,8 +89,10 @@ async function suspendPublication(history: ObservedValueHistory): Promise<{
       model,
       {
         ...options,
-        onAcknowledged: () => {
+        onAcknowledged: async () => {
           state.acknowledged = true;
+          for await (const _row of history.streamRawHistory())
+            state.published++;
         },
         afterPublication: async () => {
           state.callbacks++;
@@ -176,30 +173,27 @@ async function exercise(
   return suspension.state.published;
 }
 function lifetime(size: number, bytes: number): Promise<number> {
-  const owners = new RowOwnership();
-  return withSuffixFixture(
+  return withCompressionValueRecorder(
     size,
-    async (history) => {
+    async ({ history, owners, root }) => {
       if (!(history instanceof ObservedValueHistory))
         throw new Error('Wrong history');
-      return exercise(history, owners, size, bytes);
-    },
-    bytes,
-    (index, payload) => middleoutRow(index, index === 0 ? payload : 2048),
-    owners,
-    (options) => {
-      if (options.attachmentCounters === undefined)
-        throw new Error('Missing fixture counters');
-      return new ObservedValueHistory({
-        ...options,
-        attachmentCounters: {
-          ...options.attachmentCounters,
-          ownership: owners,
-        },
+      const media = new LocalMediaStore({
+        rootDirectory: join(root, 'media'),
+        quotaBytes: 1024,
       });
+      try {
+        await history.registerMediaOwner(new HistoryMediaOwnership(media));
+        return await exercise(history, owners, size, bytes);
+      } finally {
+        await media.close();
+      }
     },
+    (index) => middleoutRow(index, index === 0 ? bytes : 2048),
+    (options) => new ObservedValueHistory(options),
   );
 }
+
 describe('production compression value source and publication lifetime', () => {
   it.each([512, 8192])(
     'releases %i-row upstream source frames and submission shells during real acknowledged publication failure and retries under the real lock',
