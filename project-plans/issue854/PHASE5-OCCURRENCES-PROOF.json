@@ -1,0 +1,3752 @@
+{
+  "created": "2026-10-20T21:43:43.566Z",
+  "startingHead": "4e23b8fdc",
+  "implementationCommit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6",
+  "sources": {
+    "packages/core/src/journal/contributionChanges.ts": {
+      "sha256": "7b3300cf5c8f2cfae14975323e9da46b5c827119a905f0377c446cb8cb65eb03",
+      "committedSha256": "7b3300cf5c8f2cfae14975323e9da46b5c827119a905f0377c446cb8cb65eb03",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/contributionRebuild.ts": {
+      "sha256": "0e08f90cb393e23ec45ef44a7b9353c09d43df80c35d09d54431830574b54747",
+      "committedSha256": "0e08f90cb393e23ec45ef44a7b9353c09d43df80c35d09d54431830574b54747",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/fileHeader.test.ts": {
+      "sha256": "77c62cae3c500e49657ca08d8b778220aab467118f425df469dadd3ec41587fc",
+      "committedSha256": "77c62cae3c500e49657ca08d8b778220aab467118f425df469dadd3ec41587fc",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/fileHeader.ts": {
+      "sha256": "f38e47ae61d7a184abffb851bf154be5ffe73a4162bacba05be7bdb2d798bb91",
+      "committedSha256": "f38e47ae61d7a184abffb851bf154be5ffe73a4162bacba05be7bdb2d798bb91",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/groupIncremental.ts": {
+      "sha256": "63d6f1b3fe401284b0b99f58704bb3ec7836d348f98090b4485f69136387f7f6",
+      "committedSha256": "63d6f1b3fe401284b0b99f58704bb3ec7836d348f98090b4485f69136387f7f6",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/groupRebuild.ts": {
+      "sha256": "08800cff08450cb727c60bc5d4d9d4bd0eb98f18b2e2c34746bf28e4f2a81d33",
+      "committedSha256": "08800cff08450cb727c60bc5d4d9d4bd0eb98f18b2e2c34746bf28e4f2a81d33",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/idFactBatch.ts": {
+      "sha256": "f835b73ffba8a1be83e2c55f454813461efd4a70666c1131de215452b2da9c8c",
+      "committedSha256": "f835b73ffba8a1be83e2c55f454813461efd4a70666c1131de215452b2da9c8c",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/idFactQueries.ts": {
+      "sha256": "78207215c3652ca6e14c132c3b9548e98186162cbfc9d5c2606e33dac261eb25",
+      "committedSha256": "78207215c3652ca6e14c132c3b9548e98186162cbfc9d5c2606e33dac261eb25",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts": {
+      "sha256": "9c04d135152ae29844a5004b2592838467cf13599e4083955de7d58f441e3dc2",
+      "committedSha256": "9c04d135152ae29844a5004b2592838467cf13599e4083955de7d58f441e3dc2",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/journal-normalization-facts.test.ts": {
+      "sha256": "ba786c515f7313706064646fc45c8aefffbb4f40e70b349491885e82a4881909",
+      "committedSha256": "ba786c515f7313706064646fc45c8aefffbb4f40e70b349491885e82a4881909",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/journalSession.ts": {
+      "sha256": "cfc397169e43323d4b21f6db2f992c47bae185b83eccfee4109fc8ebde010e30",
+      "committedSha256": "cfc397169e43323d4b21f6db2f992c47bae185b83eccfee4109fc8ebde010e30",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/normalizedRowOccurrences.ts": {
+      "sha256": "43b05944caddfabc8e5bc235a4d97dcab49f4b8fa8efe9cd4b548172d6f7a435",
+      "committedSha256": "43b05944caddfabc8e5bc235a4d97dcab49f4b8fa8efe9cd4b548172d6f7a435",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/journal/normalizedListEdit.ts": {
+      "sha256": "8ffe2cdd4518ff2d98615cdddfc6dee637f6e32cebbeefa8a1c98036f3cfb0e5",
+      "committedSha256": "8ffe2cdd4518ff2d98615cdddfc6dee637f6e32cebbeefa8a1c98036f3cfb0e5",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/journal-normalized-occurrences.test.ts": {
+      "sha256": "0531ac1b412f167ba2ec89ee237b2a12d6084f9c8269039892c670b2e5c61731",
+      "committedSha256": "0531ac1b412f167ba2ec89ee237b2a12d6084f9c8269039892c670b2e5c61731",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/normalized-occurrence-oracle.test.ts": {
+      "sha256": "e155c2c1c480b7ef6f24049400dc0162b69890aaebfc9327e93736a86302806b",
+      "committedSha256": "e155c2c1c480b7ef6f24049400dc0162b69890aaebfc9327e93736a86302806b",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/__tests__/support/normalized-occurrence-oracle.ts": {
+      "sha256": "3ae92ad2e66000d183f92e70bdbb07c11303e3553abe2fe9ba5577e306952242",
+      "committedSha256": "3ae92ad2e66000d183f92e70bdbb07c11303e3553abe2fe9ba5577e306952242",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    },
+    "packages/core/src/services/history/__tests__/support/persisted-occurrence-oracle.ts": {
+      "sha256": "d57a7746d24f63c20a5ec983df2e9c18103f8f55f72e8dac5329fe380839b6b3",
+      "committedSha256": "d57a7746d24f63c20a5ec983df2e9c18103f8f55f72e8dac5329fe380839b6b3",
+      "commit": "9235a4420ad49bd9a15ce104c83a9de2c15781f6"
+    }
+  },
+  "totals": {
+    "processes": 102,
+    "files": 51,
+    "pass": 708,
+    "assertions": 931526,
+    "fail": 0,
+    "skips": 0
+  },
+  "accepted": [
+    {
+      "name": "old-0",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/fileHeader.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87663,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:39:56.870Z",
+      "code": 0,
+      "finished": "2026-10-20T21:39:57.001Z",
+      "logHash": "27d05e38f6627cdd08f8cca9fab3b62285fe2350bf8ae97402d0120045d64c29",
+      "sourceFile": "packages/core/src/journal/fileHeader.test.ts",
+      "sourceSha256": "77c62cae3c500e49657ca08d8b778220aab467118f425df469dadd3ec41587fc",
+      "junitHash": "6d58993f2a751881e966d2d43a40780d21e6882d676c683fcc17ca10135aa3ea"
+    },
+    {
+      "name": "old-1",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-indexed-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87668,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:39:57.002Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:06.981Z",
+      "logHash": "52f7a67c44dd066d97f7992567168078ec49a6311d9759fa86ef2a55b27736ea",
+      "sourceFile": "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+      "sourceSha256": "9c04d135152ae29844a5004b2592838467cf13599e4083955de7d58f441e3dc2",
+      "junitHash": "07cad2dc3a16755208369da78473b12362ef5a52b80250c4b9de71527f796cfd"
+    },
+    {
+      "name": "old-2",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-unit-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-2.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87959,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:06.981Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:07.279Z",
+      "logHash": "0de2b08438c1aa832966815e23389c1b1178717a364c2a4542bc41cc7823974e",
+      "sourceFile": "packages/core/src/services/history/journal-unit-metadata.test.ts",
+      "sourceSha256": "195b76e3cc0204ee22ceb17ff7408ffb62015aa84ccf12366513d74cc6763afd",
+      "junitHash": "7684f2d0918fdcec8a4768994d2a1e7218c5e8a3770ac73ac6f242c9bd65e173"
+    },
+    {
+      "name": "old-3",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactIndex.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87969,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:07.280Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:07.963Z",
+      "logHash": "9b6d64f185cbc4863075526bb439d09a6459e9adafc364b973cd545d9d1840f7",
+      "sourceFile": "packages/core/src/journal/idFactIndex.test.ts",
+      "sourceSha256": "16cbb5d287a494e091f59ac1384e65497b9806da3469a2ade565a11fb54d9f25",
+      "junitHash": "811d6ba1be10343b1e7fdaecf010355addb023253f883560697a52eb1d014254"
+    },
+    {
+      "name": "old-4",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87979,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:07.963Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:08.083Z",
+      "logHash": "7d3c13208a7e6d1d1e4302f83fe478554edbcb3bd02e392636ace56e93377147",
+      "sourceFile": "packages/core/src/journal/idFactCodec.test.ts",
+      "sourceSha256": "b958008bbab17e52d9879a1ca761bf5bc314ebcec322f8dc056b14ca56326d25",
+      "junitHash": "da00d343e32ca207e9f8dfc43896b330e048827e5f603b257c83c1461f62571c"
+    },
+    {
+      "name": "old-5",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idTrie.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 87983,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:08.084Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:09.380Z",
+      "logHash": "3cd589ca7ef27daba4b2883245830cefb0b6b7faa68509e119d9bd5a7bb0c916",
+      "sourceFile": "packages/core/src/journal/idTrie.test.ts",
+      "sourceSha256": "75b5eefc93a10aa355718688511e587cd28484dfc9fea6cd3ee3789797cdf343",
+      "junitHash": "6ce05b86b816b646fce0ecec99baa92e2c6eb8207f0831f0774140e4a77b9aff"
+    },
+    {
+      "name": "old-6",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/rowEntry.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88010,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:09.381Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:09.521Z",
+      "logHash": "caa2aa3bd9188e5df5e94d82a48e1924fbb5b380ce754ebbf3cc7e07d07c22a2",
+      "sourceFile": "packages/core/src/journal/rowEntry.test.ts",
+      "sourceSha256": "c6d2eacf6d6ac2b0dce4c8a6400c26ab8ac2f29b084ba2beb91d8e3b9a1cc589",
+      "junitHash": "3c02b210fdb9be27c26625b089d604c1cac582bddb1db0ae773b9551df521521"
+    },
+    {
+      "name": "old-7",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/rowAlgebra.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88018,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:09.521Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:09.664Z",
+      "logHash": "f710c32baff8646ee6563a60cebd8ad732323ae5eef922c1008db24fd4c0fa5f",
+      "sourceFile": "packages/core/src/journal/rowAlgebra.test.ts",
+      "sourceSha256": "21993386e019410b17a20d91fb557635a9baa5cf2b771e8a3bc852ed83e2f9b4",
+      "junitHash": "decc6b1c46f9d11f26c569c51eba273bf84f1a1e0d338ffe42f7c8542e1b04d4"
+    },
+    {
+      "name": "old-8",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.commit.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88022,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:09.665Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:10.017Z",
+      "logHash": "2ec9673912f4f041f33a53e2bfd5c8dca5ea88cde7edaacbc322c1515a4b41b0",
+      "sourceFile": "packages/core/src/journal/journalStore.commit.test.ts",
+      "sourceSha256": "e4ce162b26afa28c4008f0da549da882555a69190f61bf566d86f4e9cf3ae963",
+      "junitHash": "1989527d6502f1d733a87aa6842ca27b6c8d89a8a50878c68450786b2a52ca26"
+    },
+    {
+      "name": "old-9",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.pop.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88038,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:10.018Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:10.358Z",
+      "logHash": "0e173a73613866fab64166619d42a590a2f9b91c23493e356ecdc6002c309653",
+      "sourceFile": "packages/core/src/journal/journalStore.pop.test.ts",
+      "sourceSha256": "5b62fa5a98bff7f585843ecaf88c6d1d46ef57507ffc3a65b6235e9962c5be19",
+      "junitHash": "ca251abf063833cd9c7fac4daf5fd6680c84f391e1b652f9ec9db14fc9dfb5a0"
+    },
+    {
+      "name": "old-10",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.model.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88044,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:10.359Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:13.812Z",
+      "logHash": "089c55c45c5c2a987a71ce3b9543bc110ba971c6196757f7c59d5abdb1ea5165",
+      "sourceFile": "packages/core/src/journal/journalStore.model.test.ts",
+      "sourceSha256": "47ec37320a367718f5eb96cb750888d57eea8eaa34b94c7b5538101bcf081707",
+      "junitHash": "a4a39d588ae723faaa0d0663a9b7e6e901c03f13adadafbec01b2d01b7bc449f"
+    },
+    {
+      "name": "old-11",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionSnapshot.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88165,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:13.813Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:14.121Z",
+      "logHash": "b19aeed54d71fda49f84423ca4609578d00bb55823100d7a32f22eac0314c1fc",
+      "sourceFile": "packages/core/src/journal/versionSnapshot.test.ts",
+      "sourceSha256": "f5e5fd630769591c71f1e60ee9462acb1194eb6507b96315f3b73436c21f6edb",
+      "junitHash": "cfe8b5097eeb8c5fe62bbed68967b560f64b4006540955fff50498d058b4d4c1"
+    },
+    {
+      "name": "old-12",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-reconstruction-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88184,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:14.122Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:14.504Z",
+      "logHash": "79f4e28d38f5caba6634afd1e88baf41b9a233f86a6dd80332a04b3520bc9a8f",
+      "sourceFile": "packages/core/src/services/history/journal-reconstruction-units.test.ts",
+      "sourceSha256": "eec0a2617bdd7323c312e4bca88f8b90e369812e7a3846502aa701b468cb11db",
+      "junitHash": "3e3ae10bba4eb2bb84470dd3c0a986d83b4661d622be5df123caae5c177e6cd9"
+    },
+    {
+      "name": "old-13",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-tail-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88192,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:14.504Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:14.909Z",
+      "logHash": "c816e8accbb1ca0952ee2fe1d7c54fa2f6cbf85b67ca7b25bc76e4ef791519be",
+      "sourceFile": "packages/core/src/services/history/journal-tail-units.test.ts",
+      "sourceSha256": "11b2015b396d3c67f8cd105a3493f7b7fcc0d8ab891614717b27e3bc186127a6",
+      "junitHash": "ee3ce221ebcbd61075203d01ca378d1ce0289bd06cba2efaa0549bad5a328f4e"
+    },
+    {
+      "name": "old-14",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-fact-errors.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88203,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:14.910Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:15.217Z",
+      "logHash": "e813c8cfeb907e74e6ac2393bbdf38df33a6a7fbab87a9c5f21bb8f7dfe8cbe3",
+      "sourceFile": "packages/core/src/services/history/journal-response-fact-errors.test.ts",
+      "sourceSha256": "719fec0591c74ea3975bfe632d79a2e5286f0b5219213b17cc18c1e78baac84f",
+      "junitHash": "16c5798278610b68d23555d80f030d89ae145e158c20b4078c7c5679ae1b091c"
+    },
+    {
+      "name": "old-15",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-tail-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88215,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:15.217Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:15.651Z",
+      "logHash": "c4872c59473a77ca677127fd418b01948968016d670b6d201fa7ca85277be122",
+      "sourceFile": "packages/core/src/services/history/journal-tail-resources.test.ts",
+      "sourceSha256": "50d8c0f2848fb1006b5586990c507ffa4e6d20814583223589b38166dd8f8853",
+      "junitHash": "b5a6fc8b6eb1f6f98b37d11da4078c3dec3adda08c44aaf1855bfac514103cbf"
+    },
+    {
+      "name": "old-16",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-block-ranges.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88232,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:15.652Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:15.977Z",
+      "logHash": "ea54a02f5831a928e3f4d4aae30c53980d819a59dd48a859cc7dd986d4b90c08",
+      "sourceFile": "packages/core/src/services/history/journal-block-ranges.test.ts",
+      "sourceSha256": "520699271e5867c9f22ee25fdbab1c50aa322aa8cf4e9d57ec690d188b7db613",
+      "junitHash": "80e5d393c89a6dc77943773bc8d8cf7036e2050b7ae6e2ec4e57bc5a0450a64e"
+    },
+    {
+      "name": "old-17",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-lazy-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88237,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:15.978Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:16.294Z",
+      "logHash": "36da81643bb2e049e823a8c289ca7fab28eb639dcf0f379698eb8c28c16112df",
+      "sourceFile": "packages/core/src/services/history/journal-lazy-units.test.ts",
+      "sourceSha256": "4aad875a7353b8da1e6501c393bc755b500823e98ff9b14f5db3916f41a2a465",
+      "junitHash": "f2fb4d24159948b2630abbce51153d92957a6b7ff10105381b3ed8553c1d4564"
+    },
+    {
+      "name": "old-18",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.readerLifetime.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88251,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:16.295Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:16.613Z",
+      "logHash": "fab85b142cdede18683011f123a6f0e268e73fdff2f8c81fb3d3b6bab824dae6",
+      "sourceFile": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+      "sourceSha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+      "junitHash": "c9572b5a4f5ae2a7a9af66d5f2c3fde4997fdc9f4288aaf9a3f3f985a49a0379"
+    },
+    {
+      "name": "old-19",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalOpen.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88257,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:16.614Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:16.767Z",
+      "logHash": "5ce5922f9ee4014f2405985271cbe8022624c24c5cfa52d0371ff42cd538cdac",
+      "sourceFile": "packages/core/src/journal/journalOpen.test.ts",
+      "sourceSha256": "964908d5daa200038293c66242233c9fd7ac416811fc65522889858325b849b6",
+      "junitHash": "28b216d716ae652deeaaa2f12f67ce77a5eb522a32730e448f5b7d24e16ac5ca"
+    },
+    {
+      "name": "old-20",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalRefusal.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88258,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:16.768Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:16.900Z",
+      "logHash": "418fae8cf1678a6269cfba87ecb370b27c0d91b7b1f9226e81bfba1be7ee7651",
+      "sourceFile": "packages/core/src/journal/journalRefusal.test.ts",
+      "sourceSha256": "608dee880aee9473d9f609d7a1f40e1973183237587e1c2b8417653405f6c835",
+      "junitHash": "eb635c7520d04013f2eebeee24cfe7a5a3397b5b1424323fadbdc0a2cdf79722"
+    },
+    {
+      "name": "old-21",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalLargeRows.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88266,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:16.900Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:17.954Z",
+      "logHash": "c81d010108f28d79563c907aff4008c6d78499318e7529248364ae321dc866f2",
+      "sourceFile": "packages/core/src/journal/journalLargeRows.test.ts",
+      "sourceSha256": "7f91a449284ce5827c2bdde0e206cbd72086f3c59214043dcc5c5cca4c80fde5",
+      "junitHash": "0f228e2bb839cc5ab1beef2b751adcb711f6da659c46ef61ae1efa35de8198cd"
+    },
+    {
+      "name": "old-22",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalTornTail.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-22.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88298,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:17.955Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:20.804Z",
+      "logHash": "1f21e1fbd0291497eb2bafaccc83fa6fd4d2b07df403108b8aa17ffe6885fc7e",
+      "sourceFile": "packages/core/src/journal/journalTornTail.test.ts",
+      "sourceSha256": "1717eafa51203b16a056e055ec6c7daf727ed8165bd760495f76ddcf5b5b9f87",
+      "junitHash": "fb68cedb81b16de1b87c98c944091a73e1457dca4e63035219d7a648cb70e0e4"
+    },
+    {
+      "name": "old-23",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-lifecycle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-23.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88390,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:20.806Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:21.311Z",
+      "logHash": "bfc30c75b6d1a13aae2335544b370db23b8f08c585b7648433f402367c67b790",
+      "sourceFile": "packages/core/src/services/history/journal-response-lifecycle.test.ts",
+      "sourceSha256": "1de7f0b121ccbe83d238e8452aca5f44be02b1be99a92e3d5ee17261e4e441c0",
+      "junitHash": "cc324eaee3ca440716232ecc0c030cc15be0a96e879ab15c3d0380932dc579b7"
+    },
+    {
+      "name": "old-24",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-24.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88404,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:21.311Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:21.838Z",
+      "logHash": "6a1242112394c80cdf098e3cbb6ed632d07e50d8ac596156e0ca42fb8ff7758f",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.test.ts",
+      "sourceSha256": "ea3c0e18afd1e5dd7bd202a08937beee47e96658809cc3b1e87b9b68af14c435",
+      "junitHash": "54af63e7e160be304d9dd8fe5ce548bdade82b8a19bf9e4398b977c0d9508986"
+    },
+    {
+      "name": "old-25",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.identity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-25.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88418,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:21.839Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:22.159Z",
+      "logHash": "300253650490f68feb7680fa6595f54cf63249dc337e1087f4c676f2cf73e4ae",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.identity.test.ts",
+      "sourceSha256": "8a5959b69195b89682f417fd6afca20b2613beadac4e90f32d61cfd895f7a2a1",
+      "junitHash": "22c5b108ec85c1ce8ee1b4fd6555db47f13a25921d43af41c6a704bd5e562a68"
+    },
+    {
+      "name": "old-26",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.unlinked.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-26.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88432,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:22.160Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:22.465Z",
+      "logHash": "4bce8b4d74c7637420ffd662101d1a794f2120d0119922b3e5a092ff7b83c900",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.unlinked.test.ts",
+      "sourceSha256": "8cfb118fdf17ea0485958d88144830f91fba4f9b3a9cdd4415c34864ee2fc8d4",
+      "junitHash": "adfe042ee683f9f7c73cb0b76e16c773330318f2f2d025209692f7a7aa0ebdc5"
+    },
+    {
+      "name": "old-27",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.owner.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-27.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88439,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:22.466Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:22.802Z",
+      "logHash": "957f4812bad46d74fc986154a45ad8c5137a50a92ff104731ad30f5a76331ec1",
+      "sourceFile": "packages/core/src/journal/journalStore.owner.test.ts",
+      "sourceSha256": "059275576cf92ebe06e8b4be72cf85cb1b3320cdb1ba199ee4e957801e92e371",
+      "junitHash": "744a7f855fcb30bf6d0493752be041871f49e55b631c5d4f241f3f9b6e751d98"
+    },
+    {
+      "name": "old-28",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.ownerRules.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-28.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88444,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:22.803Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:23.137Z",
+      "logHash": "322914726d8ea0d2c9dbb78a048101228ee64e75741b992e9bc960f7daf70ce0",
+      "sourceFile": "packages/core/src/journal/journalStore.ownerRules.test.ts",
+      "sourceSha256": "ef0ebc1c63b46b4810695a262ca0f6958aad6bf139988bc2730ab019a4eff23a",
+      "junitHash": "7c35f5bad25a2bc5b284528e2619b5f215ce09e85670d88e127d80f64f937c95"
+    },
+    {
+      "name": "old-29",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionCopy.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-29.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88451,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:23.137Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:27.708Z",
+      "logHash": "2c4e0165bde2df2a75488a55c51d5a089e7d6d0881e4c18b2b5be3296fcfc707",
+      "sourceFile": "packages/core/src/journal/versionCopy.compaction.test.ts",
+      "sourceSha256": "4e6979f3defcb7f759bf19b5fb01d485fdd14face2d6d8c1c9db25dce385926c",
+      "junitHash": "3563646e035498324c4a540fd1be91c1eb6def468f4a602dd0081326f65af682"
+    },
+    {
+      "name": "old-30",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-30.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88651,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:27.709Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:28.167Z",
+      "logHash": "b185b37b9bcfa3a9da76cb4db300350041abdcc0fc5d109d575052a9c2acb9fb",
+      "sourceFile": "packages/core/src/services/history/journal-response-units.test.ts",
+      "sourceSha256": "f3ea6e578ee1c5e7cea5d0269d652b90976d28c13ee50fb42546e7fd9a6af54b",
+      "junitHash": "330de44aed78e9a320477bc7ba6d68d929ff98717d2ba8546b774ae0176144d2"
+    },
+    {
+      "name": "old-31",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-normalization-facts.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-31.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88683,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:28.168Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:28.499Z",
+      "logHash": "decef2837a4fc3305f0062877f276dca3fe9e8080ea733170ca9f0305bd28852",
+      "sourceFile": "packages/core/src/services/history/journal-normalization-facts.test.ts",
+      "sourceSha256": "ba786c515f7313706064646fc45c8aefffbb4f40e70b349491885e82a4881909",
+      "junitHash": "735d3693f7e3dfad504ceceead9326f1ab958d288f15f5a46d2a8744cbacf423"
+    },
+    {
+      "name": "old-32",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-orphan-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-32.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88694,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:28.499Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:28.873Z",
+      "logHash": "fdf12eab8956c880405376b4267ba80eaec41a02ff58319ab0e5cf9ecff695d5",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-units.test.ts",
+      "sourceSha256": "dcf77199a5b8487720241deac8ed73e1c0d8627ea3f5f90337c7218169823a80",
+      "junitHash": "bfca80062aa4d70f9a9741ca7f3b0c1860a277baaaf982875df2257b04bd767e"
+    },
+    {
+      "name": "old-33",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-orphan-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-33.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88703,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:28.876Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:34.780Z",
+      "logHash": "d8f623d1b8d7cb0c69d7f010d91ae447578e88b9b0f5074efadec8a07e9ed049",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-resources.test.ts",
+      "sourceSha256": "173c3b3ff520a32c28ebab44b9a19b5c3ba9b545e6bd7edfe65de967fd77653b",
+      "junitHash": "a88e980ede2f17e187f20bf07eacc2ad2d7b72ed9bee05b553a5bfd77e8215e1"
+    },
+    {
+      "name": "old-34",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/normalization-unit-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-34.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 88894,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:34.781Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:51.260Z",
+      "logHash": "fc5dc46d0cbf9c2436d45d515e206f0bafa29de8f2d6e79d0884986553e3afce",
+      "sourceFile": "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+      "sourceSha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+      "junitHash": "40a340077109adfc092b43c0d73ff008a60e82e253d8a97377daaf4474bc3257"
+    },
+    {
+      "name": "old-35",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalRowCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-35.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 89737,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:51.261Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:51.493Z",
+      "logHash": "4de74725b4a4e0117a860357f8c67a630e1034bf840336e2d8701599e248eebf",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.test.ts",
+      "sourceSha256": "a4d8f0fc41276498f22f34a7c92b0d55d78a6f065e47702f30e71e78f4bb9ce0",
+      "junitHash": "95c78d26a8e88a78c81c46a59265d6a6f37cfa27a3cd505a19a71ae1a11ac248"
+    },
+    {
+      "name": "old-36",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalRowCodec.cyclic.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-36.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 89805,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:51.494Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:51.618Z",
+      "logHash": "3101571dcf1e1f04c2801759e329ba390af3e061e11aad8b495375222843ec94",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.cyclic.test.ts",
+      "sourceSha256": "ecd75356b997394ccf53d596577b632efdcb6eddbb8266d7102f810d5d81bc72",
+      "junitHash": "35bf2f691db7888135509cdac3a916c8444b5f7d7f89535bdd568f85ca0bb13d"
+    },
+    {
+      "name": "old-37",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalSession.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-37.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 89840,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:51.619Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:51.953Z",
+      "logHash": "0d54e9f6a2c4fdf04597b90debf3227191a010642f14d47b86c66e0c60e8ff07",
+      "sourceFile": "packages/core/src/services/history/journalSession.test.ts",
+      "sourceSha256": "f8654f74da71d97efdb0689e3dabe97b2a31d903bacdb585403f9e5f70950e32",
+      "junitHash": "4cfc76c34be97650c31fa5e8b38d184a273a63f7b9e56c0e970de1b9063bdd29"
+    },
+    {
+      "name": "old-38",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalSession.rowRead.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-38.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 89943,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:51.953Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:52.249Z",
+      "logHash": "f49dc4847a64a1f7bcff72ee07d4c45f1de0b93b9df376f048a5bf5011ef5134",
+      "sourceFile": "packages/core/src/services/history/journalSession.rowRead.test.ts",
+      "sourceSha256": "2a7fe510e7b0f0351e31e3c6737847499e8a9094caf076cb2e3b11504e88a9c5",
+      "junitHash": "b4da1d9c1fd2eb609d6c63ba8f665b75211b3cd6e6f2ffdb33c201032903bfb4"
+    },
+    {
+      "name": "old-39",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.repair.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-39.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90038,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:52.249Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:52.658Z",
+      "logHash": "841ef0b98e3942931da0d68d39013e28947913b49c12a82f6ca813a0286c56ae",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.repair.test.ts",
+      "sourceSha256": "ee128c6e817fba9a1caf9793e5f621ab2b0ae9eb0084b2b3b4e579f0df9c08ba",
+      "junitHash": "fd22e508ababe373f0c8cf0e84913ebca1a09eb34a8732cb2092aad248a8b7c1"
+    },
+    {
+      "name": "old-40",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.mutations.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-40.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90178,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:52.659Z",
+      "code": 0,
+      "finished": "2026-10-20T21:40:56.900Z",
+      "logHash": "6f333bd9ef91c05277fc2cb7a3429abb06b9c457d2813f1aed5b2139347b85f9",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.mutations.test.ts",
+      "sourceSha256": "cc7c9784981290b2a83ae2b4fc42e5f9ca30282f7d6f0166bf9ffbd6905d3579",
+      "junitHash": "4010c4f0680d05ea7de42f3b1fbfec4fcf543448537dcf454826d971afbe9476"
+    },
+    {
+      "name": "old-41",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-41.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90610,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:40:56.901Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:00.414Z",
+      "logHash": "6a3c112ba75aa28713d769c24431a6895ad3f07fbb9aa372e291e0a5e5b6fce0",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedOwners.test.ts",
+      "sourceSha256": "1d005a8caf5ae4aab5976c4d320550c090b6a5732254cf5cdcae9b9d4d6f9ca9",
+      "junitHash": "6dae6f24beafc62cb68426c969d18448e52be7a4a8d54e2c4ad06192cf6dc4b7"
+    },
+    {
+      "name": "old-42",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.detachedMedia.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-42.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90720,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:00.415Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:01.103Z",
+      "logHash": "fda5c77369ab89aaadb05f7ba7a8401d09119c6f370b378d39c2b882371f2b2e",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedMedia.test.ts",
+      "sourceSha256": "baead400dc1f652daf6f8a4ad9325eaaa3ac9aabcc5b1afb04f428c24ccb44cb",
+      "junitHash": "f6fb87168c5da62c7eab7ea418c56d6ac595223c37ea66fee9080fcc23562c92"
+    },
+    {
+      "name": "old-43",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/provider-curated-stream.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-43.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90745,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:01.104Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:02.998Z",
+      "logHash": "259de489aaae1e341882e83ddcdfc3eb15d4fbe955faf313b6d912a3a3083aba",
+      "sourceFile": "packages/core/src/services/history/provider-curated-stream.test.ts",
+      "sourceSha256": "5ee69db7db6b9c69865a1607eb1be850bae3fcc911b1f9742f5b7bc58ad715bc",
+      "junitHash": "d8649ce0d8cbb9ed1b5fb7191c85857a9d62e1f6e08417c43113c2aef1f47756"
+    },
+    {
+      "name": "old-44",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/provider-curated-structure.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-44.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90786,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:02.998Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:03.139Z",
+      "logHash": "636f5a9df71491ea37f10f6265018a160a794bbdc794a9ecf0d6862eaf6ec5a8",
+      "sourceFile": "packages/core/src/services/history/provider-curated-structure.test.ts",
+      "sourceSha256": "534da0ec9ebf6aef514edde964221c1ae30f17e22aecd788522bd5a79a0c832c",
+      "junitHash": "e5f93e6d9b1cbb4452ac7d1dba954a8f7e1a21947d230d28b1ce39c0402e1c3e"
+    },
+    {
+      "name": "old-45",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactMistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-45.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90790,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:03.139Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:03.472Z",
+      "logHash": "0b5e67279ce4a03191340b93bacdb3bf81865a7ea959ed89942fdf6493e9f7f2",
+      "sourceFile": "packages/core/src/journal/idFactMistral.test.ts",
+      "sourceSha256": "7b458f6c26d005b6bea2ff66081045598e6742698e030b49e5ae14eb391ff6c7",
+      "junitHash": "982fdfac815a08c7ba5bc09c7e8f52278c1007f67c728c493962e4b1da9ace3f"
+    },
+    {
+      "name": "old-46",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactBatch.spill.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-46.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90801,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:03.472Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:04.464Z",
+      "logHash": "f516f9fc4d00bf341eb1a72b0519e76eea14cbcd293322aec79fc82acac81cc0",
+      "sourceFile": "packages/core/src/journal/idFactBatch.spill.test.ts",
+      "sourceSha256": "6aa50167735e5af86cad2a7e07aecf921fe7153cc0816b2927cb60c4d7578004",
+      "junitHash": "89ec98039e65c8ca2a12c4d22098b1cad5395a0b6dd9746bc3dff047c464c343"
+    },
+    {
+      "name": "old-47",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.pins.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-47.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90836,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:04.464Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:04.771Z",
+      "logHash": "eec5e072bf10c475bc4165a79feee94029030ccad3ac74af47434d816cf5cb35",
+      "sourceFile": "packages/core/src/journal/journalStore.pins.test.ts",
+      "sourceSha256": "30c9a37514ab9b42e7fc7b44e21b314ca465866c4c5f0454c34de965b2c9a33e",
+      "junitHash": "f96c63e629037c1f7061f0d38e7fcfc4664a120177e12397c7ccc34090f0cd77"
+    },
+    {
+      "name": "old-48",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionCopy.mistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-48.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90842,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:04.771Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:05.077Z",
+      "logHash": "24b623a7145eddd8957d4b68ed6115c76ee19efd20e866253949311406cf427c",
+      "sourceFile": "packages/core/src/journal/versionCopy.mistral.test.ts",
+      "sourceSha256": "9454ee3f85c63094474c49e5bfd9c324163a5d372dc7936e1d10f1725bfd2f0f",
+      "junitHash": "1370629f0d36ba2073598dcd6f70f536023dae873d32c1f854116dc4b89bec57"
+    },
+    {
+      "name": "old-49",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-normalized-occurrences.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-49.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90854,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:05.078Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:05.818Z",
+      "logHash": "edfa331c098548e0a64dfda8d6ed0d0d3a5b5e99fbf81e2aec6fa2670f1464f6",
+      "sourceFile": "packages/core/src/services/history/journal-normalized-occurrences.test.ts",
+      "sourceSha256": "0531ac1b412f167ba2ec89ee237b2a12d6084f9c8269039892c670b2e5c61731",
+      "junitHash": "fa75b2b6292a48f05027cafa7e88ee1116a3061c26cc73e77f5aaca836650f5e"
+    },
+    {
+      "name": "old-50",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/normalized-occurrence-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-old-50.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "old",
+      "pid": 90901,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:05.819Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:15.996Z",
+      "logHash": "fba7d7340ed53a8b76469a1bbb2fc3fbcb1044951bf0956f485b8de967488df1",
+      "sourceFile": "packages/core/src/services/history/normalized-occurrence-oracle.test.ts",
+      "sourceSha256": "e155c2c1c480b7ef6f24049400dc0162b69890aaebfc9327e93736a86302806b",
+      "junitHash": "ec03d0176f11400c80dab9e5de5c08bd21f844f73d4a6197eb0836420ffdf5c5"
+    },
+    {
+      "name": "journal-0",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/fileHeader.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 91663,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:15.997Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:16.117Z",
+      "logHash": "d05144a7e7817b267ba2fe60df6b23af5c1645231ad9aeb9ac58ec474ddc5c17",
+      "sourceFile": "packages/core/src/journal/fileHeader.test.ts",
+      "sourceSha256": "77c62cae3c500e49657ca08d8b778220aab467118f425df469dadd3ec41587fc",
+      "junitHash": "dcad7238b054c45e169105e7200aba8ebf640754cf80e8637ee58c9528d762ef"
+    },
+    {
+      "name": "journal-1",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-indexed-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 91683,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:16.118Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:26.838Z",
+      "logHash": "c9e752c32a82cb9ff038481eae0829d33c0b255b8635e95cb53c518b43aab508",
+      "sourceFile": "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+      "sourceSha256": "9c04d135152ae29844a5004b2592838467cf13599e4083955de7d58f441e3dc2",
+      "junitHash": "67e44032134fad9b971778205ec3907ca3bc255f9dbf307742da4d4635df1729"
+    },
+    {
+      "name": "journal-2",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-unit-metadata.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-2.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92087,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:26.839Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:27.160Z",
+      "logHash": "8120dab52669f2cfb311cd61c00afa7b132f37f36f89841f3256388226e9e081",
+      "sourceFile": "packages/core/src/services/history/journal-unit-metadata.test.ts",
+      "sourceSha256": "195b76e3cc0204ee22ceb17ff7408ffb62015aa84ccf12366513d74cc6763afd",
+      "junitHash": "8715679c52d69b17b3a8a8a7fcd695227412fd9983331a7f8eec9ad043b240ea"
+    },
+    {
+      "name": "journal-3",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactIndex.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92091,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:27.160Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:28.035Z",
+      "logHash": "620eb758046ab02da721fa27a9ea954d1cdec5fefa94fbacea9d0ca41aafc991",
+      "sourceFile": "packages/core/src/journal/idFactIndex.test.ts",
+      "sourceSha256": "16cbb5d287a494e091f59ac1384e65497b9806da3469a2ade565a11fb54d9f25",
+      "junitHash": "29dd1b335764db623a53e9d46feda6bebbdfd1c818c5d2d0d5947e019354fd83"
+    },
+    {
+      "name": "journal-4",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92117,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:28.036Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:28.166Z",
+      "logHash": "72f65d7d075360245dc60999011187f9450a6627893d01c46f33a286197c35a0",
+      "sourceFile": "packages/core/src/journal/idFactCodec.test.ts",
+      "sourceSha256": "b958008bbab17e52d9879a1ca761bf5bc314ebcec322f8dc056b14ca56326d25",
+      "junitHash": "333ae02f9328b29f75a5d18371fdb1626ee5ee2e793b0141a86e674bf7fff30f"
+    },
+    {
+      "name": "journal-5",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idTrie.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92122,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:28.167Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:29.430Z",
+      "logHash": "1ea3730b3ab94cca0065240f85caf530b86f9dafe479ad3c5bd3e3be24c6922b",
+      "sourceFile": "packages/core/src/journal/idTrie.test.ts",
+      "sourceSha256": "75b5eefc93a10aa355718688511e587cd28484dfc9fea6cd3ee3789797cdf343",
+      "junitHash": "3f11659bed64744edea1b95cce2c96d9c012ca822b07562c20c491415f83333b"
+    },
+    {
+      "name": "journal-6",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/rowEntry.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92163,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:29.431Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:29.555Z",
+      "logHash": "1bedbaf511ea7a6c0e1a65899da0f359ef1f473ec1d4ecff8095a6cef034e364",
+      "sourceFile": "packages/core/src/journal/rowEntry.test.ts",
+      "sourceSha256": "c6d2eacf6d6ac2b0dce4c8a6400c26ab8ac2f29b084ba2beb91d8e3b9a1cc589",
+      "junitHash": "0db51b6a86a1cfc8aa6939953773bb195b1b32de60009d56c1b5bb344267c0b1"
+    },
+    {
+      "name": "journal-7",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/rowAlgebra.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92170,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:29.555Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:29.684Z",
+      "logHash": "d60d1df7ffbc66f0a03d2b5b9d7f0f687004856da3645460c96c1c260fae89c8",
+      "sourceFile": "packages/core/src/journal/rowAlgebra.test.ts",
+      "sourceSha256": "21993386e019410b17a20d91fb557635a9baa5cf2b771e8a3bc852ed83e2f9b4",
+      "junitHash": "70a7b45468dd8b5ce3bfacca154b5bea5704967abc31a545cf709d57a1c02c7e"
+    },
+    {
+      "name": "journal-8",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.commit.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92171,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:29.685Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:30.041Z",
+      "logHash": "27773020f231729af6cdafec196678844f522d5f04b0a83a23b65ccccbb22499",
+      "sourceFile": "packages/core/src/journal/journalStore.commit.test.ts",
+      "sourceSha256": "e4ce162b26afa28c4008f0da549da882555a69190f61bf566d86f4e9cf3ae963",
+      "junitHash": "38303813a5a1d7afd42fb283b9aa17e7aa10788df38ca92d08e802bc900cc2ab"
+    },
+    {
+      "name": "journal-9",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.pop.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92183,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:30.041Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:30.381Z",
+      "logHash": "f8606e746338eba65e589e67026c516dabe24644e3392394d8597cabc55b3b9b",
+      "sourceFile": "packages/core/src/journal/journalStore.pop.test.ts",
+      "sourceSha256": "5b62fa5a98bff7f585843ecaf88c6d1d46ef57507ffc3a65b6235e9962c5be19",
+      "junitHash": "2e6d57e24cce5cd98b37d8a5a2fd00202d46a205ee20e1bf591795c6d7be9c28"
+    },
+    {
+      "name": "journal-10",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.model.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92196,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:30.382Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:33.972Z",
+      "logHash": "df0eb28c6971277cc9aa98a7f5e1cb810e4a361636b6b224953377584175da54",
+      "sourceFile": "packages/core/src/journal/journalStore.model.test.ts",
+      "sourceSha256": "47ec37320a367718f5eb96cb750888d57eea8eaa34b94c7b5538101bcf081707",
+      "junitHash": "a128cba096e2748a00bb12e60c00ab982707411e40b107076b51c9eadcf06666"
+    },
+    {
+      "name": "journal-11",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionSnapshot.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92291,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:33.976Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:34.286Z",
+      "logHash": "e8186b73c5f9d1f3aa2d1dc06c24c9c2cdd98c74091f34d27e1d233fd930287a",
+      "sourceFile": "packages/core/src/journal/versionSnapshot.test.ts",
+      "sourceSha256": "f5e5fd630769591c71f1e60ee9462acb1194eb6507b96315f3b73436c21f6edb",
+      "junitHash": "6b797260e0c1ae332d1901dcdbb50ad4124445f383aa841ce061797792b7ab49"
+    },
+    {
+      "name": "journal-12",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-reconstruction-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92305,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:34.287Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:34.681Z",
+      "logHash": "bb88b4d0fc3fcdeef57f0a90dd7cfb07e3aacba7862d3734f0b95512edd8ee44",
+      "sourceFile": "packages/core/src/services/history/journal-reconstruction-units.test.ts",
+      "sourceSha256": "eec0a2617bdd7323c312e4bca88f8b90e369812e7a3846502aa701b468cb11db",
+      "junitHash": "2ee0c6732fa98bea7afae1e4ae9c11235e53beb03453d3ba80466f0697d5ce0d"
+    },
+    {
+      "name": "journal-13",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-tail-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92318,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:34.682Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:35.062Z",
+      "logHash": "c8b61a43c2e928937f05f9c449d0eae624de7607416eedae789eabea5ca7ae79",
+      "sourceFile": "packages/core/src/services/history/journal-tail-units.test.ts",
+      "sourceSha256": "11b2015b396d3c67f8cd105a3493f7b7fcc0d8ab891614717b27e3bc186127a6",
+      "junitHash": "977dbeae5bade394be6d5411d83a714104ca2c25fc1ca9ed6a43cd98ca7b9a23"
+    },
+    {
+      "name": "journal-14",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-fact-errors.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92324,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:35.063Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:35.353Z",
+      "logHash": "e95b89eb48e4e82938c639fa9ba0a4078d5412721317ae6d20b0642131ae9c2e",
+      "sourceFile": "packages/core/src/services/history/journal-response-fact-errors.test.ts",
+      "sourceSha256": "719fec0591c74ea3975bfe632d79a2e5286f0b5219213b17cc18c1e78baac84f",
+      "junitHash": "01a7b0ba31a92ccf521d75a8fcf0bd7e9cdc54aabb581a9a0ed98a2e6c37980e"
+    },
+    {
+      "name": "journal-15",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-tail-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92328,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:35.354Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:35.762Z",
+      "logHash": "48b4aec783a86c61c4dbc49dd1a1960f39407bb0cf8ea08a9cfce8684e9edc8f",
+      "sourceFile": "packages/core/src/services/history/journal-tail-resources.test.ts",
+      "sourceSha256": "50d8c0f2848fb1006b5586990c507ffa4e6d20814583223589b38166dd8f8853",
+      "junitHash": "f4e31366844edf4b54c2e7d80a7b44ab4af3f76d7bb6f354af77ef4f5d03f9a6"
+    },
+    {
+      "name": "journal-16",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-block-ranges.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92351,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:35.763Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:36.048Z",
+      "logHash": "c5da7108544e25dc6000191eb7942cda201b06c5b6929736a967942b4ec305bd",
+      "sourceFile": "packages/core/src/services/history/journal-block-ranges.test.ts",
+      "sourceSha256": "520699271e5867c9f22ee25fdbab1c50aa322aa8cf4e9d57ec690d188b7db613",
+      "junitHash": "3b5106eddf774683a20dce54a13b2f8a02e780cc377db53bc3eb27700f157c2d"
+    },
+    {
+      "name": "journal-17",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-lazy-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92354,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:36.049Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:36.352Z",
+      "logHash": "5d869ddd8c4628e6186b4b02129e4b8cddec75c71fb23106dcc918bc897cf4c5",
+      "sourceFile": "packages/core/src/services/history/journal-lazy-units.test.ts",
+      "sourceSha256": "4aad875a7353b8da1e6501c393bc755b500823e98ff9b14f5db3916f41a2a465",
+      "junitHash": "e25092d60fa86247407bed891107ed61ed7fda27ff1ec6043ec4052abfd36ba1"
+    },
+    {
+      "name": "journal-18",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.readerLifetime.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92366,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:36.352Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:36.666Z",
+      "logHash": "1685eee14e9935747144df82ee058a5b879b2b4491d271235fd05cf806c6ff90",
+      "sourceFile": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+      "sourceSha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+      "junitHash": "f00879c1d152848e66c7d3d89fc0ec972fe3015812a8335a715bb5cd1b841a5d"
+    },
+    {
+      "name": "journal-19",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalOpen.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92375,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:36.666Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:36.804Z",
+      "logHash": "910e9530fd0199250507f52f7e242d7a07bd249b1893cdd9c523a61d83ba75e7",
+      "sourceFile": "packages/core/src/journal/journalOpen.test.ts",
+      "sourceSha256": "964908d5daa200038293c66242233c9fd7ac416811fc65522889858325b849b6",
+      "junitHash": "c460fe2be0c93490b695dee398722d636c6da951e6b31c7a0c2f59f1f2963c32"
+    },
+    {
+      "name": "journal-20",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalRefusal.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92377,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:36.805Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:36.932Z",
+      "logHash": "0d87e7bbbed58566fc79a449b3b94183b49ea4832a97d1b45a0d641575c0b552",
+      "sourceFile": "packages/core/src/journal/journalRefusal.test.ts",
+      "sourceSha256": "608dee880aee9473d9f609d7a1f40e1973183237587e1c2b8417653405f6c835",
+      "junitHash": "2a1045268a63b051e2929f36ee750f48126824adea985f9e924ccb8fdeada6d5"
+    },
+    {
+      "name": "journal-21",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalLargeRows.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92381,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:36.933Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:37.921Z",
+      "logHash": "7ae46833c2744cc85bb1e6fdff02e9fb6a4fa5455c92ed1db8d8bd7973cb84fd",
+      "sourceFile": "packages/core/src/journal/journalLargeRows.test.ts",
+      "sourceSha256": "7f91a449284ce5827c2bdde0e206cbd72086f3c59214043dcc5c5cca4c80fde5",
+      "junitHash": "42a0d7a891cc6d3b7a5ec0d74c9892fc13e4db24a6fa70a72e1698c1df8dd008"
+    },
+    {
+      "name": "journal-22",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalTornTail.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-22.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92405,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:37.922Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:40.461Z",
+      "logHash": "b9456eafc8f48b191ea4dbad98156d9dd005ad46f3dba551ef287ea4103084c2",
+      "sourceFile": "packages/core/src/journal/journalTornTail.test.ts",
+      "sourceSha256": "1717eafa51203b16a056e055ec6c7daf727ed8165bd760495f76ddcf5b5b9f87",
+      "junitHash": "01231033840266471fd54eb0b74d5213a2a8bd23d7dacf951158e5e7282f30e9"
+    },
+    {
+      "name": "journal-23",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-lifecycle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-23.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92464,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:40.461Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:40.934Z",
+      "logHash": "33a30573dfe597b4e4a5020e9b79d8b18193cf44888967b4866d927130196efe",
+      "sourceFile": "packages/core/src/services/history/journal-response-lifecycle.test.ts",
+      "sourceSha256": "1de7f0b121ccbe83d238e8452aca5f44be02b1be99a92e3d5ee17261e4e441c0",
+      "junitHash": "a09a1105159bdb24435c9c1f6138a879a534b7a17a99a99fefbd88db2566193f"
+    },
+    {
+      "name": "journal-24",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-24.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92469,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:40.935Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:41.442Z",
+      "logHash": "557a39b805d5427cdf4a3964216b56e0daf1f4d354f534c038e2f7247bfa1a8a",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.test.ts",
+      "sourceSha256": "ea3c0e18afd1e5dd7bd202a08937beee47e96658809cc3b1e87b9b68af14c435",
+      "junitHash": "18944681362c88e7602a2709e16a8d06a6ac04e1b9624c37875540fcd513e9a8"
+    },
+    {
+      "name": "journal-25",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.identity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-25.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92477,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:41.442Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:41.758Z",
+      "logHash": "c3eed84bd3d4c33718a98915f46b4a67f3a316c200eeb94e0b4d8415eecdf8a0",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.identity.test.ts",
+      "sourceSha256": "8a5959b69195b89682f417fd6afca20b2613beadac4e90f32d61cfd895f7a2a1",
+      "junitHash": "fa1f5310dc4967f4cccb3a1d34d6bda49115a3277337b75ef15e1e96c24de1e6"
+    },
+    {
+      "name": "journal-26",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.compaction.unlinked.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-26.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92491,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:41.759Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:42.066Z",
+      "logHash": "7ec76009eb54a53a7832706d836dd945bd337080a016677ef12b0bcc4eca3d20",
+      "sourceFile": "packages/core/src/journal/journalStore.compaction.unlinked.test.ts",
+      "sourceSha256": "8cfb118fdf17ea0485958d88144830f91fba4f9b3a9cdd4415c34864ee2fc8d4",
+      "junitHash": "a2b6fb16ef69c244a2f8c84162e2e053539b0354792242f415693776c36137d4"
+    },
+    {
+      "name": "journal-27",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.owner.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-27.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92497,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:42.067Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:42.412Z",
+      "logHash": "c7db15c1dae89c2cbb8d008bc69afe1ff5e619d1922f10bbe7dda54e9454d4f7",
+      "sourceFile": "packages/core/src/journal/journalStore.owner.test.ts",
+      "sourceSha256": "059275576cf92ebe06e8b4be72cf85cb1b3320cdb1ba199ee4e957801e92e371",
+      "junitHash": "91af7e8be2fe9635b08168f1242faf44c49c051f05ad31befbd9a5ff57fd9afc"
+    },
+    {
+      "name": "journal-28",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.ownerRules.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-28.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92503,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:42.413Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:42.738Z",
+      "logHash": "5a8eaf362e593413f2032022c43c7198c28145a043908aae12c3cf579c67a169",
+      "sourceFile": "packages/core/src/journal/journalStore.ownerRules.test.ts",
+      "sourceSha256": "ef0ebc1c63b46b4810695a262ca0f6958aad6bf139988bc2730ab019a4eff23a",
+      "junitHash": "c8ac2dfe9e3a08c3d4d9cbb4345def016d1a2a060189985a1132a73c24c22eff"
+    },
+    {
+      "name": "journal-29",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionCopy.compaction.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-29.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92517,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:42.739Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:47.401Z",
+      "logHash": "dee9bd950d8ef5baf783a0b82eaa420370a5ffbf80ce31e2371f0efda917e880",
+      "sourceFile": "packages/core/src/journal/versionCopy.compaction.test.ts",
+      "sourceSha256": "4e6979f3defcb7f759bf19b5fb01d485fdd14face2d6d8c1c9db25dce385926c",
+      "junitHash": "eee54e734185fb0f45c592e963ff2777c6e95c321a3afd997ec81691f3b6e2cf"
+    },
+    {
+      "name": "journal-30",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-response-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-30.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92666,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:47.402Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:47.846Z",
+      "logHash": "a726307b0e3e472131fae76f6245ecbd6b4d16bf68ee76112c6e5dcdc524aa61",
+      "sourceFile": "packages/core/src/services/history/journal-response-units.test.ts",
+      "sourceSha256": "f3ea6e578ee1c5e7cea5d0269d652b90976d28c13ee50fb42546e7fd9a6af54b",
+      "junitHash": "0021d15a59c66c08cbda4e57c315976ccc019678a794d7e009bbbbd22117309e"
+    },
+    {
+      "name": "journal-31",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-normalization-facts.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-31.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92678,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:47.847Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:48.166Z",
+      "logHash": "4b331d53134c1db445cded5840e948f407b167a984f6011832040bef3e9ff08e",
+      "sourceFile": "packages/core/src/services/history/journal-normalization-facts.test.ts",
+      "sourceSha256": "ba786c515f7313706064646fc45c8aefffbb4f40e70b349491885e82a4881909",
+      "junitHash": "f2d0097f70acc4d90b7631d36c2e3bab6887d7b17fbdcc206662269e2a616ee5"
+    },
+    {
+      "name": "journal-32",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-orphan-units.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-32.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92682,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:48.167Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:48.571Z",
+      "logHash": "16dfed0ac8b8491f44022a95c3072051964b3e7c7eecf710723c0ca2b7330881",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-units.test.ts",
+      "sourceSha256": "dcf77199a5b8487720241deac8ed73e1c0d8627ea3f5f90337c7218169823a80",
+      "junitHash": "8644bfdcb14d7e3849dfbe28208339a84e7db9888d10d7e309af8b5df8b57d49"
+    },
+    {
+      "name": "journal-33",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-orphan-resources.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-33.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92700,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:48.571Z",
+      "code": 0,
+      "finished": "2026-10-20T21:41:54.692Z",
+      "logHash": "25265a47d830f0868c5262a3387f5113f6bd2fe5b8fda4af030cab8d0aa6c3c7",
+      "sourceFile": "packages/core/src/services/history/journal-orphan-resources.test.ts",
+      "sourceSha256": "173c3b3ff520a32c28ebab44b9a19b5c3ba9b545e6bd7edfe65de967fd77653b",
+      "junitHash": "6662d3f8bb59542392206bdcfcaef6eaad95ed4d9c959d4951e15c37c7ad4a42"
+    },
+    {
+      "name": "journal-34",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/normalization-unit-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-34.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 92847,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:41:54.692Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:12.372Z",
+      "logHash": "db68ecf03231588a42ac27f95294ffd5454b4e1d817059e60c0e18d8c1bfde35",
+      "sourceFile": "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+      "sourceSha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+      "junitHash": "9ac16c8ddb5e24f8c39e3bc0b2e4680268f0adc67ca62bef3ba8f4c2d6f3518c"
+    },
+    {
+      "name": "journal-35",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalRowCodec.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-35.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93300,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:12.373Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:12.537Z",
+      "logHash": "c7b2940493321991008cea2ae383d2d95ee373aeac8a5e12ee656fc770ce4117",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.test.ts",
+      "sourceSha256": "a4d8f0fc41276498f22f34a7c92b0d55d78a6f065e47702f30e71e78f4bb9ce0",
+      "junitHash": "5e93642279c5c2dd74074310dc9777fbb9b06b3da68f6cdb8d066075713dad00"
+    },
+    {
+      "name": "journal-36",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalRowCodec.cyclic.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-36.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93311,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:12.538Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:12.689Z",
+      "logHash": "8b988e3be559c4307c7d90c12666256ba774ad4006bee479c6b5e94ff80f75b4",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.cyclic.test.ts",
+      "sourceSha256": "ecd75356b997394ccf53d596577b632efdcb6eddbb8266d7102f810d5d81bc72",
+      "junitHash": "133712aeb12b108794e743f2cb8105104adc068ecf163adcb05ae90258cdaa8a"
+    },
+    {
+      "name": "journal-37",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalSession.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-37.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93316,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:12.689Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:13.048Z",
+      "logHash": "47c06990fa60a9a88266ecee1fa573319be62a4e1624fcec291cf56912c2ff14",
+      "sourceFile": "packages/core/src/services/history/journalSession.test.ts",
+      "sourceSha256": "f8654f74da71d97efdb0689e3dabe97b2a31d903bacdb585403f9e5f70950e32",
+      "junitHash": "7e97627896ae5ba8daa260ddb57bdc6081e83195bbe3d6f9e7c35afe848f6577"
+    },
+    {
+      "name": "journal-38",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalSession.rowRead.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-38.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93322,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:13.048Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:13.363Z",
+      "logHash": "ab3524a68c23d7288c2aee514ff291a2b737abb96c0e08e29019f9922483d06e",
+      "sourceFile": "packages/core/src/services/history/journalSession.rowRead.test.ts",
+      "sourceSha256": "2a7fe510e7b0f0351e31e3c6737847499e8a9094caf076cb2e3b11504e88a9c5",
+      "junitHash": "abdd0a5a30ac6eafe5ff2bf3d0964fc22714d9d14b38f20612e225e3ac3dea8a"
+    },
+    {
+      "name": "journal-39",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.repair.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-39.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93329,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:13.364Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:13.787Z",
+      "logHash": "f1e545780e1781c41692949a268ba9792b2c3e289d417c5bd6e7f272affd1ee1",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.repair.test.ts",
+      "sourceSha256": "ee128c6e817fba9a1caf9793e5f621ab2b0ae9eb0084b2b3b4e579f0df9c08ba",
+      "junitHash": "188ee4738135262d545330592746494bd2fd847d5ec22021cb5a7e91acb07428"
+    },
+    {
+      "name": "journal-40",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.mutations.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-40.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93343,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:13.787Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:18.193Z",
+      "logHash": "058aa463e77d1132df63ff81f5d50d421aed493365d57148ce1a3baa139caa36",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.mutations.test.ts",
+      "sourceSha256": "cc7c9784981290b2a83ae2b4fc42e5f9ca30282f7d6f0166bf9ffbd6905d3579",
+      "junitHash": "c7bc54462c68aac4756ee6e0e2982ec27c08e8bc262f691edebadee609587118"
+    },
+    {
+      "name": "journal-41",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-41.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93463,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:18.194Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:21.892Z",
+      "logHash": "4642ea85b1e510748db07d8c881b50b76b9bd2b3f59ed32bbea0ba0bd942d8f3",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedOwners.test.ts",
+      "sourceSha256": "1d005a8caf5ae4aab5976c4d320550c090b6a5732254cf5cdcae9b9d4d6f9ca9",
+      "junitHash": "a800841a776d9013d6e83a4a950804354f7a50a1df4705d1b8e60452a94e03bb"
+    },
+    {
+      "name": "journal-42",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journalHistoryStore.detachedMedia.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-42.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93608,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:21.893Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:22.580Z",
+      "logHash": "6bb73a27de92529fe03ddf0bdc889d07f5935c3a882b513d281bc2daaecf6257",
+      "sourceFile": "packages/core/src/services/history/journalHistoryStore.detachedMedia.test.ts",
+      "sourceSha256": "baead400dc1f652daf6f8a4ad9325eaaa3ac9aabcc5b1afb04f428c24ccb44cb",
+      "junitHash": "f6a9b89036b3339ceb6256034512e7e06476b52a3ff3440b5d2e35c7f7bf90b5"
+    },
+    {
+      "name": "journal-43",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/provider-curated-stream.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-43.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 93630,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:22.580Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:39.442Z",
+      "logHash": "a8d92bfc491f4bad249be1875eb10704752cc619a29bf735313d533cc227ec1d",
+      "sourceFile": "packages/core/src/services/history/provider-curated-stream.test.ts",
+      "sourceSha256": "5ee69db7db6b9c69865a1607eb1be850bae3fcc911b1f9742f5b7bc58ad715bc",
+      "junitHash": "4c85516cd7b0fb8a1d4043c0bf13d332f4c097b9f1090c5cda1ec97f24205fb5"
+    },
+    {
+      "name": "journal-44",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/provider-curated-structure.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-44.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95034,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:39.446Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:39.587Z",
+      "logHash": "7761e8374080e3046403d310fa2c3c1a2ceba9668415a0e5feddb7392c3771ef",
+      "sourceFile": "packages/core/src/services/history/provider-curated-structure.test.ts",
+      "sourceSha256": "534da0ec9ebf6aef514edde964221c1ae30f17e22aecd788522bd5a79a0c832c",
+      "junitHash": "b4458370d4529a7954be1ab1d762b9a1717a9727ae0a56aedfcb39eb06863ea6"
+    },
+    {
+      "name": "journal-45",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactMistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-45.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95081,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:39.588Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:39.917Z",
+      "logHash": "d6494b233af49e386e1b36e8f27cc2467a5ceed7a62bf259989f807386b794a2",
+      "sourceFile": "packages/core/src/journal/idFactMistral.test.ts",
+      "sourceSha256": "7b458f6c26d005b6bea2ff66081045598e6742698e030b49e5ae14eb391ff6c7",
+      "junitHash": "46bcf31527cb61415ada59f687bcc5494235a32af11ed6386fc5c05cb902bfe3"
+    },
+    {
+      "name": "journal-46",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/idFactBatch.spill.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-46.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95186,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:39.918Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:40.769Z",
+      "logHash": "ecb758ef6935bb7b69871ade8a9ba46691f3d094d3cfc6df4fdb5e0c8391c469",
+      "sourceFile": "packages/core/src/journal/idFactBatch.spill.test.ts",
+      "sourceSha256": "6aa50167735e5af86cad2a7e07aecf921fe7153cc0816b2927cb60c4d7578004",
+      "junitHash": "f1961654766e3a31702953c2433fce6529b31a223ae2da93282b75560f04ada9"
+    },
+    {
+      "name": "journal-47",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/journalStore.pins.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-47.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95469,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:40.770Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:41.087Z",
+      "logHash": "7f6adee59d6c08b3532adb30514ebc417027bc35257dd2df4879061b7a186d8e",
+      "sourceFile": "packages/core/src/journal/journalStore.pins.test.ts",
+      "sourceSha256": "30c9a37514ab9b42e7fc7b44e21b314ca465866c4c5f0454c34de965b2c9a33e",
+      "junitHash": "6ea76e3b9a2d79580545e36ac137934fc6bce7bcacda11e75cc7f7178aa2a65f"
+    },
+    {
+      "name": "journal-48",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/journal/versionCopy.mistral.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-48.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95576,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:41.088Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:41.398Z",
+      "logHash": "1031ddaede0e0e8bea50e5bc6d2873eed94e759e324fde2a544deec475d10dfc",
+      "sourceFile": "packages/core/src/journal/versionCopy.mistral.test.ts",
+      "sourceSha256": "9454ee3f85c63094474c49e5bfd9c324163a5d372dc7936e1d10f1725bfd2f0f",
+      "junitHash": "eac8b62490ed2f6efb1e8985d717c791f462729bad42eba320716316af8f2cfd"
+    },
+    {
+      "name": "journal-49",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/journal-normalized-occurrences.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-49.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95677,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:41.399Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:42.144Z",
+      "logHash": "f3b0d2da1ad53f605b433435d83fe0117b193c6c73e419f54e9ab73d7e00195b",
+      "sourceFile": "packages/core/src/services/history/journal-normalized-occurrences.test.ts",
+      "sourceSha256": "0531ac1b412f167ba2ec89ee237b2a12d6084f9c8269039892c670b2e5c61731",
+      "junitHash": "d072cf69fb61e914bb8a52d66301b587e2077360f0c37a9569c7a3cc53413fa5"
+    },
+    {
+      "name": "journal-50",
+      "cmd": "bun",
+      "args": [
+        "test",
+        "--timeout",
+        "180000",
+        "./src/services/history/normalized-occurrence-oracle.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/occurrence-run-e/accepted-journal-50.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "backend": "journal",
+      "pid": 95923,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:42.144Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:52.635Z",
+      "logHash": "d68f58cf4cb42ab7750ae794a948c2cc79b649265c59f6713109bffefac6de89",
+      "sourceFile": "packages/core/src/services/history/normalized-occurrence-oracle.test.ts",
+      "sourceSha256": "e155c2c1c480b7ef6f24049400dc0162b69890aaebfc9327e93736a86302806b",
+      "junitHash": "fb5c4cb84fbbb4c8582aa60d628ea95638074be70743f30b2217b8c7618f8e03"
+    }
+  ],
+  "gates": [
+    {
+      "name": "declarations",
+      "cmd": "bun",
+      "args": ["../../scripts/build_package.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 97937,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:52.637Z",
+      "code": 0,
+      "finished": "2026-10-20T21:42:56.480Z",
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "types",
+      "cmd": "bunx",
+      "args": ["tsc", "--noEmit", "-p", "packages/core/tsconfig.noemit.json"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98052,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:42:56.485Z",
+      "code": 0,
+      "finished": "2026-10-20T21:43:03.289Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "lint",
+      "cmd": "bunx",
+      "args": [
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/groupRebuild.ts",
+        "packages/core/src/journal/idFactBatch.ts",
+        "packages/core/src/journal/idFactQueries.ts",
+        "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+        "packages/core/src/services/history/journal-normalization-facts.test.ts",
+        "packages/core/src/services/history/journalSession.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/normalizedListEdit.ts",
+        "packages/core/src/services/history/journal-normalized-occurrences.test.ts",
+        "packages/core/src/services/history/normalized-occurrence-oracle.test.ts",
+        "packages/core/src/services/history/__tests__/support/normalized-occurrence-oracle.ts",
+        "packages/core/src/services/history/__tests__/support/persisted-occurrence-oracle.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98261,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:43:03.290Z",
+      "code": 0,
+      "finished": "2026-10-20T21:43:07.742Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "prettier",
+      "cmd": "bunx",
+      "args": [
+        "prettier",
+        "--check",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/groupRebuild.ts",
+        "packages/core/src/journal/idFactBatch.ts",
+        "packages/core/src/journal/idFactQueries.ts",
+        "packages/core/src/services/history/journal-indexed-metadata.test.ts",
+        "packages/core/src/services/history/journal-normalization-facts.test.ts",
+        "packages/core/src/services/history/journalSession.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/normalizedListEdit.ts",
+        "packages/core/src/services/history/journal-normalized-occurrences.test.ts",
+        "packages/core/src/services/history/normalized-occurrence-oracle.test.ts",
+        "packages/core/src/services/history/__tests__/support/normalized-occurrence-oracle.ts",
+        "packages/core/src/services/history/__tests__/support/persisted-occurrence-oracle.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98403,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:43:07.743Z",
+      "code": 0,
+      "finished": "2026-10-20T21:43:07.993Z",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph",
+      "cmd": "bun",
+      "args": ["scripts/check-affected-test-shards.ts"],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98429,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:43:08.171Z",
+      "code": 0,
+      "finished": "2026-10-20T21:43:10.425Z",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "audit",
+      "cmd": "bun",
+      "args": [
+        "scripts/test-audit/scan.ts",
+        "tmp/854-notes/p5/occurrence-run-e/audit-accepted"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98494,
+      "driverPid": 87657,
+      "started": "2026-10-20T21:43:10.505Z",
+      "code": 0,
+      "finished": "2026-10-20T21:43:13.465Z",
+      "logHash": "126137adf487b37fc202b9ab4cdcb84325f0687670743e25634a15f1af92bc72"
+    }
+  ],
+  "controls": {
+    "driverPid": 87234,
+    "results": [
+      {
+        "name": "wrong-normalization",
+        "target": "packages/core/src/services/history/journalSession.ts",
+        "pid": 87238,
+        "driverPid": 87234,
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "./src/services/history/journal-normalized-occurrences.test.ts",
+          "--test-name-pattern",
+          "counts empty collisions"
+        ],
+        "originalHash": "cfc397169e43323d4b21f6db2f992c47bae185b83eccfee4109fc8ebde010e30",
+        "mutationHash": "f737c18843e84babb2fb709b269bcb0f9a1a51ed8849e4009837e6c973189add",
+        "code": 1,
+        "logHash": "e1470bb3e957d89f985de92280a93b5f311e74b22be0e9c4cb11699ce96d55e5"
+      },
+      {
+        "name": "omit-reconstructed-calls",
+        "target": "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "pid": 87265,
+        "driverPid": 87234,
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "./src/services/history/journal-normalized-occurrences.test.ts",
+          "--test-name-pattern",
+          "counts empty collisions"
+        ],
+        "originalHash": "43b05944caddfabc8e5bc235a4d97dcab49f4b8fa8efe9cd4b548172d6f7a435",
+        "mutationHash": "3e960c6c6dc9b46aaa6ecfc577c232ca3e2af04a3f3ba8fac9b9dd88a18f6a95",
+        "code": 1,
+        "logHash": "68a2c95bf53b255dd02187db8640787818d43bb6127c71ce684db0c762d0f2a0"
+      },
+      {
+        "name": "retained-history-id-map",
+        "target": "packages/core/src/journal/contributionChanges.ts",
+        "pid": 87285,
+        "driverPid": 87234,
+        "args": [
+          "test",
+          "--timeout",
+          "180000",
+          "./src/services/history/journal-indexed-metadata.test.ts",
+          "--test-name-pattern",
+          "updates only affected unit paths when one response follows 4000 distinct calls"
+        ],
+        "originalHash": "7b3300cf5c8f2cfae14975323e9da46b5c827119a905f0377c446cb8cb65eb03",
+        "mutationHash": "4452552a7c82962612630026d3f66f277927059673ce5e3502b22c70428e6f27",
+        "code": 1,
+        "logHash": "72da0d6e1e466e83dc73c569092d39d81049713860c4087f7df2bf1ddd096649"
+      }
+    ]
+  },
+  "fullSourceInventory": {
+    "path": "tmp/854-notes/p5/occurrence-run-e/accepted-full-sources.json",
+    "sha256": "bc64fe1a0f9200a46b220738b813411d97d6714527fee28037a91b2f279f9940",
+    "entries": 8606,
+    "worktreeMatches": true,
+    "trackedSourcesMatchImplementation": true
+  },
+  "preservation": {
+    "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e",
+    "packages/core/src/services/history/provider-curated-stream.ts": "a0cfae8c168746a641d0c853334cb5b4950ee91e609c8034defedce8a1554f80",
+    "packages/core/src/services/history/historyToolNormalization.ts": "0fe5e4d43070769e5494cff5ff675f69cf0255e5f1ff562e311de35612850001",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d"
+  },
+  "touchedAuditFindings": [
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts\t162\tindexed metadata native mutation and read bounds > preserves counts across append, pop, owner, fill, purge, density, compression, clone and compaction\tDUP_ASSERT\t2x identical assertion: expect(pinned.units).toBe(1)\tcore",
+    "packages/core/src/services/history/journal-indexed-metadata.test.ts\t268\tindexed metadata native mutation and read bounds > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect({ blocks: stats.blocks, bodies: stats.bodies }).toStrictEqual({ blocks: 0, bodies: \tcore"
+  ],
+  "absentPids": [
+    87657, 87234, 87663, 87668, 87959, 87969, 87979, 87983, 88010, 88018, 88022,
+    88038, 88044, 88165, 88184, 88192, 88203, 88215, 88232, 88237, 88251, 88257,
+    88258, 88266, 88298, 88390, 88404, 88418, 88432, 88439, 88444, 88451, 88651,
+    88683, 88694, 88703, 88894, 89737, 89805, 89840, 89943, 90038, 90178, 90610,
+    90720, 90745, 90786, 90790, 90801, 90836, 90842, 90854, 90901, 91663, 91683,
+    92087, 92091, 92117, 92122, 92163, 92170, 92171, 92183, 92196, 92291, 92305,
+    92318, 92324, 92328, 92351, 92354, 92366, 92375, 92377, 92381, 92405, 92464,
+    92469, 92477, 92491, 92497, 92503, 92517, 92666, 92678, 92682, 92700, 92847,
+    93300, 93311, 93316, 93322, 93329, 93343, 93463, 93608, 93630, 95034, 95081,
+    95186, 95469, 95576, 95677, 95923, 97937, 98052, 98261, 98403, 98429, 98494,
+    80211, 80186, 80477, 80629, 82953, 82948, 83079, 83271, 83461, 83469, 83556,
+    87238, 87265, 87285, 70923, 70918, 70929, 71196, 71208, 71231, 71237, 71267,
+    71271, 71280, 71295, 71308, 71421, 71436, 71453, 71466, 71477, 71489, 71503,
+    71514, 71525, 71530, 71539, 71571, 71646, 71659, 71673, 71690, 71703, 71720,
+    71730, 71879, 71894, 71903, 71921, 72074, 72488, 72497, 72501, 72516, 72530,
+    72547, 72689, 72816, 72833, 72899, 72904, 72915, 72942, 72955, 72969, 73011,
+    73392, 73397, 73682, 73695, 73721, 73725, 73758, 73763, 73767, 73778, 73793,
+    73904, 73916, 73933, 73953, 73965, 73986, 73991, 74001, 74011, 74023, 74026,
+    74067, 74158, 74176, 74193, 74205, 74215, 74222, 74233, 74374, 74389, 74401,
+    74417, 74581, 75041, 75046, 75050, 75059, 75074, 75089, 75220, 75347, 75373,
+    75898, 75904, 75913, 75945, 75959, 75974, 75997, 76327, 76476
+  ],
+  "livePids": [],
+  "receipts": [
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-49.log",
+      "sha256": "8f234e518f726cb14341be769f502874a1800c3e293581a2cce3005cfdf993f0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-11.log",
+      "sha256": "e8186b73c5f9d1f3aa2d1dc06c24c9c2cdd98c74091f34d27e1d233fd930287a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-19.log",
+      "sha256": "5ce5922f9ee4014f2405985271cbe8022624c24c5cfa52d0371ff42cd538cdac"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-1.log",
+      "sha256": "6501583a837feeaf4e35a7f44abf8ee041eae358395dbb9b6434b0059e60fe8b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-31.log",
+      "sha256": "decef2837a4fc3305f0062877f276dca3fe9e8080ea733170ca9f0305bd28852"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-39.log",
+      "sha256": "f1e545780e1781c41692949a268ba9792b2c3e289d417c5bd6e7f272affd1ee1"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-25.log",
+      "sha256": "300253650490f68feb7680fa6595f54cf63249dc337e1087f4c676f2cf73e4ae"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-results.jsonl",
+      "sha256": "6908d6f5714a7c2a5e174116376f29e9aa28458301b2b018da4a6e5c4864f2fb"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-40.log",
+      "sha256": "380c9350f1840ec393700d7d5e596d9d3f5d6c16acc640479a9960fb16836878"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-41.log",
+      "sha256": "a72f84abd0a37dd26aa6f2acc77601ad51bc1cadb700eda7dd75969417aa091b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-38.log",
+      "sha256": "ab3524a68c23d7288c2aee514ff291a2b737abb96c0e08e29019f9922483d06e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-24.log",
+      "sha256": "6a1242112394c80cdf098e3cbb6ed632d07e50d8ac596156e0ca42fb8ff7758f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-30.log",
+      "sha256": "b185b37b9bcfa3a9da76cb4db300350041abdcc0fc5d109d575052a9c2acb9fb"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-0.log",
+      "sha256": "23248c1a014a14a36d0878550aa9455a1e8fb0c5f2096b7fb1437f36546d21e8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-18.log",
+      "sha256": "fab85b142cdede18683011f123a6f0e268e73fdff2f8c81fb3d3b6bab824dae6"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-48.log",
+      "sha256": "bf115d6a3022e48104d5c9e11b19c7d34a47e8efe46c013717c5a9fab1dfd35f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-10.log",
+      "sha256": "df0eb28c6971277cc9aa98a7f5e1cb810e4a361636b6b224953377584175da54"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-2.log",
+      "sha256": "60340f56a3a91581d514ee2d702e762d6b38e2bf86fd9229440ef80204829585"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-12.log",
+      "sha256": "bb88b4d0fc3fcdeef57f0a90dd7cfb07e3aacba7862d3734f0b95512edd8ee44"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-26.log",
+      "sha256": "4bce8b4d74c7637420ffd662101d1a794f2120d0119922b3e5a092ff7b83c900"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-32.log",
+      "sha256": "fdf12eab8956c880405376b4267ba80eaec41a02ff58319ab0e5cf9ecff695d5"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-43.log",
+      "sha256": "a67d24f7227a65e895febd636c9b0adeb02679357ac82089eed824cb60a74270"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-42.log",
+      "sha256": "7fdad3e364a8a1827cc91cae751aa460939e55d6656dad4c998dd224c334f104"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-33.log",
+      "sha256": "d8f623d1b8d7cb0c69d7f010d91ae447578e88b9b0f5074efadec8a07e9ed049"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-27.log",
+      "sha256": "957f4812bad46d74fc986154a45ad8c5137a50a92ff104731ad30f5a76331ec1"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-13.log",
+      "sha256": "c8b61a43c2e928937f05f9c449d0eae624de7607416eedae789eabea5ca7ae79"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-3.log",
+      "sha256": "ce7398c7b89d0e90f70b3f281d1f4667d1c00f5bc86c8cac25c8ded302e12983"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-23.log",
+      "sha256": "bfc30c75b6d1a13aae2335544b370db23b8f08c585b7648433f402367c67b790"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-37.log",
+      "sha256": "0d54e9f6a2c4fdf04597b90debf3227191a010642f14d47b86c66e0c60e8ff07"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-7.log",
+      "sha256": "7e1557a487c2421d94b77f4dfb7672596dbf54cc8784b29f4f2167f579bcb195"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-17.log",
+      "sha256": "5d869ddd8c4628e6186b4b02129e4b8cddec75c71fb23106dcc918bc897cf4c5"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/green-native-initial.log",
+      "sha256": "0a87a41e9da7b388d3c9c45c264a119e38d5638e393ffa4e4bab6f2bc6629283"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-46.log",
+      "sha256": "8ffe923685749b7d3393be9da617e5249d458200937764bdae7b72043993fac8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-47.log",
+      "sha256": "bee701441682790889bdf493a48c0e5ba9677f9451aa91ce34ded86e2954d87d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-16.log",
+      "sha256": "c5da7108544e25dc6000191eb7942cda201b06c5b6929736a967942b4ec305bd"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-6.log",
+      "sha256": "96745c47dec2b565bb3f84362e69fb03da490bb4f1872613243965c5ec58a346"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-36.log",
+      "sha256": "3101571dcf1e1f04c2801759e329ba390af3e061e11aad8b495375222843ec94"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-22.log",
+      "sha256": "1f21e1fbd0291497eb2bafaccc83fa6fd4d2b07df403108b8aa17ffe6885fc7e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-28.log",
+      "sha256": "5a8eaf362e593413f2032022c43c7198c28145a043908aae12c3cf579c67a169"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-34.log",
+      "sha256": "fc5dc46d0cbf9c2436d45d515e206f0bafa29de8f2d6e79d0884986553e3afce"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-20.log",
+      "sha256": "418fae8cf1678a6269cfba87ecb370b27c0d91b7b1f9226e81bfba1be7ee7651"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-14.log",
+      "sha256": "e95b89eb48e4e82938c639fa9ba0a4078d5412721317ae6d20b0642131ae9c2e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-4.log",
+      "sha256": "3f092578c868fe2f9aea3a0b1b9f0583c81fa1fe84005f046279f0bb8515624a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-omit-reconstructed-calls-mutated.ts",
+      "sha256": "3e960c6c6dc9b46aaa6ecfc577c232ca3e2af04a3f3ba8fac9b9dd88a18f6a95"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/verify.ts",
+      "sha256": "c0c006e469e925ec86ec7044f63ed88919d2c95584b61fe87746c8afc9108472"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-45.log",
+      "sha256": "730fc96a07d8b07c8700e24fd4e0777a35f5239dd80b21cb064fc352d05864fc"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-44.log",
+      "sha256": "6fe995e075b26729f657d974e6da9b036fc7e32a09eabc9411ab7c120111d4fb"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-50.log",
+      "sha256": "eaa9031fdcde5a15ec24b39d4288da19fb76005fc5e80fa6eb2b391483c7c0ec"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-5.log",
+      "sha256": "f96a10855cc5a08e60cf8fba48947dfcfeb5409f8065c0e49c5c473c9150fb07"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-15.log",
+      "sha256": "48b4aec783a86c61c4dbc49dd1a1960f39407bb0cf8ea08a9cfce8684e9edc8f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-21.log",
+      "sha256": "c81d010108f28d79563c907aff4008c6d78499318e7529248364ae321dc866f2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-29.log",
+      "sha256": "dee9bd950d8ef5baf783a0b82eaa420370a5ffbf80ce31e2371f0efda917e880"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-35.log",
+      "sha256": "4de74725b4a4e0117a860357f8c67a630e1034bf840336e2d8701599e248eebf"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/types-initial.log",
+      "sha256": "21f354873c444ad73788c3545623874b784661faf8194bf990b42d508a792449"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-3.log",
+      "sha256": "278a2b930527ab18cb51ab07f281761196bbb7fdc0de2875f228c43a5ffe107e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-16.log",
+      "sha256": "8d0ee6196678761429628758ecff40116556a68458d33b99018abd625045084b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-46.log",
+      "sha256": "f516f9fc4d00bf341eb1a72b0519e76eea14cbcd293322aec79fc82acac81cc0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-4.log",
+      "sha256": "72f65d7d075360245dc60999011187f9450a6627893d01c46f33a286197c35a0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-37.log",
+      "sha256": "b0717c44990ba108ac4c7233a2c02e1cef3d137c3f58198ff810782cbf75abd4"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-23.log",
+      "sha256": "bfd4a3a8ab2a2483f37fd85153e41dc896a70ba1cffebef6f6a01de441f51d7f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-22.log",
+      "sha256": "a5cb245cb9ccbd6ab0049fdbaaf73a80ea521ca7449e7e0f2f0a797d9da9d35e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-36.log",
+      "sha256": "6a5beee8e847415cb7f9b5ecdf3c80bc2b0480a8163caa99e8f135f2000ee6ef"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-5.log",
+      "sha256": "1ea3730b3ab94cca0065240f85caf530b86f9dafe479ad3c5bd3e3be24c6922b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/source-inventory.log",
+      "sha256": "a0ad555f869eb703cfc6665ce16d97a6dfdf0195d0d70fad2a55e32ac2009ea7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-omit-reconstructed-calls-original.ts",
+      "sha256": "43b05944caddfabc8e5bc235a4d97dcab49f4b8fa8efe9cd4b548172d6f7a435"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/precommit-status.log",
+      "sha256": "1d51f68fb01105883df5bbc6ba81c827ce34a4ea3171d93d419ad62ba9a136d3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-47.log",
+      "sha256": "eec5e072bf10c475bc4165a79feee94029030ccad3ac74af47434d816cf5cb35"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-17.log",
+      "sha256": "46539bf183476c381b1a8cf2ae8e2bc2f42c4d0163bc7c8c0cb4182f3c744c5a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-2.log",
+      "sha256": "920c0dbf30a7a920eb6d499212e825a57f8c7c4687ae72a255e8ce4bf653d76d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-0.log",
+      "sha256": "d3c18b4202cb35412eb8cf5c3701c175d6fdb0a58c7389ee37a04a3a1b2e7bff"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-29.log",
+      "sha256": "30d1f931db03ddc524bc9b367697b37fe2db8219d5ebdd056b09802f5a30f827"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-45.log",
+      "sha256": "0b5e67279ce4a03191340b93bacdb3bf81865a7ea959ed89942fdf6493e9f7f2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-15.log",
+      "sha256": "2e984e2efd02a3cf94abe8de8b53700b4cda230937eac4e0637c6795a6fbf44b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-results.jsonl",
+      "sha256": "ac6af1a3b798eeb0cc366985d93e544d092cdcd6c21b204bfb95a3e9e92bf00e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-7.log",
+      "sha256": "d60d1df7ffbc66f0a03d2b5b9d7f0f687004856da3645460c96c1c260fae89c8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/controls-restoration.jsonl",
+      "sha256": "d64b53b0b65a34511ebba3ca25d6ae4e24cec01575a770acb5bb073f5430eea1"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-format.log",
+      "sha256": "a6e3e07b9b5040b3153fc5d85e1d0e2fef0eb7741abf7075afd9c278b4456429"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-20.log",
+      "sha256": "5d0957e65d66676eaf7e218386c8f2cb180b2a8586fbbca2e98a423259546bfa"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-34.log",
+      "sha256": "76f0cc490c5e56d1e59137c96cb294220039411d9e726d6fac78fc768fcbfefd"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-35.log",
+      "sha256": "99623e1f5c59ee4480149cb692d99125720306ab55eb6d2f95d1d433cbc56134"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-21.log",
+      "sha256": "02bb2b88ae9576357d1be0f8da22d131fc52009ae9fc414f5463e6fad183d41b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-6.log",
+      "sha256": "1bedbaf511ea7a6c0e1a65899da0f359ef1f473ec1d4ecff8095a6cef034e364"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-50.log",
+      "sha256": "fba7d7340ed53a8b76469a1bbb2fc3fbcb1044951bf0956f485b8de967488df1"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-14.log",
+      "sha256": "7626ef2a1e2bfd4eb8102d7e934144b680a6cffebd77d711f375e35ab96cec5c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-44.log",
+      "sha256": "636f5a9df71491ea37f10f6265018a160a794bbdc794a9ecf0d6862eaf6ec5a8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-28.log",
+      "sha256": "53d77fe737f84b596c9263c15645f12643141630fa656479e70694b0b212d7a3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-1.log",
+      "sha256": "876d60bbde2cfc604f080597dadc040e3e2ea41c52a0a6d1949d6f26c45b28e3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-5.log",
+      "sha256": "63342e0ca44efa7e3eb97936b0fc5796cc3af55a825a4cf2db2d3c521b5ac106"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-40.log",
+      "sha256": "6f333bd9ef91c05277fc2cb7a3429abb06b9c457d2813f1aed5b2139347b85f9"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-48.log",
+      "sha256": "1031ddaede0e0e8bea50e5bc6d2873eed94e759e324fde2a544deec475d10dfc"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-10.log",
+      "sha256": "23312002180d1ea2bef9cb83747b42cd764a5beb1457ef2654064d9621163731"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-38.log",
+      "sha256": "0a056106053c7d1cfe3dcb4b3e151132d3d375c85ff9491fd96dc2e6a1cdd646"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/frozen5000-initial.log",
+      "sha256": "6fd0def05656ca86fff9032a02e7378a84500de827587ecd0e2410d05c19677a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-2.log",
+      "sha256": "8120dab52669f2cfb311cd61c00afa7b132f37f36f89841f3256388226e9e081"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-19.log",
+      "sha256": "3a6ace58010ee0a44e0fb917e0308879439638feb597253e18ba28a998f1cc1c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-25.log",
+      "sha256": "fa48f112faed55cab5177215fdd5c38f2197db44ade11ec803e2cbfba6767286"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-31.log",
+      "sha256": "fd23e4e1f4190d455477921ec80a7c4b6b99e9754a88b198000b2bedc48dc08d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-30.log",
+      "sha256": "ec7ed8200deb0c9cb619ba0fa88b84a0041de4bdc54cab2406fdd8d6bac461fd"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-24.log",
+      "sha256": "62e2dca2ff5adaef5abd0afbd038cdb04fec7c9de5f51a53f20b46fe8332fa75"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-18.log",
+      "sha256": "9e056f1c8e13c1b615c89bc511c96bb302317a89cdefdeaf59e6de8d5e0430f7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-3.log",
+      "sha256": "620eb758046ab02da721fa27a9ea954d1cdec5fefa94fbacea9d0ca41aafc991"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-retained-history-id-map.log",
+      "sha256": "72da0d6e1e466e83dc73c569092d39d81049713860c4087f7df2bf1ddd096649"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-wrong-normalization.log",
+      "sha256": "e1470bb3e957d89f985de92280a93b5f311e74b22be0e9c4cb11699ce96d55e5"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-39.log",
+      "sha256": "508d36bb6b51353787ea1723a7a98497ec164804bdc53a2960b7c3a5852f7aac"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-49.log",
+      "sha256": "f3b0d2da1ad53f605b433435d83fe0117b193c6c73e419f54e9ab73d7e00195b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-11.log",
+      "sha256": "8435e53787d0e6022e5d74310c21ae9b880a9d979bf7846f25b5090f1a54278e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-41.log",
+      "sha256": "6a3c112ba75aa28713d769c24431a6895ad3f07fbb9aa372e291e0a5e5b6fce0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-4.log",
+      "sha256": "392b64273a26f00d83d6cd027bf5ec1a292980a9d8a7001ae6b3997b3407d8e9"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-6.log",
+      "sha256": "57f17a7fc72f5c8ac27e492172ca966ba167d2f301bb933283a78682be5f0a6d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-13.log",
+      "sha256": "0e7f60b190970fe46599ab83ac0dd6c5c65706c41784c5842edb2f61795b158c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-43.log",
+      "sha256": "259de489aaae1e341882e83ddcdfc3eb15d4fbe955faf313b6d912a3a3083aba"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-8.log",
+      "sha256": "2ec9673912f4f041f33a53e2bfd5c8dca5ea88cde7edaacbc322c1515a4b41b0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-1.log",
+      "sha256": "c9e752c32a82cb9ff038481eae0829d33c0b255b8635e95cb53c518b43aab508"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-results.jsonl",
+      "sha256": "5517ca0ec74f0573e67e41c677ce335c4733e98fa15a613e2f1a13c2baa58fc0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-32.log",
+      "sha256": "429d3ffd497965a0b0275d1099ceb6ee6c7ab729da6be8519922af45423c599a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-26.log",
+      "sha256": "9f85df13c9018cc12bc5238c358d7da45daaf9d87dd1af6a00ef151d90c3f6f9"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-27.log",
+      "sha256": "325da742f9e9d7d7980971491406eef159d5e650aa4d910e326c795fdd220deb"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-33.log",
+      "sha256": "b1609b9437d0a2ade687c1b2af441e61d1334f102b9b8d5de517d9c1c889c3f4"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-0.log",
+      "sha256": "d05144a7e7817b267ba2fe60df6b23af5c1645231ad9aeb9ac58ec474ddc5c17"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-9.log",
+      "sha256": "0e173a73613866fab64166619d42a590a2f9b91c23493e356ecdc6002c309653"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-42.log",
+      "sha256": "fda5c77369ab89aaadb05f7ba7a8401d09119c6f370b378d39c2b882371f2b2e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-12.log",
+      "sha256": "76ecec65adfcb8a6da68f161113a5cd111efacb6bdd6b59405d105ad82607c4a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/bind-occurrences.ts",
+      "sha256": "697c16670b6be2957b7b0a5c0f72377f378f025a54433e15ccbaf6e40bdcab12"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-7.log",
+      "sha256": "0eb4e8f970644a9ed673c4413b07c20b88076cf04770c2d0f1550732297633c4"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-47.log",
+      "sha256": "7f6adee59d6c08b3532adb30514ebc417027bc35257dd2df4879061b7a186d8e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-37.log",
+      "sha256": "09ead4325617e42baf867c84265c59cd4b4738a027d46f9249bb56a3a679ad24"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/red-version4.log",
+      "sha256": "afb18f93ee64fc8190540f588007b88c05c98c15739ed8816c1f9f9a375e0e0b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-23.log",
+      "sha256": "40a1b68aae7738ab3f6ae1f050e1e7c9989d2cb3bcc6bcc0d57e1dad437bbe67"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-pids.jsonl",
+      "sha256": "aa8c451f4ccda773de5cded0e4ba67c224cb3eb885e3c01422eadf23d2638a56"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-4.log",
+      "sha256": "7d3c13208a7e6d1d1e4302f83fe478554edbcb3bd02e392636ace56e93377147"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-16.log",
+      "sha256": "c0754820ad0d221039554260a4942e9a56f1577af169fec9ca0301d631db2329"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-17.log",
+      "sha256": "93d7a237d496cf5ac23c6638d99bad15b86e07fbc0bd9ff2b06a3fa87c7f4e01"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-5.log",
+      "sha256": "3cd589ca7ef27daba4b2883245830cefb0b6b7faa68509e119d9bd5a7bb0c916"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-wrong-normalization-original.ts",
+      "sha256": "cfc397169e43323d4b21f6db2f992c47bae185b83eccfee4109fc8ebde010e30"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-22.log",
+      "sha256": "d2f3e3c53ba65a56ac728c6f77b57b8da4a20fdbfaf2edad9ed27a409825d128"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-36.log",
+      "sha256": "ee3afe3f5c0ea53e6abe9ee0189b0a316ff752dff1a89ac4a2125f195c7b54ff"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-46.log",
+      "sha256": "ecb758ef6935bb7b69871ade8a9ba46691f3d094d3cfc6df4fdb5e0c8391c469"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-9.log",
+      "sha256": "852a189d1df96684b51e92d7b1a0b498b729876f2abdf35a80c8c97a9e361e01"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-44.log",
+      "sha256": "7761e8374080e3046403d310fa2c3c1a2ceba9668415a0e5feddb7392c3771ef"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-pids.jsonl",
+      "sha256": "a9d49590b69847b0a4d1831d208b7be8bfa02d856d52d1cbf574a2f18a4996d7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-50.log",
+      "sha256": "d68f58cf4cb42ab7750ae794a948c2cc79b649265c59f6713109bffefac6de89"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-20.log",
+      "sha256": "1ac0f7d94259ee843a1844fe1c8397173d50c29ef844edcc184f5f8d16cdb221"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-34.log",
+      "sha256": "8b6341c848020db30ca4482c9654f20c069452409cb7aa64e3546bbf3a4773be"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-driver.log",
+      "sha256": "80f6196329ded5ab262d75f82b14c7a0609b9cfb47db140a4b1eed7eff03011a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-7.log",
+      "sha256": "f710c32baff8646ee6563a60cebd8ad732323ae5eef922c1008db24fd4c0fa5f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/controls-driver.log",
+      "sha256": "17b36f15ebeefb780acb1491d5fd6427b8d3ffe837d9af65d62a93f66e49335e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-15.log",
+      "sha256": "55ce99548942aef3d1e19bd0208c183e3f5fb322e5119464d4c4347e37dc1bf3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-29.log",
+      "sha256": "874444a8eb8ca398e9c109dc326d3409051e2a6e5ce64b39a03793d35475b68a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-28.log",
+      "sha256": "8c4f75718bdc78c5a33ffb2d786b4f539053dee88d8e4e8dca6bc8caa81a9f8e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-14.log",
+      "sha256": "4130b3e125e965df47704c78e8ece87501253611d65329b0168a47e9b1b28836"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-6.log",
+      "sha256": "caa2aa3bd9188e5df5e94d82a48e1924fbb5b380ce754ebbf3cc7e07d07c22a2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-35.log",
+      "sha256": "bb65a9b521acdf250555c7c0e0095037d2d5b6d1ac6b6969a837e1cd0c00b4f7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-21.log",
+      "sha256": "d9c31fe9560036e3f5e565aed39c9540cc99c66447eae51173ee920f164987ae"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-45.log",
+      "sha256": "d6494b233af49e386e1b36e8f27cc2467a5ceed7a62bf259989f807386b794a2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-8.log",
+      "sha256": "aaf81dd7e9f5d26532c83c8c04fa8313057279f973f3da47a29d0d357e7d387d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-25.log",
+      "sha256": "98157d14a5270fc9464cf96dbdcaabbbc5196da88a99e4f401127080ab7a0568"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-31.log",
+      "sha256": "8ab14d6190a2aa6030104c21bad28654920120045dfc55b1e45c0f7232add4c7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-19.log",
+      "sha256": "58f0474129f2b6e113253e4822ab611faf751ab716f333357de496b4ccee11d8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-41.log",
+      "sha256": "4642ea85b1e510748db07d8c881b50b76b9bd2b3f59ed32bbea0ba0bd942d8f3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-49.log",
+      "sha256": "edfa331c098548e0a64dfda8d6ed0d0d3a5b5e99fbf81e2aec6fa2670f1464f6"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-2.log",
+      "sha256": "0de2b08438c1aa832966815e23389c1b1178717a364c2a4542bc41cc7823974e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-retained-history-id-map-mutated.ts",
+      "sha256": "4452552a7c82962612630026d3f66f277927059673ce5e3502b22c70428e6f27"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-38.log",
+      "sha256": "c11b0bc2520ef9353d4d4a513c56246161fa39dc6b025453771e391ede2ca2b7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-10.log",
+      "sha256": "470663291a03069b95974aeb75c12549eda5e1cc05e554ea780b498c97499e01"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-11.log",
+      "sha256": "cd7f6050c526cdb0b3f4b928e1c75a0a76c74aa4c0a6b229cc7885c6b21aa9fe"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/red-native.log",
+      "sha256": "6293dfcf58760f205f4e50c3d988fdb230b8c9326fcc41fcf9284bd90301b26e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-39.log",
+      "sha256": "4dd528f8307422e79d806eb29387938be945f6b955976286cae304a99a41c37c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/postcommit-status.log",
+      "sha256": "86342a0e37f320190776ad8353738b0a1496508d911175cecc4317d7f876cea8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-3.log",
+      "sha256": "9b6d64f185cbc4863075526bb439d09a6459e9adafc364b973cd545d9d1840f7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-audit.log",
+      "sha256": "126137adf487b37fc202b9ab4cdcb84325f0687670743e25634a15f1af92bc72"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-48.log",
+      "sha256": "24b623a7145eddd8957d4b68ed6115c76ee19efd20e866253949311406cf427c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-18.log",
+      "sha256": "df89a0b58eb6199fb9798127b208ec805d6912599644c6b5e0e5920a22df4862"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-40.log",
+      "sha256": "058aa463e77d1132df63ff81f5d50d421aed493365d57148ce1a3baa139caa36"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-30.log",
+      "sha256": "7ffdaaad77082327880c5213bf2ca1fc3cf6c2162ae20ee8d160b29aee16566e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-24.log",
+      "sha256": "bbcbd0b7a55409eb381542b7cf44a169d8f6cb441dd7eb3262a964bab189ef00"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-lint.log",
+      "sha256": "34a40469328c33d962e91c562fbda7de478fbf5ecddef2d64b97849abfee8f10"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-32.log",
+      "sha256": "2c37133879710f1191ae9e5c4174b837c844e1ade8c076a49e2ab25b1dc52638"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-26.log",
+      "sha256": "7339b266ffe56af77b134f3fa4f38af1ccbeb9330ea97b177f59b65b84f3f83f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-42.log",
+      "sha256": "6bb73a27de92529fe03ddf0bdc889d07f5935c3a882b513d281bc2daaecf6257"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/green-native-expanded.log",
+      "sha256": "308a2d3c6bdbbb9cfaac14de3efd81b712b0ee8f21746add4f6bdf2501dd9aa2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-8.log",
+      "sha256": "27773020f231729af6cdafec196678844f522d5f04b0a83a23b65ccccbb22499"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-1.log",
+      "sha256": "52f7a67c44dd066d97f7992567168078ec49a6311d9759fa86ef2a55b27736ea"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-13.log",
+      "sha256": "180e3813929bb9bef9267c765c69e7f0f866f8076b2e050abd1aed7093cc54bc"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-12.log",
+      "sha256": "eecbfb94244a8505632e67bc010e3498300df169adde546fd7682b11435392f0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-driver.log",
+      "sha256": "d24437029d032007b6310893096ab46f92de858f4fd877844df773bd0e883422"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-0.log",
+      "sha256": "27d05e38f6627cdd08f8cca9fab3b62285fe2350bf8ae97402d0120045d64c29"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-9.log",
+      "sha256": "f8606e746338eba65e589e67026c516dabe24644e3392394d8597cabc55b3b9b"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-types.log",
+      "sha256": "5ff86a306a057a7a604cda8b705379747293ca355af12ee072c34101cfe38d3e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-retained-history-id-map-original.ts",
+      "sha256": "7b3300cf5c8f2cfae14975323e9da46b5c827119a905f0377c446cb8cb65eb03"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-43.log",
+      "sha256": "a8d92bfc491f4bad249be1875eb10704752cc619a29bf735313d533cc227ec1d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-27.log",
+      "sha256": "eef41a196a7ff2490d2ae2406d0664ecbd031957fc08bf5314d5ab4eb9c3bc39"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-33.log",
+      "sha256": "47a396c15a3a60dbe9466fa16553da3338ce4a03ed57a5eba18aa58ebf2bbf8e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-30.log",
+      "sha256": "a726307b0e3e472131fae76f6245ecbd6b4d16bf68ee76112c6e5dcdc524aa61"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-24.log",
+      "sha256": "557a39b805d5427cdf4a3964216b56e0daf1f4d354f534c038e2f7247bfa1a8a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-38.log",
+      "sha256": "f49dc4847a64a1f7bcff72ee07d4c45f1de0b93b9df376f048a5bf5011ef5134"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-8.log",
+      "sha256": "a1af4b9cab99ea7e50db90ae63e491e533b78f90f7565faedda008ff64615aef"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-10.log",
+      "sha256": "089c55c45c5c2a987a71ce3b9543bc110ba971c6196757f7c59d5abdb1ea5165"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-18.log",
+      "sha256": "1685eee14e9935747144df82ee058a5b879b2b4491d271235fd05cf806c6ff90"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-40.log",
+      "sha256": "961613144e07a1fecf0ebb850f3050aff9c0ba6e2bdb079e89a3a52bc0668edb"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-49.log",
+      "sha256": "88128a39403eafb20e21ddf492c520521b47fdc3b6f14e14f9e595b7be28ff25"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-old-48.log",
+      "sha256": "1f50411e8778a773e89870f31b7d35f5926ca5644e08d4478b613ec5231f6c25"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-pids.jsonl",
+      "sha256": "cc2e65e14bfc5af82b439df4e05a632e2703aa7f05214dbf32b3e92a3d964644"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-19.log",
+      "sha256": "910e9530fd0199250507f52f7e242d7a07bd249b1893cdd9c523a61d83ba75e7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-41.log",
+      "sha256": "998b200a318f92f96cc2300dce508d62c5abf11aeb0c73888599fef2dab16178"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-11.log",
+      "sha256": "b19aeed54d71fda49f84423ca4609578d00bb55823100d7a32f22eac0314c1fc"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-9.log",
+      "sha256": "3a1ab5fa106d24f0186022b95782d3ddf498caf761e08c3246bcd2db4245d6d5"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-25.log",
+      "sha256": "c3eed84bd3d4c33718a98915f46b4a67f3a316c200eeb94e0b4d8415eecdf8a0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-39.log",
+      "sha256": "841ef0b98e3942931da0d68d39013e28947913b49c12a82f6ca813a0286c56ae"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-31.log",
+      "sha256": "4b331d53134c1db445cded5840e948f407b167a984f6011832040bef3e9ff08e"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-27.log",
+      "sha256": "c7db15c1dae89c2cbb8d008bc69afe1ff5e619d1922f10bbe7dda54e9454d4f7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-33.log",
+      "sha256": "25265a47d830f0868c5262a3387f5113f6bd2fe5b8fda4af030cab8d0aa6c3c7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-43.log",
+      "sha256": "83e9cc3a50b7a3c62dbfac15e2981b2dfeda215d48f4a2f8633930653ef1a59a"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-13.log",
+      "sha256": "c816e8accbb1ca0952ee2fe1d7c54fa2f6cbf85b67ca7b25bc76e4ef791519be"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/refactor-gates-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-audit.log",
+      "sha256": "126137adf487b37fc202b9ab4cdcb84325f0687670743e25634a15f1af92bc72"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-12.log",
+      "sha256": "79f4e28d38f5caba6634afd1e88baf41b9a233f86a6dd80332a04b3520bc9a8f"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-42.log",
+      "sha256": "787ab0999aa13396178549cd2f6e112837d450f0808af5df83297eadf9626e7d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-32.log",
+      "sha256": "16dfed0ac8b8491f44022a95c3072051964b3e7c7eecf710723c0ca2b7330881"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-26.log",
+      "sha256": "7ec76009eb54a53a7832706d836dd945bd337080a016677ef12b0bcc4eca3d20"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-driver.log",
+      "sha256": "3d4f28b1b6e101942c27ab7a9078d1b904ef3264c17d28e47b500c2f159acd0d"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-46.log",
+      "sha256": "193b5649d861c1b11d2c8b5c8ecc5b5dcc5d15a076fe0bf0ca08cd461456b6d6"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-16.log",
+      "sha256": "ea54a02f5831a928e3f4d4aae30c53980d819a59dd48a859cc7dd986d4b90c08"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/verify-continuation.ts",
+      "sha256": "8bbce0d126c23fa82f9f35b2a8449a6e40528fcc44be348b4654643132acac3c"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-22.log",
+      "sha256": "b9456eafc8f48b191ea4dbad98156d9dd005ad46f3dba551ef287ea4103084c2"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-36.log",
+      "sha256": "8b988e3be559c4307c7d90c12666256ba774ad4006bee479c6b5e94ff80f75b4"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/controls-pids.jsonl",
+      "sha256": "160ba580372067d2a86aa1632346817a89a7c99d4549cdd7af1c10aa2bc2fe69"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-pids.jsonl",
+      "sha256": "ad34debf84ec8596d8296d1ca9f203ee2c39dd2f5321586a627e9ce489cd9cb9"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-omit-reconstructed-calls.log",
+      "sha256": "68a2c95bf53b255dd02187db8640787818d43bb6127c71ce684db0c762d0f2a0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/control-wrong-normalization-mutated.ts",
+      "sha256": "f737c18843e84babb2fb709b269bcb0f9a1a51ed8849e4009837e6c973189add"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-37.log",
+      "sha256": "47c06990fa60a9a88266ecee1fa573319be62a4e1624fcec291cf56912c2ff14"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-23.log",
+      "sha256": "33a30573dfe597b4e4a5020e9b79d8b18193cf44888967b4866d927130196efe"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-17.log",
+      "sha256": "36da81643bb2e049e823a8c289ca7fab28eb639dcf0f379698eb8c28c16112df"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-47.log",
+      "sha256": "2046e88ba69fab7feb5c301f08cf94b732945dc84d790b927291c9b5d7399def"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/controls-continuation.ts",
+      "sha256": "336e7fa0c1bb6d00860e834ad5318664aa25f9f9b0f148ac15b67c80cced0e12"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-15.log",
+      "sha256": "c4872c59473a77ca677127fd418b01948968016d670b6d201fa7ca85277be122"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-45.log",
+      "sha256": "8bd8c2c4333b7ccaa3fe7858c121d330568991393f66f5f4bc26eb813e48b0d6"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-35.log",
+      "sha256": "c7b2940493321991008cea2ae383d2d95ee373aeac8a5e12ee656fc770ce4117"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-29.log",
+      "sha256": "2c4e0165bde2df2a75488a55c51d5a089e7d6d0881e4c18b2b5be3296fcfc707"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-21.log",
+      "sha256": "7ae46833c2744cc85bb1e6fdff02e9fb6a4fa5455c92ed1db8d8bd7973cb84fd"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-driver.log",
+      "sha256": "eb0c8efdae729741318039212354a1ed6361f6b1d321dac1f935f1a029f911f8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/repair-gates-results.jsonl",
+      "sha256": "75541a76f93f15e0e581f78e198c9a6fd634f18b8ab20defd564096e8509bad7"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-20.log",
+      "sha256": "0d87e7bbbed58566fc79a449b3b94183b49ea4832a97d1b45a0d641575c0b552"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-journal-34.log",
+      "sha256": "db68ecf03231588a42ac27f95294ffd5454b4e1d817059e60c0e18d8c1bfde35"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-28.log",
+      "sha256": "322914726d8ea0d2c9dbb78a048101228ee64e75741b992e9bc960f7daf70ce0"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-44.log",
+      "sha256": "064eb0ad255d68073ca729461093e5c6ebc0be41bb0027d469bb59de8d9d7eb8"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/accepted-old-14.log",
+      "sha256": "e813c8cfeb907e74e6ac2393bbdf38df33a6a7fbab87a9c5f21bb8f7dfe8cbe3"
+    },
+    {
+      "path": "tmp/854-notes/p5/occurrence-run-e/initial-journal-50.log",
+      "sha256": "5e97393eb83dcd5836c353d1eddfb0c1b5a0124a0465d77c6ba5b48ef9018d99"
+    }
+  ],
+  "initialEvidence": {
+    "testProcesses": 102,
+    "disposition": "Preserved, superseded by final matrix after fixture/type and lint refactors; not reused as final-source acceptance.",
+    "changedSinceInitial": [
+      "packages/core/src/journal/contributionChanges.ts",
+      "packages/core/src/journal/normalizedRowOccurrences.ts",
+      "packages/core/src/services/history/journal-normalized-occurrences.test.ts",
+      "packages/core/src/services/history/normalized-occurrence-oracle.test.ts",
+      "packages/core/src/services/history/__tests__/support/normalized-occurrence-oracle.ts"
+    ],
+    "typeError": "Inline media fixture missing required encoding.",
+    "lintErrors": 12,
+    "sourceInventoryAttemptError": "createHash.update rejected ArrayBuffer; final inventory wraps it in Uint8Array. No acceptance test rerun or altered source for that script error."
+  },
+  "normalizedNamespaces": {
+    "openai": 1,
+    "anthropic": 2,
+    "unitCases": 5000,
+    "range": "Persisted emitted normalized units; pending inputs persisted only as equivalent curated fixture rows in the occurrence differential. Request-tail fact overlay queries remain future provider work.",
+    "reconstructedDuplicates": true,
+    "emptyAndPrefixCollisions": true,
+    "rawAnthropicResultPath": "Existing normalized-library tests only; native normalization strips raw human response blocks and relocates their results beside targets."
+  },
+  "bounds": {
+    "currentRowFactsOnly": true,
+    "idBatchBytes": 65536,
+    "appendDistinctIds": [40, 4000],
+    "appendReadsExclusive": 150,
+    "metadataRows": [40, 4000, 100000],
+    "metadataHeadReadsExclusive": 120,
+    "metadataPayloadReads": 0,
+    "rankSelectHeadReadsExclusive": 20,
+    "selectedUnitBlockReads": 1
+  },
+  "format": {
+    "version": 5,
+    "refusesVersion4WithCorrectCRC": true,
+    "reason": "Committed version-4 semantics omitted normalized namespace lists; admitting those journals would return false zero counts.",
+    "migration": false
+  },
+  "limits": "Provider routing/default unchanged. Native namespaces 0/4 and Kimi fields remain source occurrences, not completed emitted-unit bookkeeping. Kimi callBlocks/last eligible/exception namespace 5, Mistral mappedRef/used namespace 3 production assignment and active-slot fill, format/settings summaries and LENS remain incomplete. Native clone/compaction retain label-based normalized positions through the existing offset-aware copier; existing Mistral copy regression does not establish native mapping assignment. The retained-ID control fails a read budget (13779 reads versus <150), not the outstanding 10k/100k/1M heap proof. Range reads do not validate unselected whole-row CRC. W26 scratch and eight W23 planning cases remain phase5-7 dependent. Review skipped per Andrew 2026-10-09."
+}
