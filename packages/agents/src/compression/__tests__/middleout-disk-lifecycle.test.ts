@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { nativeSummaryAdmissionRollback } from './support/native-summary-publication.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
@@ -56,6 +58,8 @@ async function failures(size: number): Promise<number> {
 }
 
 async function rollback(size: number): Promise<number> {
+  if (selectBackend() === 'journal')
+    return nativeSummaryAdmissionRollback(size);
   return withRollbackFixture(async (history, recorder) => {
     const { handler, transport } = middleoutSetup(history);
     const makeRow = (index: number): IContent => {

@@ -25,7 +25,8 @@ class RetainingHistory extends MiddleoutDiskHistory {
     let first = true;
     const { retained, copied, borrowedOwners, copyOwners } = this;
     return {
-      ...snapshot,
+      close: () => snapshot.close(),
+      chronology: () => snapshot.chronology(),
       async *rows() {
         const retain = first;
         first = false;

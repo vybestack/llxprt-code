@@ -232,6 +232,14 @@ export function encodeContentRow(
 ): RowDraft {
   const chronology = content.metadata?.chronology;
   const metadata = storableMetadata(content.metadata);
+  const contentKeys = Object.keys(content).filter(
+    (key) => key === 'speaker' || key === 'blocks' || key === 'metadata',
+  );
+  const defaultKeys =
+    content.metadata === undefined
+      ? 'speaker,blocks'
+      : 'speaker,blocks,metadata';
+  const order = contentKeys.join(',') === defaultKeys ? {} : { contentKeys };
   return {
     owner: options.owner,
     speaker: speakerCode(content.speaker),
@@ -246,9 +254,10 @@ export function encodeContentRow(
     meta: ENCODER.encode(
       JSON.stringify(
         metadata === undefined
-          ? { speaker: content.speaker }
+          ? { speaker: content.speaker, ...order }
           : {
               speaker: content.speaker,
+              ...order,
               metadata,
               ...(chronology === undefined
                 ? {}
@@ -270,6 +279,7 @@ export function encodeContentRow(
 
 interface MetaPiece {
   readonly speaker: IContent['speaker'];
+  readonly contentKeys?: readonly string[];
   readonly metadata?: ContentMetadata;
   readonly chronologyIndex?: number;
 }
@@ -334,9 +344,19 @@ export function decodeStoredRow(
   };
   const metadata = decodedMetadata(piece, header);
   if (metadata !== undefined) content.metadata = metadata;
-  return (header.flags & ROW_FLAG.invalidateResponses) !== 0
-    ? invalidateResponsesStatefulChain([content])[0]
-    : applyResumeBoundary(header.label, content, resumeBoundary);
+  const decoded =
+    (header.flags & ROW_FLAG.invalidateResponses) !== 0
+      ? invalidateResponsesStatefulChain([content])[0]
+      : applyResumeBoundary(header.label, content, resumeBoundary);
+  return Object.assign(
+    Object.fromEntries(
+      (piece.contentKeys ?? Object.keys(decoded)).map((key) => [
+        key,
+        Reflect.get(decoded, key),
+      ]),
+    ),
+    decoded,
+  );
 }
 
 /**

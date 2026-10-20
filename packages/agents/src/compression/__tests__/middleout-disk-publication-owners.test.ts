@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { nativeSummaryPublication } from './support/native-summary-publication.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
@@ -23,6 +25,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 async function publication(size: number): Promise<number> {
+  if (selectBackend() === 'journal')
+    return nativeSummaryPublication(size, 'middle-out');
   const transaction = new RowOwnership();
   return withSuffixFixture(
     size,

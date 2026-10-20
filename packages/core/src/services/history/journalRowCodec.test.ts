@@ -50,6 +50,22 @@ function flagsOf(content: IContent): number {
 }
 
 describe('row codec round trip', () => {
+  it('preserves serialized content field order across native conversion', () => {
+    const content: IContent = {
+      speaker: 'ai',
+      metadata: { model: 'historical-model', chronology: CHRONOLOGY },
+      blocks: [{ type: 'text', text: 'ordered provider request' }],
+    };
+    expect(JSON.stringify(roundTrip(content))).toBe(JSON.stringify(content));
+    const reordered: IContent = {
+      metadata: content.metadata,
+      blocks: content.blocks,
+      speaker: content.speaker,
+    };
+    expect(JSON.stringify(roundTrip(reordered))).toBe(
+      JSON.stringify(reordered),
+    );
+  });
   for (const [name, content] of ROW_SHAPES) {
     it(`restores ${name} exactly`, () => {
       expect(roundTrip(content)).toStrictEqual(content);

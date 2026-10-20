@@ -32,11 +32,20 @@ export function sanitizeProviderHistoryForSerialization(
 export function sanitizeProviderContentForSerialization(
   content: IContent,
 ): IContent {
-  return {
-    speaker: content.speaker,
-    blocks: content.blocks.map(cloneBlock),
-    metadata: content.metadata ? { ...content.metadata } : {},
-  };
+  return Object.assign(
+    Object.fromEntries(
+      Object.keys(content)
+        .filter(
+          (key) => key === 'speaker' || key === 'blocks' || key === 'metadata',
+        )
+        .map((key) => [key, undefined]),
+    ),
+    {
+      speaker: content.speaker,
+      blocks: content.blocks.map(cloneBlock),
+      metadata: content.metadata ? { ...content.metadata } : {},
+    },
+  );
 }
 
 /** Clone a single block, sanitizing tool_call/tool_response payloads. */

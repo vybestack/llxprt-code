@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { spyOn } from 'bun:test';
+import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -124,6 +125,7 @@ function nativeGraph(
 
 export interface NativeFallbackFixture {
   readonly history: HistoryService;
+  seed: ReturnType<typeof suffixSeeder>;
   readonly owners: BatchOwnerCensus;
   readonly writerPaused: Promise<void>;
   pauseWriter(): void;
@@ -157,6 +159,7 @@ export async function withNativeFallbackFixture(
   try {
     await action({
       history,
+      seed: suffixSeeder(recording, history),
       owners,
       writerPaused: writer.paused,
       pauseWriter: () => writer.arm(),
