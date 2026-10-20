@@ -1,0 +1,1505 @@
+{
+  "task": "W22 remaining five core fault contracts, implementation not review",
+  "base": "9b35908c14aff6329ee37d3fe6e5090da1244e2d",
+  "productionCommit": "fc2515b17",
+  "sourceCommit": "3fff916f5cfb891305f2ca67508d3897c900861b",
+  "censusCommit": "572ec4341a80cb6d8f92f9f1d5874ff91682d429",
+  "raw": "tmp/854-notes/p4/w22/core-fault-run-m",
+  "fullProof": {
+    "path": "tmp/854-notes/p4/w22/core-fault-run-m/final-proof.json",
+    "sha256": "1c4c1bd79ce626809b876a4dd9e07155a7b39ea6fe1112ece011330457fd787f"
+  },
+  "matrices": [
+    {
+      "backend": "journal",
+      "files": 20,
+      "pass": 145,
+      "fail": 0,
+      "skip": 0,
+      "rows": [
+        {
+          "path": "packages/agents/src/core/deferred-history-source.test.ts",
+          "sourceHash": "4b5a605e3f7abf8b455d5a2ebdf35251d578d51a6df72829195dba8079591c04",
+          "pid": 67758,
+          "driverPid": 67757,
+          "pass": 7,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-deferred-final-journal-m-b/0608-deferred-history-source.test.ts.log",
+          "logSha256": "7032016177d81daec013d9b20dd2c6c4f34a7e221f59b60f781544b738f82697",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-deferred-final-journal-m-b/0608-deferred-history-source.test.ts.xml",
+          "junitSha256": "af2b89081205417ac4bbfbfb1d266cbd83f4d42e2a08225c43cfa6a9de47cfd4"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+          "sourceHash": "5445960e5c11511bbd059b2687fa611187eaf5cfbbd73b3ff063297f9a3333fa",
+          "pid": 64805,
+          "driverPid": 64655,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0654-semantic-purge-array-seam.test.ts.log",
+          "logSha256": "293c163b708029f675864d0ca9e8b133dc817e93e68d74030f4686cb3dc9af32",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0654-semantic-purge-array-seam.test.ts.xml",
+          "junitSha256": "91e19c25fdb84c5fc9189fab5c8448fc1573dc17544a95356af2e80bf2ff7786"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+          "sourceHash": "81d38a13482c90f94a70b06dfa2e4feed5c2f51800c61962862d12c21a48036b",
+          "pid": 65279,
+          "driverPid": 64655,
+          "pass": 6,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0655-semantic-purge-production.test.ts.log",
+          "logSha256": "26c81709a2c82012526e8bbbec139d836b698cd09ff646c13725b0029259bd1a",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0655-semantic-purge-production.test.ts.xml",
+          "junitSha256": "f0c27c2dcd7bd7c8459a84318ee63981652b395ce5f707f4d549061741b7698f"
+        },
+        {
+          "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+          "sourceHash": "1cedd6c3ffd0a40f55006b1cddc4cdc6d05d009c17fae858ca5bead85c1c214e",
+          "pid": 70909,
+          "driverPid": 70908,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-journal-m-c/0683-stream-request-body-demand.test.ts.log",
+          "logSha256": "7ae8cb3870d1636644e4939ade1c53450753b4c389b440e65faeed10399a7334",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-journal-m-c/0683-stream-request-body-demand.test.ts.xml",
+          "junitSha256": "6dcb36787f8fb5735065edd9bb43d6dd28890c36143b16ad9c45d5e598aafd09"
+        },
+        {
+          "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+          "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+          "pid": 65762,
+          "driverPid": 64655,
+          "pass": 15,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0772-turnMediaAdmission.lifecycle.test.ts.log",
+          "logSha256": "8901a843716bc5af397774d54d7c3412cafcfe80c27f61282c2dd023849b1a97",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-journal-m-a/0772-turnMediaAdmission.lifecycle.test.ts.xml",
+          "junitSha256": "db2c7d9a0b09ed38cd503bed77a16640183b393ad6c0d35420db7bc8aa729589"
+        },
+        {
+          "path": "packages/core/src/storage/history-media-failure.test.ts",
+          "sourceHash": "11890aeaa88d04f425c003ebdc1bce9efe7c6584823630409ea0a1ce3a69651b",
+          "pid": 70945,
+          "driverPid": 70908,
+          "pass": 9,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-journal-m-c/0807-history-media-failure.test.ts.log",
+          "logSha256": "170edc4b028e95723906ec1cce26ea60f3133703428f3cf9262c1235acd19b7e",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-journal-m-c/0807-history-media-failure.test.ts.xml",
+          "junitSha256": "b5ce2f93c8374c947ce78dfbeafa099c235e569d1b7a709cfab0ce4dfa92c0a6"
+        },
+        {
+          "path": "packages/core/src/storage/history-media-stream.test.ts",
+          "sourceHash": "6bbdc0cbb11f9c9b45a6129ad3f94a8a9168a44748965d7caf0388c131320e2a",
+          "pid": 72760,
+          "driverPid": 72759,
+          "pass": 1,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0806-history-media-stream.test.ts.log",
+          "logSha256": "e31d16b9b98558ecc15fa1c10efaae760047e2fe29362f77cf033ac38590e966",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0806-history-media-stream.test.ts.xml",
+          "junitSha256": "4d12992bb030ecd1fffc184833a930841cf3279525ee376c842f614343bf6052"
+        },
+        {
+          "path": "packages/core/src/services/history/semantic-purge.journal.test.ts",
+          "sourceHash": "da423edc6149e79dac424ee2867905dfa5d9b29fbe05c990aca74756ed376a37",
+          "pid": 72768,
+          "driverPid": 72759,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0807-semantic-purge.journal.test.ts.log",
+          "logSha256": "7a8a7db2429ab21cf1ed116f7807119e75085a6f2d24acb8cfa802e4c07b4546",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0807-semantic-purge.journal.test.ts.xml",
+          "junitSha256": "ddb8bc4f75b0b70fd3133308c95c7afbfec2b01e149fcf12f2be1a97d6234440"
+        },
+        {
+          "path": "packages/core/src/services/history/borrowed-snapshot-lifecycle.journal.test.ts",
+          "sourceHash": "e8c5748c0275fa7f2c8b4230a7da5cd1685050d88362a9c76cb2d9710ed7834f",
+          "pid": 72792,
+          "driverPid": 72759,
+          "pass": 19,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0808-borrowed-snapshot-lifecycle.journal.test.ts.log",
+          "logSha256": "7ecfb98d0fb97808b8f34a673d427cde4b98b874c7d82dcdb5ab5e8302dc0648",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0808-borrowed-snapshot-lifecycle.journal.test.ts.xml",
+          "junitSha256": "015977a0d48fee7a91bb232e8ea670d2f067db2c1692118de14820150126f838"
+        },
+        {
+          "path": "packages/core/src/services/history/chronology-rollback-atomicity.journal.test.ts",
+          "sourceHash": "18c82ccb7d59106b464e300ec51e29914f94fd472e6c59352a0e34c5d20d1ebf",
+          "pid": 73391,
+          "driverPid": 72759,
+          "pass": 19,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0809-chronology-rollback-atomicity.journal.test.ts.log",
+          "logSha256": "b96d96ef63f0f1202cbad0cf7a5ee9ac51e6e246f6b5b62eabcdcaed068e0cf1",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0809-chronology-rollback-atomicity.journal.test.ts.xml",
+          "junitSha256": "6097eebe05b08e16e888e12d2e17acb00b4ad7208dc0e3720869dcdf88d72056"
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/public-history-deferred.test.ts",
+          "sourceHash": "94a12a38d11a1d7e7163e4d9e3de9229c7f93b86e1157b473815b8bfaa52124c",
+          "pid": 73524,
+          "driverPid": 72759,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0137-public-history-deferred.test.ts.log",
+          "logSha256": "c9240b44289dbf3ec26200599318cf0c10dd5d38273565a5958f71bb1b879bbb",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0137-public-history-deferred.test.ts.xml",
+          "junitSha256": "5b6bced7e79048856f172828505abd8a62f8185ca5d351a8d75ed74b9fc657ff"
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/public-history-faults.test.ts",
+          "sourceHash": "3035190ee2219120b540830a0a437076da35c702b72cb4b0397a90c803e8f4c6",
+          "pid": 73647,
+          "driverPid": 72759,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0138-public-history-faults.test.ts.log",
+          "logSha256": "031ec0ed92ea0aa02caf5913c62ff89b90b65f82d97144074981e98e33176aec",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0138-public-history-faults.test.ts.xml",
+          "junitSha256": "248a71d4b05a5896cc949d6ee9f4f826eb5683da19ec8c9182eb908265511546"
+        },
+        {
+          "path": "packages/agents/src/core/service-tool-crash.test.ts",
+          "sourceHash": "5ad53ba205dd31322b6a2ea9d31b6ad3fe9c4ad0d6dd3929026db8e5b1cb2487",
+          "pid": 73888,
+          "driverPid": 72759,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0660-service-tool-crash.test.ts.log",
+          "logSha256": "ae6340769155056247cee536613b4d21e4fe373bf6c6627f16f630ada148c011",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0660-service-tool-crash.test.ts.xml",
+          "junitSha256": "0e21d22d73345d1df889125f5072df80e22270486b6cd81236f5ec0060202d9b"
+        },
+        {
+          "path": "packages/agents/src/core/service-tool-crash-reopen.test.ts",
+          "sourceHash": "85dbdcac9ac07bfa706db2529705290d9244e438843ff32817bedadebf7e81b4",
+          "pid": 73936,
+          "driverPid": 72759,
+          "pass": 1,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0659-service-tool-crash-reopen.test.ts.log",
+          "logSha256": "39b472ce6db5ae113f6885e2663c4062889857e5b270328e1d69b25ef28ff64b",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0659-service-tool-crash-reopen.test.ts.xml",
+          "junitSha256": "26b0a270948378f9cb21c004cbb3898e00e6a8871da96a3b2d788642a7307b6f"
+        },
+        {
+          "path": "packages/agents/src/core/next-request-variants.test.ts",
+          "sourceHash": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+          "pid": 73958,
+          "driverPid": 72759,
+          "pass": 32,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0619-next-request-variants.test.ts.log",
+          "logSha256": "f30263dff483efd8e96b6cd91f0d838e61094e586692a8e75f2f9bc3e2bdd53b",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0619-next-request-variants.test.ts.xml",
+          "junitSha256": "3351fed81088835c49d8f10d363adff6e4d01d6138bc04ae311516fea1b1d2b9"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-boundary.test.ts",
+          "sourceHash": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+          "pid": 74680,
+          "driverPid": 72759,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0656-semantic-purge-request-boundary.test.ts.log",
+          "logSha256": "93bd0eb168c1386d3a10e818c1bf5dac31f6cd936d643809660d64c2dbc94e08",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0656-semantic-purge-request-boundary.test.ts.xml",
+          "junitSha256": "d53b5f791a75892abb379b5bcc8efc8e9a97fae69acfd963cb0f856db39b3d97"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts",
+          "sourceHash": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+          "pid": 74690,
+          "driverPid": 72759,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0657-semantic-purge-request-lifecycle.test.ts.log",
+          "logSha256": "6d43b6808fc2fc701420e5a1cb34c9da1b6875c9068fa3dc1d6e79da4ca930ca",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0657-semantic-purge-request-lifecycle.test.ts.xml",
+          "junitSha256": "24fdae5f92ad7b4f32425e2456cb28178ae6ebd21a1bfff552a4e5470d5ef247"
+        },
+        {
+          "path": "packages/agents/src/core/source-preflight-request.test.ts",
+          "sourceHash": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+          "pid": 74706,
+          "driverPid": 72759,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0678-source-preflight-request.test.ts.log",
+          "logSha256": "8e29be7318ed2bd5bef1afa4283b86b7a6b4846cbb1ae0df9d4fcfb8be5c40f7",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0678-source-preflight-request.test.ts.xml",
+          "junitSha256": "3b73740030d0d838901f4fc58d7ab3918ceb3f8dbd1783e6d97f9084f4ec0664"
+        },
+        {
+          "path": "packages/agents/src/core/source-model-hook-no-snapshot.test.ts",
+          "sourceHash": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+          "pid": 74724,
+          "driverPid": 72759,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0670-source-model-hook-no-snapshot.test.ts.log",
+          "logSha256": "aab6285eb07a849686f82a746fccc80d0c8075e45766fbe71d36ff6751e11060",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0670-source-model-hook-no-snapshot.test.ts.xml",
+          "junitSha256": "df7bdb9fa910bc3edbd8f877bc4bc34cc746d15af82b26ca4fce8360c9071206"
+        },
+        {
+          "path": "packages/agents/src/core/streamprocessor-source-http.test.ts",
+          "sourceHash": "b9420b44c8e9c4c5f0e5f0ea9053d74164855265bff63ab933653a18ae311f50",
+          "pid": 74744,
+          "driverPid": 72759,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0699-streamprocessor-source-http.test.ts.log",
+          "logSha256": "421845ae1594c60126d6ce0049cee27d5defe1112b48c963fc0ddc860178b50b",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-journal-m-a/0699-streamprocessor-source-http.test.ts.xml",
+          "junitSha256": "a1a6bb93e55d84e5148d471a3889d2dc33d456a209358a003f9a45ca8d41be5c"
+        }
+      ]
+    },
+    {
+      "backend": "old",
+      "files": 20,
+      "pass": 145,
+      "fail": 0,
+      "skip": 0,
+      "rows": [
+        {
+          "path": "packages/agents/src/core/deferred-history-source.test.ts",
+          "sourceHash": "4b5a605e3f7abf8b455d5a2ebdf35251d578d51a6df72829195dba8079591c04",
+          "pid": 67919,
+          "driverPid": 67918,
+          "pass": 7,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-deferred-final-old-m-b/0608-deferred-history-source.test.ts.log",
+          "logSha256": "b7faed4d30c3690fa85e88a8379c45a55f084e1dcc374287bcca2434aaea8502",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-deferred-final-old-m-b/0608-deferred-history-source.test.ts.xml",
+          "junitSha256": "d993ee64d3932f282c8ead6cecbebae1d7c914463adf6164d032c882936c1430"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+          "sourceHash": "5445960e5c11511bbd059b2687fa611187eaf5cfbbd73b3ff063297f9a3333fa",
+          "pid": 65925,
+          "driverPid": 65790,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0654-semantic-purge-array-seam.test.ts.log",
+          "logSha256": "652ffb418f7bb95d198e01789ac63e8b11d1835b8e676078ef0ce610865803b6",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0654-semantic-purge-array-seam.test.ts.xml",
+          "junitSha256": "6730500881003dc5b4ab3f71cdbe78b1b22739acdcd4f11cc0f44b49f2a2e74a"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+          "sourceHash": "81d38a13482c90f94a70b06dfa2e4feed5c2f51800c61962862d12c21a48036b",
+          "pid": 66102,
+          "driverPid": 65790,
+          "pass": 6,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0655-semantic-purge-production.test.ts.log",
+          "logSha256": "9115dc6539536af3230ea30740afd69cbd23726a24532a72d4b0fe31512295ce",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0655-semantic-purge-production.test.ts.xml",
+          "junitSha256": "1b6f90d9741493cdad1db9824d773192be40aba84fd3d24a346bf0ea48840bf1"
+        },
+        {
+          "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+          "sourceHash": "1cedd6c3ffd0a40f55006b1cddc4cdc6d05d009c17fae858ca5bead85c1c214e",
+          "pid": 70999,
+          "driverPid": 70998,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-old-m-c/0683-stream-request-body-demand.test.ts.log",
+          "logSha256": "fd1459834a05c0acddafa6061df0c3556842e823db94fed9391e49a03ce7349e",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-old-m-c/0683-stream-request-body-demand.test.ts.xml",
+          "junitSha256": "8629a6b2becaa94309a7476ba22515abadd161d5279efe6685bc58816d109f95"
+        },
+        {
+          "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+          "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+          "pid": 66289,
+          "driverPid": 65790,
+          "pass": 15,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0772-turnMediaAdmission.lifecycle.test.ts.log",
+          "logSha256": "9477a978f88135dce797d793a73fdc7912b0b9ba43e0576dcfc26b749d442de6",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-final-old-m-a/0772-turnMediaAdmission.lifecycle.test.ts.xml",
+          "junitSha256": "4b43695b862583ea1ff9c678f96cceee08774ab3ec8e318917d18118992be13c"
+        },
+        {
+          "path": "packages/core/src/storage/history-media-failure.test.ts",
+          "sourceHash": "11890aeaa88d04f425c003ebdc1bce9efe7c6584823630409ea0a1ce3a69651b",
+          "pid": 71005,
+          "driverPid": 70998,
+          "pass": 9,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-old-m-c/0807-history-media-failure.test.ts.log",
+          "logSha256": "2d4371292b843a659042e234545c6664ff7b2e11626b46b0f8704671010fd7e1",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-changed-final-old-m-c/0807-history-media-failure.test.ts.xml",
+          "junitSha256": "c09506583ac0a630bf6edccb8feb50a923c8d2bb050b93fc754dd599e7623992"
+        },
+        {
+          "path": "packages/core/src/storage/history-media-stream.test.ts",
+          "sourceHash": "6bbdc0cbb11f9c9b45a6129ad3f94a8a9168a44748965d7caf0388c131320e2a",
+          "pid": 74950,
+          "driverPid": 74949,
+          "pass": 1,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0806-history-media-stream.test.ts.log",
+          "logSha256": "beb408864f9c2a8bc1029c43414434e891690c1d5bd15cbb61188e1ca05f95ea",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0806-history-media-stream.test.ts.xml",
+          "junitSha256": "1ba95959e9b4d85aa6266cc5585852f10f2dde46027de12fb78f4de5c84ad45b"
+        },
+        {
+          "path": "packages/core/src/services/history/semantic-purge.journal.test.ts",
+          "sourceHash": "da423edc6149e79dac424ee2867905dfa5d9b29fbe05c990aca74756ed376a37",
+          "pid": 74960,
+          "driverPid": 74949,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0807-semantic-purge.journal.test.ts.log",
+          "logSha256": "1a7d26281cdb4838c6e7f26da10a595488820ba10f4dc6a225bf2e24972c7b91",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0807-semantic-purge.journal.test.ts.xml",
+          "junitSha256": "94c8e6e70ac57d027bc42e8d8b18616a18380c26512aed3879bafdf74539d538"
+        },
+        {
+          "path": "packages/core/src/services/history/borrowed-snapshot-lifecycle.journal.test.ts",
+          "sourceHash": "e8c5748c0275fa7f2c8b4230a7da5cd1685050d88362a9c76cb2d9710ed7834f",
+          "pid": 74981,
+          "driverPid": 74949,
+          "pass": 19,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0808-borrowed-snapshot-lifecycle.journal.test.ts.log",
+          "logSha256": "ebff1e91bd1d40803fa012c6a5aac589339ac82edd8e549642662562e8c5b03c",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0808-borrowed-snapshot-lifecycle.journal.test.ts.xml",
+          "junitSha256": "37ef974486f53d1193d243770d248e17ee84c84510623eee3bbbcd35e374dcad"
+        },
+        {
+          "path": "packages/core/src/services/history/chronology-rollback-atomicity.journal.test.ts",
+          "sourceHash": "18c82ccb7d59106b464e300ec51e29914f94fd472e6c59352a0e34c5d20d1ebf",
+          "pid": 75597,
+          "driverPid": 74949,
+          "pass": 19,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0809-chronology-rollback-atomicity.journal.test.ts.log",
+          "logSha256": "6f4e015bc5616e6ffb3b35ff96fb596b65cbd49af3eec26660f48b2ccf70ac31",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0809-chronology-rollback-atomicity.journal.test.ts.xml",
+          "junitSha256": "e9093ed666b8e56a84fbd101212971512b33caa87972bf87274ec51e2130b7b3"
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/public-history-deferred.test.ts",
+          "sourceHash": "94a12a38d11a1d7e7163e4d9e3de9229c7f93b86e1157b473815b8bfaa52124c",
+          "pid": 75715,
+          "driverPid": 74949,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0137-public-history-deferred.test.ts.log",
+          "logSha256": "e4835a98964bbee146072d677ab159e6aef4edef5faa9d0ccf24368dd77fe382",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0137-public-history-deferred.test.ts.xml",
+          "junitSha256": "59f49ab0c723fe1b40acfa42ef5601fc1938bcc67275bb1e75089c6fdc85b6b5"
+        },
+        {
+          "path": "packages/agents/src/api/__tests__/public-history-faults.test.ts",
+          "sourceHash": "3035190ee2219120b540830a0a437076da35c702b72cb4b0397a90c803e8f4c6",
+          "pid": 75762,
+          "driverPid": 74949,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0138-public-history-faults.test.ts.log",
+          "logSha256": "059f0b1e0875828c76effddd3acc71cac110aff61e0dddaf9a753d48c848354b",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0138-public-history-faults.test.ts.xml",
+          "junitSha256": "fe2331fa1c1cc2adcda5e39fbb338ea5aa900116baf7a698b414e4620e3cc75d"
+        },
+        {
+          "path": "packages/agents/src/core/service-tool-crash.test.ts",
+          "sourceHash": "5ad53ba205dd31322b6a2ea9d31b6ad3fe9c4ad0d6dd3929026db8e5b1cb2487",
+          "pid": 75857,
+          "driverPid": 74949,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0660-service-tool-crash.test.ts.log",
+          "logSha256": "173ed42ffe646b8f5887b776539c10fb59f0487cbda407bd8302d5d683963f44",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0660-service-tool-crash.test.ts.xml",
+          "junitSha256": "8e63db834eee9288c1dd1d927a7029c384585ab6d87e60fe33829cc3b850ae2f"
+        },
+        {
+          "path": "packages/agents/src/core/service-tool-crash-reopen.test.ts",
+          "sourceHash": "85dbdcac9ac07bfa706db2529705290d9244e438843ff32817bedadebf7e81b4",
+          "pid": 75906,
+          "driverPid": 74949,
+          "pass": 1,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0659-service-tool-crash-reopen.test.ts.log",
+          "logSha256": "bfbd42121951af950b8fcf80761017d26a6526b07fdc6fba00599a821c9f9eb2",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0659-service-tool-crash-reopen.test.ts.xml",
+          "junitSha256": "d0bee723df1bc57a89e27dab15c44da20eaae235b081a61689dfcf112f82ef92"
+        },
+        {
+          "path": "packages/agents/src/core/next-request-variants.test.ts",
+          "sourceHash": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+          "pid": 75928,
+          "driverPid": 74949,
+          "pass": 32,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0619-next-request-variants.test.ts.log",
+          "logSha256": "f13b498c19e374058f9fbbe087b444eab34f56a750fa0dda64ff8849bde0180d",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0619-next-request-variants.test.ts.xml",
+          "junitSha256": "06738f965b24e3db353cecabe69e010ea03e27436b3f4532dd79cee04f304d2a"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-boundary.test.ts",
+          "sourceHash": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+          "pid": 76638,
+          "driverPid": 74949,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0656-semantic-purge-request-boundary.test.ts.log",
+          "logSha256": "f44b52ed02902d5568fc1fe615189119dbcb92b9f0a59600144225351d6a9837",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0656-semantic-purge-request-boundary.test.ts.xml",
+          "junitSha256": "d1b97b7ebf2a475ab25aa4daa0d7b28fde959845bf4bea08e9f21cf64a5bad36"
+        },
+        {
+          "path": "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts",
+          "sourceHash": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+          "pid": 76653,
+          "driverPid": 74949,
+          "pass": 4,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0657-semantic-purge-request-lifecycle.test.ts.log",
+          "logSha256": "29debcce4116a75cf1609c2cbb83803f614dc78978a5285f648fe6f2a9e7879e",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0657-semantic-purge-request-lifecycle.test.ts.xml",
+          "junitSha256": "ad285c410d109c1a8a6dbbf0899db1e894d54f79b8106a019fc6044b22086ae6"
+        },
+        {
+          "path": "packages/agents/src/core/source-preflight-request.test.ts",
+          "sourceHash": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+          "pid": 76666,
+          "driverPid": 74949,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0678-source-preflight-request.test.ts.log",
+          "logSha256": "c65a58df9435ed9549feafffea9666bc24b4e5e1b87b40c7fb404bbbeca0bba5",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0678-source-preflight-request.test.ts.xml",
+          "junitSha256": "ec6e63e92c8bf50033b7e0bb32ccb8cb999539ededc0228582fd824c494e2044"
+        },
+        {
+          "path": "packages/agents/src/core/source-model-hook-no-snapshot.test.ts",
+          "sourceHash": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+          "pid": 76677,
+          "driverPid": 74949,
+          "pass": 2,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0670-source-model-hook-no-snapshot.test.ts.log",
+          "logSha256": "7b783b6a54e4033415be6bc4dc555173b90ff008347eb31a57a36c199d46d442",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0670-source-model-hook-no-snapshot.test.ts.xml",
+          "junitSha256": "2ca0ba70783637c2929cdd9c110905999d58f239e98e1bd27e13f7e400778b94"
+        },
+        {
+          "path": "packages/agents/src/core/streamprocessor-source-http.test.ts",
+          "sourceHash": "b9420b44c8e9c4c5f0e5f0ea9053d74164855265bff63ab933653a18ae311f50",
+          "pid": 76687,
+          "driverPid": 74949,
+          "pass": 3,
+          "log": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0699-streamprocessor-source-http.test.ts.log",
+          "logSha256": "e417fbeefc1b6d33d8857c3bb83b50f578766515d71cdc26013ecaaccf21ea13",
+          "junit": "tmp/854-notes/p4/w22/run-20261019-a/fault-related-old-m-a/0699-streamprocessor-source-http.test.ts.xml",
+          "junitSha256": "a7b99af6ace4f290783d7e8b930b1111975468aeb20906d12544a593cd4db0d5"
+        }
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "name": "api-surface-c",
+      "code": 0,
+      "pid": 71069,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/api-surface-c.log",
+      "logSha256": "d8e35368f555b3f23774ce1e03062c1529731aeb3605b95efe7ef942aa9555e2"
+    },
+    {
+      "name": "build-types-c",
+      "code": 0,
+      "pid": 71220,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/build-types-c.log",
+      "logSha256": "1939dc7f2972cfc33589b0c3565a80afdfee4e864ac82503bea9564a4cc94d86"
+    },
+    {
+      "name": "core-tsc-c",
+      "code": 0,
+      "pid": 72200,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/core-tsc-c.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-tsc-c",
+      "code": 0,
+      "pid": 72288,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/agents-tsc-c.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-bun-tsc-c",
+      "code": 0,
+      "pid": 72428,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/agents-bun-tsc-c.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "touched-tsc-c",
+      "code": 0,
+      "pid": 72516,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/touched-tsc-c.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "eslint-c",
+      "code": 0,
+      "pid": 72611,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/eslint-c.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "prettier-c",
+      "code": 0,
+      "pid": 72690,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/prettier-c.log",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "affected-graph-c",
+      "code": 0,
+      "pid": 72691,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/affected-graph-c.log",
+      "logSha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "test-audit-c",
+      "code": 0,
+      "pid": 72725,
+      "driverPid": 70907,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/test-audit-c.log",
+      "logSha256": "99c26921f05320169e2a8ffdc1b3e48e26e516aaff78cd65389c2df439930317"
+    },
+    {
+      "name": "w22-census.test.ts-final",
+      "code": 0,
+      "pid": 78464,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/w22-census.test.ts-final.log",
+      "logSha256": "5ade1838f7586fb6d0f0c4638d1564f2688bed13718ac1a727f7db922c894f39"
+    },
+    {
+      "name": "w22-request-census.test.ts-final",
+      "code": 0,
+      "pid": 78479,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/w22-request-census.test.ts-final.log",
+      "logSha256": "17eed7663973c1bd74630b7898e8e45ab8feb780d31ed59b23e1de948fa9d208"
+    },
+    {
+      "name": "w22-request-counterparts.test.ts-final",
+      "code": 0,
+      "pid": 78489,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/w22-request-counterparts.test.ts-final.log",
+      "logSha256": "7b78e0110473644f5df6fbac8fed6eb22a64565ac27cb1e41a4755b5d6ec729f"
+    },
+    {
+      "name": "w22-observation-census.test.ts-final",
+      "code": 0,
+      "pid": 78494,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/w22-observation-census.test.ts-final.log",
+      "logSha256": "5b470f54bf11df8d2cbeaf8b922b7fa925840baefb200457c71a70807063b519"
+    },
+    {
+      "name": "w22-fault-census.test.ts-final",
+      "code": 0,
+      "pid": 78502,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/w22-fault-census.test.ts-final.log",
+      "logSha256": "b4322fd8f4f14c7cdebaada6a91a98c94610b11999a7a66006ae69c27d1e94ad"
+    },
+    {
+      "name": "census-tsc",
+      "code": 0,
+      "pid": 78505,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/census-tsc.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "census-eslint",
+      "code": 0,
+      "pid": 78511,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/census-eslint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "census-prettier",
+      "code": 0,
+      "pid": 78556,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/census-prettier.log",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "final-affected-graph",
+      "code": 0,
+      "pid": 78559,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/final-affected-graph.log",
+      "logSha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "final-test-audit",
+      "code": 0,
+      "pid": 78576,
+      "driverPid": 78455,
+      "log": "tmp/854-notes/p4/w22/core-fault-run-m/final-test-audit.log",
+      "logSha256": "99c26921f05320169e2a8ffdc1b3e48e26e516aaff78cd65389c2df439930317"
+    }
+  ],
+  "sourceHashes": {
+    "packages/agents/src/core/deferred-history-source.test.ts": "4b5a605e3f7abf8b455d5a2ebdf35251d578d51a6df72829195dba8079591c04",
+    "packages/agents/src/core/semantic-purge-array-seam.test.ts": "5445960e5c11511bbd059b2687fa611187eaf5cfbbd73b3ff063297f9a3333fa",
+    "packages/agents/src/core/semantic-purge-production.test.ts": "81d38a13482c90f94a70b06dfa2e4feed5c2f51800c61962862d12c21a48036b",
+    "packages/agents/src/core/stream-request-body-demand.test.ts": "1cedd6c3ffd0a40f55006b1cddc4cdc6d05d009c17fae858ca5bead85c1c214e",
+    "packages/agents/src/core/__tests__/support/native-deferred-acknowledgement.ts": "3341bb97727012652655f9444e86ebbe4caeade1224c5f4fb72cb46b29127b76",
+    "packages/agents/src/core/__tests__/support/semantic-purge-fault-test-helpers.ts": "d40ecd59bbc738770572e936086d27aac8624b33bcc3d0f550d284f364b0f2c1",
+    "packages/core/src/storage/history-media-ownership.ts": "c1bb072711d11adc49ceeb646bb09587f039d6636a95208d4cc74e9ee61f98fd",
+    "packages/core/src/storage/history-media-failure.test.ts": "11890aeaa88d04f425c003ebdc1bce9efe7c6584823630409ea0a1ce3a69651b",
+    "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+    "packages/core/src/storage/history-media-stream.test.ts": "6bbdc0cbb11f9c9b45a6129ad3f94a8a9168a44748965d7caf0388c131320e2a",
+    "packages/core/src/services/history/semantic-purge.journal.test.ts": "da423edc6149e79dac424ee2867905dfa5d9b29fbe05c990aca74756ed376a37",
+    "packages/core/src/services/history/borrowed-snapshot-lifecycle.journal.test.ts": "e8c5748c0275fa7f2c8b4230a7da5cd1685050d88362a9c76cb2d9710ed7834f",
+    "packages/core/src/services/history/chronology-rollback-atomicity.journal.test.ts": "18c82ccb7d59106b464e300ec51e29914f94fd472e6c59352a0e34c5d20d1ebf",
+    "packages/agents/src/api/__tests__/public-history-deferred.test.ts": "94a12a38d11a1d7e7163e4d9e3de9229c7f93b86e1157b473815b8bfaa52124c",
+    "packages/agents/src/api/__tests__/public-history-faults.test.ts": "3035190ee2219120b540830a0a437076da35c702b72cb4b0397a90c803e8f4c6",
+    "packages/agents/src/core/service-tool-crash.test.ts": "5ad53ba205dd31322b6a2ea9d31b6ad3fe9c4ad0d6dd3929026db8e5b1cb2487",
+    "packages/agents/src/core/service-tool-crash-reopen.test.ts": "85dbdcac9ac07bfa706db2529705290d9244e438843ff32817bedadebf7e81b4",
+    "packages/agents/src/core/next-request-variants.test.ts": "5232df957f663683da8faba5e1d90129f4b16de022c9b27ed55ef51a0638e3a1",
+    "packages/agents/src/core/semantic-purge-request-boundary.test.ts": "78ade54992c666e17237f6f6f383efec6efd84ff68adc09c3eb62ce59d3cd5a5",
+    "packages/agents/src/core/semantic-purge-request-lifecycle.test.ts": "425c02b5d8f6e518522253b01f429fb765c4556e9bce70ed078b85f69b4d8535",
+    "packages/agents/src/core/source-preflight-request.test.ts": "4bca185425a051499201eb296a8a324140b92778b810d21fb317204311ac5b1e",
+    "packages/agents/src/core/source-model-hook-no-snapshot.test.ts": "466f90785d4aff1161b4178025e58817c7584771e55a65eaf8f280702b6a156d",
+    "packages/agents/src/core/streamprocessor-source-http.test.ts": "b9420b44c8e9c4c5f0e5f0ea9053d74164855265bff63ab933653a18ae311f50"
+  },
+  "censusFiles": [
+    {
+      "path": "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts",
+      "sha256": "b76113b4c572f33db5db2d7fd7047b32cc8229de43b6b0273ff717fc75c80979"
+    },
+    {
+      "path": "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-fault-census.test.ts",
+      "sha256": "5e229cc29d5671c0c2fcf58bf4a59247700147f40ca94a73bed23a6abece8917"
+    }
+  ],
+  "preservation": {
+    "receipt": {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/original-preservation-final.json",
+      "sha256": "551521d0aaa2b94e8f7c453cc38f24fbc641a3fb2596edff33bae55d7af7413f"
+    },
+    "originalAssertions": 119,
+    "verbatimPreserved": 119,
+    "addedAssertions": 14,
+    "originalDomainsTimeoutsBounds": "unchanged",
+    "rows": [
+      {
+        "path": "packages/agents/src/core/deferred-history-source.test.ts",
+        "originalHash": "42736e4c5bdc53633266439b8da05f49f4c716fdd6fec525bb6d235f9ae98671",
+        "finalHash": "4b5a605e3f7abf8b455d5a2ebdf35251d578d51a6df72829195dba8079591c04",
+        "originalAssertions": 31,
+        "finalAssertions": 31,
+        "verbatim": 31,
+        "originalRed": {
+          "path": "packages/agents/src/core/deferred-history-source.test.ts",
+          "pid": 40285,
+          "batch": "package-resume-g-0450",
+          "sourceHash": "42736e4c5bdc53633266439b8da05f49f4c716fdd6fec525bb6d235f9ae98671",
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0608-deferred-history-source.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0608-deferred-history-source.test.ts.xml",
+          "counts": {
+            "pass": 6,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedCases": [
+            {
+              "classname": "deferred disk commit acknowledgement",
+              "name": "does not complete or expose admission before the final durable write acknowledgement and rolls back write failure",
+              "time": "180.000003",
+              "status": "failed",
+              "failureMessage": null
+            }
+          ],
+          "rawFailureLines": [
+            "(fail) deferred disk commit acknowledgement > does not complete or expose admission before the final durable write acknowledgement and rolls back write failure [180000.00ms]",
+            "  ^ this test timed out after 180000ms."
+          ],
+          "logHash": "4d6dac64fab9fd7c4215de0c53bffed7b438f253c44fc3ebe6c94626355fabbc",
+          "xmlHash": "4c4277c107472d5c44d4fda79f71447b68fc08baff6eeb22c54d90aeb5fd6998"
+        }
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+        "originalHash": "d2e12850ff052e042b76a4c98133a48c4d199c5af789ad7470857788eb241704",
+        "finalHash": "5445960e5c11511bbd059b2687fa611187eaf5cfbbd73b3ff063297f9a3333fa",
+        "originalAssertions": 24,
+        "finalAssertions": 25,
+        "verbatim": 24,
+        "originalRed": {
+          "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+          "pid": 53105,
+          "batch": "package-resume-g-0450",
+          "sourceHash": "d2e12850ff052e042b76a4c98133a48c4d199c5af789ad7470857788eb241704",
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0654-semantic-purge-array-seam.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0654-semantic-purge-array-seam.test.ts.xml",
+          "counts": {
+            "pass": 0,
+            "fail": 3,
+            "skip": 0
+          },
+          "failedCases": [
+            {
+              "classname": "journal materialization guard",
+              "name": "StreamOnlyHistory rejects journal eager materialization",
+              "time": "0.007682",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "production semantic purge no-materialization contract",
+              "name": "prepares the production 512-row media/tool transaction without getAll",
+              "time": "0.000659",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "production semantic purge no-materialization contract",
+              "name": "prepares the production 8192-row media/tool transaction without getAll",
+              "time": "0.000144",
+              "status": "failed",
+              "failureMessage": null
+            }
+          ],
+          "rawFailureLines": [
+            "(fail) journal materialization guard > StreamOnlyHistory rejects journal eager materialization [7.68ms]",
+            "(fail) production semantic purge no-materialization contract > prepares the production 512-row media/tool transaction without getAll [0.66ms]",
+            "(fail) production semantic purge no-materialization contract > prepares the production 8192-row media/tool transaction without getAll [0.14ms]"
+          ],
+          "logHash": "df8f5f9e2811404c7ba4b8b7fb57b91cb63359a390028b3070d249b59fbdbf50",
+          "xmlHash": "8b372710c923e50fb0819cac3e4defbb86005384a071da50d2f30f49fd81c565"
+        }
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+        "originalHash": "000d8449f48f193aff44b3f0e2cbc0179f11394f06138fec5ece692b3181b59b",
+        "finalHash": "81d38a13482c90f94a70b06dfa2e4feed5c2f51800c61962862d12c21a48036b",
+        "originalAssertions": 26,
+        "finalAssertions": 27,
+        "verbatim": 26,
+        "originalRed": {
+          "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+          "pid": 53112,
+          "batch": "package-resume-g-0450",
+          "sourceHash": "000d8449f48f193aff44b3f0e2cbc0179f11394f06138fec5ece692b3181b59b",
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0655-semantic-purge-production.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0655-semantic-purge-production.test.ts.xml",
+          "counts": {
+            "pass": 2,
+            "fail": 3,
+            "skip": 0
+          },
+          "failedCases": [
+            {
+              "classname": "journal materialization guard",
+              "name": "StreamOnlyHistory rejects journal eager materialization",
+              "time": "0.006367",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "invoked production streaming semantic purge session: persisted membership",
+              "name": "commits and rolls back real 512-row history without eager access and releases its next lease",
+              "time": "0.000637",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "invoked production streaming semantic purge session: persisted membership",
+              "name": "commits and rolls back real 8192-row history without eager access and releases its next lease",
+              "time": "0.00014",
+              "status": "failed",
+              "failureMessage": null
+            }
+          ],
+          "rawFailureLines": [
+            "(fail) journal materialization guard > StreamOnlyHistory rejects journal eager materialization [6.37ms]",
+            "(fail) invoked production streaming semantic purge session: persisted membership > commits and rolls back real 512-row history without eager access and releases its next lease [0.64ms]",
+            "(fail) invoked production streaming semantic purge session: persisted membership > commits and rolls back real 8192-row history without eager access and releases its next lease [0.14ms]"
+          ],
+          "logHash": "700a2a196fcd3a077baf29fe5677458a1a5217d7d620e50559d2548f82718e93",
+          "xmlHash": "00f300a2a98104bace39c4193560407b8bb8e1805a93d7e6097a6fd44bda5430"
+        }
+      },
+      {
+        "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+        "originalHash": "2f03aad4c842bae51b14b88e8f4a5f5f0962ed5edcd014bdb782c24b0c4afa25",
+        "finalHash": "1cedd6c3ffd0a40f55006b1cddc4cdc6d05d009c17fae858ca5bead85c1c214e",
+        "originalAssertions": 13,
+        "finalAssertions": 25,
+        "verbatim": 13,
+        "originalRed": {
+          "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+          "pid": 55328,
+          "batch": "package-resume-g-0500",
+          "sourceHash": "2f03aad4c842bae51b14b88e8f4a5f5f0962ed5edcd014bdb782c24b0c4afa25",
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0683-stream-request-body-demand.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0683-stream-request-body-demand.test.ts.xml",
+          "counts": {
+            "pass": 0,
+            "fail": 3,
+            "skip": 0
+          },
+          "failedCases": [
+            {
+              "classname": "issue854 real StreamProcessor Responses BODY demand",
+              "name": "preserves exact BODY and estimation without holding a journal reader across the provider call",
+              "time": "0.001618",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "issue854 real StreamProcessor Responses BODY demand",
+              "name": "delivers the complete BeforeModel input to the configured external hook",
+              "time": "0.000358",
+              "status": "failed",
+              "failureMessage": null
+            },
+            {
+              "classname": "issue854 real StreamProcessor Responses BODY demand",
+              "name": "closes the disk reader when an actual agent request aborts during curation",
+              "time": "0.000313",
+              "status": "failed",
+              "failureMessage": null
+            }
+          ],
+          "rawFailureLines": [
+            "(fail) issue854 real StreamProcessor Responses BODY demand > preserves exact BODY and estimation without holding a journal reader across the provider call [1.62ms]",
+            "(fail) issue854 real StreamProcessor Responses BODY demand > delivers the complete BeforeModel input to the configured external hook [0.36ms]",
+            "(fail) issue854 real StreamProcessor Responses BODY demand > closes the disk reader when an actual agent request aborts during curation [0.31ms]"
+          ],
+          "logHash": "f8ae4cb499537db53e58782e8a3b71797dcf544c0b96de58016c5a2392d3d2cd",
+          "xmlHash": "065baf20940904e815633fb244f2a544d8d595956ce2611f8344380ab82fa0c8"
+        }
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "originalHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+        "finalHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+        "originalAssertions": 25,
+        "finalAssertions": 25,
+        "verbatim": 25,
+        "originalRed": {
+          "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+          "pid": 62183,
+          "batch": "package-resume-g-0600",
+          "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0772-turnMediaAdmission.lifecycle.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0772-turnMediaAdmission.lifecycle.test.ts.xml",
+          "counts": {
+            "pass": 14,
+            "fail": 1,
+            "skip": 0
+          },
+          "failedCases": [
+            {
+              "classname": "rolls back published history when temporary media settlement fails &gt; turn media admission terminal lifecycle",
+              "name": "rolls back published history when temporary media settlement fails",
+              "time": "0.046638",
+              "status": "failed",
+              "failureMessage": null
+            }
+          ],
+          "rawFailureLines": [
+            "(fail) turn media admission terminal lifecycle > rolls back published history when temporary media settlement fails > rolls back published history when temporary media settlement fails [46.64ms]"
+          ],
+          "logHash": "2a788a54b091e7ee5fa8c7140a94d4eba1882a77bdb050e83dbea71e13a37d7a",
+          "xmlHash": "59b7aba819cd8320735eadb7e7256e9063986305cc4d39fb9793b053a33e7178"
+        }
+      }
+    ]
+  },
+  "controls": {
+    "productionOriginal": [
+      {
+        "path": "packages/core/src/storage/history-media-failure.test.ts",
+        "pid": 77227,
+        "pass": 5,
+        "fail": 4,
+        "skip": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/fault-media-original-control-journal-m-c/0806-history-media-failure.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/fault-media-original-control-journal-m-c/0806-history-media-failure.test.ts.xml",
+        "sourceHash": "11890aeaa88d04f425c003ebdc1bce9efe7c6584823630409ea0a1ce3a69651b",
+        "failedCases": [
+          {
+            "classname": "addition rollback releases &gt; bounded media ownership",
+            "name": "settles every release after removal=%s failure and retains failed reservations for disposal",
+            "time": "0.022107",
+            "status": "failed",
+            "failureMessage": null
+          },
+          {
+            "classname": "addition rollback releases &gt; bounded media ownership",
+            "name": "settles every release after removal=%s failure and retains failed reservations for disposal",
+            "time": "0.015715",
+            "status": "failed",
+            "failureMessage": null
+          },
+          {
+            "classname": "replacement rollback releases &gt; bounded media ownership",
+            "name": "settles every release after removal=%s failure and retains failed reservations for disposal",
+            "time": "0.019271",
+            "status": "failed",
+            "failureMessage": null
+          },
+          {
+            "classname": "replacement rollback releases &gt; bounded media ownership",
+            "name": "settles every release after removal=%s failure and retains failed reservations for disposal",
+            "time": "0.019517",
+            "status": "failed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "pid": 77270,
+        "pass": 14,
+        "fail": 1,
+        "skip": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/fault-media-original-control-journal-m-c/0772-turnMediaAdmission.lifecycle.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/fault-media-original-control-journal-m-c/0772-turnMediaAdmission.lifecycle.test.ts.xml",
+        "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+        "failedCases": [
+          {
+            "classname": "rolls back published history when temporary media settlement fails &gt; turn media admission terminal lifecycle",
+            "name": "rolls back published history when temporary media settlement fails",
+            "time": "0.046778",
+            "status": "failed",
+            "failureMessage": null
+          }
+        ]
+      }
+    ],
+    "productionRestoration": {
+      "cmp": 0,
+      "sha256": "c1bb072711d11adc49ceeb646bb09587f039d6636a95208d4cc74e9ee61f98fd",
+      "restored": true
+    },
+    "restored": [
+      {
+        "path": "packages/core/src/storage/history-media-failure.test.ts",
+        "pid": 77319,
+        "pass": 9,
+        "fail": 0,
+        "skip": 0
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "pid": 77377,
+        "pass": 15,
+        "fail": 0,
+        "skip": 0
+      }
+    ],
+    "censusRestoration": {
+      "cmp": 0,
+      "restored": true,
+      "sha256": "b76113b4c572f33db5db2d7fd7047b32cc8229de43b6b0273ff717fc75c80979"
+    },
+    "censusRed": {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/census-red.log",
+      "sha256": "923dd944803a410bdc92f2021d6df57e5a70d72c52a189b974fd83eac1d19875"
+    },
+    "censusMutation": {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/census-mutation.log",
+      "sha256": "ffa19305e394a38362f9b0b4bd233ef4692aca7c5a5a43e0b7a7095b6870d272"
+    }
+  },
+  "census": {
+    "generation": "7e731274-7a5a-4e2d-9976-88b64c3d0cd1",
+    "partition": {
+      "green": 798,
+      "red": 7,
+      "unverified": 1,
+      "unrun": 0
+    },
+    "verifiedPass": 6557,
+    "recordedPass": 6564,
+    "fail": 11,
+    "skip": 0,
+    "classifications": {
+      "native-history": 388,
+      "journal-selected-shared-public": 344,
+      "explicit-old": 44,
+      "classification-pending": 5781,
+      "unclassified": 0
+    },
+    "attempts": 1344,
+    "historicalMissingAttempts": 26,
+    "latestMissingFiles": 0,
+    "changed": [
+      {
+        "path": "packages/agents/src/core/deferred-history-source.test.ts",
+        "pid": 67758,
+        "sourceHash": "4b5a605e3f7abf8b455d5a2ebdf35251d578d51a6df72829195dba8079591c04",
+        "batch": "fault-deferred-final-journal-m-b",
+        "counts": {
+          "pass": 7,
+          "fail": 0,
+          "skip": 0
+        },
+        "cases": [
+          {
+            "classname": "disk deferred admission at 512 &gt; streamed deferred history admission",
+            "name": "commits detached rows without retaining the source and pins only the paused output row",
+            "time": "0.514386",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "disk deferred admission at 8192 &gt; streamed deferred history admission",
+            "name": "commits detached rows without retaining the source and pins only the paused output row",
+            "time": "6.004435",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "deferred source failures and oversized rows",
+            "name": "rolls back a source failure and cancellation without changing admitted history",
+            "time": "0.047186",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "deferred source failures and oversized rows",
+            "name": "accepts a valid disk row larger than the aggregate byte limit",
+            "time": "0.083149",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "paused deferred source",
+            "name": "charges the paused admission source until serialization completes",
+            "time": "0.027977",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "streamed deferred media ownership",
+            "name": "keeps media usable after startup failure, transfers on retry, and releases on disposal",
+            "time": "0.078023",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "deferred disk commit acknowledgement",
+            "name": "does not complete or expose admission before the final durable write acknowledgement and rolls back write failure",
+            "time": "0.053659",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+        "pid": 64805,
+        "sourceHash": "5445960e5c11511bbd059b2687fa611187eaf5cfbbd73b3ff063297f9a3333fa",
+        "batch": "fault-final-journal-m-a",
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "cases": [
+          {
+            "classname": "journal materialization guard",
+            "name": "StreamOnlyHistory rejects journal eager materialization",
+            "time": "0.001022",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "journal materialization guard",
+            "name": "rejects native eager materialization through the guarded journal",
+            "time": "0.008467",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "production semantic purge no-materialization contract",
+            "name": "prepares the production 512-row media/tool transaction without getAll",
+            "time": "1.399444",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "production semantic purge no-materialization contract",
+            "name": "prepares the production 8192-row media/tool transaction without getAll",
+            "time": "29.83976",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+        "pid": 65279,
+        "sourceHash": "81d38a13482c90f94a70b06dfa2e4feed5c2f51800c61962862d12c21a48036b",
+        "batch": "fault-final-journal-m-a",
+        "counts": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0
+        },
+        "cases": [
+          {
+            "classname": "journal materialization guard",
+            "name": "StreamOnlyHistory rejects journal eager materialization",
+            "time": "0.000896",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "explicit-old",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "journal materialization guard",
+            "name": "rejects native eager materialization through the guarded journal",
+            "time": "0.00797",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: persisted membership",
+            "name": "commits and rolls back real 512-row history without eager access and releases its next lease",
+            "time": "1.504933",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: persisted membership",
+            "name": "commits and rolls back real 8192-row history without eager access and releases its next lease",
+            "time": "29.555465",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: cancels construction before taking ownership and can begin again",
+            "name": "cancels construction before taking ownership and can begin again",
+            "time": "0.045246",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: preserves explicit-cache identity through repeated request passes and rejects foreign evidence",
+            "name": "preserves explicit-cache identity through repeated request passes and rejects foreign evidence",
+            "time": "0.029141",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+        "pid": 70909,
+        "sourceHash": "1cedd6c3ffd0a40f55006b1cddc4cdc6d05d009c17fae858ca5bead85c1c214e",
+        "batch": "fault-changed-final-journal-m-c",
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0
+        },
+        "cases": [
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "keeps replay readers cold until demand and releases the yielded row on cancellation",
+            "time": "0.377537",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "preserves exact BODY and estimation without holding a journal reader across the provider call",
+            "time": "0.487338",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "delivers the complete BeforeModel input to the configured external hook",
+            "time": "0.397517",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "closes the disk reader when an actual agent request aborts during curation",
+            "time": "0.346571",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "pid": 65762,
+        "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+        "batch": "fault-final-journal-m-a",
+        "counts": {
+          "pass": 15,
+          "fail": 0,
+          "skip": 0
+        },
+        "cases": [
+          {
+            "classname": "releases admitted user media when the provider rejects a non-streaming turn &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user media when the provider rejects a non-streaming turn",
+            "time": "0.104992",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "aggregates provider rejection with awaited media cleanup failure &gt; turn media admission terminal lifecycle",
+            "name": "aggregates provider rejection with awaited media cleanup failure",
+            "time": "0.010947",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "rolls back published history when temporary media settlement fails &gt; turn media admission terminal lifecycle",
+            "name": "rolls back published history when temporary media settlement fails",
+            "time": "0.052403",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "awaits admitted user-media release when a non-streaming turn is aborted &gt; turn media admission terminal lifecycle",
+            "name": "awaits admitted user-media release when a non-streaming turn is aborted",
+            "time": "0.01249",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases superseded stream output and retained user media after retry exhaustion &gt; turn media admission terminal lifecycle",
+            "name": "releases superseded stream output and retained user media after retry exhaustion",
+            "time": "0.531313",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "retains the user admission while releasing superseded output on a successful retry &gt; turn media admission terminal lifecycle",
+            "name": "retains the user admission while releasing superseded output on a successful retry",
+            "time": "0.558971",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user and output media when a stream consumer cancels &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user and output media when a stream consumer cancels",
+            "time": "0.021712",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user media when a stream is cancelled before consumption &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user media when a stream is cancelled before consumption",
+            "time": "0.012828",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user media when an unstarted stream receives a thrown cancellation &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user media when an unstarted stream receives a thrown cancellation",
+            "time": "0.010683",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user and output media when a provider stream fails &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user and output media when a provider stream fails",
+            "time": "0.020591",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user media when semantic-purge persistence rejects &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user media when semantic-purge persistence rejects",
+            "time": "0.034517",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "releases admitted user and output media when history commit rejects &gt; turn media admission terminal lifecycle",
+            "name": "releases admitted user and output media when history commit rejects",
+            "time": "0.034705",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "rolls back streaming history before releasing rejected turn admissions &gt; turn media admission terminal lifecycle",
+            "name": "rolls back streaming history before releasing rejected turn admissions",
+            "time": "0.03797",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "transfers non-streaming user and output admissions once history commits &gt; turn media admission terminal lifecycle",
+            "name": "transfers non-streaming user and output admissions once history commits",
+            "time": "0.045062",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          },
+          {
+            "classname": "transfers streaming user and output admissions once final history commits &gt; turn media admission terminal lifecycle",
+            "name": "transfers streaming user and output admissions once final history commits",
+            "time": "0.043455",
+            "status": "passed",
+            "failureMessage": null,
+            "classification": "native-history",
+            "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/core-fault-run-m/classification.json"
+          }
+        ]
+      }
+    ]
+  },
+  "audit": {
+    "before": [
+      "packages/core/src/storage/history-media-stream.test.ts\tbounded media ownership > streams duplicates without retiring prior media before commit and rolls back source failure\tDUP_ASSERT\t2x identical assertion: expect(await store.hasReservations(prior.contentId)).toBe(true)\tcore",
+      "packages/core/src/storage/history-media-stream.test.ts\tbounded media ownership > streams duplicates without retiring prior media before commit and rolls back source failure\tDUP_ASSERT\t2x identical assertion: expect(await store.hasReservations(incoming.contentId)).toBe(false)\tcore",
+      "packages/core/src/services/history/borrowed-snapshot-lifecycle.journal.test.ts\t(unnamed) > closes an abandoned acquired reader when the callback throws or stops\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tcore",
+      "packages/agents/src/core/deferred-history-source.test.ts\tstreamed deferred history admission > (unnamed) > commits detached rows without retaining the source and pins only the paused output row\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tagents",
+      "packages/agents/src/core/deferred-history-source.test.ts\tdeferred source failures and oversized rows > rolls back a source failure and cancellation without changing admitted history\tDUP_ASSERT\t2x identical assertion: expect( (await Array.fromAsync(client.getHistory())).map((row) => row.blocks), ).toStrictE\tagents",
+      "packages/agents/src/core/deferred-history-source.test.ts\tstreamed deferred media ownership > keeps media usable after startup failure, transfers on retry, and releases on disposal\tDUP_ASSERT\t3x identical assertion: expect(await store.hasReservations(reference.contentId)).toBe(true)\tagents"
+    ],
+    "after": [
+      "packages/core/src/storage/history-media-stream.test.ts\tbounded media ownership > streams duplicates without retiring prior media before commit and rolls back source failure\tDUP_ASSERT\t2x identical assertion: expect(await store.hasReservations(prior.contentId)).toBe(true)\tcore",
+      "packages/core/src/storage/history-media-stream.test.ts\tbounded media ownership > streams duplicates without retiring prior media before commit and rolls back source failure\tDUP_ASSERT\t2x identical assertion: expect(await store.hasReservations(incoming.contentId)).toBe(false)\tcore",
+      "packages/core/src/services/history/borrowed-snapshot-lifecycle.journal.test.ts\t(unnamed) > closes an abandoned acquired reader when the callback throws or stops\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tcore",
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(fixture.history.pulled).toBe(rowCount)\tagents",
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(ownership.snapshot().acquisitions).toBe(0)\tagents",
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(ownership.snapshot().liveRows).toBe(0)\tagents",
+      "packages/agents/src/core/deferred-history-source.test.ts\tstreamed deferred history admission > (unnamed) > commits detached rows without retaining the source and pins only the paused output row\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tagents",
+      "packages/agents/src/core/deferred-history-source.test.ts\tdeferred source failures and oversized rows > rolls back a source failure and cancellation without changing admitted history\tDUP_ASSERT\t2x identical assertion: expect( (await Array.fromAsync(client.getHistory())).map((row) => row.blocks), ).toStrictE\tagents",
+      "packages/agents/src/core/deferred-history-source.test.ts\tstreamed deferred media ownership > keeps media usable after startup failure, transfers on retry, and releases on disposal\tDUP_ASSERT\t3x identical assertion: expect(await store.hasReservations(reference.contentId)).toBe(true)\tagents"
+    ],
+    "new": [
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(fixture.history.pulled).toBe(rowCount)\tagents",
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(ownership.snapshot().acquisitions).toBe(0)\tagents",
+      "packages/agents/src/core/stream-request-body-demand.test.ts\tissue854 real StreamProcessor Responses BODY demand > keeps replay readers cold until demand and releases the yielded row on cancellation\tDUP_ASSERT\t2x identical assertion: expect(ownership.snapshot().liveRows).toBe(0)\tagents"
+    ]
+  },
+  "remainingPaths": [
+    "packages/agents/src/core/__tests__/childaccept-body.test.ts",
+    "packages/agents/src/core/__tests__/childaccept.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+    "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+    "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+    "packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts",
+    "packages/agents/test-bun/run-bun-tests.issue3253.bun.ts"
+  ],
+  "absentOwnedPids": [
+    56261, 56262, 56782, 56784, 57229, 57230, 57578, 57581, 57623, 57655, 57799,
+    57800, 57862, 57887, 58492, 58493, 61958, 61959, 62091, 62559, 63013, 64591,
+    64592, 64655, 64656, 64805, 65279, 65721, 65762, 65790, 65791, 65925, 66102,
+    66272, 66289, 67756, 67757, 67758, 67918, 67919, 68070, 68184, 69225, 69302,
+    69406, 69489, 69577, 70907, 70908, 70909, 70945, 70998, 70999, 71005, 71069,
+    71220, 72200, 72288, 72428, 72516, 72611, 72690, 72691, 72725, 72759, 72760,
+    72768, 72792, 73391, 73524, 73647, 73888, 73936, 73958, 74680, 74690, 74706,
+    74724, 74744, 74949, 74950, 74960, 74981, 75597, 75715, 75762, 75857, 75906,
+    75928, 76638, 76653, 76666, 76677, 76687, 77224, 77226, 77227, 77270, 77318,
+    77319, 77377, 78455, 78456, 78464, 78479, 78489, 78494, 78502, 78505, 78511,
+    78556, 78559, 78576
+  ],
+  "processCheckTime": "2026-10-20T03:19:33.952Z",
+  "references": [
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/classification.json",
+      "sha256": "2e3ba1834702bdd9a74b75b07839f4c21943ef2dbee3a4479b63da4ef1bca9cf"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/original-preservation-final.json",
+      "sha256": "551521d0aaa2b94e8f7c453cc38f24fbc641a3fb2596edff33bae55d7af7413f"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/census-red.log",
+      "sha256": "923dd944803a410bdc92f2021d6df57e5a70d72c52a189b974fd83eac1d19875"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/census-mutation.log",
+      "sha256": "ffa19305e394a38362f9b0b4bd233ef4692aca7c5a5a43e0b7a7095b6870d272"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/media-production-final.saved",
+      "sha256": "c1bb072711d11adc49ceeb646bb09587f039d6636a95208d4cc74e9ee61f98fd"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/media-restoration.json",
+      "sha256": "dc4644261976e0e565e475d58904fb312aa6958d034c921507921ac4e43fe46e"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/census-restoration.json",
+      "sha256": "e4a4b379d6d638ab8b499529d36c17dd402d05e5e63dcac1a0c66e4ffefb62fd"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/frozen-final/census.json",
+      "sha256": "fa7df792c9272f006ace23afa066af48857fa7e398df95614044720721177a7c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/core-fault-run-m/frozen-final/all-attempts.json",
+      "sha256": "897c8335ee1a26e7e35dea42caa9be4158d9b331e60c3ed68ca180318a1948b4"
+    }
+  ],
+  "limits": "Cumulative per-file evidence, not whole-package final-source green. Seven red paths and one inconsistent runner remain. Supplemental core addbatch-value-serialization outside inventory remains open. W22/W23-W26, pending classification and scratch removal remain open; old default unchanged. Review skipped per Andrew 2026-10-09."
+}

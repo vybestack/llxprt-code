@@ -1,47 +1,28 @@
 # W22 agents sweep status
 
-**Six core observation/request targets are green and committed at 9ad76c8a5. W22 remains incomplete.** Base ba4c3e8ca was verified; production and the old backend default are unchanged. This supersedes the request/publication finalization checkpoint for current counts only.
+## W22 five core fault contracts, 2026-10-20T03:19:33.952Z
 
-## Completed subset
+**All five requested core suites are green and committed at 3fff916f5; W22 remains incomplete.** Production fix fc2515b17 follows actual RED: native rollback stopped at the first media-release error and discarded the append owner index. It now attempts every release, reports errors and retains failed reservation bookkeeping until disposal. Original lifecycle test unchanged. Test/support source committed before census acceptance 572ec4341.
 
-ConversationManager model stamping, direct-message characterization, structural and stream-structural characterization, chatSession runtime and streamRequestHelpers pass **59 cases per backend**. Eight reused related suites add **67 per backend**: **28 serial isolated processes/252 passes/zero failures/skips** at final source. Related native transport, hook demand, semantic-purge boundary/lifecycle and runtime cases actually ran rather than being duplicated.
+Final effective matrix: **twenty files per backend, 145 passes each, 290 total/zero failures/skips**, isolated serial Bun processes. Five targets provide 36 cases per backend. Fifteen reused W21/native service/public-crash/lifetime/request/purge suites actually ran; no duplicate full matrix. Ten scoped product gates and five census/API suites (twelve cases), strict census types/lint/explicit formatting/final graph/audit pass. Audit adds three DUP_ASSERT notices for deliberate before/after demand/ownership checks; no new MOCK_MIRROR/ALWAYS_TRUE/SELF_CONFIRMING/NO_ASSERT. Graph validation is not shard execution.
 
-Observers await the existing commit boundary; all callers use explicit async signatures. Historical request inputs carry deterministic chronology, preserving the exact byte oracle rather than stripping metadata. All **156 original assertions** remain (153 verbatim, three await/curation-equivalent); two block assertions were added. Original property domains/timeouts/ownership bounds are unchanged. No production fix, whole-history materialization, extra counting pass or lazy request behavior change was made.
+All **119 original target assertion expressions remain verbatim**, with fourteen additions; original domains/timeouts/bounds unchanged. Native deferred acknowledgement gates the real trailer write after producer exhaustion and independently reopens durable bytes. Purge fixtures select the recorder protocol, keep old synchronous guards explicit-old and exercise distinct native guards plus durable row digests. BODY observes the actual journal traversal without a history override, preserves exact bytes/estimation/hooks/abort, and proves cold replay readers release on cancellation. No production request read, count pass, full-history clone or backend-default change.
 
-Ten scoped product gates passed, including declaration build, core/agents/agents-Bun/touched types, API surface, lint/format/graph/audit. Eleven census/API tests plus strict types, explicit zero-warning lint and ignore-free formatting passed. Final graph/audit passed; scoped audit has no new findings. Graph validation is not shard execution. Initial type and preservation-tool errors remain retained.
+Original-production control PIDs 77227/77270 fail exactly four media regressions plus the unchanged lifecycle case; fixed source restores with cmp zero and PIDs 77319/77377 pass 24 cases. Source-hash census guard removal fails, restores byte-identically/cmp zero and passes. Earlier original RED, diagnostic/old-injector and lint failures remain retained, not retried into acceptance.
 
-Actual original RED is source/hash-matched to the starting commit. The census acceptance test also failed before its new layer and now rejects mismatched sources/cases and inconsistent raw/JUnit evidence. No mutation was started; no restoration remains pending.
+**806 = 798 green + 7 red + 1 unverified**, zero unrun. Verified **6557 passes/11 failures/zero skips**; recorded 6564 passes include seven inconsistent runner XML passes withheld. Classifications: **388 native/344 shared-public/44 explicit-old/5781 pending**; separate unclassified zero. Only five target paths change state from 793/12/1. Generation 7e731274-7a5a-4e2d-9976-88b64c3d0cd1 keeps 1344 attempts, 26 historical missing attempts, zero latest missing files and the separate runner inconsistency. Exact source/case/native-counterpart acceptance excludes old/diagnostic/unknown/control results. Cumulative per-file evidence is not full-package final-source/native proof.
 
-## Accepted census
-
-**806 = 793 green + 12 red + 1 unverified**, zero unrun. Verified cases: **6543 passes/22 failures/zero skips**. Recorded 6550 passes include seven inconsistent runner XML passes withheld from verified totals.
-
-Passing classifications: **354 native/344 shared-public/42 explicit-old/5803 pending**. Separate unclassified zero.
-
-Only six red paths changed state from 787/18/1. Generation `067cf012-0657-40d0-b056-f493ee86a7f8` retains 1280 attempts, 26 historical missing attempts, 0 latest missing files and the distinct runner inconsistency. This is cumulative per-file evidence, not a final-source package green/native proof.
+Details and checksums: W22-CORE-FAULT-PROOF.md/.json; raw tmp/854-notes/p4/w22/core-fault-run-m/. All 113 recorded owned PIDs are absent; no active mutation or restoration. Eight exact remaining paths are in W22-REMAINING-FAMILIES.tsv. Next candidates: childaccept transport/config, retained-growth/traps, send-journal opens and the runner inconsistency; none started. Supplemental core addBatch red stays outside census. W22/W23-W26/classification/scratch remain open. Review skipped per Andrew 2026-10-09. No cleanup/deletion, obstruction move, .llxprt edit/staging, raw recovery bulk staging, pattern kill, weakened check/timeout/bound, default flip, OCR, push or merge. One transient index lock blocked census staging; after verified absence a normal authorized retry committed, without lock alteration.
 
 ## Exact remaining queue
 
-| State      | Remaining path under packages/agents/                                  |
-| ---------- | ---------------------------------------------------------------------- |
-| red        | `src/core/__tests__/childaccept-body.test.ts`                          |
-| red        | `src/core/__tests__/childaccept.test.ts`                               |
-| red        | `src/core/__tests__/journal-retained-growth-release-trap.test.ts`      |
-| red        | `src/core/__tests__/journal-retained-growth-retaining-trap.test.ts`    |
-| red        | `src/core/__tests__/journal-retained-growth.test.ts`                   |
-| red        | `src/core/__tests__/send-journal-opens.test.ts`                        |
-| red        | `src/core/__tests__/subagent-child-config-journal-integration.test.ts` |
-| red        | `src/core/deferred-history-source.test.ts`                             |
-| red        | `src/core/semantic-purge-array-seam.test.ts`                           |
-| red        | `src/core/semantic-purge-production.test.ts`                           |
-| red        | `src/core/stream-request-body-demand.test.ts`                          |
-| red        | `src/core/turnMediaAdmission.lifecycle.test.ts`                        |
-| unverified | `test-bun/run-bun-tests.issue3253.bun.ts`                              |
-
-Five requested targets remain red: deferred acknowledgement, both semantic-purge suites, request BODY demand and turn-media lifecycle. Their exact original failed cases and diagnosed fixture boundaries are enumerated in W22-CORE-OBSERVATION-PROOF.md/.json. The native no-array snapshot and media error-finalizer requirements remain open; unrelated native regressions do not close them. The supplemental core addBatch fixture remains red outside this inventory.
-
-## Evidence and process closure
-
-New raw evidence: `tmp/854-notes/p4/w22/core-observation-run-l/`. W22-CORE-OBSERVATION-PROOF.json binds final matrices/gates/source hashes, all eleven original RED case sets, classifications, assertion preservation and frozen ledger checksums. All sixteen package source hashes match committed bytes/worktree. W22-REMAINING-FAMILIES.tsv is the exact thirteen-path queue.
-
-All 84 recorded owned PIDs are absent at 2026-10-20T02:49:17.269Z; no live test/gate/supervisor or mutation remains. W22/W23-W26, pending classification and scratch removal stay open. Review skipped per Andrew 2026-10-09. No cleanup/deletion, obstruction move, .llxprt edit/staging, raw recovery bulk staging, pattern kill, assertion/bound/timeout/check weakening, default flip, OCR, push or merge. Unrelated dirty memory/recovery artifacts remain untouched.
+| State      | Remaining path                                                                         |
+| ---------- | -------------------------------------------------------------------------------------- |
+| red        | `packages/agents/src/core/__tests__/childaccept-body.test.ts`                          |
+| red        | `packages/agents/src/core/__tests__/childaccept.test.ts`                               |
+| red        | `packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts`      |
+| red        | `packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts`    |
+| red        | `packages/agents/src/core/__tests__/journal-retained-growth.test.ts`                   |
+| red        | `packages/agents/src/core/__tests__/send-journal-opens.test.ts`                        |
+| red        | `packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts` |
+| unverified | `packages/agents/test-bun/run-bun-tests.issue3253.bun.ts`                              |

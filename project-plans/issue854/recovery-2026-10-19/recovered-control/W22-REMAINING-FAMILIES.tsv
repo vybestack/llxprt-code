@@ -6,9 +6,4 @@ retained-growth	red	packages/agents/src/core/__tests__/journal-retained-growth-r
 retained-growth	red	packages/agents/src/core/__tests__/journal-retained-growth.test.ts	26096	d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72	package-resume-g-0300	14	1	0
 send-snapshot-count	red	packages/agents/src/core/__tests__/send-journal-opens.test.ts	26139	700ab6548a4731503980ccad48298a4030de9a686d4b3145bb1ed32e1c52f579	package-resume-g-0300	0	2	0
 child-ownership-transport	red	packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts	26229	0ae76833ac5131283e438033a192a8f4d510a69fb0dd76aafd147b313de204bc	package-resume-g-0300	0	2	0
-deferred-acknowledgement	red	packages/agents/src/core/deferred-history-source.test.ts	40285	42736e4c5bdc53633266439b8da05f49f4c716fdd6fec525bb6d235f9ae98671	package-resume-g-0450	6	1	0
-semantic-purge	red	packages/agents/src/core/semantic-purge-array-seam.test.ts	53105	d2e12850ff052e042b76a4c98133a48c4d199c5af789ad7470857788eb241704	package-resume-g-0450	0	3	0
-semantic-purge	red	packages/agents/src/core/semantic-purge-production.test.ts	53112	000d8449f48f193aff44b3f0e2cbc0179f11394f06138fec5ece692b3181b59b	package-resume-g-0450	2	3	0
-stream-request-demand	red	packages/agents/src/core/stream-request-body-demand.test.ts	55328	2f03aad4c842bae51b14b88e8f4a5f5f0962ed5edcd014bdb782c24b0c4afa25	package-resume-g-0500	0	3	0
-turn-media-rollback	red	packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts	62183	e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965	package-resume-g-0600	14	1	0
 runner-summary-accounting	unverified	packages/agents/test-bun/run-bun-tests.issue3253.bun.ts	62524	58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5	package-resume-g-0600	7	0	0
