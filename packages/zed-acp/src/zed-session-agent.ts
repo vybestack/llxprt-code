@@ -392,6 +392,22 @@ async function retireSessionWorkspace(
     );
 }
 
+export async function disposeFailedZedSession(
+  session: { dispose(): Promise<void> },
+  primary?: unknown,
+): Promise<void> {
+  try {
+    await session.dispose();
+  } catch (cleanup) {
+    if (primary === undefined) throw cleanup;
+    throw new AggregateError(
+      [primary, cleanup],
+      'ACP session load and cleanup failed',
+      { cause: primary },
+    );
+  }
+}
+
 export async function disposeZedSession(
   detach: () => void,
   terminals: TerminalManager | null,

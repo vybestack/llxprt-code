@@ -58,6 +58,7 @@ import {
   type ZedSessionAgent,
   type ZedHostInputs,
   disposeZedSession,
+  disposeFailedZedSession,
 } from './zed-session-agent.js';
 import { deliverHistoryUpdates } from './zed-session-replay.js';
 import {
@@ -267,7 +268,7 @@ export class ZedAgent {
       try {
         await reattached.sendAvailableCommands();
       } catch (error) {
-        await this.rollbackSession(sessionId, reattached);
+        await this.rollbackSession(sessionId, reattached, error);
         throw error;
       }
       try {
@@ -279,7 +280,7 @@ export class ZedAgent {
           )),
         };
       } catch (error) {
-        await this.rollbackSession(sessionId, reattached);
+        await this.rollbackSession(sessionId, reattached, error);
         throw error;
       }
     }
@@ -288,7 +289,7 @@ export class ZedAgent {
     try {
       await session.sendAvailableCommands();
     } catch (error) {
-      await this.rollbackSession(sessionId, session);
+      await this.rollbackSession(sessionId, session, error);
       throw error;
     }
     return {
@@ -318,16 +319,17 @@ export class ZedAgent {
       await existing.replayLiveHistory();
       return existing;
     } catch (error) {
-      await this.rollbackSession(sessionId, existing);
+      await this.rollbackSession(sessionId, existing, error);
       throw error;
     }
   }
   private async rollbackSession(
     sessionId: string,
     session: Session,
+    primary?: unknown,
   ): Promise<void> {
     this.sessions.delete(sessionId);
-    await session.dispose().catch(() => undefined);
+    await disposeFailedZedSession(session, primary);
   }
   private async disposePriorSession(sessionId: string): Promise<void> {
     const existing = this.sessions.get(sessionId);
@@ -345,7 +347,7 @@ export class ZedAgent {
     try {
       await session.streamHistory(history);
     } catch (error) {
-      await this.rollbackSession(sessionId, session);
+      await this.rollbackSession(sessionId, session, error);
       this.logger.debug(() => `loadSession - replay failed: ${error}`);
       throw error;
     }

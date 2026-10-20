@@ -288,10 +288,12 @@ export function wrapReplayFailure(
     return error;
   }
   const detail = errorMessage(error);
-  return acp.RequestError.internalError(
+  const failure = acp.RequestError.internalError(
     { sessionId, reason: detail, phase: 'replay' },
     `Failed to replay session history: ${detail}`,
   );
+  failure.cause = error;
+  return failure;
 }
 
 /**
