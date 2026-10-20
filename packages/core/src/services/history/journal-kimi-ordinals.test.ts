@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { getToolIdStrategy } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '../../debug/index.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -26,13 +27,14 @@ async function referenceCount(rows: readonly IContent[]): Promise<number> {
     new DebugLogger('kimi-eligible-reference'),
   );
   try {
-    let count = 0;
-    for await (const unit of normalized.openReader())
-      count += unit.blocks.filter(
-        (block) =>
-          block.type === 'tool_call' && block.id !== '' && block.name !== '',
-      ).length;
-    return count;
+    const units: IContent[] = [];
+    for await (const unit of normalized.openReader()) units.push(unit);
+    const mapper = getToolIdStrategy('kimi').createMapper(units);
+    const prefix = 'functions.__ordinal_probe__:';
+    const probe = mapper.resolveToolCallId(call('', '__ordinal_probe__'));
+    if (!probe.startsWith(prefix))
+      throw new Error('Unexpected Kimi counter probe');
+    return Number(probe.slice(prefix.length));
   } finally {
     normalized.close();
   }
