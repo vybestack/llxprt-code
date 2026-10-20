@@ -1,0 +1,656 @@
+{
+  "created": "2026-10-20T23:35:27.429Z",
+  "startingHead": "7ccd44b5b750048efc7ee98ec091ff1b055d9c4c",
+  "implementationCommit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+  "sources": {
+    "packages/core/src/journal/normalizedRowOccurrences.ts": {
+      "sha256": "65220f88fbcd887a4712171d82de294653f40aed2609d10afaca3d594c1590d9",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "65220f88fbcd887a4712171d82de294653f40aed2609d10afaca3d594c1590d9"
+    },
+    "packages/core/src/journal/versionSnapshot.ts": {
+      "sha256": "06ae78beb2371135104e145b58525e1f32991cac2d8dbed91cde0036691a4343",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "06ae78beb2371135104e145b58525e1f32991cac2d8dbed91cde0036691a4343"
+    },
+    "packages/core/src/services/history/indexed-journal-request-snapshot.ts": {
+      "sha256": "e65c44604fb88cb4881b4475f5d4ebbeb7dfcf98b19d5e8b9c12410dea35ea17",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "e65c44604fb88cb4881b4475f5d4ebbeb7dfcf98b19d5e8b9c12410dea35ea17"
+    },
+    "packages/core/src/services/history/journal-indexed-overlay.ts": {
+      "sha256": "3803cd0c5facaa74ccd3922e24f28914b9ac5b9b06df55fd437ee0be3256f791",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "3803cd0c5facaa74ccd3922e24f28914b9ac5b9b06df55fd437ee0be3256f791"
+    },
+    "packages/core/src/services/history/journal-request-occurrences.ts": {
+      "sha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397"
+    },
+    "packages/core/src/services/history/journal-tail-queries.test.ts": {
+      "sha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb"
+    },
+    "packages/core/src/services/history/tail-query-oracle.test.ts": {
+      "sha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da"
+    },
+    "packages/core/src/services/history/journal-tail-query-resources.test.ts": {
+      "sha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a"
+    },
+    "packages/core/src/services/history/journal-tail-query-pins.test.ts": {
+      "sha256": "da2e07a6c68a56977f4b7e55d381a928d5fb7cc76a642ad9fa4976c1aa53025d",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "da2e07a6c68a56977f4b7e55d381a928d5fb7cc76a642ad9fa4976c1aa53025d"
+    },
+    "packages/core/src/services/history/__tests__/support/tail-query-oracle.ts": {
+      "sha256": "d96b0afe00d9e504f96d87805f1892a59f569cf56310b969da50dc8cc3eca352",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "d96b0afe00d9e504f96d87805f1892a59f569cf56310b969da50dc8cc3eca352"
+    },
+    "packages/core/src/services/history/__tests__/support/measured-request-snapshot.ts": {
+      "sha256": "99c8da9b08a0dc2d34ff93312e5330481bb597d9cd2aa9f292bafbcfaf28089e",
+      "commit": "92beb284e4d7f58aeaadf6b9b379c92ccf7446f5",
+      "committedSha256": "99c8da9b08a0dc2d34ff93312e5330481bb597d9cd2aa9f292bafbcfaf28089e"
+    }
+  },
+  "totals": {
+    "files": 65,
+    "processes": 130,
+    "pass": 931,
+    "fail": 1,
+    "skip": 0,
+    "assertions": 3888934
+  },
+  "matrixGreen": false,
+  "queryAcceptance": {
+    "green": true,
+    "files": 4,
+    "processes": 8,
+    "pass": 36,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 2948448,
+    "receipts": [
+      {
+        "name": "accepted-final-old-61",
+        "backend": "old",
+        "sourceFile": "packages/core/src/services/history/journal-tail-queries.test.ts",
+        "sourceSha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb",
+        "junitHash": "d9ef53a869a98bb91cf62f1200e070bf72e029fd211dc5e6c30bb1f25ef76da8",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-old-62",
+        "backend": "old",
+        "sourceFile": "packages/core/src/services/history/tail-query-oracle.test.ts",
+        "sourceSha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da",
+        "junitHash": "7dc16adea48a82aba0001676f75900b79e49a7a96f67e7f2ca306cb5b180b27e",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-old-63",
+        "backend": "old",
+        "sourceFile": "packages/core/src/services/history/journal-tail-query-resources.test.ts",
+        "sourceSha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a",
+        "junitHash": "d445c57cfd69245d04c106e7dcff0bd42863b1b2501dda00bc24f03a18199547",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-old-64",
+        "backend": "old",
+        "sourceFile": "packages/core/src/services/history/journal-tail-query-pins.test.ts",
+        "sourceSha256": "da2e07a6c68a56977f4b7e55d381a928d5fb7cc76a642ad9fa4976c1aa53025d",
+        "junitHash": "af1e47c82f71deec01e6edde29ee34792c3ab866b2a5faf1e287aad0b7907dfa",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-journal-61",
+        "backend": "journal",
+        "sourceFile": "packages/core/src/services/history/journal-tail-queries.test.ts",
+        "sourceSha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb",
+        "junitHash": "9f49e1198162c258f3a23130ca5328b226d25b8289b0d6c0c7361a9443ea4b03",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-journal-62",
+        "backend": "journal",
+        "sourceFile": "packages/core/src/services/history/tail-query-oracle.test.ts",
+        "sourceSha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da",
+        "junitHash": "340f904f5e2444af8c2d5add3b264cb09026142193b1cc72e169b2a20efefe68",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-journal-63",
+        "backend": "journal",
+        "sourceFile": "packages/core/src/services/history/journal-tail-query-resources.test.ts",
+        "sourceSha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a",
+        "junitHash": "4ea22d67de34ebf1e76dd940a571d2784128b1f105da69863d98defe835df555",
+        "code": 0
+      },
+      {
+        "name": "accepted-final-journal-64",
+        "backend": "journal",
+        "sourceFile": "packages/core/src/services/history/journal-tail-query-pins.test.ts",
+        "sourceSha256": "da2e07a6c68a56977f4b7e55d381a928d5fb7cc76a642ad9fa4976c1aa53025d",
+        "junitHash": "050cb9c929fbee6d4cf07d3bef12dd4a27b4d463d2a00c7eb4e81be65ab75c74",
+        "code": 0
+      }
+    ]
+  },
+  "failures": [
+    {
+      "name": "accepted-final-journal-35",
+      "backend": "journal",
+      "sourceFile": "packages/core/src/services/history/journalRowCodec.test.ts",
+      "sourceSha256": "a4d8f0fc41276498f22f34a7c92b0d55d78a6f065e47702f30e71e78f4bb9ce0",
+      "junitHash": "4de9cbf50cc99c7a89e2323adcbd98672edd48e65f0f1398512fc00e20cc5753",
+      "code": 1
+    }
+  ],
+  "broaderMatrix": {
+    "green": false,
+    "phase": "accepted-final",
+    "manifest": "tmp/854-notes/p5/tail-queries-run-i/accepted-final-tests.jsonl",
+    "sha256": "44003dcf13ab433dcd66f7215e8a943460e875347c658dc94c05e842e336c175",
+    "complete": {
+      "driverPids": [
+        95345,
+        4508
+      ],
+      "files": 65,
+      "processes": 130,
+      "finished": "2026-10-20T23:32:54.445Z",
+      "fullSourceCount": 8863,
+      "nonGreenMatrix": true,
+      "knownFailure": {
+        "name": "accepted-final-journal-35",
+        "issue": 3917,
+        "seed": 609796497
+      },
+      "continuation": "Only previously unexecuted files; no failing test was retried or skipped"
+    }
+  },
+  "gates": [
+    {
+      "name": "final-declarations",
+      "pid": 94891,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:24:55.361Z",
+      "finished": "2026-10-20T23:24:59.002Z",
+      "code": 0,
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "final-types",
+      "pid": 94945,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:24:59.002Z",
+      "finished": "2026-10-20T23:25:05.412Z",
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-lint",
+      "pid": 95043,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:25:05.413Z",
+      "finished": "2026-10-20T23:25:09.607Z",
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "final-prettier",
+      "pid": 95104,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:25:09.607Z",
+      "finished": "2026-10-20T23:25:09.829Z",
+      "code": 0,
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "final-graph",
+      "pid": 95111,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:25:09.829Z",
+      "finished": "2026-10-20T23:25:12.053Z",
+      "code": 0,
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "final-audit",
+      "pid": 95140,
+      "driverPid": 94889,
+      "started": "2026-10-20T23:25:12.053Z",
+      "finished": "2026-10-20T23:25:15.005Z",
+      "code": 0,
+      "logHash": "cf07595096d2c3e50530778b2bfae92f7f5c7e90e38527092202c5295e7cb29b"
+    }
+  ],
+  "controls": [
+    {
+      "name": "control-wrong-tail-override",
+      "pid": 95183,
+      "driverPid": 95182,
+      "started": "2026-10-20T23:25:15.022Z",
+      "finished": "2026-10-20T23:25:15.643Z",
+      "code": 1,
+      "logHash": "9661228d49428cdc7d4d108a47fa33fba8f8ac5a6734807683efdf1fac356423"
+    },
+    {
+      "name": "control-wrong-projected-position",
+      "pid": 95192,
+      "driverPid": 95182,
+      "started": "2026-10-20T23:25:15.646Z",
+      "finished": "2026-10-20T23:25:16.188Z",
+      "code": 1,
+      "logHash": "9b665aa48087ffc83fb8209f5bc7081c5e5e46d305d56b4a63207259021c271f"
+    },
+    {
+      "name": "control-all-history-copy",
+      "pid": 95201,
+      "driverPid": 95182,
+      "started": "2026-10-20T23:25:16.190Z",
+      "finished": "2026-10-20T23:25:23.315Z",
+      "code": 1,
+      "logHash": "c126e36d94e1b8708cb00698026ec1cf0995bf1fa2e7c8cf0bd3debdd5671c06"
+    }
+  ],
+  "restorations": [
+    {
+      "name": "control-wrong-tail-override",
+      "path": "packages/core/src/services/history/journal-tail-source.ts",
+      "test": "packages/core/src/services/history/journal-tail-queries.test.ts",
+      "testSha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb",
+      "originalSha256": "5b64de04a687f63bb50bbbf1ee1c4120fb625bd8b8821ab8b3ac388ecf8e0e1e",
+      "restoredSha256": "5b64de04a687f63bb50bbbf1ee1c4120fb625bd8b8821ab8b3ac388ecf8e0e1e",
+      "cmp": true,
+      "code": 1
+    },
+    {
+      "name": "control-wrong-projected-position",
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "test": "packages/core/src/services/history/journal-tail-queries.test.ts",
+      "testSha256": "6757007314f00cced781ff42af63ac11ab7567c01a1685bf6a832e727c77fadb",
+      "originalSha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397",
+      "restoredSha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397",
+      "cmp": true,
+      "code": 1
+    },
+    {
+      "name": "control-all-history-copy",
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "test": "packages/core/src/services/history/journal-tail-query-resources.test.ts",
+      "testSha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a",
+      "originalSha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397",
+      "restoredSha256": "e881bfc783c53df9c75bec7452415ff332a7c6b25765ebeb0f638fcf71637397",
+      "cmp": true,
+      "code": 1
+    }
+  ],
+  "red": [
+    {
+      "name": "red",
+      "pid": 74429,
+      "driverPid": 74426,
+      "started": "2026-10-20T23:15:47.910Z",
+      "finished": "2026-10-20T23:15:48.273Z",
+      "code": 1,
+      "logHash": "864103d00f0bb8b609412fac78eece8b198be74baee21ca86b2329a01a2cb742"
+    },
+    {
+      "name": "red-preparation-error",
+      "pid": 82314,
+      "driverPid": 82312,
+      "started": "2026-10-20T23:19:54.132Z",
+      "finished": "2026-10-20T23:19:54.436Z",
+      "code": 1,
+      "logHash": "15adb4df65b6577cc177d80019eda31dc43f6e8d14dead46dd21fde03b22cf00"
+    }
+  ],
+  "initialFailures": [
+    {
+      "name": "gates-initial-declarations",
+      "pid": 83233,
+      "driverPid": 83229,
+      "started": "2026-10-20T23:20:19.261Z",
+      "finished": "2026-10-20T23:20:23.216Z",
+      "code": 1,
+      "logHash": "923f94136dc8cddb34d827ef041d8acea7e88608688895a3049265319d126e9f"
+    },
+    {
+      "name": "gates-typed-lint",
+      "pid": 86248,
+      "driverPid": 84695,
+      "started": "2026-10-20T23:20:45.178Z",
+      "finished": "2026-10-20T23:20:49.424Z",
+      "code": 1,
+      "logHash": "333bfeb76cf091eb89901933b012a1b5dfef8b9e889f12f7e7e5cb73f8977b5c"
+    },
+    {
+      "name": "gates-final-lint",
+      "pid": 90858,
+      "driverPid": 90549,
+      "started": "2026-10-20T23:22:29.309Z",
+      "finished": "2026-10-20T23:22:33.418Z",
+      "code": 1,
+      "logHash": "8ab772b977225cc11d28eff8561807d4266fc3e2cf4067a428069140832e269e"
+    },
+    {
+      "name": "accepted-final-journal-35",
+      "pid": 98662,
+      "driverPid": 95345,
+      "started": "2026-10-20T23:28:52.038Z",
+      "finished": "2026-10-20T23:28:52.201Z",
+      "code": 1,
+      "logHash": "c5ee7644a1c0178a459282961f9c3d95997a40204ec1bf0f84aa0d2d6afcc7a6"
+    }
+  ],
+  "readMeasurements": [
+    {
+      "size": 40,
+      "readings": {
+        "prepare": 17,
+        "count": 3,
+        "successor": 13,
+        "last": 2,
+        "range": 14
+      },
+      "pid": 97861
+    },
+    {
+      "size": 4000,
+      "readings": {
+        "prepare": 27,
+        "count": 3,
+        "successor": 25,
+        "last": 2,
+        "range": 26
+      },
+      "pid": 97861
+    },
+    {
+      "size": 100000,
+      "readings": {
+        "prepare": 37,
+        "count": 3,
+        "successor": 37,
+        "last": 2,
+        "range": 38
+      },
+      "pid": 97861
+    },
+    {
+      "size": 40,
+      "readings": {
+        "prepare": 17,
+        "count": 3,
+        "successor": 13,
+        "last": 2,
+        "range": 14
+      },
+      "pid": 6461
+    },
+    {
+      "size": 4000,
+      "readings": {
+        "prepare": 27,
+        "count": 3,
+        "successor": 25,
+        "last": 2,
+        "range": 26
+      },
+      "pid": 6461
+    },
+    {
+      "size": 100000,
+      "readings": {
+        "prepare": 37,
+        "count": 3,
+        "successor": 37,
+        "last": 2,
+        "range": 38
+      },
+      "pid": 6461
+    }
+  ],
+  "fullSourceInventory": {
+    "path": "tmp/854-notes/p5/tail-queries-run-i/accepted-final-full-sources.json",
+    "sha256": "afd3ed0776671a57536fb484976cb5d9e3e333d754d0909496f3d15ef6a08d29",
+    "entries": 8863,
+    "worktreeMatches": true
+  },
+  "rawReceipts": {
+    "path": "tmp/854-notes/p5/tail-queries-run-i/receipt-index.json",
+    "sha256": "78797c07fbb5f86425e40250f4aa5f09d2228e45bfef73e5f3f5f5300f55da4b",
+    "entries": 316
+  },
+  "preservation": {
+    "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e",
+    "packages/core/src/services/history/provider-curated-stream.ts": "a0cfae8c168746a641d0c853334cb5b4950ee91e609c8034defedce8a1554f80",
+    "packages/core/src/services/history/historyToolNormalization.ts": "0fe5e4d43070769e5494cff5ff675f69cf0255e5f1ff562e311de35612850001",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+    "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d"
+  },
+  "absentPids": [
+    74429,
+    74426,
+    77656,
+    77654,
+    78673,
+    78672,
+    80654,
+    80653,
+    80661,
+    80660,
+    82314,
+    82312,
+    83225,
+    83222,
+    83233,
+    83229,
+    84709,
+    84695,
+    85818,
+    86248,
+    90541,
+    90535,
+    90557,
+    90549,
+    90688,
+    90858,
+    92091,
+    92089,
+    92202,
+    92394,
+    92513,
+    92518,
+    92595,
+    92692,
+    92691,
+    92706,
+    92727,
+    94885,
+    94881,
+    94891,
+    94889,
+    94945,
+    95043,
+    95104,
+    95111,
+    95140,
+    95183,
+    95182,
+    95192,
+    95201,
+    95358,
+    95345,
+    95364,
+    95536,
+    95539,
+    95561,
+    95562,
+    95583,
+    95584,
+    95586,
+    95595,
+    95598,
+    95675,
+    95680,
+    95685,
+    95694,
+    95695,
+    95705,
+    95710,
+    95711,
+    95714,
+    95721,
+    95722,
+    95739,
+    95774,
+    95777,
+    95783,
+    95786,
+    95798,
+    95799,
+    95802,
+    95879,
+    95883,
+    95887,
+    95888,
+    95984,
+    96243,
+    96251,
+    96266,
+    96271,
+    96278,
+    96284,
+    96340,
+    96388,
+    96397,
+    96449,
+    96461,
+    96489,
+    96541,
+    96545,
+    96557,
+    96565,
+    96677,
+    96681,
+    96751,
+    96759,
+    96760,
+    96776,
+    96850,
+    96865,
+    96871,
+    96948,
+    96958,
+    96962,
+    97861,
+    97962,
+    97968,
+    97969,
+    98096,
+    98103,
+    98111,
+    98114,
+    98128,
+    98134,
+    98135,
+    98137,
+    98140,
+    98165,
+    98170,
+    98176,
+    98179,
+    98183,
+    98189,
+    98195,
+    98196,
+    98202,
+    98203,
+    98205,
+    98214,
+    98253,
+    98260,
+    98264,
+    98271,
+    98277,
+    98283,
+    98287,
+    98343,
+    98352,
+    98357,
+    98362,
+    98439,
+    98662,
+    3849,
+    3848,
+    4510,
+    4508,
+    4512,
+    4513,
+    4518,
+    4525,
+    4577,
+    4631,
+    4641,
+    4881,
+    4882,
+    4888,
+    4904,
+    4915,
+    4919,
+    4941,
+    5094,
+    5098,
+    5152,
+    5158,
+    5159,
+    5174,
+    5278,
+    5294,
+    5298,
+    5358,
+    5373,
+    5378,
+    6461,
+    6551
+  ],
+  "livePids": [],
+  "touchedAuditFindings": [
+    "packages/core/src/services/history/journal-tail-query-pins.test.ts\t94\tnormalized request query pin ownership > holds an iterator until explicit return after opener close\tDUP_ASSERT\t2x identical assertion: expect(await iterator.next()).toStrictEqual({ done: false, value: 0 })\tcore",
+    "packages/core/src/services/history/journal-tail-query-resources.test.ts\t40\tnormalized request-tail read bounds > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect({ blocks: stats.blocks, bodies: stats.bodies }).toStrictEqual({ blocks: 0, bodies: \tcore",
+    "packages/core/src/services/history/journal-tail-query-resources.test.ts\t40\tnormalized request-tail read bounds > (unnamed)\tDUP_ASSERT\t4x identical assertion: expect(stats.heads).toBeLessThan(150)\tcore"
+  ],
+  "scope": {
+    "native": "Pinned indexed request namespace 1/2 count, occurrence selection, strict successor, last-at-or-after and streamed half-open cursor ranges; same tail source and row contributions as count/readAt; shared persisted row-emission core; projected request coordinates",
+    "cost": "Only actual tail IDs enter the raw-fact overlay. Each selected-ID query reads affected/tail current-row ID metadata and binary-searches persisted list intervals; no journal-prefix enumeration. Unchanged row coordinates use tree rank. Fixed-tail measurements are read-budget evidence, not heap acceptance.",
+    "open": [
+      "Full Kimi request-tail mapping continuation and tail duplicates replacing earlier journal mappings",
+      "Mistral namespace-3 plus tail-bounded used-ID continuation",
+      "Complete fallback digits/ranks, unmapped row aggregates, holder name/token/byte remeasurement",
+      "Format/settings generations, summaries/LENS, range whole-record CRC, full 10k/100k/1M retained heap",
+      "W26 scratch, W23 eight planning/header cases, W25/default and provider cutover"
+    ]
+  },
+  "notes": [
+    "Initial RED used the test before shared-helper extraction; final controls and acceptance bind final tests.",
+    "An initial package-relative driver launch failed before tests; its empty ignored artifact was preserved.",
+    "The completed broader matrix has a reproduced pre-existing codec failure (#3917); it is not green. All scoped normalized query tests and six gates pass. The failed test was not retried or skipped.",
+    "293 existing untracked agent declarations, recovery material and pre-existing .llxprt change remain excluded."
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}

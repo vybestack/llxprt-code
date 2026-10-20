@@ -1,5 +1,17 @@
 # Phase 5 proof map
 
+## Current normalized pending-input query increment
+
+Starting HEAD `7ccd44b5b`; implementation `92beb284e4d7f58aeaadf6b9b379c92ccf7446f5`. [PHASE5-TAIL-QUERIES-PROOF.json](PHASE5-TAIL-QUERIES-PROOF.json) binds 11 committed source/test paths, 8863 package/script hashes and 316 raw receipt hashes. Scoped query acceptance: **36 passes, 2,948,448 assertions, eight isolated serial processes over four files, both outer backends, no failures/skips**. Six scoped gates pass. All 184 recorded child/driver PIDs are absent; none live.
+
+The broader 65-file, 130-process matrix is **not green**: 931 passes, one failure, zero skips and 3,888,934 assertions. The unchanged codec property test generated an own `__proto__` JSON key that `sanitizeParams` drops. Seed `609796497` reproduces the minimized input; codec, sanitizer and property-test hashes match starting HEAD. Filed as [#3917](https://github.com/vybestack/llxprt-code/issues/3917). The failing test was not retried or skipped. Only unexecuted files continued under the same source inventory.
+
+Namespace 1/2 request queries now cover count, selection, strict successor, last-at-or-after and half-open cursor ranges. They reuse the existing indexed request/tail overlay and persisted `RowOccurrences` core. Affected row intervals replace persisted contributions; every selected position uses updated part offsets and preceding row-count deltas. Current callback/iterator holds preserve pin ownership and primary-error identity. All 5000 immutable cases are recomputed through the old normalizer with request-only tails; seven named differentials add stateful duplicate, split-part, cross-speaker, R1, best/tie and empty/prefix cases. Pending metadata remains exact.
+
+Fixed-tail preparation reads at 40/4000/100000 rows: 17/27/37; count 3/3/3; successor 13/25/37; last 2/2/2; range 14/26/38. Queries read no payload blocks or whole bodies. Selected-unit reading consumes one block. Wrong tail precedence and projection controls fail actual assertions; a history-copy control fails `<150` at 4575/114292 reads. Restorations use cmp plus hashes before final verification. This proves read budgets, not retained heap. Three repeated-assertion reports span distinct pin/read boundaries; no prohibited touched audit finding is accepted.
+
+Not full tail Kimi: earlier journal mappings are not yet overridden by tail eligible duplicates through this view. Mistral tail used-ID continuation, full format/settings/LENS, fallback ranks, holder measurements, range CRC, 10k/100k/1M heap and W26/W23/W25/default dependencies remain open. No provider route/default changes. Review skipped per Andrew 2026-10-09. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [LOGDECISIONS.md](LOGDECISIONS.md).
+
 ## Current native Kimi emitted mapping/correction increment
 
 Starting HEAD `4e119cb2c`; first coherent implementation `4d88b25211a7d1b4ac5999afaf88797dbafc05f3`; written-use/converter follow-up `95ac306c970c52bdae6009c72e9acf64040ca13d`. [PHASE5-KIMI-CORRECTIONS-PROOF.json](PHASE5-KIMI-CORRECTIONS-PROOF.json) binds 17 committed paths, 8856 package/script hashes and 617 raw receipt hashes. Acceptance: **122 isolated serial processes over 61 files, 896 passes, 940226 assertions, zero failures/skips**, both outer backends, unchanged timeout and seven passing scoped gates. All 342 recorded child/driver PIDs are absent; none live.
