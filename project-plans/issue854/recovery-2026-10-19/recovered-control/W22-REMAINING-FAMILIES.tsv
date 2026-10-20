@@ -1,9 +1,4 @@
 family	state	path	pid	source_sha256	batch	pass	fail	skip
-compression-attempt	red	packages/agents/src/compression/__tests__/compression-attempt-estimation.test.ts	71899	113518dca442e44f4e3f9ea59fd024fa253177a78c4ed0b91df251433c6428a5	package-resume-f-0050	1	1	0
-compression-attempt	red	packages/agents/src/compression/__tests__/compression-attempt-lifecycle.test.ts	72984	04da2fb80b979f077a6bbd9f6d847092adbcfb33803bb2baec6492cfe6e46fcf	package-resume-f-0050	3	2	0
-compression-attempt	red	packages/agents/src/compression/__tests__/compression-attempt-stream.test.ts	74633	5ec2b40c53540dfe7e9a699fdff094196f99a57841419cf2b8ffc8847b007a7e	package-resume-f-0050	4	4	0
-compression-value	red	packages/agents/src/compression/__tests__/compression-value-lifetime.test.ts	94666	d67f4a79db38b6e289146303f1c103fd712828dac57a116de054bef18db841c8	package-resume-g-0000	0	3	0
-compression-value	red	packages/agents/src/compression/__tests__/compression-value-recorder.test.ts	95480	e7c0a6ba51bad95771449fc3b0267da96dbcde0f58a656ec234e6b51bc954fad	package-resume-g-0000	0	4	0
 density-accounting	red	packages/agents/src/compression/__tests__/density-disk-capture-owners.test.ts	95950	a8f9961911a87d9c79690374a14e06641f97768ad000f4ee9e54074763806eb5	package-resume-g-0000	0	1	0
 density-accounting	red	packages/agents/src/compression/__tests__/density-disk-lifecycle.test.ts	96014	1cbf3108e563ed279eca30f8b1bab7a8494227830a2208327a1895868d9a61b2	package-resume-g-0000	4	1	0
 density-accounting	red	packages/agents/src/compression/__tests__/density-disk-span-order.test.ts	97194	869338ce01babcd784c1f97c76444f784c4fd71386debc698534567daf0019f4	package-resume-g-0000	0	1	0

@@ -483,6 +483,96 @@ describe('W22 shared runner', () => {
       expect(
         acceptedProvider.attempts.find((row) => row.pid === pid)?.accepted,
       ).toBe(false);
+    batch(
+      'attempt-final-journal-i-a',
+      { ...base, pid: 130, sourceHash: 'attempt-final' },
+      xml('passed', 'attempt works'),
+    );
+    batch(
+      'attempt-final-old-i-a',
+      { ...base, pid: 140, backend: 'old', sourceHash: 'attempt-final' },
+      xml('passed', 'attempt works'),
+    );
+    batch(
+      'attempt-unknown-i-a',
+      { ...base, pid: 160, backend: 'unknown', sourceHash: 'attempt-final' },
+      xml('passed', 'attempt works'),
+    );
+    batch(
+      'attempt-initial-journal-i-a',
+      { ...base, pid: 170, sourceHash: 'attempt-before' },
+      xml('passed', 'attempt works'),
+    );
+    batch(
+      'attempt-retaining-control-i-a',
+      { ...base, pid: 150, code: 1, pass: 0, fail: 1 },
+      xml('failed'),
+    );
+    const attempt = join(w22, 'attempt-value-run-i');
+    mkdirSync(attempt, { recursive: true });
+    writeFileSync(
+      join(attempt, 'classification.json'),
+      JSON.stringify({
+        rows: [
+          {
+            path: base.path,
+            sourceHash: 'attempt-final',
+            cases: [
+              {
+                classname: 'suite',
+                name: 'attempt works',
+                classification: 'native-history',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const acceptedAttempt = runCensus(root);
+    const selectedAttempt = acceptedAttempt.rows.find(
+      (row) => row.path === base.path,
+    );
+    expect(selectedAttempt?.pid).toBe(130);
+    expect(selectedAttempt?.sourceHash).toBe('attempt-final');
+    expect(selectedAttempt?.supersedes).toHaveLength(4);
+    expect(selectedAttempt?.cases[0]?.classification).toBe('native-history');
+    expect(selectedAttempt?.cases[0]?.classificationProvenance).toContain(
+      'attempt-value-run-i/classification.json',
+    );
+    expect(acceptedAttempt.attempts).toHaveLength(
+      acceptedProvider.attempts.length + 5,
+    );
+    for (const pid of [140, 150, 160, 170])
+      expect(
+        acceptedAttempt.attempts.find((row) => row.pid === pid)?.accepted,
+      ).toBe(false);
+    for (const pid of [140, 160, 170])
+      expect(
+        acceptedAttempt.attempts.find((row) => row.pid === pid)?.cases[0]
+          ?.classification,
+      ).toBe('classification-pending');
+    writeFileSync(
+      join(attempt, 'classification.json'),
+      JSON.stringify({
+        rows: [
+          {
+            path: base.path,
+            sourceHash: 'unmatched-source',
+            cases: [
+              {
+                classname: 'suite',
+                name: 'attempt works',
+                classification: 'native-history',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(
+      runCensus(root).rows.find((row) => row.pid === 130)?.cases[0]
+        ?.classification,
+    ).toBe('classification-pending');
     writeFileSync(
       join(run, 'package-resume-g-0000/results.json'),
       JSON.stringify([{ ...base, pid: 'invalid' }]),

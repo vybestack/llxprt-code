@@ -28,6 +28,7 @@ const checkpointSchema = z
       z
         .object({
           path: z.string(),
+          sourceHash: z.string().optional(),
           cases: z.array(
             z
               .object({
@@ -121,6 +122,10 @@ function acceptedBatches(
       reference: 'provider-fallback-run-h/verify-current.json',
       batches: ['provider-final-journal-h-a'],
     },
+    {
+      reference: 'attempt-value-run-i/verify-current.json',
+      batches: ['attempt-final-journal-i-a'],
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -188,12 +193,7 @@ function normalize(
 
 function classificationContracts(
   w22: string,
-): Map<string, { classification: string; provenance: string }> {
-  const contracts = new Map<
-    string,
-    { classification: string; provenance: string }
-  >();
-  for (const name of [
+  names: readonly string[] = [
     'instance-run-20261019-a/census-before.json',
     'run-20261019-a/accounting-after-boundary.json',
     'next-run-20261019-b/classification-b.json',
@@ -202,7 +202,20 @@ function classificationContracts(
     'finalizer-run-20261019-a/hook-classification.json',
     'pending-window-run-g/classification.json',
     'provider-fallback-run-h/classification.json',
-  ]) {
+  ],
+): Map<
+  string,
+  { classification: string; provenance: string; sourceHash: string | undefined }
+> {
+  const contracts = new Map<
+    string,
+    {
+      classification: string;
+      provenance: string;
+      sourceHash: string | undefined;
+    }
+  >();
+  for (const name of names) {
     const path = join(w22, name);
     if (!existsSync(path)) continue;
     for (const row of checkpointSchema.parse(json(path)).rows) {
@@ -215,6 +228,7 @@ function classificationContracts(
           contracts.set(key, {
             classification: test.classification,
             provenance: path,
+            sourceHash: row.sourceHash,
           });
       }
     }
@@ -225,10 +239,17 @@ function classificationContracts(
 function classify(
   row: Attempt,
   contracts: ReturnType<typeof classificationContracts>,
+  attemptContracts: ReturnType<typeof classificationContracts>,
   w22: string,
 ): Attempt {
   const cases: CensusCase[] = row.cases.map((test) => {
-    const known = contracts.get(caseKey(row.path, test));
+    const attempt = attemptContracts.get(caseKey(row.path, test));
+    const known =
+      row.accepted &&
+      row.batch === 'attempt-final-journal-i-a' &&
+      attempt?.sourceHash === row.sourceHash
+        ? attempt
+        : contracts.get(caseKey(row.path, test));
     const instanceOverride =
       row.accepted &&
       /^instance-(?:run-final-journal-[ab]|nodefix-final-journal-a)$/.test(
@@ -307,6 +328,9 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
     ]),
   );
   const contracts = classificationContracts(w22);
+  const attemptContracts = classificationContracts(w22, [
+    'attempt-value-run-i/classification.json',
+  ]);
   const checkpoints = [
     join(run, 'accounting.json'),
     join(run, 'accounting-after-boundary.json'),
@@ -370,6 +394,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
     classify(
       inspectEvidence(input, provenance, text(input.junit), text(input.log)),
       contracts,
+      attemptContracts,
       w22,
     ),
   );
