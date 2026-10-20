@@ -486,6 +486,193 @@
           "classification": "native-history"
         }
       ]
+    },
+    {
+      "path": "packages/agents/src/core/client-array-route.test.ts",
+      "sourceHash": "e9a475826f5748b6c7ecc0ecc7dae848850830bcf035d0695c54ebc712420554",
+      "evidence": "W22-CLIENT-CLOSURE-PROOF.md: five original public effects; old SnapshotProbeHistory retained unchanged; exact native source counterparts below. Old eager batch callback/legacy-array bypass mechanics are not native feature contracts.",
+      "cases": [
+        {
+          "classname": "registerScale &gt; AgentClient admitted array restore scoped values",
+          "name": "publishes every original full 512 media/tool row without either legacy array engine",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-g-0450",
+              "path": "packages/agents/src/core/reinitialize-history-stream.test.ts",
+              "sourceHash": "268e646cd26d146b42383e9b257661ca75353d204f91b4a254c0b34c0a3e7468",
+              "classname": "registerTransfer &gt; active history reinitialization at 512",
+              "name": "transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup"
+            },
+            {
+              "batch": "package-resume-g-0050",
+              "path": "packages/agents/src/compression/__tests__/provider-curated-recomposition.test.ts",
+              "sourceHash": "72a578bd9789220f42a42a89980be17cf7c95024d1ee13acc8a408fb1ad84cba",
+              "classname": "invoked provider-source reopening",
+              "name": "recomposes 512 tool/media rows through the real source ladder with old-format byte parity"
+            }
+          ]
+        },
+        {
+          "classname": "registerScale &gt; AgentClient admitted array restore scoped values",
+          "name": "publishes every original full 8192 media/tool row without either legacy array engine",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-g-0450",
+              "path": "packages/agents/src/core/reinitialize-history-stream.test.ts",
+              "sourceHash": "268e646cd26d146b42383e9b257661ca75353d204f91b4a254c0b34c0a3e7468",
+              "classname": "registerTransfer &gt; active history reinitialization at 8192",
+              "name": "transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup"
+            },
+            {
+              "batch": "package-resume-g-0050",
+              "path": "packages/agents/src/compression/__tests__/provider-curated-recomposition.test.ts",
+              "sourceHash": "72a578bd9789220f42a42a89980be17cf7c95024d1ee13acc8a408fb1ad84cba",
+              "classname": "invoked provider-source reopening",
+              "name": "recomposes 8192 tool/media rows through the real source ladder with old-format byte parity"
+            }
+          ]
+        },
+        {
+          "classname": "registerFrozenAliases &gt; AgentClient admitted array restore scoped values",
+          "name": "preserves frozen stamped marker values and repeated aliases without requiring post-ack identity",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "client-values-refactored-final-journal-q",
+              "path": "packages/agents/src/core/client-source-values.test.ts",
+              "sourceHash": "a3de06d1ab14390e4052db04e1da6a2c263e363085ac0ff9956fc86a8bd5227b",
+              "classname": "client source restored values",
+              "name": "preserves repeated frozen provenance and leaves imported AI unstamped through native request selection and send"
+            }
+          ]
+        },
+        {
+          "classname": "registerLargeRow &gt; AgentClient admitted array restore scoped values",
+          "name": "does not truncate a valid nine MiB original row",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-g-0450",
+              "path": "packages/agents/src/core/reinitialize-history-stream.test.ts",
+              "sourceHash": "268e646cd26d146b42383e9b257661ca75353d204f91b4a254c0b34c0a3e7468",
+              "classname": "large active journal row",
+              "name": "preserves a valid nine-MiB row without a byte admission cap"
+            }
+          ]
+        },
+        {
+          "classname": "registerFreshValues &gt; AgentClient admitted array restore scoped values",
+          "name": "leaves empty restore as a no-op and fresh AI values unstamped with a model",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "client-values-refactored-final-journal-q",
+              "path": "packages/agents/src/core/client-source-values.test.ts",
+              "sourceHash": "a3de06d1ab14390e4052db04e1da6a2c263e363085ac0ff9956fc86a8bd5227b",
+              "classname": "client source restored values",
+              "name": "preserves repeated frozen provenance and leaves imported AI unstamped through native request selection and send"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/core/reinitialize-history-stream.test.ts",
+      "sourceHash": "268e646cd26d146b42383e9b257661ca75353d204f91b4a254c0b34c0a3e7468",
+      "evidence": "W22-CLIENT-CLOSURE-PROOF.md: actual HistoryService/ChatSession streamed transfer, provider source reopening and bounded restored-value request selection; source-matched accepted cases, not whole-product parity.",
+      "cases": [
+        {
+          "classname": "registerTransfer &gt; active history reinitialization at 512",
+          "name": "transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerSourceFailure &gt; active history reinitialization at 512",
+          "name": "does not advance a paused source and preserves active membership on source failure",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerCancellation &gt; active history reinitialization at 512",
+          "name": "propagates cancellation without replacing the active chat",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerControls &gt; active history reinitialization at 512",
+          "name": "charges borrowed consumer identities instead of excusing retention",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerControls &gt; active history reinitialization at 512",
+          "name": "charges copy consumer identities instead of excusing retention",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerTransfer &gt; active history reinitialization at 8192",
+          "name": "transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerSourceFailure &gt; active history reinitialization at 8192",
+          "name": "does not advance a paused source and preserves active membership on source failure",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerCancellation &gt; active history reinitialization at 8192",
+          "name": "propagates cancellation without replacing the active chat",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerControls &gt; active history reinitialization at 8192",
+          "name": "charges borrowed consumer identities instead of excusing retention",
+          "classification": "native-history"
+        },
+        {
+          "classname": "registerControls &gt; active history reinitialization at 8192",
+          "name": "charges copy consumer identities instead of excusing retention",
+          "classification": "native-history"
+        },
+        {
+          "classname": "large active journal row",
+          "name": "preserves a valid nine-MiB row without a byte admission cap",
+          "classification": "native-history"
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-curated-recomposition.test.ts",
+      "sourceHash": "72a578bd9789220f42a42a89980be17cf7c95024d1ee13acc8a408fb1ad84cba",
+      "evidence": "W22-CLIENT-CLOSURE-PROOF.md: actual HistoryService/ChatSession streamed transfer, provider source reopening and bounded restored-value request selection; source-matched accepted cases, not whole-product parity.",
+      "cases": [
+        {
+          "classname": "journal materialization guard",
+          "name": "CursorOnlyHistory rejects journal eager materialization",
+          "classification": "native-history"
+        },
+        {
+          "classname": "invoked provider-source reopening",
+          "name": "recomposes 512 tool/media rows through the real source ladder with old-format byte parity",
+          "classification": "native-history"
+        },
+        {
+          "classname": "invoked provider-source reopening",
+          "name": "recomposes 8192 tool/media rows through the real source ladder with old-format byte parity",
+          "classification": "native-history"
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/core/client-source-values.test.ts",
+      "sourceHash": "a3de06d1ab14390e4052db04e1da6a2c263e363085ac0ff9956fc86a8bd5227b",
+      "evidence": "W22-CLIENT-CLOSURE-PROOF.md: actual HistoryService/ChatSession streamed transfer, provider source reopening and bounded restored-value request selection; source-matched accepted cases, not whole-product parity.",
+      "cases": [
+        {
+          "classname": "client source restored values",
+          "name": "preserves repeated frozen provenance and leaves imported AI unstamped through native request selection and send",
+          "classification": "native-history"
+        }
+      ]
     }
   ]
 }

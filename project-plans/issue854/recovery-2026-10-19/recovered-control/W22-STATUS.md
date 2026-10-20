@@ -1,5 +1,17 @@
 # W22 agents sweep status
 
+## Client-source contract closure, 2026-10-20
+
+**W22 is complete within its owned scope: all 806 original inventory files have accepted accumulated per-file evidence, and the affected public history contracts have source-bound native counterparts.** Starting HEAD cf54149a4 verified. This is not a fresh whole-package final-source run or whole-product parity. W23 send/planning, W24 whole-product, W25 default selection, W26 scratch/seam removal and phases 5-9 remain unchanged and open; W23 was not started.
+
+Generation `eeee4081-c256-4b88-8e61-cde63656fa93`: **806 green, zero red/unverified/unrun; 6575 inventory passes, zero failures/skips**. Passing classifications: **454 native-history, 367 journal-selected shared/public, 65 explicit-old, 370 history-independent, 5319 shared/public with no native claim**; zero pending/unclassified. The prior 5338 conservative cases are not declared native: only fourteen traced reinitialization/provider cases and five original old-store cases change labels. One new bounded source-values case is supplemental and does not add an inventory pass.
+
+All five unchanged client-array originals now map to exact native cases: 512/8192-row reinitialization plus provider-source byte parity; complete nine-MiB reinitialization/read/send; and a bounded real-client source case preserving frozen repeated metadata, fresh AI provenance and the existing empty-restore no-op through complete provider request selection and send. The production resume/rebuild/clear/send callers already use streamed history and disk-backed request snapshots. The explicit public array-restore wrapper still exists for planned later deletion; no compatibility route was added.
+
+Effective matrix: **eight files and 45 passes per outer backend, 90 passes total, zero failures/skips**. All original assertions/bounds/timeouts remain. Seven census suites run separately under each outer environment: **38 passes/430 expectations**. Scoped declaration build, agents types, strict census types, zero-warning ESLint, API surface, AST audit, formatting and affected-graph validation pass. Graph validation is not affected-shard execution. The absent executed counterpart first left the original file unverified; source/case/count controls remain rejecting.
+
+Exact mappings, hashes, PIDs, source citations, gates and control counts: W22-CLIENT-CLOSURE-PROOF.md/.json and W22-NATIVE-CLOSURE.json. Raw: `tmp/854-notes/p4/w22/client-closure-q/`. Preserve 26 historical missing attempts and zero latest missing files separately. Old default remains. Review skipped per Andrew 2026-10-09. No cleanup/deletion, .llxprt staging, raw recovery bulk staging, weaker check, OCR, push or merge.
+
 ## Runner accounting and bounded classification, 2026-10-20
 
 **All 806 inventory files are green; W22 native contract closure remains open.** Accounting repair is committed at `c32abf6bc`. No product code or backend-default change belongs to this increment. The original seven runner tests remain unchanged and also pass under both outer backend settings, seven cases each.

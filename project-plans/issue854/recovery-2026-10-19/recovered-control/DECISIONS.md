@@ -1,5 +1,13 @@
 # Recovered decision guidance
 
+## Client-source closure decisions, 2026-10-20
+
+Define W22 completion as accepted accumulated evidence for all 806 original files plus source-bound native counterparts for its affected public history contracts. Do not turn conservative shared/public cases into a native claim or demand unrelated native ports. The fourteen traced native cases and five explicit-old originals change labels; 5319 conservative cases remain without a native claim.
+
+Reuse exact native scale/large-row/provider cases. Add only the missing bounded frozen-alias/fresh-provenance public effect through real source admission, request selection and send. Keep the original array tests unchanged for their planned deletion; do not rebuild array compatibility or require the old eager batch payload in native history. Record the surviving explicit public array wrapper and distinguish it from current streamed resume/rebuild/clear/send callers. Preserve strict source/case/accepted-receipt checks and the absent-receipt rejection.
+
+W22 is complete under that definition; W23-W26 and phases 5-9 remain unchanged/open. No final-source whole-package/whole-product claim or default flip. Exact proof: W22-CLIENT-CLOSURE-PROOF.md/.json. Review skipped per Andrew 2026-10-09.
+
 ## W22 runner and classification decisions, 2026-10-20
 
 Parse only the complete terminal Bun summary. Preserve incorrect historical saved aggregates, correcting interpretation only when complete XML, exact saved/raw parent case identities, terminal counts and own successful exit agree. Do not change the seven runner cases or trust XML alone. Keep missing/partial/mismatched inputs rejecting.

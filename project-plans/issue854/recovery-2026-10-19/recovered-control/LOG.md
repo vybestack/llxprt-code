@@ -1,5 +1,11 @@
 # Recovery chronology, reconstructed
 
+## Client-source contract closure, 2026-10-20
+
+Verified starting HEAD cf54149a4. Kept the five original client-array cases byte-identical and mapped them to complete native transfer/token/provider-byte/large-row effects, plus one bounded real-client restored-value case. Production code/default unchanged. The missing supplemental receipt first left the old file unverified; the final exact hash/case/batch receipt closes that gap.
+
+W22 owned scope is complete: 806 accumulated original files green, 6575 passes, zero failures/skips; no fresh whole-package final-source or whole-product claim. Effective isolated serial matrix: 45 passes per backend. Final census guards: 19 passes/215 expectations per backend. Declaration/types/lint/API/audit/format/graph checks pass with original checks unchanged; the bare agents type command needs installed Bun ambient declarations. Full source, authoring failures, mapping/control/gate evidence: W22-CLIENT-CLOSURE-PROOF.md/.json. W23-W26 and phases 5-9 remain open, W23 not started. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt staging, raw recovery bulk staging, weaker check, default flip, OCR, push or merge.
+
 ## W22 runner accounting and classification, 2026-10-20
 
 Verified starting HEAD 223d05612. Committed accounting repair/tests early at c32abf6bc after fail-first nested-output evidence, unchanged seven-case runner passes under both outer backends, scoped census/types/lint/format/API/declaration/audit gates. No product or backend-default change. The saved first-child aggregate remains preserved; complete terminal summary, exact XML/saved/raw parent cases and own exit support its explicit correction.

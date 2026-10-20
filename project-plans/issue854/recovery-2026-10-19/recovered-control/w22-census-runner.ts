@@ -202,6 +202,10 @@ function acceptedBatches(
       reference: 'retained-run-o/verify-current.json',
       batches: RETAINED_BATCHES,
     },
+    {
+      reference: 'client-closure-q/final-values-refactored.json',
+      batches: ['client-values-refactored-final-journal-q'],
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
