@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
+import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -218,11 +219,22 @@ export async function buildRebuilt(
   const chainBase = await ctx.chainFor(plan.parent);
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
-  const tree = await bulkBuildRowTree(appender, algebra, pass.entries());
+  let tree = await bulkBuildRowTree(appender, algebra, pass.entries());
   const roots =
     tree === undefined
       ? { idRoot: 0, metaRoot: 0 }
       : await commitRebuiltFacts(finishFacts(facts), appender);
+  if (tree !== undefined) {
+    tree = await rebuildContributions(
+      ctx,
+      appender,
+      algebra,
+      { offset: tree.root.childOffset, rows: tree.root.count },
+      facts,
+    );
+    if (tree === undefined)
+      throw new JournalFormatError('Contribution rebuild lost its rows');
+  }
   const stateRoot = await commitState(ctx, plan, appender);
   const { first, last } = pass;
   return {

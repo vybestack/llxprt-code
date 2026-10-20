@@ -152,7 +152,13 @@ function updateForCall(fact: IdFact, occ: IdOccurrence): IdFact {
 
 function updateForResponse(fact: IdFact, occ: IdOccurrence): IdFact {
   const counted = { ...fact, respCount: fact.respCount + 1 };
-  if (occ.rawId === '') return counted;
+  if (occ.rawId === '')
+    return {
+      ...counted,
+      firstToolResponse:
+        fact.firstToolResponse ??
+        (occ.partSpeaker === ROW_SPEAKER.tool ? occ.at : undefined),
+    };
   if (
     fact.firstResponse !== undefined &&
     comparePositions(occ.at, fact.firstResponse) <= 0

@@ -11,7 +11,12 @@ import {
   type RowIds,
   type StoredRow,
 } from './rowReads.js';
-import { entryByLabel } from './rowTreeQueries.js';
+import {
+  entryByLabel,
+  countUnitsBelow,
+  entryAtUnit,
+  type IndexedUnit,
+} from './rowTreeQueries.js';
 import { readStoredBlock, readStoredMetadata } from './rowRangeReads.js';
 import {
   entryAt,
@@ -90,6 +95,20 @@ export class VersionSnapshot {
   /** The number of live rows. */
   get rows(): number {
     return this.read.version?.rows ?? 0;
+  }
+
+  get units(): number {
+    this.read.requireOpen();
+    return this.read.version?.aggregate.units ?? 0;
+  }
+
+  unitsBelow(label: bigint): Promise<number> {
+    this.read.requireOpen();
+    return countUnitsBelow(this.read.access, this.rootRef(), label);
+  }
+
+  unitAt(index: number): Promise<IndexedUnit> {
+    return entryAtUnit(this.read.access, this.rootRef(), this.units, index);
   }
 
   /** The live rows in label order from index `from`. */

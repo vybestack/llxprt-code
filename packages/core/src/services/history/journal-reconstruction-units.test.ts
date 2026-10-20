@@ -131,6 +131,7 @@ describe('indexed reconstructed call units', () => {
             hash: expected.outputHash,
             count: expected.count,
           });
+          expect(snapshot.units).toBe(expected.count);
         } finally {
           await snapshot.close();
         }

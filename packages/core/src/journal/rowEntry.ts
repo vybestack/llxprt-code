@@ -17,7 +17,7 @@ import {
 import type { SlotStamp } from './aggregate.js';
 import { JournalFormatError } from './errors.js';
 import { SLOT_SUMMARY_BYTES } from './slotSummary.js';
-import { ROW_SPEAKER } from './rowRecord.js';
+import { ROW_FLAG, ROW_SPEAKER } from './rowRecord.js';
 
 /** A leaf entry of the row tree at format version 3 (design 3.2). */
 export const ROW_ENTRY_BYTES = 1112;
@@ -58,8 +58,11 @@ export const ROW_ENTRY_NO_CHRONOLOGY_SEQ = 0xffff_ffff_ffff_ffffn;
 export const ENTRY_FLAG = {
   pairSensitive: 1 << 11,
   imageContrib: 1 << 12,
+  self: 1 << 13,
+  splitSelf: 1 << 14,
+  reconstructedAdjacent: 1 << 15,
 } as const;
-const FLAGS_LIMIT = 1 << 13;
+const FLAGS_LIMIT = 1 << 16;
 
 /** The entry's contribution to the media metrics (design 8.4), 56 bytes. */
 export interface EntryMedia {
@@ -104,6 +107,13 @@ function fail(message: string): never {
 }
 
 function assertEntryFields(entry: RowEntry): void {
+  const contribution =
+    ENTRY_FLAG.self | ENTRY_FLAG.splitSelf | ENTRY_FLAG.reconstructedAdjacent;
+  if (
+    (entry.flags & contribution) !== 0 &&
+    (entry.flags & ROW_FLAG.curated) === 0
+  )
+    fail('Uncurated entry cannot contribute units');
   if (entry.label < 1n) fail(`Entry label ${entry.label} must be at least 1`);
   if (entry.speaker > ROW_SPEAKER.tool) {
     fail(`Entry speaker ${entry.speaker} is not human, ai or tool`);

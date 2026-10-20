@@ -13,6 +13,7 @@ import {
 } from './rowEntry.js';
 import { ROW_FLAG, ROW_SPEAKER } from './rowRecord.js';
 import type { RowTreeAlgebra } from './rowTreeBuilder.js';
+import { unitCount } from './unitContributions.js';
 
 function labelIf(flags: number, bit: number, label: bigint): bigint {
   return (flags & bit) !== 0 ? label : 0n;
@@ -41,7 +42,7 @@ export function entryAggregate(entry: RowEntry): Aggregate {
   return {
     rows: 1,
     curated: has(ROW_FLAG.curated),
-    units: 1 + entry.reconBlocks,
+    units: unitCount(entry),
     tokens: [tokenSlot(0), tokenSlot(1), tokenSlot(2), tokenSlot(3)],
     tokensMissing: [0, 0, 0, 0],
     liveBytes: entry.recordLength,

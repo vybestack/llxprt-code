@@ -34,6 +34,8 @@ import type { RowEntry } from './rowEntry.js';
 import { appendRowEntries } from './rowTreeBuilder.js';
 import { editRowTree } from './rowTreeEdit.js';
 import { slotKindsOf } from './version.js';
+import { updateContributions } from './contributionChanges.js';
+import { readRowIds } from './rowReads.js';
 
 function freshOf(segments: readonly Segment[]): FreshSegment[] {
   return segments.filter(
@@ -91,8 +93,11 @@ async function incrementalFacts(
   ctx: BuildContext,
   plan: GroupPlan,
   adds: ReadonlyArray<FreshSegment | ForeignSegment>,
-): Promise<{ facts: GroupFacts | undefined } | undefined> {
-  if (adds.length === 0) return { facts: undefined };
+): Promise<
+  { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
+> {
+  const affected = new Set<bigint>();
+  if (adds.length === 0) return { facts: undefined, affected };
   const facts = await startFacts(
     ctx.access,
     plan.base.roots,
@@ -100,9 +105,19 @@ async function incrementalFacts(
     mapReader(ctx, 'meta'),
   );
   for (const segment of adds) {
+    const ids =
+      segment.kind === 'fresh'
+        ? segment.draft.ids.map((id) => id.rawId)
+        : (await readRowIds(segment.row.source, segment.row.entry)).rawIds;
+    for (const id of new Set(ids)) {
+      const before = await facts.ids.queries.fact(id);
+      if (before?.firstCall !== undefined) affected.add(before.firstCall.label);
+      if (before?.firstToolResponse !== undefined)
+        affected.add(before.firstToolResponse.label);
+    }
     if (!(await addFacts(ctx, plan, facts, segment))) return undefined;
   }
-  return { facts: finishFacts(facts) };
+  return { facts: finishFacts(facts), affected };
 }
 
 /** What the group changes in the tree of its base: entries that replace live ones, and entries for new labels. */
@@ -228,6 +243,18 @@ export async function buildIncremental(
   if (collected === undefined) return undefined;
   const chainBase = await ctx.chainFor(plan.parent);
   const changes = await writeChanges(appender, segments);
+  const queries =
+    collected.facts?.ids.queries ??
+    (await startFacts(ctx.access, plan.base.roots, ctx, mapReader(ctx, 'meta')))
+      .ids.queries;
+  await updateContributions(
+    ctx,
+    plan,
+    segments,
+    collected.affected,
+    changes,
+    queries,
+  );
   const { idRoot, metaRoot } = await commitFacts(
     collected.facts,
     plan,
