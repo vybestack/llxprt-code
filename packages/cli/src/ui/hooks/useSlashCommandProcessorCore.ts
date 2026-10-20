@@ -65,6 +65,7 @@ export type SlashCommandProcessorCoreResult = {
   commandContext: ReturnType<typeof useCommandContext>;
   /** Aborts every in-flight slash command. Returns true iff any was aborted. */
   cancelActiveSlashCommand: () => boolean;
+  isSlashCommandRunning: boolean;
 };
 
 export interface UseSlashCommandProcessorCoreArgs {
@@ -231,5 +232,6 @@ export function useSlashCommandProcessorCore(
     pendingHistoryItems: pending.pendingHistoryItems,
     commandContext,
     cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
+    isSlashCommandRunning: cancellation.isSlashCommandRunning,
   };
 }

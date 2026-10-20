@@ -102,3 +102,56 @@ describe('slash-command cancellation registry', () => {
     expect(registry.cancelActiveSlashCommand()).toBe(false);
   });
 });
+
+describe('slash-command progress registry', () => {
+  it('does not show progress for commands unless they opt in', () => {
+    const registry = createSlashCommandCancellation();
+    const controller = registry.beginSlashCommandAction();
+    expect(registry.getIsSlashCommandRunning()).toBe(false);
+    expect(registry.cancelActiveSlashCommand()).toBe(true);
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it('keeps progress until every opted-in command settles', () => {
+    const registry = createSlashCommandCancellation();
+    let notifications = 0;
+    const unsubscribe = registry.subscribe(() => notifications++);
+    const first = registry.beginSlashCommandAction(true);
+    const second = registry.beginSlashCommandAction(true);
+    const quick = registry.beginSlashCommandAction();
+    registry.endSlashCommandAction(quick);
+    expect(registry.getIsSlashCommandRunning()).toBe(true);
+    registry.endSlashCommandAction(first);
+    expect(registry.getIsSlashCommandRunning()).toBe(true);
+    registry.endSlashCommandAction(second);
+    expect(registry.getIsSlashCommandRunning()).toBe(false);
+    expect(notifications).toBe(6);
+    unsubscribe();
+    registry.beginSlashCommandAction(true);
+    expect(notifications).toBe(6);
+  });
+
+  it('clears progress immediately on Esc, before actions finish unwinding', () => {
+    const registry = createSlashCommandCancellation();
+    const first = registry.beginSlashCommandAction(true);
+    const second = registry.beginSlashCommandAction(true);
+    expect(registry.getIsSlashCommandRunning()).toBe(true);
+    expect(registry.cancelActiveSlashCommand()).toBe(true);
+    expect(registry.getIsSlashCommandRunning()).toBe(false);
+    expect(registry.cancelActiveSlashCommand()).toBe(false);
+    const next = registry.beginSlashCommandAction(true);
+    registry.endSlashCommandAction(first);
+    registry.endSlashCommandAction(second);
+    expect(registry.getIsSlashCommandRunning()).toBe(true);
+    registry.endSlashCommandAction(next);
+    expect(registry.getIsSlashCommandRunning()).toBe(false);
+  });
+
+  it('ignores an action whose own signal was aborted', () => {
+    const registry = createSlashCommandCancellation();
+    const controller = registry.beginSlashCommandAction(true);
+    controller.abort();
+    expect(registry.getIsSlashCommandRunning()).toBe(false);
+    registry.endSlashCommandAction(controller);
+  });
+});
