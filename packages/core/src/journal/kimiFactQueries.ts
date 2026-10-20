@@ -17,6 +17,32 @@ import {
 import type { VersionSnapshot } from './versionSnapshot.js';
 import type { KeyedMapReader } from './keyedMap.js';
 
+export async function kimiOccurrenceName(
+  source: Pick<VersionSnapshot, 'entryByLabel' | 'readBlock'>,
+  last: KimiOccurrence,
+): Promise<string> {
+  const entry = await source.entryByLabel(last.position.label);
+  if (entry === undefined)
+    throw new JournalFormatError('Kimi last eligible row is absent');
+  const block: unknown = JSON.parse(
+    Buffer.from(await source.readBlock(entry, last.block)).toString('utf8'),
+  );
+  if (typeof block !== 'object' || block === null)
+    throw new JournalFormatError('Kimi name source is not a block');
+  const reconstructed = (last.flags & KIMI_FLAG.reconstructed) !== 0;
+  let name: string;
+  if (
+    reconstructed &&
+    'toolName' in block &&
+    typeof block.toolName === 'string'
+  )
+    name = block.toolName || 'unknown_tool';
+  else if (!reconstructed && 'name' in block && typeof block.name === 'string')
+    name = block.name;
+  else throw new JournalFormatError('Kimi last eligible name is absent');
+  return Buffer.from(name, 'utf16le').toString('utf16le');
+}
+
 export interface KimiIdFact extends KimiCounts {
   readonly writtenUses: number;
   readonly unmappedUses: number;
@@ -77,33 +103,8 @@ export class KimiFactQueries {
     const fact = await this.idFact(rawId);
     if (fact?.last === undefined) return undefined;
     const { last } = fact;
-    const entry = await this.snapshot.entryByLabel(last.position.label);
-    if (entry === undefined)
-      throw new JournalFormatError('Kimi last eligible row is absent');
-    const block: unknown = JSON.parse(
-      Buffer.from(await this.snapshot.readBlock(entry, last.block)).toString(
-        'utf8',
-      ),
-    );
-    if (typeof block !== 'object' || block === null)
-      throw new JournalFormatError('Kimi name source is not a block');
-    const reconstructed = (last.flags & KIMI_FLAG.reconstructed) !== 0;
-    let name: string;
-    if (
-      reconstructed &&
-      'toolName' in block &&
-      typeof block.toolName === 'string'
-    )
-      name = block.toolName || 'unknown_tool';
-    else if (
-      !reconstructed &&
-      'name' in block &&
-      typeof block.name === 'string'
-    )
-      name = block.name;
-    else throw new JournalFormatError('Kimi last eligible name is absent');
-    const owned = Buffer.from(name, 'utf16le').toString('utf16le');
-    return `functions.${owned}:${await this.snapshot.kimiOrdinal(last.position.label, last.eligibleWithinRow)}`;
+    const name = await kimiOccurrenceName(this.snapshot, last);
+    return `functions.${name}:${await this.snapshot.kimiOrdinal(last.position.label, last.eligibleWithinRow)}`;
   }
 
   async *exceptions(): AsyncGenerator<KimiIdFact> {

@@ -78,7 +78,6 @@ class RowOccurrences {
   readonly kimiRows = new Map<
     string,
     {
-      identity: Uint8Array;
       calls: Array<KimiRowId['calls'][number]>;
       responses: Array<KimiRowId['responses'][number]>;
     }
@@ -90,7 +89,7 @@ class RowOccurrences {
       family: NormalizedFamily,
       rawId: string,
     ) => string,
-    private readonly kimiIdentity?: (rawId: string) => Uint8Array,
+    private readonly kimi = false,
   ) {}
 
   private initializeLists(rawId: string): void {
@@ -115,9 +114,8 @@ class RowOccurrences {
         throw new JournalFormatError('Normalized row has no source fact');
       this.facts.set(occurrence.rawId, fact);
       this.initializeLists(occurrence.rawId);
-      if (this.kimiIdentity !== undefined)
+      if (this.kimi)
         this.kimiRows.set(occurrence.rawId, {
-          identity: this.kimiIdentity(occurrence.rawId),
           calls: [],
           responses: [],
         });
@@ -185,7 +183,7 @@ class RowOccurrences {
         kind === OCCURRENCE_KIND.call &&
         occurrence.rawId !== '' &&
         (reconstructed || occurrence.nameLen > 0);
-      if (this.kimiIdentity !== undefined)
+      if (this.kimi)
         this.recordKimi(
           occurrence,
           kind,
@@ -284,6 +282,24 @@ export async function normalizedRowLists(
   return [...occurrences.lists.values()];
 }
 
+export async function kimiRowCalls(
+  row: PlannedRow,
+  entry: RowEntry,
+  source: readonly IdOccurrence[],
+  facts: Pick<IdFactQueries, 'fact'>,
+): Promise<{
+  readonly eligibleCalls: number;
+  readonly ids: ReadonlyMap<string, { readonly calls: KimiRowId['calls'] }>;
+}> {
+  const occurrences = new RowOccurrences(row, (_family, id) => id, true);
+  await occurrences.initialize(source, facts);
+  for (const part of [0, 1]) occurrences.part(source, entry, part);
+  return {
+    eligibleCalls: occurrences.eligibleCalls,
+    ids: occurrences.kimiRows,
+  };
+}
+
 export async function writeNormalizedRowOccurrences(
   row: PlannedRow,
   entry: RowEntry,
@@ -301,9 +317,7 @@ export async function writeNormalizedRowOccurrences(
   const occurrences = new RowOccurrences(
     row,
     (family, rawId) => normalizedIdOf(deps.idDeps.normalizers, family, rawId),
-    kimiFacts?.kimi === true
-      ? (rawId) => deps.idDeps.hasher(ID_NS.fact, fact0Key(rawId))
-      : undefined,
+    kimiFacts?.kimi === true,
   );
   await occurrences.initialize(source, ids.queries);
   for (const part of [0, 1]) occurrences.part(source, entry, part);
@@ -318,8 +332,11 @@ export async function writeNormalizedRowOccurrences(
     );
   }
   if (kimiFacts?.kimi === true) {
-    for (const id of occurrences.kimiRows.values())
-      await replaceKimiRow(kimiFacts, row.label, id);
+    for (const [rawId, id] of occurrences.kimiRows)
+      await replaceKimiRow(kimiFacts, row.label, {
+        ...id,
+        identity: deps.idDeps.hasher(ID_NS.fact, fact0Key(rawId)),
+      });
   }
   return occurrences.eligibleCalls;
 }

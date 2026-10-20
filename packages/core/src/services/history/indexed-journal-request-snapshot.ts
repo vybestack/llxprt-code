@@ -17,6 +17,7 @@ import { journalEntryPlans } from './journal-entry-plans.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';
 import { assertRowIndex } from './provider-request-snapshot.js';
 import { streamResponsePlans } from './journal-response-units.js';
+import { JournalRequestKimi } from './journal-request-kimi.js';
 
 async function releaseQueryHold(
   release: () => void | Promise<void>,
@@ -31,6 +32,7 @@ async function releaseQueryHold(
 
 export class IndexedJournalRequestSnapshot {
   private closed = false;
+  private kimi: Promise<JournalRequestKimi> | undefined;
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
@@ -157,12 +159,8 @@ export class IndexedJournalRequestSnapshot {
     );
   }
 
-  async withNormalized<T>(
-    family: NormalizedFamily,
-    kind: OccurrenceKind,
-    id: string,
-    consume: (view: JournalRequestOccurrences) => T | Promise<T>,
-    range?: RequestUnitRange,
+  private async query<T>(
+    consume: () => T | Promise<T>,
     signal?: AbortSignal,
   ): Promise<T> {
     this.requireOpen();
@@ -170,9 +168,7 @@ export class IndexedJournalRequestSnapshot {
     const release = this.snapshot.hold();
     let failed = false;
     try {
-      const view = await this.occurrences(family, kind, id, range);
-      signal?.throwIfAborted();
-      const result = await consume(view);
+      const result = await consume();
       signal?.throwIfAborted();
       return result;
     } catch (error) {
@@ -181,6 +177,53 @@ export class IndexedJournalRequestSnapshot {
     } finally {
       await releaseQueryHold(release, failed);
     }
+  }
+
+  withNormalized<T>(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    consume: (view: JournalRequestOccurrences) => T | Promise<T>,
+    range?: RequestUnitRange,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.query(async () => {
+      const view = await this.occurrences(family, kind, id, range);
+      signal?.throwIfAborted();
+      return consume(view);
+    }, signal);
+  }
+
+  withKimi<T>(
+    consume: (view: JournalRequestKimi) => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.query(async () => {
+      this.kimi ??= JournalRequestKimi.create(
+        this.snapshot,
+        this.source,
+        this.rows,
+      );
+      const view = await this.kimi;
+      signal?.throwIfAborted();
+      return consume(view);
+    }, signal);
+  }
+
+  kimiEligibleCount(): Promise<number> {
+    return this.withKimi((view) => view.eligibleCount());
+  }
+
+  kimiMappedId(rawId: string): Promise<string | undefined> {
+    return this.withKimi((view) => view.mappedId(rawId));
+  }
+
+  kimiName(rawId: string): Promise<string | undefined> {
+    return this.withKimi((view) => view.name(rawId));
+  }
+
+  kimiOrdinal(rawId: string): Promise<number | undefined> {
+    return this.withKimi((view) => view.ordinal(rawId));
   }
 
   normalizedCount(

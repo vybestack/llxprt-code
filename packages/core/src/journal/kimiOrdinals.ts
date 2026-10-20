@@ -5,6 +5,7 @@ import { BoundedIdNodeCache } from './idTrieCache.js';
 import { KeyedMapReader } from './keyedMap.js';
 import type { PinnedRead } from './pinLease.js';
 import { readRowTreeNode } from './rowTreeReader.js';
+import type { RowEntry } from './rowEntry.js';
 
 export const KIMI_ELIGIBLE_KEY = 'kimi:eligible';
 
@@ -43,11 +44,13 @@ export class KimiOrdinalQueries {
     return version.aggregate.callBlocks;
   }
 
-  async ordinal(label: bigint, withinRow: number): Promise<number> {
+  private async prefix(
+    label: bigint,
+  ): Promise<{ readonly below: number; readonly entry?: RowEntry }> {
     await this.count();
     const version = this.read.version;
     if (version === undefined || version.roots.rowRoot === 0)
-      throw new RangeError('Kimi ordinal needs a live row');
+      return { below: 0 };
     let node = await readRowTreeNode(this.read.access, version.roots.rowRoot);
     let below = 0;
     while (node.kind === 'internal') {
@@ -59,21 +62,34 @@ export class KimiOrdinalQueries {
           break;
         }
       }
-      if (next === undefined)
-        throw new RangeError('Kimi ordinal needs a live row');
+      if (next === undefined) return { below };
       node = await readRowTreeNode(this.read.access, next);
     }
     for (const entry of node.entries) {
       if (entry.label < label) below += entry.callBlocks;
-      else if (
-        entry.label === label &&
-        Number.isInteger(withinRow) &&
-        withinRow >= 0 &&
-        withinRow < entry.callBlocks
-      )
-        return below + withinRow;
-      else break;
+      else return { below, entry: entry.label === label ? entry : undefined };
     }
+    return { below };
+  }
+
+  async below(label: bigint): Promise<number> {
+    return (await this.prefix(label)).below;
+  }
+
+  async ordinal(label: bigint, withinRow: number): Promise<number> {
+    const { below, entry } = await this.prefix(label);
+    if (
+      this.read.version === undefined ||
+      this.read.version.roots.rowRoot === 0
+    )
+      throw new RangeError('Kimi ordinal needs a live row');
+    if (
+      entry !== undefined &&
+      Number.isInteger(withinRow) &&
+      withinRow >= 0 &&
+      withinRow < entry.callBlocks
+    )
+      return below + withinRow;
     throw new RangeError('Kimi ordinal is outside the row eligible calls');
   }
 }

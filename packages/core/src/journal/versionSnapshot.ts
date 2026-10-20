@@ -106,6 +106,10 @@ export class VersionSnapshot {
     return this.kimi.ordinal(label, eligibleWithinRow);
   }
 
+  kimiEligibleBelow(label: bigint): Promise<number> {
+    return this.kimi.below(label);
+  }
+
   async mistralMapping(
     rawId: string,
     slot: number,
