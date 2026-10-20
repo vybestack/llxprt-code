@@ -13,6 +13,33 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import {
+  decodeSessionFact,
+  SESSION_KEYS,
+} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+
+async function assertDurableTitle(path: string): Promise<void> {
+  if (selectBackend() === 'old') {
+    await assertJsonlTitle(path);
+    return;
+  }
+  const session = await JournalSession.open(path);
+  try {
+    const bytes = await session.store.getState(SESSION_KEYS.title);
+    if (bytes === undefined) throw new Error('Missing durable title');
+    expect(decodeSessionFact(bytes)).toBe('/tools owner title');
+  } finally {
+    await session.close();
+  }
+}
+
+async function assertJsonlTitle(path: string): Promise<void> {
+  expect(await readFile(path, 'utf8')).toContain(
+    '"title":"/tools owner title"',
+  );
+}
 import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import type { Session } from './zedIntegration.js';
 import {
@@ -37,9 +64,7 @@ describe('Zed Session recording title owner', () => {
       expect(first.stopReason).toBe('end_turn');
       const path = agent.session.getRecording().path;
       if (path === undefined) throw new Error('Recording was not materialized');
-      expect(await readFile(path, 'utf8')).toContain(
-        '"title":"/tools owner title"',
-      );
+      await assertDurableTitle(path);
       await owned.prompt({
         sessionId: 'test-session-id',
         prompt: [{ type: 'text', text: '/tools second prompt' }],

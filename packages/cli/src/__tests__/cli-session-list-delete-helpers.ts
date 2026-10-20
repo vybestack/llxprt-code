@@ -10,9 +10,25 @@
 import { spawn } from 'node:child_process';
 import { mkdir, utimes, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import {
+  encodeSessionFact,
+  SESSION_KEYS,
+} from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
 
-const CLI_ENTRY = resolve(import.meta.dir, '..', 'index.ts');
+export function corruptSessionReason(): string {
+  return selectBackend() === 'journal'
+    ? 'Session fact session:provider is not in the expected form'
+    : 'Invalid session_start: missing or malformed required fields';
+}
+
+const CLI_ENTRY = resolve(import.meta.dir, '..', '..', 'index.ts');
 
 export interface CliRun {
   exitCode: number;
@@ -60,7 +76,7 @@ export async function writeHealthySession(
   modified: string,
   model = 'test-model',
 ): Promise<string> {
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     chatsDir: target.chatsDir,
     sessionId,
     projectHash: target.projectHash,
@@ -69,10 +85,14 @@ export async function writeHealthySession(
     model,
   });
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
+      },
+    ]);
+    if (recording instanceof JournalRecordingService)
+      recording.recordFirstUserPreview(`hello from ${sessionId}`);
     await recording.flush();
     const filePath = recording.getFilePath();
     if (filePath === null) {
@@ -91,6 +111,26 @@ export async function writeCorruptSession(
   target: RecordingTarget,
   sessionId: string,
 ): Promise<string> {
+  if (selectBackend() === 'journal') {
+    const path = await writeHealthySession(
+      target,
+      sessionId,
+      '2026-10-08T21:18:08.000Z',
+    );
+    const session = await JournalSession.open(path);
+    try {
+      await session.store.commit([
+        {
+          kind: 'setState',
+          key: SESSION_KEYS.provider,
+          value: encodeSessionFact({ provider: 'anthropic', model: 42 }),
+        },
+      ]);
+    } finally {
+      await session.close();
+    }
+    return path;
+  }
   await mkdir(target.chatsDir, { recursive: true });
   const filePath = join(
     target.chatsDir,
