@@ -39,10 +39,10 @@ function rowMediaBytes(row: IContent): number {
  * budget is enforced across rows by shrinking the budget handed to each row's
  * resolution. The rows share one set of store reservations, so a content id
  * costs one store round trip however many rows reference it and all
- * reservations are released together. Every resolved row's lease and the
- * shared reservations are registered on `owner` and are held until the call
- * that owns `owner` finishes; resolution failures release their own partial
- * reservations before they propagate.
+ * reservations are released together. Each resolved row's lease is released
+ * when its consumer advances. Shared reservations stay on `owner` until the
+ * request finishes; resolution failures release their own partial resources
+ * before they propagate.
  */
 export async function* resolveRowsMedia(
   rows: AsyncIterable<IContent>,
@@ -65,38 +65,34 @@ export async function* resolveRowsMedia(
         owner.registerCleanup(() => opened.release());
       }
     }
-    yield bytes === 0
-      ? row
-      : await resolveRow(
-          row,
-          { ...media, reservations },
-          remaining,
-          owner,
-          signal,
-        );
+    if (bytes === 0) yield row;
+    else yield* resolveRow(row, { ...media, reservations }, remaining, signal);
   }
 }
 
-async function resolveRow(
+async function* resolveRow(
   row: IContent,
   media: Parameters<typeof resolveRequestMedia>[0],
   remaining: number,
-  owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
-): Promise<IContent> {
+): AsyncGenerator<IContent, void> {
   if (!hasReference(row)) {
     assertRequestMediaBudget(
       [row],
       row.metadata?.turnId ?? row.metadata?.id ?? 'unknown-turn',
       remaining,
     );
-    return row;
+    yield row;
+    return;
   }
   const resolved = await resolveRequestMedia(
     { ...media, aggregateBudgetBytes: remaining },
     [row],
     signal,
   );
-  owner.registerCleanup(() => resolved.release());
-  return resolved.withContents((contents) => contents[0]);
+  try {
+    yield resolved.withContents((contents) => contents[0]);
+  } finally {
+    await resolved.release();
+  }
 }

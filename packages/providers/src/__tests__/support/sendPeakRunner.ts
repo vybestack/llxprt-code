@@ -83,6 +83,13 @@ async function runChild(
     stdout: 'pipe',
     stderr: 'pipe',
   });
+  if (process.env.SEND_PEAK_LOG !== undefined) {
+    appendFileSync(
+      `${process.env.SEND_PEAK_LOG}.probe-pids.jsonl`,
+      `${JSON.stringify({ pid: child.pid, parent: process.pid, routeId })}
+`,
+    );
+  }
   const [, error, exitCode] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -94,6 +101,14 @@ async function runChild(
   );
   if (typeof result !== 'object' || result === null) {
     throw new Error('send peak probe wrote an invalid measurement');
+  }
+  const measurementLog = process.env.SEND_PEAK_LOG;
+  if (measurementLog !== undefined && measurementLog !== '') {
+    appendFileSync(
+      `${measurementLog}.raw.jsonl`,
+      `${JSON.stringify({ routeId, native: process.env.ISSUE854_SEND_NATIVE === '1', trap: trap ?? null, result })}
+`,
+    );
   }
   const bad = Object.entries(result).filter(
     ([, series]) => !isSendPeakSeries(series),

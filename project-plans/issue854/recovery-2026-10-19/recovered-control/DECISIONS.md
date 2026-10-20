@@ -1,5 +1,15 @@
 # Recovered decision guidance
 
+## W23 native send/liveness decisions, 2026-10-20
+
+Use actual committed journal HistoryService curated sources for native send measurements, with the existing independent expected-byte oracle. Keep the original 1024/8192 row sizes, 1 MiB growth/retention bounds, six repeated sends and every trap. Isolate the HTTP receiver in a separate process so its transport buffers are not attributed to provider heap. Redirect fetch's network destination without changing the provider's original endpoint/settings; localhost configuration otherwise disables Anthropic native-endpoint caching and invalidates a byte comparison by 121 bytes.
+
+The production RED is real row retention, not synthetic row-accounting weight: forty 1 MiB rows with stored-image references remain live across all routes because request-owner cleanup closures hold every row lease. Yield from a row-scoped generator and release that lease in finally on consumer advance/return. Preserve request-wide shared reservations, budget enforcement, failure propagation and lock-cycle behavior. No new production history array, fallback or spool is introduced.
+
+Do not equate streaming size enforcement or Content-Length with planning refusal. Current 128 MiB-limit production sends show both Responses routes entering HTTP with declared length 134,217,837 and partial received bodies; Chat/Anthropic decode before refusal. Stored-summary planning belongs to phase 7 and is not wired in phase 4. Keep the requirement open and preserve the four-case RED plus the separate header diagnostic. A declared-length guard alone would not prove the required decoded-row-free plan.
+
+Reuse the source-matching repeated-turn workers instead of rerunning them. Commit only the seven tested code paths and the named W23 control documents/proof; leave existing .llxprt and raw recovery changes untouched. This closes the bounded native memory/control increment only, without phase-6 performance, spool-removal, whole-product or default-selection claims. Review skipped per Andrew 2026-10-09.
+
 ## Client-source closure decisions, 2026-10-20
 
 Define W22 completion as accepted accumulated evidence for all 806 original files plus source-bound native counterparts for its affected public history contracts. Do not turn conservative shared/public cases into a native claim or demand unrelated native ports. The fourteen traced native cases and five explicit-old originals change labels; 5319 conservative cases remain without a native claim.

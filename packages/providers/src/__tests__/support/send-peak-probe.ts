@@ -31,7 +31,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -57,6 +57,8 @@ import {
   type WireRoute,
 } from './wireBodyCapture.js';
 import { SEND_PEAK_REQUEST_SHAPE } from './sendPeakShapes.js';
+import { prepareNativeProbeSources } from './native-probe-source.js';
+import { isolatedWireHashSink } from './isolated-wire-hash-sink.js';
 import {
   SEND_TRAP_ENV,
   armSendTrap,
@@ -182,8 +184,15 @@ class MemorySampler {
   constructor(private readonly baseline: Reading) {}
 
   /** Records one in-flight sample against the baseline. */
-  async sample(): Promise<void> {
+  async sample(phase = 'rows'): Promise<void> {
     const now = await settledReading();
+    if (process.env.SEND_PEAK_LOG !== undefined) {
+      appendFileSync(
+        `${process.env.SEND_PEAK_LOG}.samples.jsonl`,
+        `${JSON.stringify({ phase, baseline: this.baseline, now, heapDelta: now.heap - this.baseline.heap })}
+`,
+      );
+    }
     this.samples += 1;
     this.peakHeap = Math.max(this.peakHeap, now.heap - this.baseline.heap);
     this.peakArrayBuffers = Math.max(
@@ -306,6 +315,29 @@ function installHashingTransport(
   };
 }
 
+function redirectToLocalHttp(baseURL: string): () => void {
+  const original = globalThis.fetch;
+  const destination = new URL(baseURL);
+  globalThis.fetch = Object.assign(
+    (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ): Promise<Response> => {
+      const url = new URL(requestUrl(input));
+      url.protocol = destination.protocol;
+      url.host = destination.host;
+      return original(
+        input instanceof Request ? new Request(url, input) : url,
+        init,
+      );
+    },
+    { preconnect: original.preconnect },
+  );
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
 /** Reads rows from their files, one object at a time. */
 async function* readRows(
   job: Job,
@@ -340,6 +372,8 @@ function fileSelection(
   sampler: MemorySampler | undefined,
   activeTrap: SendTrap | undefined,
 ): SelectionHandle {
+  if (nativeSources !== undefined)
+    return nativeSources.handle(job, sampler, activeTrap);
   let held: TrapHold | undefined;
   let armed = false;
   return {
@@ -387,7 +421,7 @@ async function estimateWhileSampling(
       ? undefined
       : await armSendTrap(estimateTrap, handle.rows());
   try {
-    await sampler?.sample();
+    await sampler?.sample('estimate-start');
     const state = { settled: false };
     const estimating = estimatePromptEnvelope(
       provider.name,
@@ -397,10 +431,10 @@ async function estimateWhileSampling(
       state.settled = true;
     });
     if (sampler !== undefined) {
-      while (!state.settled) await sampler.sample();
+      while (!state.settled) await sampler.sample('estimate');
     }
     await estimating;
-    await sampler?.sample();
+    await sampler?.sample('estimate-end');
   } finally {
     hold?.release();
   }
@@ -440,7 +474,16 @@ async function send(
   sampler: MemorySampler | undefined,
 ): Promise<BodyEvidence> {
   const evidence = emptyEvidence();
-  const restore = installHashingTransport(wireRoute, sampler, evidence);
+  const local =
+    nativeSources === undefined
+      ? undefined
+      : await isolatedWireHashSink(wireRoute, async () => {
+          await sampler?.sample('http');
+        });
+  const restore =
+    local === undefined
+      ? installHashingTransport(wireRoute, sampler, evidence)
+      : redirectToLocalHttp(local.route.baseURL);
   try {
     const provider = wireRoute.createProvider();
     const contents: AsyncIterable<IContent> = {
@@ -471,8 +514,16 @@ async function send(
     })) {
       void chunk;
     }
+    if (local !== undefined) {
+      const seen = await local.body();
+      evidence.bytes = seen.bytes;
+      evidence.sha256 = seen.sha256;
+      evidence.contentLength = seen.contentLength ?? null;
+      evidence.modelRequests = seen.entries;
+    }
   } finally {
     restore();
+    await local?.close();
   }
   if (evidence.modelRequests !== 1) {
     throw new Error(
@@ -607,10 +658,15 @@ async function measureShape(
   return { ...series, accumulation: await accumulate(wireRoute, jobs.large) };
 }
 
+const nativeSources =
+  process.env.ISSUE854_SEND_NATIVE === '1'
+    ? await prepareNativeProbeSources(root, plan)
+    : undefined;
 await awaitCodeAging();
 const results: Record<string, SendPeakSeries> = {};
 for (const [shape, counts] of Object.entries(plan.shapes)) {
   results[shape] = await measureShape(route, shape, counts);
 }
 writeFileSync(join(root, 'measured.json'), JSON.stringify(results));
+await nativeSources?.close();
 clearTimeout(deadline);

@@ -1,5 +1,31 @@
 # W23 proof map
 
+## Native memory and live-row boundary, 2026-10-20T06:40Z
+
+`W23-NATIVE-MEMORY-PROOF.json` binds the final 44-file run, six green gates, original/fixed live-object receipts, raw measurement hashes and frozen-source checks. Parent `3b617814b` contains the actual eight 40 MiB sends; final index 29 repeats those eight sends against the retention fix. Text-only / stored-image body byte counts remain: chat 41,943,164 / 41,943,259; Responses-via-OpenAI 41,943,148 / 41,943,243; standalone Responses 41,943,148 / 41,943,243; Anthropic 41,943,171 / 41,943,279. Whole-body SHA-256 and Content-Length match the unchanged separate oracle.
+
+The new probe mode uses the real journal HistoryService, attached recorder, committed row tree and pinned curated selection through `journal-send-fixture.ts`. No ownership-byte estimate substitutes for retained objects. The forty 1 MiB row test gives each row a real stored image reference and watches decoded rows/text/reference blocks with WeakRefs. Original production SHA-256 `db0715d7929a50cac2cb3032fd84f3d3a232a7bebadcdddc35015b8026430bcf` matches starting HEAD and fails all four routes at 40/40/40. Fixed source `52dfe34f13a43cbf157bd865f6b510f7da8eaf35781f013de46b60a204155f67` peaks at 2/2/2 everywhere. The retained-object control fails the same bound at 40, or 80 on chat's two readers.
+
+| Native route / shape | Large wire bytes | Heap growth | ArrayBuffer growth | Retained trend growth |
+| --- | ---: | ---: | ---: | ---: |
+| Chat text | 8,596,228 | -92,765 | -32,768 | 0 |
+| Chat tools | 11,774,659 | -248,082 | -32,768 | 160,545 |
+| Anthropic cached text | 8,596,378 | -1,044,470 | -32,768 | 77,873.75 |
+| Anthropic cached tools | 11,541,325 | -943,474 | -32,768 | 0 |
+| Via-OpenAI Responses text | 8,596,212 | -187,995 | 0 | 132,372 |
+| Via-OpenAI Responses tools | 11,582,131 | 238,271 | 8,304 | 0 |
+| Responses disk text | 8,596,212 | -257,104 | 0 | 323,997 |
+| Responses disk tools | 11,582,131 | -167,399 | 0 | 79,371.67 |
+| Responses stream tools | 11,582,131 | -115,873 | 0 | 410,780 |
+
+All values are bytes. Every positive oracle and original 1 MiB predicate passes. Six-send retained growth is the original Theil-Sen slope times five, with all raw readings retained. The five unchanged positive send tests under native traps pass byte checks and fail the memory assertion: array 14,453,617; chat estimate 14,027,816; Anthropic estimate 13,698,656; fill 40,391,639 heap-growth bytes; retain 84,756,100 retained-growth bytes. Raw logs/JUnit agree; no loader failure is counted. The 44-file run has 1,199 passes and 13 deliberate failures: nine control failures and four open planning failures. The separate header diagnostic adds four planning failures, not positive tests.
+
+Earlier native measurements failed because the in-process `Response(body)` transport retained receiver-side body memory. Moving the hash sink to its own process removes that unrelated heap from the provider reading. A later Anthropic byte failure was a deterministic input mismatch: configuring localhost as the provider endpoint disabled native-endpoint caching, removing 121 body bytes. Final transport redirection changes only the network destination; original provider settings and oracle remain intact. These corrections change neither memory thresholds nor expected bytes. The final source manifest has zero mismatches; the formatter changed no file bytes. Six final gates pass, touched audit findings are zero, and graph validation is not shard execution.
+
+Planning remains RED at the actual 128 MiB limit with 134,217,729 raw text bytes. Chat/Anthropic refuse after decoding and before HTTP. Both Responses routes declare Content-Length 134,217,837, enter HTTP once and deliver at least 133,169,179 bytes before rejecting. The declared length exceeds the configured limit before fetch, yet no refusal occurs there. Stored-summary planning is phase 7 and not implemented in phase 4. Exact supplemental headers, counters and failures are in `planning-declared-*`; do not close this requirement using a declared-length check or a spool-time rejection.
+
+Thirty-five repeated-turn source/receipt checks still match without a worker rerun: normal native 845 requests, retaining/release controls 850 each. Of 87 frozen-start entries, only the two intended probe/runner source files differ; golden/corpus and oracle inputs are unchanged. Accepted source copies compare byte-for-byte, original production is preserved separately, and no mutation is active. Remaining scope is the twelve unexecuted suffix/curated/borrowed/recomposition candidates in `run-a/native-remainder-inventory.json`, CLI session/chat/resume native contracts beyond bootstrap, zed native session/tool orchestration beyond replay, a2a native task/tool/history protocol beyond stubs, full native 5000-seed corpora/randomized purge, and planning refusal. Existing 202 frontdoor candidates are discovery inventory, not an execution or native-coverage claim. Spool removal and W24-W26 remain future work. Review skipped per Andrew 2026-10-09.
+
 ## Actual native 40 MiB send subset, 2026-10-20T05:57Z
 
 `journal-large-native-send.test.ts`: **eight passes, zero failures/skips** in `limits-memory-run-c/subset-accepted/000.log` and matching JUnit. Explicit journal HistoryService, locked recorder and pinned curated source feed production OpenAI chat, Responses-via-OpenAI, standalone Responses and Anthropic cache-off. Each route sends exactly 40 MiB of text, both without media and with a native admitted stored-image reference. HTTP server hashes received chunks; full SHA-256/length and Content-Length match the existing independent oracle. Bodies: chat 41,943,164 / 41,943,259; via-OpenAI 41,943,148 / 41,943,243; standalone Responses 41,943,148 / 41,943,243; Anthropic 41,943,171 / 41,943,279 bytes. Oracle arrays are confined to an earlier call returning only the digest. Source rows are generated and released before send. This subset has no memory-bound assertion.

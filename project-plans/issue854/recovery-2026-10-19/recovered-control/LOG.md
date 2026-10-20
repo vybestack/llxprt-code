@@ -1,5 +1,13 @@
 # Recovery chronology, reconstructed
 
+## W23 native row retention and completed memory lane, 2026-10-20
+
+Resumed the already-running driver 35437 at parent `3b617814b`; no completed memory input was rerun by this finalizer. The inherited 44-file serial lane finished with 1,199 passes, nine rejecting-control assertion failures and four planning-requirement failures, zero skips/source mismatches. All eight native memory files and eight disk-row comparison files pass; nine native route/shape measurements keep the original 1 MiB bounds and byte oracles. Five unchanged positive send tests under native traps fail the intended memory predicates. The forty-row native test changes from original 40/40/40 live rows/text/media to fixed 2/2/2 across all four routes; its retaining control fails at 40 or 80. The production fix releases each resolved row when the consumer advances, preserving shared request reservations.
+
+Six scoped final gates pass with zero touched audit findings. Reused retention proof has 35 matching source/receipt checks and unchanged native normal/control request counts 845/850. All frozen body/corpus inputs remain unchanged. Raw authority, headers, hashes, JUnit and source copies: `tmp/854-notes/p4/w23/limits-memory-run-c/`; durable map: `W23-NATIVE-MEMORY-PROOF.json`, STATUS and PROOF-MAP. Source copies pass cmp and no production mutation is active. The final PID census is in the proof.
+
+The separate four-case declared-length diagnostic retains the existing 128 MiB production threshold and a limit+1 raw text row. Responses declares 134,217,837 bytes and still enters HTTP; 133,169,179 bytes are observed before rejection. Chat/Anthropic reject before transport but after decoding. Planning refusal stays open, with no phase-7 claim. This is W23 bounded proof, not phase-6 performance closure. Existing spooling and the precise suffix/curated/borrowed, CLI/zed/a2a, full-native-seed/randomized-purge and later-phase requirements remain open. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edit/staging, broad recovery staging, weakened check, push or merge.
+
 ## Client-source contract closure, 2026-10-20
 
 Verified starting HEAD cf54149a4. Kept the five original client-array cases byte-identical and mapped them to complete native transfer/token/provider-byte/large-row effects, plus one bounded real-client restored-value case. Production code/default unchanged. The missing supplemental receipt first left the old file unverified; the final exact hash/case/batch receipt closes that gap.
