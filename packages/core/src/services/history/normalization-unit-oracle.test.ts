@@ -17,6 +17,7 @@ import { streamJournalResponseUnitRecords } from './journal-response-units.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { IContent } from './IContent.js';
+import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 
 const record = z
   .object({
@@ -43,6 +44,7 @@ async function responseOutcome(
   readonly firstOutputIndex: number | undefined;
 }> {
   const snapshot = await session.store.snapshot();
+  const indexed = await IndexedJournalRequestSnapshot.create(snapshot, tail);
   try {
     const units: IContent[] = [];
     const pending: boolean[] = [];
@@ -51,6 +53,15 @@ async function responseOutcome(
       pending.push(unit.pending);
     }
     const first = pending.indexOf(true);
+    expect(indexed.count).toBe(units.length);
+    expect(indexed.pending.firstOutputIndex).toBe(
+      first < 0 ? undefined : first,
+    );
+    expect(indexed.pending.inputCount).toBe(tail.length);
+    for (let index = 0; index < units.length; index++) {
+      expect(indexed.isPending(index)).toBe(pending[index]);
+      expect(await indexed.readAt(index)).toStrictEqual(units[index]);
+    }
     return {
       hash: digest(units),
       count: units.length,
@@ -58,6 +69,7 @@ async function responseOutcome(
       firstOutputIndex: first < 0 ? undefined : first,
     };
   } finally {
+    await indexed.close();
     await snapshot.close();
   }
 }

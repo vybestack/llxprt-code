@@ -3,6 +3,7 @@ import { JournalFormatError } from '../../journal/errors.js';
 import type { BlockPosition, IdFact } from '../../journal/idFactCodec.js';
 import { comparePositions } from '../../journal/idFactUpdate.js';
 import { ROW_ID_KIND, ROW_SPEAKER } from '../../journal/rowRecord.js';
+import type { RowEntry } from '../../journal/rowEntry.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 import {
   partIds,
@@ -42,7 +43,6 @@ export function targetsPart(
 async function reconstructedIndices(
   snapshot: JournalResponseSource,
   part: ResponsePart,
-  emptyReconstructed: boolean,
 ): Promise<readonly number[]> {
   if (part.speaker !== ROW_SPEAKER.tool) return [];
   const indices: number[] = [];
@@ -56,12 +56,7 @@ async function reconstructedIndices(
       (fact.firstCall.label < part.entry.label ||
         (fact.firstCall.label === part.entry.label &&
           fact.firstCall.part < part.part));
-    if (
-      !before &&
-      (tuple.id === ''
-        ? !emptyReconstructed
-        : targetsPart(callTarget(fact), { ...part, reconstructed: true }))
-    )
+    if (!before && sameResponsePart(fact.firstToolResponse, partPosition(part)))
       indices.push(part.indices[tuple.block]);
   }
   return indices;
@@ -69,14 +64,10 @@ async function reconstructedIndices(
 
 export async function* completedResponseParts(
   snapshot: JournalResponseSource,
+  entries?: AsyncIterable<RowEntry>,
 ): AsyncGenerator<ResponsePart> {
-  let emptyReconstructed = false;
-  for await (const part of responseParts(snapshot)) {
-    const indices = await reconstructedIndices(
-      snapshot,
-      part,
-      emptyReconstructed,
-    );
+  for await (const part of responseParts(snapshot, entries)) {
+    const indices = await reconstructedIndices(snapshot, part);
     if (indices.length > 0) {
       const reconstructed = {
         ...part,
@@ -84,9 +75,6 @@ export async function* completedResponseParts(
         speaker: ROW_SPEAKER.ai,
         reconstructed: true,
       };
-      emptyReconstructed ||= partIds(reconstructed).some(
-        (tuple) => tuple.id === '',
-      );
       yield reconstructed;
     }
     yield part;

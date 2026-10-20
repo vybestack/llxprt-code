@@ -10,4 +10,14 @@ Append now uses the same segment builder as other mutations. Dirty contribution 
 
 The initial native RED expected eight units but the snapshot had no count API. A second RED found the missing empty reconstruction contribution, expected two units versus one. Initial GREEN includes native count/rank, reconstruction, publication and pop suites, strict test-inclusive core types and zero-warning scoped ESLint. Raw receipts are in `tmp/854-notes/p5/metadata-run-d/`.
 
-This increment does not claim normalized namespace maintenance, provider format/settings summaries, pending-tail indexed metadata, full mutation/heap acceptance or CRC closure. Production provider routing and the default backend remain unchanged. Review skipped per Andrew 2026-10-09.
+The second increment adds an indexed request snapshot. Its prelude stores descriptors only for tail rows and tail-related journal targets. Target labels come from ID facts, output starts from native prefix sums, and within-row pending membership from a small bit mask. Count and first pending output are scalars. A curated-successor query supplies the single look-ahead row needed by indexed plan selection. `readAt` does not enumerate preceding units. The snapshot owns the encoded tail and one hold on the native pin; closing it releases that hold.
+
+File admission now requires version 4. Reusing version 3 would silently admit journals whose entries lack contribution bits and return wrong counts. A CRC-correct version-3 header was accepted in the format RED; the version change makes it fail admission. Existing layout widths remain unchanged. This is a format replacement, not a compatibility shim.
+
+The broad native regression matrix exposed two old test-model assumptions: the naive fact model excluded empty IDs from `Rt`, and the mutation model expected only source flags in entries. Both models now include the newly specified fields, without dropping equality assertions. Frozen 5000-case and provider-wire fixtures remain unchanged. The named native empty-ID test separately verifies that `Rt` exists while `R` and `best` remain absent.
+
+Two controls insert a full prefix rescan or retain all per-row counts during snapshot creation. Each fails the existing metadata-read bound; restoration is byte-checked. These controls establish that the read budget detects those implementations. They do not establish the pending full retained-heap claim.
+
+The test audit reports two `DUP_ASSERT` findings in the indexed metadata matrix: the same pinned count before and after a later append, and zero payload reads at two independently reset measurement boundaries. Both assertions are retained because each tests a different state. No `MOCK_MIRROR`, `ALWAYS_TRUE`, `SELF_CONFIRMING` or `NO_ASSERT` finding is accepted on touched tests.
+
+Normalized namespace maintenance, provider format/settings summaries, full mutation/heap acceptance and CRC closure remain open. Production provider routing and the default backend remain unchanged. Review skipped per Andrew 2026-10-09.

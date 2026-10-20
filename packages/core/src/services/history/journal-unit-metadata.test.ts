@@ -10,6 +10,37 @@ import { streamJournalResponseUnits } from './journal-response-units.js';
 describe('native indexed unit metadata', () => {
   const directory = useTempDir('indexed-unit-metadata-');
 
+  it('keeps empty-id Rt for reconstruction while excluding it from real-response targets', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/empty-rt.llxj`,
+      { journal: testJournalSeams().dependencies },
+    );
+    try {
+      await session.append([
+        { speaker: 'tool', blocks: [response(''), response('')] },
+      ]);
+      const snapshot = await session.store.snapshot();
+      try {
+        const first = await snapshot.entryAt(0);
+        const fact = await snapshot.facts.fact('');
+        expect(fact?.firstToolResponse).toStrictEqual({
+          label: first.label,
+          part: 0,
+          block: 0,
+        });
+        expect(fact?.firstResponse).toBeUndefined();
+        expect(fact?.best).toBeUndefined();
+        expect(first.reconBlocks).toBe(2);
+        expect(first.answered).toBe(0);
+        expect(snapshot.units).toBe(1);
+      } finally {
+        await snapshot.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('counts reconstructed, split, stripped and cross-speaker adjacent units in the published tree', async () => {
     const session = await JournalSession.create(`${directory()}/units.llxj`, {
       journal: testJournalSeams().dependencies,

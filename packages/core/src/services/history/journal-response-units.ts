@@ -3,7 +3,7 @@ import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { IContent } from './IContent.js';
 import { countDecodedRow } from './journalRowCounters.js';
-import type { ResponsePart } from './journal-response-parts.js';
+import type { JournalResponseSource } from './journal-response-source.js';
 import { responseAdjacent } from './journal-response-slots.js';
 import { completedResponseParts } from './journal-reconstruction.js';
 import { JournalTailSource } from './journal-tail-source.js';
@@ -20,10 +20,18 @@ export async function* streamJournalResponsePlans(
   tail: readonly IContent[] = [],
 ): AsyncGenerator<JournalResponsePlan> {
   const release = snapshot.hold();
-  let parts: AsyncGenerator<ResponsePart> | undefined;
   try {
-    const source = await JournalTailSource.create(snapshot, tail);
-    parts = completedResponseParts(source);
+    yield* streamResponsePlans(await JournalTailSource.create(snapshot, tail));
+  } finally {
+    await release();
+  }
+}
+
+export async function* streamResponsePlans(
+  source: JournalResponseSource,
+): AsyncGenerator<JournalResponsePlan> {
+  const parts = completedResponseParts(source);
+  try {
     let current = await parts.next();
     while (current.done !== true) {
       const part = current.value;
@@ -39,11 +47,7 @@ export async function* streamJournalResponsePlans(
       current = next;
     }
   } finally {
-    try {
-      await parts?.return(undefined);
-    } finally {
-      await release();
-    }
+    await parts.return(undefined);
   }
 }
 

@@ -2,8 +2,13 @@
 import type { EntryFill, VersionEdit } from '../../groupEdits.js';
 import { LABEL_STEP, FIRST_NEXT_LABEL, labelBetween } from '../../labels.js';
 import type { RowDraft } from '../../rowDraft.js';
-import type { RowEntry } from '../../rowEntry.js';
-import { CHRONOLOGY_SEQ_NONE, ROW_FLAG, ROW_ID_KIND } from '../../rowRecord.js';
+import { ENTRY_FLAG, type RowEntry } from '../../rowEntry.js';
+import {
+  CHRONOLOGY_SEQ_NONE,
+  ROW_FLAG,
+  ROW_ID_KIND,
+  ROW_SPEAKER,
+} from '../../rowRecord.js';
 import { ID_SHAPES } from './idHistoryModel.js';
 import type { SeededRandom } from './seededRandom.js';
 import type { Version } from '../../version.js';
@@ -188,9 +193,42 @@ export class StoreModel {
     };
   }
 
-  /** The flags a stored entry should show: the model's, with the curated bit every draft carries. */
   entryFlags(row: ModelRow): number {
-    return row.flags | ROW_FLAG.curated;
+    const calls = row.ids.some((id) => id.kind === ROW_ID_KIND.call);
+    const responses = row.ids.filter((id) => id.kind === ROW_ID_KIND.response);
+    const tool = row.speaker === ROW_SPEAKER.tool;
+    const self = !tool || calls || responses.length === 0;
+    const splitSelf = tool && calls && responses.length === 0;
+    const reconAdjacent =
+      tool &&
+      !calls &&
+      responses.some((id) => {
+        if (id.rawId === '') return false;
+        const callBefore = this.rows.some(
+          (other) =>
+            other.label < row.label &&
+            other.ids.some(
+              (tuple) =>
+                tuple.kind === ROW_ID_KIND.call && tuple.rawId === id.rawId,
+            ),
+        );
+        const firstTool = this.rows.find(
+          (other) =>
+            other.speaker === ROW_SPEAKER.tool &&
+            other.ids.some(
+              (tuple) =>
+                tuple.kind === ROW_ID_KIND.response && tuple.rawId === id.rawId,
+            ),
+        );
+        return !callBefore && firstTool?.label === row.label;
+      });
+    return (
+      row.flags |
+      ROW_FLAG.curated |
+      (self ? ENTRY_FLAG.self : 0) |
+      (splitSelf ? ENTRY_FLAG.splitSelf : 0) |
+      (reconAdjacent ? ENTRY_FLAG.reconstructedAdjacent : 0)
+    );
   }
 
   private labelFor(): bigint {

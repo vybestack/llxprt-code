@@ -19,6 +19,7 @@ import type { ContentBlock, IContent } from './IContent.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 import type { JournalResponseSource } from './journal-response-source.js';
+import { callTarget } from './journal-reconstruction.js';
 
 interface TailRow {
   readonly entry: RowEntry;
@@ -110,6 +111,31 @@ export class JournalTailSource implements JournalResponseSource {
   }
 
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
+
+  affectedJournalLabels(): readonly bigint[] {
+    const labels = new Set<bigint>();
+    for (const [id, fact] of this.overlay) {
+      if (id === '') continue;
+      const target = callTarget(fact);
+      if (target !== undefined && !this.isTail(target.at.label))
+        labels.add(target.at.label);
+    }
+    return [...labels].sort((left, right) =>
+      left < right ? -1 : Number(left > right),
+    );
+  }
+
+  *tailEntries(): Generator<RowEntry> {
+    for (const row of this.tailRows) yield row.entry;
+  }
+
+  async nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {
+    if (this.isTail(label))
+      return this.tailRows[Number(label - this.firstLabel) + 1]?.entry;
+    return (
+      (await this.snapshot.nextCuratedAfter(label)) ?? this.tailRows[0]?.entry
+    );
+  }
 
   private tailAt(label: bigint): TailRow {
     this.snapshot.requireOpen();

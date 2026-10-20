@@ -56,8 +56,9 @@ function parts(entry: RowEntry, ids: RowIds): readonly ResponsePart[] {
 
 export async function* responseParts(
   snapshot: JournalResponseSource,
+  entries: AsyncIterable<RowEntry> = snapshot.entries(),
 ): AsyncGenerator<ResponsePart> {
-  for await (const entry of snapshot.entries()) {
+  for await (const entry of entries) {
     if ((entry.flags & ROW_FLAG.curated) === 0) continue;
     yield* parts(entry, await snapshot.readIds(entry));
   }

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { nextCuratedEntry } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
@@ -104,11 +105,28 @@ export class VersionSnapshot {
 
   unitsBelow(label: bigint): Promise<number> {
     this.read.requireOpen();
+    if (this.read.version === undefined) return Promise.resolve(0);
     return countUnitsBelow(this.read.access, this.rootRef(), label);
   }
 
-  unitAt(index: number): Promise<IndexedUnit> {
-    return entryAtUnit(this.read.access, this.rootRef(), this.units, index);
+  async unitAt(index: number): Promise<IndexedUnit> {
+    this.read.requireOpen();
+    const root = this.rootRef();
+    if (root === undefined)
+      throw new RangeError(`Unit ${index} of an empty snapshot`);
+    return entryAtUnit(this.read.access, root, this.units, index);
+  }
+
+  nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {
+    this.read.requireOpen();
+    const root = this.rootRef();
+    if (root === undefined) return Promise.resolve(undefined);
+    return nextCuratedEntry(
+      this.read.access,
+      root,
+      this.read.version?.aggregate.curated ?? 0,
+      label,
+    );
   }
 
   /** The live rows in label order from index `from`. */

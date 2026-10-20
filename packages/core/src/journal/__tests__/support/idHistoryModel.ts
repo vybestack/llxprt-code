@@ -290,7 +290,7 @@ function naiveFact(list: readonly IdOccurrence[]): IdFact {
     firstCall: real[0]?.at,
     firstAiCall: real.find((o) => o.partSpeaker === AI)?.at,
     firstResponse: truthyResps[0]?.at,
-    firstToolResponse: truthyResps.find((o) => o.partSpeaker === TOOL)?.at,
+    firstToolResponse: resps.find((o) => o.partSpeaker === TOOL)?.at,
     best: best?.at,
     bestScore: best?.score ?? 0,
     callCount: calls.length,
