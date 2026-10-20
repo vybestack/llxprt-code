@@ -8,6 +8,7 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import type {
   ContentMetadata,
   IContent,
@@ -261,5 +262,9 @@ export async function responseAdjacent(
   const blocks: IContent['blocks'] = [];
   for (const slot of slots) blocks.push(await slotBlock(snapshot, slot));
   for (const ref of media) blocks.push(await responseBlockAt(snapshot, ref.at));
-  return { speaker: 'tool', blocks, metadata };
+  return sanitizeProviderContentForSerialization({
+    speaker: 'tool',
+    blocks,
+    metadata,
+  });
 }

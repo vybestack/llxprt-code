@@ -1,21 +1,53 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { IContent } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import { strippedSelf } from './journal-orphan-units.js';
+import { countDecodedRow } from './journalRowCounters.js';
 import {
   responseParts,
   responsePartContent,
   UnsupportedJournalNormalizationError,
+  type ResponsePart,
 } from './journal-response-parts.js';
 import {
   assertResponsePartSupported,
   responseAdjacent,
 } from './journal-response-slots.js';
 
+async function* chargedUnit(
+  row: IContent | undefined,
+  counters: JournalReadCounters | undefined,
+): AsyncGenerator<IContent> {
+  if (row === undefined) return;
+  const release = countDecodedRow(row, counters);
+  try {
+    yield row;
+  } finally {
+    release();
+  }
+}
+
+async function* selfUnit(
+  snapshot: VersionSnapshot,
+  part: ResponsePart,
+  counters: JournalReadCounters | undefined,
+): AsyncGenerator<IContent> {
+  yield* chargedUnit(
+    strippedSelf(
+      sanitizeProviderContentForSerialization(
+        await responsePartContent(snapshot, part),
+      ),
+    ),
+    counters,
+  );
+}
+
 export async function* streamJournalResponseUnits(
   snapshot: VersionSnapshot,
   tail: readonly IContent[] = [],
+  counters?: JournalReadCounters,
 ): AsyncGenerator<IContent> {
   if (tail.length !== 0)
     throw new UnsupportedJournalNormalizationError(
@@ -29,19 +61,15 @@ export async function* streamJournalResponseUnits(
       const part = current.value;
       await assertResponsePartSupported(snapshot, part);
       const next = await parts.next();
-      const self = strippedSelf(
-        sanitizeProviderContentForSerialization(
-          await responsePartContent(snapshot, part),
+      yield* selfUnit(snapshot, part, counters);
+      yield* chargedUnit(
+        await responseAdjacent(
+          snapshot,
+          part,
+          next.done === true ? undefined : next.value,
         ),
+        counters,
       );
-      if (self !== undefined) yield self;
-      const adjacent = await responseAdjacent(
-        snapshot,
-        part,
-        next.done === true ? undefined : next.value,
-      );
-      if (adjacent !== undefined)
-        yield sanitizeProviderContentForSerialization(adjacent);
       current = next;
     }
   } finally {
