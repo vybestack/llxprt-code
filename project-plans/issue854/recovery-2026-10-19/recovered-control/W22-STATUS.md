@@ -1,72 +1,74 @@
 # W22 agents sweep status
 
-Updated 2026-10-20 after verification completed at 00:49:09Z. This supersedes the provider-fallback checkpoint at `f622ef692`.
+Updated 2026-10-20 after the density/accounting matrix completed at 01:27:55Z. This supersedes the attempt/value checkpoint of 767 green, 34 red and five unverified.
 
-**The five attempt/value suites are green and committed. W22 remains incomplete.** Source commit: `ca62b6bc22b8e66e62cf889d7944998746fa407a`, five test/support paths. Production and the old backend default are unchanged. Source was committed before census acceptance and documentation. This is WIP finalization, not review; no unrelated repair family was started.
+**The six density/accounting targets are green and committed. W22 remains incomplete.** Production fix: `051b9df521ae50b08ae66bcd99ed61525c32efa4`. Fixture and census source: `12705c2bd`, eight explicit paths committed before census publication and documentation. This is WIP finalization, not review. No middle-out or one-shot repair began.
 
-## Complete collection and accepted census
+## Accepted census
 
-All **806 inventory paths were process-attempted**. The accepted census is **806 = 767 green + 34 red + five unverified**, with zero unattempted paths. These are cumulative accepted per-file source boundaries, not a final-source whole-package pass.
+All **806 inventory paths were process-attempted**. Accepted state is **806 = 773 green + 28 red + five unverified**, with zero unattempted. This increment changes exactly six red files to green. These are cumulative accepted per-file source boundaries, not a final-source whole-package pass.
 
-Verified case evidence is **6474 passes, 80 failures and zero skips**. The recorded pass aggregate is 6481. Seven XML passes from the inconsistent runner meta-suite remain unverified and excluded from verified passes and classification. Passing classifications reconcile to 6474: **229 native-history, 268 journal-selected shared/public, 31 explicit-old and 5946 classification-pending**. The separate unclassified bucket is zero. Native-history includes retaining controls; those controls are not positive bounded-memory proof.
+Verified cases are **6495 passes, 64 failures and zero skips**. The recorded aggregate is 6502 passes; seven inconsistent runner XML passes remain unverified and excluded from classifications. Passing classifications reconcile to 6495: **277 native-history, 311 shared/public, 42 explicit-old and 5865 classification-pending**. The separate unclassified bucket is zero. Native labels include retaining controls; those controls are not positive bounded-memory proof.
 
-There are **1101 retained attempt records**. Only `attempt-final-journal-i-a` is newly accepted after `provider-final-journal-h-a`. Seventeen of its twenty files belong to the original inventory; the new retaining suite and two core suites are supplemental. The five original red files, with eight passes/fourteen failures, are replaced by twenty-two final selected-native passes. Diagnostics, the retention trap and outer-old comparison remain outside accepted package totals. No completed product gate or matrix was rerun for accounting.
+There are **1162 retained attempts**. Newly accepted batches are only `density-core-b-final-journal-j-a` and `density-final-journal-j-a`, in that order. Nineteen distinct inventory paths have current density evidence; six supplemental core paths do not enlarge the inventory. Later lifecycle evidence supersedes its earlier five-case source. Diagnostics, traps and outer-old comparisons remain outside accepted totals. Relative to the preceding checkpoint, verified passes increase by 21 and failures decrease by 16.
 
-Generation: `b530937c-8556-4416-9711-9945af11692e`, published at 00:49:43Z. Full ledger, failure table, missing evidence and publication checksums are frozen under `tmp/854-notes/p4/w22/attempt-value-run-i/frozen-final/`. `W22-ATTEMPT-VALUE-PROOF.json` records source hashes, exact case/PID/gate evidence, classifications, preserved assertions, controls and all unresolved paths. `W22-REMAINING-FAMILIES.tsv` is the exact **39-path** open list.
+Generation: `7ff32ea1-af78-41a5-a87a-c4d1da7b17ef`. Full ledger, failure table, missing evidence and publication checksums are frozen under `tmp/854-notes/p4/w22/density-run-j/frozen-final/`. Compact source/PID/case/gate/control evidence: `W22-DENSITY-ACCOUNTING-PROOF.json`. Exact open queue: `W22-REMAINING-FAMILIES.tsv`, **33 paths**.
 
-## Attempt/value proof
+## Root causes and native proof
 
-The hook-only fixtures originally seeded the old recorder without estimating tokens. Native addBatch seeding estimated tokens and inadvertently entered strategy execution after the hook. That caused unexpected compression and rejected historical zero-block rows. The shared hook fixture now restores its original zero scalar token baseline through the public service API. Actual cursor traversal, complete-value digest checks and hook token estimation remain active; no runtime threshold changes.
+The initial six-file run had **35 passes/16 failures**, with complete XML and matching summaries. Three failures exposed production differences fixed at `051b9df52`:
 
-The value-lifetime wrapper lost native snapshot prototype methods through object spread. It now forwards rows, chronology and close explicitly. Its old indexed media participant is replaced by real HistoryMediaOwnership supporting both protocols. Published rows are counted through the real public stream at acknowledgment. The original weak-reference release, live lock, callback failure identity, rollback, anchor and retry assertions remain.
+- The native density transform did not charge the decoded original while resolving its addressed decision. Capture test PID 43094 observed zero owned rows. The transform now tracks and releases each original through the existing ownership mechanism.
+- Candidate token estimation omitted the old path's transient retry contract. Lifecycle PID 43105 propagated the first 503 instead of completing over its pinned source. Native estimation now uses the existing compression retry policy, retaining its attempts and delays.
+- Equal-position span merge gave replacement spans precedence over removals. Span-order PID 43378 observed a replacement covering 2..3 instead of replacement 2 plus removal 3. Removal spans now precede replacements before the stable sort/merge.
 
-The selected-recorder fixture replaces direct JSONL-only construction. It streams seeds, awaits commits and uses real journal positional-write barriers. Native durable assertions independently reopen both the primary and recorder mirror and compare their complete row digests with public history. The old enqueue admission fault is preserved. Native partial admission rejects the third candidate row at the real tokenizer boundary after two successful admissions. A physical writer failure poisons subsequent I/O and cannot establish this test's normal retry contract; that intermediate diagnostic remains separate. No production recovery wrapper or exception broadening was added.
+The remaining failures were fixture/API assumptions. Identical row digests at both scales show old seed totals of zero and native admitted totals of 795/12743. Effective accounting must retain those tokens plus the requested offset. No-read acquisitions are measured relative to fixture entry. Explicit context room preserves both original compression-decision assertions; a one-token infrastructure tokenizer and larger thoughts make the unchanged zero clamp assertion meaningful.
 
-All **67 original assertion expressions**, parameter domains and timeouts remain, with selected-backend durable/failure fixture-name normalization only. The 512/8192 scales, 440-row/8 MiB bounds, hook row over eight MiB and nine-MiB value row remain unchanged. The three attempt test files themselves are byte-unchanged from the parent.
+High-density fallback constructed an old-only recorder and assumed its zero admission baseline. The selected real recorder fixture, awaited addBatch and native admitted no-op/failure cases now exercise the current protocol. The original zero-baseline cases remain explicitly old. The type suite checks the current `compressDisk` public entrypoint; absence-of-optimize assertions remain through the strategy interface.
 
-Final matrix: **twenty files per outer backend, 96 passes each, 192 total, zero failures/skips**. Journal classifications: 84 native-history, eight shared/public, four explicit-old. Outer-old has 52 explicit-old and 44 explicitly native cases. The five targets contribute twenty-two native cases covering public pinned membership, cancellation/close, estimation, source/stream ownership, acknowledgment failure, complete persisted rows, compensation and retry. Reused native value-contract, publication/media and borrowed-snapshot suites supply additional behavior rather than blanket old selection. Accepted inventory files contribute 54 native, eight shared/public and four explicit-old passes; supplemental files do not enlarge the 806-path inventory.
+The six final targets pass **56 cases per outer backend**, zero failures/skips. Selected-journal classification is **20 native, 31 shared/public and five explicit-old**. Native density lifecycle adds partial admission/rollback/retry at 512/8192 rows and rejected publication with restored chronology. It checks complete public rows against independently reopened primary and mirror row trees, token/offset/anchor/range restoration, original failure identity and released owners. Existing native fallback value, cancellation, queued publication, source lifetime, media and publication-shape suites actually ran. Native coverage is not inferred from pinned old cases.
 
-The retaining trap, test PID **37921**, exits one with **zero passes/four failures**, at the unchanged within-bounds predicate for complete reference/copy retention at both scales. It fails by assertion, with no timeout or unrelated exception. The trap is separate from the green matrices and census.
+Original assertion count is not reduced: **109 of 112 expressions remain verbatim**. Three expressions account for admitted tokens, relative acquisitions or the renamed public API. All original parameter domains, timeouts, 512/8192 scales, 440-row/8 MiB bounds and nine-MiB surviving row remain. The AST preservation receipt records every difference and its reason.
 
-All ten saved source-bound gates passed: API surface, declaration build, core types, agents types, agents Bun types, touched-path types, explicit zero-warning ESLint, Prettier, affected graph and AST test audit. No touched audit findings before or after. All **24 matrix/helper hashes** match the worktree and committed blobs. Affected-graph validation does not establish affected-shard execution.
+## Matrices, controls and gates
+
+Four retained phase batches contain **56 isolated processes, 370 passes, two failures and zero skips**. Three paths repeat per outer setting. After taking the latest source once per path, the effective matrix is **25 files per backend**: journal **177 passes/two failures**, old **179 passes/zero failures**, zero skips. The two journal failures are the unchanged middleout-disk cases, with the exact prior source hash, case statuses and counts. Outer-old passes those cases. They are not repaired or relabeled green. The original broad verifier stopped on that known red; the completion driver separately validated it and finished the existing old matrix.
+
+Effective journal classifications are 115 native/45 shared-public/17 old. Effective outer-old classifications are 74 internally native/45 shared-public/60 old. Supplemental and repeated executions are separate from the 806-path census.
+
+The retaining trap, test PID **51671**, exits one with **zero passes/four failures** at the unchanged 440-row predicate. Both reference and complete-copy retention fail at 512/8192 rows, without timeout or unrelated error. Those failures remain outside positive and accepted totals.
+
+All ten saved final product gates pass: API surface, declarations, core types, agents types, agents Bun types, touched-path types, zero-warning no-ignore ESLint, Prettier, affected graph and AST audit. **All 37 effective source hashes**, including two census paths, match worktree and committed blobs. Earlier lifecycle hashes remain historical, not current proof. No successful heavy gate or matrix was rerun for finalization. Graph validation does not establish shard-test execution.
+
+The audit retains its pre-existing structure-only API notice and five new SELF_CONFIRMING notices. The latter compare pre-attempt token/offset/durable state with independent post-rollback observations across real rejected compression. They are conservation assertions, not echo assertions. Exact equality and scanner policy remain unchanged; no suppression was added.
 
 ## Census oracle integrity
 
-The initial census acceptance test failed because it selected provider PID 100 rather than attempt PID 130. The new acceptance layer selects only the final journal batch. Its new classifications require the exact path/classname/name and recorded test source hash. Matching case names from outer-old, unknown-backend and diagnostic attempts do not inherit this cluster's native labels. A mismatched classification source hash stays pending. Earlier classification contracts retain their earlier scope.
+Acceptance initially failed at stale PID 130 instead of density PID 180. The final layer selects only the two final journal batches. Density labels require exact path/classname/name, accepted journal batch and matching source hash. Old, unknown and diagnostic attempts do not inherit these labels; source mismatch remains pending. Existing missing/inconsistent evidence rules are unchanged.
 
-A source-guard mutation actually removed the hash requirement. The census test then failed with native-history where classification-pending was required. The runner was restored in finally and compared byte-identically with cmp, followed by a passing test. Explicit final formatting followed; the final formatted boundary passes **seven tests/82 assertions**, strict types, no-ignore zero-warning lint and explicit formatting checks. No existing oracle assertion was removed or relaxed.
+Removing only the density source-hash guard produced the expected native-versus-pending failure. Final-source restoration passed actual `cmp` with exit zero, then **seven tests/92 assertions**, strict types, explicit no-ignore zero-warning lint and explicit formatting passed. An earlier control was byte-restored before its acceptance-reference path changed; the final control covers the exact committed boundary. A standalone type invocation initially omitted the required `.ts` import option; its corrected invocation passed without source changes. Both logs remain retained.
 
-## Unverified evidence stays open
+## Missing evidence and remaining families
 
-Four latest files lack XML and a complete summary after their recorded outer SIGTERM: `middleout-disk-{large-request,publication-owners}` and `oneshot-disk-{large-request,publication-owners}`. Counts remain unknown. The publication logs contain first-case timeouts; large-request logs have no completed case summary. They were attempted, not skipped or unrun.
+Four latest missing-XML files remain unknown: middleout-disk-{large-request,publication-owners} and oneshot-disk-{large-request,publication-owners}. Their outer terminations and incomplete summaries are not zero-count measurements. Keep these four files separate from **22 historical missing attempts**.
 
-The fifth file is `test-bun/run-bun-tests.issue3253.bun.ts`, PID 62524. Exit zero and XML/final outer summary say seven passes, but the parsers captured an earlier nested child's one-pass summary. It remains inconsistent-record-unverified. This cluster did not repair that parser family or rerun the suite.
+The fifth unverified file is `test-bun/run-bun-tests.issue3253.bun.ts`, PID 62524. XML/final outer summary report seven passes, while the parser captured a nested child's one-pass summary. It stays inconsistent-record-unverified. Original admission PID 98836 remains missing at its original source; later PID 19211 has three passes at a different source hash. Later success does not reconstruct missing original evidence.
 
-Keep **22 historical missing attempts** distinct from **four latest missing files**. Original profile-admission PID 98836 has no XML/complete summary. Later selected PID 19211 has three passes at a different source hash. Later success does not reconstruct the original missing result. Frozen evidence preserves both.
+| Family                                   | Red files | Unverified files |
+| ---------------------------------------- | --------: | ---------------: |
+| Middle-out request/publication           |         5 |                2 |
+| One-shot request/publication             |         5 |                2 |
+| Conversation observations/model stamping |         5 |                0 |
+| Child ownership/transport                |         3 |                0 |
+| Retained growth and its controls         |         3 |                0 |
+| Send snapshot count                      |         1 |                0 |
+| Deferred acknowledgement                 |         1 |                0 |
+| Semantic purge                           |         2 |                0 |
+| Stream request demand                    |         2 |                0 |
+| Turn media rollback                      |         1 |                0 |
+| Runner summary accounting                |         0 |                1 |
+| Total                                    |        28 |                5 |
 
-## Remaining families
+Next candidate family is middle-out request/publication, including its two missing-evidence files, in a subsequent task. No diagnosis or implementation for that family or one-shot began here. Other families remain separate; grouping does not prove a shared cause. There is no pending package sweep to resume.
 
-Grouping labels do not establish shared root causes. The TSV gives exact paths, states, PIDs, hashes, batches and counts. The proof JSON includes failed cases and raw references.
-
-| Family                                    | Red files | Unverified files |
-| ----------------------------------------- | --------: | ---------------: |
-| Density capture/lifecycle/span accounting |         3 |                0 |
-| Effective token count                     |         1 |                0 |
-| High-density fallback rollback            |         1 |                0 |
-| Middle-out request/publication            |         5 |                2 |
-| One-shot request/publication              |         5 |                2 |
-| Strategy type contract                    |         1 |                0 |
-| Conversation observations/model stamping  |         5 |                0 |
-| Child ownership/transport                 |         3 |                0 |
-| Retained growth and its controls          |         3 |                0 |
-| Send snapshot count                       |         1 |                0 |
-| Deferred acknowledgement                  |         1 |                0 |
-| Semantic purge                            |         2 |                0 |
-| Stream request demand                     |         2 |                0 |
-| Turn media rollback                       |         1 |                0 |
-| Runner summary accounting                 |         0 |                1 |
-| Total                                     |        34 |                5 |
-
-Next cluster: density-disk capture owners, lifecycle and span order, after reading their individual failure inputs. Effective-token counting and high-density fallback remain separate candidates; do not assume they share a cause. Middle-out and one-shot request/publication contracts, including their missing evidence, remain open. There is no pending package sweep to resume.
-
-Verification driver **22627**, supervisor **22625**, bash **22626**, both final matrix drivers, trap driver and all recorded children/gates are absent. Receipt: `tmp/854-notes/p4/w22/attempt-value-run-i/final-owned-processes.log`. W23-W26 and scratch removal remain open; the old default is unchanged. Review skipped per Andrew 2026-10-09. No OCR, project cleanup/deletion, obstruction move, `.llxprt/` edit/staging, raw recovery bulk staging, push or merge. Unrelated dirty memory and recovery artifacts remain untouched.
+Owned completion driver **70429**, serial driver **70431** and every recorded matrix/gate child are absent. Receipt: `density-run-j/final-owned-processes.json`. W22 and W23-W26, pending classifications and scratch removal remain open; old default unchanged. Review skipped per Andrew 2026-10-09. No OCR, cleanup/deletion, obstruction move, `.llxprt/` edit/staging, raw recovery bulk staging, push, merge, skip or weakened enforcement. Unrelated dirty memory and recovery artifacts remain untouched.

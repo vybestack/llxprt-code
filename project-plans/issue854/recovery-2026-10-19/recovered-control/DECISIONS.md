@@ -1,5 +1,23 @@
 # Recovered decision guidance
 
+## W22 density/accounting finalization decisions, 2026-10-20T01:27:55Z
+
+Commit the green fixture/census source before accounting or another repair family. Source `12705c2bd` contains eight explicit paths, following production `051b9df521ae50b08ae66bcd99ed61525c32efa4`. Reuse the ten successful saved product gates and completed journal evidence. Monitor the existing old matrix instead of duplicating it. Retain the broad verifier's known-red stop and use the completion driver to prove the unchanged journal middleout-disk failure boundary. Do not call that matrix wholly green or repair the next family during finalization.
+
+Charge each decoded density original during its addressed decision, apply the existing transient compression estimation policy to the same pinned candidate, and order removals before replacements for equal-position span merging. Keep these production causes separate from fixture mismatches. Exact initial RED PIDs/cases/logs and final hashes are in W22-DENSITY-ACCOUNTING-PROOF.json. No new production changes were needed in this finalization.
+
+Keep native admitted token totals rather than imposing the old recorder's zero seed baseline. Compare identical input digests, add the requested offset, measure acquisition deltas from fixture entry and supply context/clamp inputs that test the original boundaries. Preserve both original compression-decision assertions and the zero clamp. Select actual recorder protocols for fallback; retain original old zero-baseline behavior explicitly old and RUN native admitted no-op/failure equivalents. Native density rollback/publication must compare public rows with independently reopened primary/mirror rows, preserve error/accounting/chronology and permit retry. Do not substitute pinned old tests for these contracts.
+
+All original domains/timeouts/scales/owner bounds remain, and assertion count is not reduced. Preserve 109/112 expressions verbatim; document the three accounting/API expression changes individually. Keep the five new audit conservation notices: they compare state before real rejected compression with state afterward, rather than asserting a configured echo. Do not rewrite equality to silence the scanner or change audit policy. The old structure-only API check follows the renamed public entrypoint; real related behavior remains separately executed.
+
+Treat 56 phase processes/370 passes/two failures separately from the latest-source 25-file-per-backend matrix: journal 177/2, old 179/0. Earlier lifecycle source is superseded, not claimed current. The six targets are 56/0 each and supply 20 native/31 shared-public/five old cases on journal. All 37 effective hashes match committed blobs/worktree. Retaining PID 51671 must reject all four original ownership predicates. Preserve that trap outside accepted positive totals.
+
+Accept only the two completed final journal batches, with exact source-bound density case contracts. Old/unknown/diagnostic attempts and source mismatches must not inherit the labels. The final source-guard mutation rejects, restores byte-identically with cmp and passes seven tests/92 assertions plus strict types, explicit lint and format. Its final run is necessary because the acceptance-reference path changed after the earlier byte-restored control. Correct the standalone compiler's missing .ts-import option rather than alter source or weaken types; retain both invocation logs.
+
+Publish only the completed delta: **773 green/28 red/five unverified**, 6495 verified passes/64 failures/zero skips, classification 277 native/311 shared-public/42 old/5865 pending. Recorded 6502 passes still contain seven inconsistent runner XML passes excluded from verified classification. Keep 1162 attempts, 22 historical missing attempts, four latest missing files and the separate inconsistent runner file. Frozen ledger/checksums live in density-run-j/frozen-final; the exact remaining queue has 33 paths. No full-package green/native claim follows.
+
+Next candidate is middle-out request/publication in a later task. Do not begin it or one-shot here. All owned verification PIDs are absent. W22/W23-W26, pending classification and scratch removal remain open, and old default stays. Review skipped per Andrew 2026-10-09. No cleanup/deletion, obstruction move, .llxprt edit/staging, raw recovery bulk staging, OCR, push, merge, skip or weaker enforcement.
+
 ## W22 attempt/value finalization decisions, 2026-10-20T00:49:43Z
 
 Commit the completed green source before accounting or another family. Source `ca62b6bc22b8e66e62cf889d7944998746fa407a` contains exactly five intended test/support paths. Reuse hash-matched successful gates and journal results; let the owned old matrix/trap finish instead of starting duplicates. Both twenty-file matrices have 96 passes, zero failures/skips, and all ten scoped gates pass. All 24 recorded source hashes match committed blobs/worktree. Preserve all 67 original assertions/domains/timeouts, scales and owner bounds. No production change was needed.
@@ -66,19 +84,19 @@ W22 remains partial, W23-W26 open, old default unchanged, no 802 reset; W26 scra
 
 This is a reconstructed index, not the original complete DECISIONS file. Eleven D-ORCH append bodies are preserved verbatim under `fragments/DECISIONS/`; source timestamp, seq, command and result are indexed in `provenance.json` and `../extracts/index.json`. Other per-slice decisions survive only as quoted fragments or task reports. The recreated post-incident DECISIONS file is preserved separately.
 
-| Decision | Current-recording command seq | Recovered substance |
-|---|---:|---|
-| D-ORCH-1 | 119 | Trailer-answerable reads stay synchronous. Content reads become async, without cached last rows. Counts and chronology come from aggregates. |
-| D-ORCH-2 | 135 | Leave old-store internals alone. Make public methods async and delegate complete operations through the port. Fix the producer-error lifecycle blocker before the flip. |
-| D-ORCH-3 | 155 | Async detached sink operations provide row-by-row backpressure without another bounded channel. |
-| D-ORCH-4 | 163 | Unchanged and cut-tail publications preserve their operation semantics; append reads aggregates; batch notifications follow one explicit lifetime contract. |
-| D-ORCH-5 | 227 | Preserve owners through explicit source ordinals, not object identity. Synthetic rows use the operation's named origin. |
-| D-ORCH-6 | 255 | Compaction keeps commitSeq/groupTag. Every offset-based reader holds and releases a pin. |
-| D-ORCH-7 | 261 | Accept wiring decisions with W26 required before final proof; measure double writes in W24 and choose from that evidence. |
-| D-ORCH-8 | 305 | Delete caller-free G5 mutation methods and fallback; port tests through production APIs without weaker assertions. |
-| D-ORCH-9 | 341 | Run W12/W13/W20 before W11 and recorder-fixture classification. Fix broken retention traps at their cause. |
-| D-ORCH-10 | 373 | No backend-conditioned skips. Construct the old implementation explicitly for old internals and record native behavioral counterparts or an explicit old-only reason. |
-| D-ORCH-11 | 411 | Detaching an adopted primary first moves the store to a streaming clone in the mutation queue, then closes the recorder. Recording off must stop writes to that session file. |
+| Decision  | Current-recording command seq | Recovered substance                                                                                                                                                           |
+| --------- | ----------------------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-ORCH-1  |                           119 | Trailer-answerable reads stay synchronous. Content reads become async, without cached last rows. Counts and chronology come from aggregates.                                  |
+| D-ORCH-2  |                           135 | Leave old-store internals alone. Make public methods async and delegate complete operations through the port. Fix the producer-error lifecycle blocker before the flip.       |
+| D-ORCH-3  |                           155 | Async detached sink operations provide row-by-row backpressure without another bounded channel.                                                                               |
+| D-ORCH-4  |                           163 | Unchanged and cut-tail publications preserve their operation semantics; append reads aggregates; batch notifications follow one explicit lifetime contract.                   |
+| D-ORCH-5  |                           227 | Preserve owners through explicit source ordinals, not object identity. Synthetic rows use the operation's named origin.                                                       |
+| D-ORCH-6  |                           255 | Compaction keeps commitSeq/groupTag. Every offset-based reader holds and releases a pin.                                                                                      |
+| D-ORCH-7  |                           261 | Accept wiring decisions with W26 required before final proof; measure double writes in W24 and choose from that evidence.                                                     |
+| D-ORCH-8  |                           305 | Delete caller-free G5 mutation methods and fallback; port tests through production APIs without weaker assertions.                                                            |
+| D-ORCH-9  |                           341 | Run W12/W13/W20 before W11 and recorder-fixture classification. Fix broken retention traps at their cause.                                                                    |
+| D-ORCH-10 |                           373 | No backend-conditioned skips. Construct the old implementation explicitly for old internals and record native behavioral counterparts or an explicit old-only reason.         |
+| D-ORCH-11 |                           411 | Detaching an adopted primary first moves the store to a streaming clone in the mutation queue, then closes the recorder. Recording off must stop writes to that session file. |
 
 These entries summarize recovered instructions. Their full language is in `seq-<number>-append.txt`. Paired shell responses appear at the next seq except when concurrent tool results share a record; use callId in the index rather than assuming ordering alone proves execution.
 
@@ -216,7 +234,6 @@ Final settled proof is 70 serial processes/656 passes/0 failures/0 skips, eight 
 
 W21's owned named queue is DONE only at the boundaries listed in W21-REMAINING-CONTRACTS.md, including earlier reference/generation/large-row/crash/transport proof. Do not infer full-package/shard/monorepo closure, start W22, decide W24 topology or flip defaults. No .llxprt edit, raw recovery staging, cleanup, weaker check, pattern kill, OCR, push or merge. Review skipped per Andrew 2026-10-09. Historical deleted logs remain missing.
 
-
 ## W22 first agents fixture decisions, 2026-10-19
 
 The current W22 instruction authorizes the agents package sweep after W21's named closure. Discover both package runner sets, including test-bun, before tests. Keep an exact pending path list and separate native-history cases, journal-selected shared/public cases, explicitly old comparison executions and non-executed loader attempts. Do not turn affected-graph validation or W21 closure into a package-test claim.
@@ -226,7 +243,6 @@ Use backend-selected real suffix/recorder fixtures and async row observations. C
 The external volume ran out of space during seeding, before the intended fault. Keep those failed attempts distinct. Place only new test HOME/TMPDIR isolation roots on available system-volume space; keep raw logs/inventory/JUnit in the workspace. Do not delete/truncate retained artifacts or silently weaken row scales. Individually verified ignored MCP declaration obstructions move intact to unique held paths, including output recreated by the declaration gate. No other generated directory is moved without a demonstrated obstruction.
 
 All eight scoped gates pass, all 3317 captured source hashes match and touched audit findings are zero. Four final native changed-test executions and four separate old executions pass; all four unchanged native retaining traps reject. The first twenty package files account for 147 current passing cases, including 26 native history contracts and 121 shared/public cases. W22 remains incomplete. W26's temporary compression scratch candidates are scheduled for removal within this PR; no final scratch exemption follows from this fixture work. Default/deletion/topology decisions remain with W24-W26. No OCR, .llxprt edit, broad recovery staging, cleanup command, push/merge or enforcement weakening. Review skipped per Andrew 2026-10-09.
-
 
 For the boundary RED, retain the guard absolutely. Use the existing agents withHistoryBackend helper instead of a core/src test-only import; both old/native export bodies and all fifteen assertion ASTs remain unchanged. The old export case is counted explicitly old only because its native equivalent actually ran. Three export SELF_CONFIRMING notices and one DUP_ASSERT notice are identical before/after and cover conservation across operations; preserve the findings, not a scanner exemption.
 

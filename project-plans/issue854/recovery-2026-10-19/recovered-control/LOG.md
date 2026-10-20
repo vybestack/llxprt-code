@@ -1,5 +1,19 @@
 # Recovery chronology, reconstructed
 
+## W22 density/accounting finalized, 2026-10-20T01:27:55Z
+
+Continued the existing WIP from production commit `051b9df521ae50b08ae66bcd99ed61525c32efa4`. Read density-run-j's current driver, final hashes, logs, original preservation and gate records before any execution. Monitored owned completion PID 70429/serial PID 70431 to normal completion; no overlapping heavy lane or duplicate successful gate was launched. The broad journal verifier had stopped on the unchanged middleout-disk red. Its completion driver verified that exact baseline and finished outer-old without changing the open family.
+
+Committed eight explicit fixture/census paths first as `12705c2bd`. The six targets pass 56 cases per backend, zero failures/skips, with selected-journal 20 native/31 shared-public/five old. Native density adds 512/8192 partial admission/retry and rejected-publication proof; high-density uses actual selected recorder protocols and independently reopened primary/mirror rows. The three committed production causes are decoded-original ownership, missing existing transient estimation retry semantics and equal-position removal precedence. Their initial PIDs 43094/43105/43378 failed 0/1, 4/1 and 0/1 respectively. The entire initial six-file run was 35 pass/16 fail. Token fixture and public-API assumptions are recorded separately, including identical input digests and native admitted 795/12743 totals versus old zero.
+
+Four phase batches have 56 processes/370 passes/two failures/zero skips. Latest-source deduplication gives journal 177/2 and old 179/0 across 25 files each; only the unchanged journal middleout-disk cases fail. All ten saved product gates pass and all 37 effective hashes match worktree/committed blobs. Original domains, timeouts and ownership bounds remain; 109/112 expressions remain verbatim, with three explained accounting/API updates and no reduced assertion count. The audit's five new strict rollback-conservation notices and prior structure-only API notice are retained without suppression or policy changes.
+
+Retaining PID 51671 rejects four unchanged 440-row predicates, with no timeout. The final census source-hash guard mutation rejects the exact pending-versus-native assertion, then restoration passes actual cmp zero and seven tests/92 assertions. Strict census types, explicit zero-warning lint and formatting pass. The standalone type command initially omitted the required .ts import option; only the pending failed invocation was corrected, without source changes or rerunning successful product proof. The final control also covers the acceptance-reference path changed after the earlier restored control.
+
+Published generation `7ff32ea1-af78-41a5-a87a-c4d1da7b17ef`: **806 attempted = 773 green + 28 red + five unverified**, zero unattempted; **6495 verified passes/64 failures/zero skips**. Recorded 6502 includes seven inconsistent runner XML passes still excluded. Classifications: 277 native/311 shared-public/42 old/5865 pending, separate unclassified zero. Exactly six red files become green. Nineteen current density inventory paths and six supplemental core paths remain distinct. Retained attempts: 1162; historical missing attempts: 22; latest missing files: four, plus the separate inconsistent runner file.
+
+Durable proof is W22-DENSITY-ACCOUNTING-PROOF.json; complete checksummed ledger is density-run-j/frozen-final; W22-REMAINING-FAMILIES.tsv lists all 33 open paths. STATUS/proof map describe native mappings and limits. All recorded owned PIDs, including 70429/70431, are absent. Next candidate is middle-out request/publication in a later task; no middle-out or one-shot repair started. W22/W23-W26, classification and scratch removal remain open; old default unchanged. Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, .llxprt edit/staging, raw recovery bulk staging, OCR, push, merge, skip or enforcement weakening.
+
 ## W22 attempt/value committed and census accepted, 2026-10-20T00:49:43Z
 
 Finalized only the existing attempt/value WIP from `f622ef6923a9b16b76eea039516bba6b07d8e091`. Read run-i's driver, current state, initial/final logs, preservation evidence and actual diff. Reused all ten successful gates and the completed journal matrix. Monitored original-backend driver 34944 to normal completion, then the existing retention trap. No duplicate heavy lane or full suite was launched.
@@ -66,19 +80,19 @@ The phase-four planner reported its S00-S16 plan at current recording seq 100 on
 
 Later recorded task reports establish these work states:
 
-| Seq | Recorded result |
-|---:|---|
-| 432 | W15 owner/fork/offset proofs reported complete at `a5d715d29` |
-| 434 | W16 child session wiring reported complete at `c165a80e4` |
-| 436 | W17 production wiring committed; wider lifecycle/fault proofs remain partial |
-| 446 | W18 package and slash-command gaps reported closed |
-| 448 | W19 snapshot/media scan work committed at `b647d7dc1` |
-| 452 | Producer-error blocker reported fixed at `243558304`, with 512/8192 cases on both backends |
-| 506 | W11 original92/original37 closure reported at `b0f58ec58`; exact tables later lost |
+| Seq | Recorded result                                                                                     |
+| --: | --------------------------------------------------------------------------------------------------- |
+| 432 | W15 owner/fork/offset proofs reported complete at `a5d715d29`                                       |
+| 434 | W16 child session wiring reported complete at `c165a80e4`                                           |
+| 436 | W17 production wiring committed; wider lifecycle/fault proofs remain partial                        |
+| 446 | W18 package and slash-command gaps reported closed                                                  |
+| 448 | W19 snapshot/media scan work committed at `b647d7dc1`                                               |
+| 452 | Producer-error blocker reported fixed at `243558304`, with 512/8192 cases on both backends          |
+| 506 | W11 original92/original37 closure reported at `b0f58ec58`; exact tables later lost                  |
 | 510 | W21 part one committed at `7411cff7b`; worker reports ignored-file cleanup incident and W21 partial |
-| 512 | Direct read records the existing incident document and repository state |
-| 514 | Docwriter reports three placeholder recovery documents, without complete extraction |
-| 517 | Recovery task directs structured payload extraction and corrects source path/presence claims |
+| 512 | Direct read records the existing incident document and repository state                             |
+| 514 | Docwriter reports three placeholder recovery documents, without complete extraction                 |
+| 517 | Recovery task directs structured payload extraction and corrects source path/presence claims        |
 
 Exact source timestamps are in `../extracts/index.json`. The current recording is `session-2026-10-16T15-54-19-3851f0a8-d63.jsonl` in the manifest's chats directory. Seq numbers refer only to that recording, not persisted history indices.
 
@@ -242,7 +256,6 @@ Raw new evidence: `tmp/854-notes/p4/w21/discovery-remainder/run-20261019-HGigU4/
 
 W21's owned named gaps are DONE, including earlier service defects 1–5, public lifecycle/ownership, generated/unstamped replay, referenced media, service large rows/crash and next-request transport variants within their prior documented boundaries. No full-package/affected-shard/monorepo result is claimed. W22 is not started. W23 send/planning, W24 whole-product/write-amplification/topology, W25 default/deletion and W26/later requirements remain separate.
 
-
 ## W22 agents package sweep started, 2026-10-19
 
 Verified `issue854` at `b1714cdea75dd297a122b443b853bbe36b1cead5`. Created inventory/status before tests using both package discovery functions: 799 source files plus seven test-bun files, 806 total, no exclusions. Every test file runs alone from packages/agents in a serial recorded-PID background driver with child-only journal selection. W21's named queue remains closed within its documented scope; no package sweep was inherited from W21.
@@ -254,7 +267,6 @@ The first twenty attempts failed before test bodies because generated MCP declar
 All eight gates pass: API surface, declaration build, agents no-emit/Bun types, three-path zero-warning ESLint/Prettier, affected graph and AST audit. No touched audit findings. All 3317 captured agents/core/test-utils TypeScript hashes match. Graph validation is not affected-shard execution. The ordinary commit was retried only after a transient index lock was confirmed absent; no lock was modified.
 
 Cumulative first-batch proof is twenty green files/147 cases: 26 native history-specific and 121 journal-selected shared/public, zero current failures/skips. Four old comparison executions remain separate. The next twenty package paths are now running with stop-after-first-failure, not an exclusion list. Exact current counts/PIDs and remaining inventory belong to W22-STATUS.md and W22-PROOF-MAP.md; raw new evidence is tmp/854-notes/p4/w22/run-20261019-a/. W22 remains incomplete. W23-W26/default/deletion/later phases remain separate. Review skipped per Andrew 2026-10-09. No OCR, push, merge, cleanup command, .llxprt edit, broad recovery staging or weaker check.
-
 
 ## W22 boundary fixture and running-package checkpoint
 
