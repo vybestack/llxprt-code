@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   withFallbackFixture,
   fallbackHarness,
@@ -24,23 +23,10 @@ async function paused(size: number): Promise<number> {
   let live = 0;
   await withFallbackFixture(
     size,
-    async ({ history, owners, reads, before }) => {
+    async ({ history, owners, reads, before, pausePublication }) => {
       const ready = deferred();
       const gate = deferred();
-      let rejecting = true;
-      await history.registerMediaOwner(
-        mediaParticipant((input) => ({
-          rollback: () => {},
-          publish: async () => {
-            if (!rejecting) return;
-            for (const _row of input.next) {
-              ready.resolve();
-              await gate.promise;
-              throw new Error('paused provider publication rejected');
-            }
-          },
-        })),
-      );
+      await pausePublication(ready.resolve, gate.promise);
       const { runtime, transport } = middleoutSetup(history);
       const harness = fallbackHarness(
         history,
@@ -81,7 +67,6 @@ async function paused(size: number): Promise<number> {
       expect(owners.snapshot().liveRows).toBe(0);
       expect(history.getCacheAnchorSeq()).toBe(1);
       expect(harness.baseline()).toBe(123);
-      rejecting = false;
     },
   );
   return live;

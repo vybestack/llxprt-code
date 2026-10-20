@@ -4,10 +4,16 @@ import { vi } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import {
-  AdmissionFailureRecorder,
-  exactTokenizer,
-} from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+  fallbackRecordingFault,
+  assertFallbackCommitted,
+} from './support/fallback-recording-fault.js';
+import { FallbackPublicationOwner } from './support/fallback-publication-owner.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import {
   createRowCounters,
   type RowCounters,
@@ -60,10 +66,15 @@ export class FallbackDiskHistory extends HistoryService {}
 
 export interface FallbackFixture {
   history: FallbackDiskHistory;
-  recorder: AdmissionFailureRecorder;
+  recorder: Pick<SessionRecordingPort, 'flush'> & {
+    failure: Error;
+    failAdmissionAfter(successes: number): void;
+  };
   reads: RowCounters;
   owners: RowOwnership;
   before: string;
+  failCompensation(): Promise<void>;
+  pausePublication(ready: () => void, release: Promise<void>): Promise<void>;
 }
 
 export async function withFallbackFixture(
@@ -71,7 +82,7 @@ export async function withFallbackFixture(
   action: (fixture: FallbackFixture) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'provider-fallback-journal-'));
-  const recorder = new AdmissionFailureRecorder({
+  const recorder = createRecorderForTest({
     sessionId: 'fallback',
     projectHash: 'fallback',
     chatsDir: root,
@@ -79,14 +90,24 @@ export async function withFallbackFixture(
     provider: 'test',
     model: 'test',
   });
+  recorder.recordSessionMetadata('provider fallback fixture');
+  const fault = await fallbackRecordingFault(root, recorder);
   const reads = createRowCounters();
   const owners = new RowOwnership();
-  const history = new FallbackDiskHistory({
-    recording: recorder,
-    attachmentCounters: reads.counters,
-    mutationOwnership: owners,
-  });
+  const history = fault.attach(
+    () =>
+      new FallbackDiskHistory({
+        recording: recorder,
+        attachmentCounters: { ...reads.counters, ownership: owners },
+        mutationOwnership: owners,
+      }),
+  );
   history.setTokenizerFactory(exactTokenizer());
+  const media = new LocalMediaStore({
+    rootDirectory: join(root, 'media'),
+    quotaBytes: 1024,
+  });
+  const owner = new FallbackPublicationOwner(media);
   try {
     await history.detachedValues.replace(
       (function* () {
@@ -96,14 +117,42 @@ export async function withFallbackFixture(
       'test',
       { publishTokens: true },
     );
+    await history.waitForCommit();
     await recorder.flush();
+    await history.registerMediaOwner(owner);
+    await history.settleMediaOwnership();
     history.setCacheAnchorSeq(1);
     history.setBaseTokenOffset(37);
     const before = await digestRows(history.streamRawHistory());
-    await action({ history, recorder, reads, owners, before });
+    await action({
+      history,
+      recorder: {
+        flush: () => recorder.flush(),
+        failure: fault.failure,
+        failAdmissionAfter: fault.failAdmissionAfter,
+      },
+      reads,
+      owners,
+      before,
+      failCompensation: async () => {
+        if (recorder instanceof SessionRecordingService)
+          fault.failAdmissionAfter(0);
+        else owner.rejectNext(fault.failure);
+      },
+      pausePublication: async (ready, release) => {
+        owner.rejectNext(new Error('paused provider publication rejected'), {
+          snapshot: await history.openDumpSnapshot(),
+          ready,
+          release,
+        });
+      },
+    });
+    await assertFallbackCommitted(history, recorder, root);
   } finally {
+    fault.restore();
     await history.dispose();
     await recorder.dispose();
+    await media.close();
     rmSync(root, { recursive: true, force: true });
   }
 }
