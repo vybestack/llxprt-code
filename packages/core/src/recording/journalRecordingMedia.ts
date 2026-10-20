@@ -110,7 +110,7 @@ export function recordingMediaEffect(
             );
         }
       } finally {
-        read.close();
+        await read.close();
       }
     },
   };

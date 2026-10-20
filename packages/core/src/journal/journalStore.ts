@@ -100,7 +100,7 @@ export interface CommittedGroup {
   readonly after: Version;
   readonly read: PinnedRead;
   readonly writtenLabels: readonly bigint[];
-  close(): void;
+  close(): void | Promise<void>;
 }
 
 /** The labels of the rows a group writes. A replace streams its rows, so it names none. */
@@ -143,6 +143,7 @@ export class JournalStore {
   private stateCache: IdNodeCache;
   /** Commits submitted and not yet finished; compaction runs when none is waiting. */
   private queued = 0;
+  private closing = false;
   /** Readers that hold a version across awaits; a swap waits for none (design 10.1). */
   private pins = 0;
   /** A compaction was due but a pin held it off; the last pin released evaluates the trigger again. */
@@ -258,8 +259,8 @@ export class JournalStore {
    * group. Groups run one at a time in the order they are submitted.
    */
   commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
-    return this.commitDetailed(edits).then((group) => {
-      group.close();
+    return this.commitDetailed(edits).then(async (group) => {
+      await group.close();
       return group.ack;
     });
   }
@@ -269,6 +270,8 @@ export class JournalStore {
    * to mirrors (design 5.2). The group holds a pin until the caller closes it.
    */
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+    if (this.closing)
+      return Promise.reject(new Error('The journal store is closed'));
     this.queued += 1;
     const turn = this.tail.then(() => this.runCommit(edits));
     this.tail = turn.then(noop, noop).then(() => this.afterCommit());
@@ -294,7 +297,7 @@ export class JournalStore {
    * reads of this class pin for their own duration; a caller that keeps a
    * `snapshot()`, a `recordAccess()` or a `CommittedGroup` across awaits pins.
    */
-  async pin(): Promise<() => void> {
+  async pin(): Promise<() => void | Promise<void>> {
     const read = await this.openRead();
     return () => read.close();
   }
@@ -308,6 +311,7 @@ export class JournalStore {
     while (this.compacting !== undefined) {
       await this.compacting.catch(noop);
     }
+    if (this.closing) throw new Error('The journal store is closed');
     return this.readOfPublished();
   }
 
@@ -317,13 +321,15 @@ export class JournalStore {
   }
 
   private newLease(): PinLease {
+    const release = this.writer.retainReader();
     this.pins += 1;
     return new PinLease(() => {
       this.pins -= 1;
-      if (this.pins === 0 && this.deferredByPin) {
+      if (!this.closing && this.pins === 0 && this.deferredByPin) {
         this.deferredByPin = false;
         this.tail = this.tail.then(() => this.compactWhenIdle());
       }
+      return release();
     });
   }
 
@@ -332,7 +338,7 @@ export class JournalStore {
     try {
       return await work();
     } finally {
-      read.close();
+      await read.close();
     }
   }
 
@@ -342,6 +348,8 @@ export class JournalStore {
    * would not rename over the open file.
    */
   compact(): Promise<SwapOutcome> {
+    if (this.closing)
+      return Promise.reject(new Error('The journal store is closed'));
     if (this.pins > 0) {
       return Promise.reject(
         new Error('A journal with a live pin cannot compact'),
@@ -353,6 +361,7 @@ export class JournalStore {
   }
 
   async close(): Promise<void> {
+    this.closing = true;
     await this.tail;
     await this.writer.close();
   }
@@ -369,11 +378,13 @@ export class JournalStore {
 
   /** A state map entry of the published version. */
   getState(key: string): Promise<Uint8Array | undefined> {
-    return this.whilePinned(() =>
-      mapReader(this.readContext(), 'state').get(
-        this.currentVersion?.roots.stateRoot ?? 0,
-        key,
-      ),
+    return this.whilePinned(() => this.getStateUnpinned(key));
+  }
+
+  private getStateUnpinned(key: string): Promise<Uint8Array | undefined> {
+    return mapReader(this.readContext(), 'state').get(
+      this.currentVersion?.roots.stateRoot ?? 0,
+      key,
     );
   }
 
@@ -387,7 +398,7 @@ export class JournalStore {
         this.currentVersion?.roots.stateRoot ?? 0,
       );
     } finally {
-      read.close();
+      await read.close();
     }
   }
 
@@ -425,7 +436,7 @@ export class JournalStore {
       if (root === undefined || this.access === undefined) return;
       yield* iterateRowEntries(this.access, root, from);
     } finally {
-      read.close();
+      await read.close();
     }
   }
 
@@ -475,6 +486,7 @@ export class JournalStore {
     const version = this.currentVersion;
     if (
       version === undefined ||
+      this.closing ||
       this.queued > 0 ||
       this.compactionFailure !== undefined
     ) {
@@ -568,7 +580,7 @@ export class JournalStore {
     let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
     const effect = this.commitEffect?.({
       read: this.buildContext().readGroup,
-      getState: (key) => this.getState(key),
+      getState: (key) => this.getStateUnpinned(key),
     });
     let ack: CommitAck;
     try {
@@ -653,7 +665,7 @@ export class JournalStore {
       published: this.currentVersion,
       readVersion: (offset) => this.readVersionUnpinned(offset),
       firstNextLabel: FIRST_NEXT_LABEL,
-      readState: (key) => this.getState(key),
+      readState: (key) => this.getStateUnpinned(key),
     };
   }
 

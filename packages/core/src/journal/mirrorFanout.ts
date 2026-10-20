@@ -62,6 +62,10 @@ export class MirrorFanout {
   private readonly links: MirrorLink[] = [];
   /** The mutation FIFO: commits and attaches run one at a time in the order they arrive. */
   private fifo: Promise<void> = Promise.resolve();
+  private readReleases: Promise<void> = Promise.resolve();
+  private releaseFailure:
+    | { readonly error: unknown; reported: boolean }
+    | undefined;
 
   constructor(private readonly primary: JournalStore) {}
 
@@ -72,7 +76,7 @@ export class MirrorFanout {
   /** Commits to the primary, queues the group's delta for every mirror, and returns when the primary has acked. */
   async commit(edits: readonly VersionEdit[]): Promise<CommitAck> {
     const group = await this.commitDetailed(edits);
-    group.close();
+    await group.close();
     return group.ack;
   }
 
@@ -87,7 +91,15 @@ export class MirrorFanout {
       const delta = deltaOf(group, edits);
       const release = group.read.hold();
       const applied = this.links.map((link) => this.deliver(link, delta));
-      void Promise.all(applied).then(release);
+      this.readReleases = Promise.all([
+        this.readReleases,
+        Promise.all(applied).then(release),
+      ]).then(
+        () => undefined,
+        (error: unknown) => {
+          this.releaseFailure ??= { error, reported: false };
+        },
+      );
       return group;
     });
   }
@@ -128,7 +140,7 @@ export class MirrorFanout {
       try {
         await this.bind(store, owner, read);
       } finally {
-        read.close();
+        await read.close();
       }
     });
   }
@@ -159,18 +171,24 @@ export class MirrorFanout {
   async flush(unreportedOnly = false): Promise<void> {
     await this.fifo;
     await Promise.all(this.links.map((link) => link.queue));
-    rethrowAll(
-      this.links.flatMap((link) => {
-        if (
-          link.failure === undefined ||
-          (unreportedOnly && link.failure.reported)
-        )
-          return [];
-        link.failure.reported = true;
-        return [link.failure.error];
-      }),
-      'Mirror fan-out flush failed',
-    );
+    await this.readReleases;
+    const failures = this.links.flatMap((link) => {
+      if (
+        link.failure === undefined ||
+        (unreportedOnly && link.failure.reported)
+      )
+        return [];
+      link.failure.reported = true;
+      return [link.failure.error];
+    });
+    if (
+      this.releaseFailure !== undefined &&
+      (!unreportedOnly || !this.releaseFailure.reported)
+    ) {
+      this.releaseFailure.reported = true;
+      failures.push(this.releaseFailure.error);
+    }
+    rethrowAll(failures, 'Mirror fan-out flush failed');
   }
 
   /**

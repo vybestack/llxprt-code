@@ -102,11 +102,11 @@ import type { ResumePoint } from '../../recording/journalResume.js';
 import { applyOperation, type JournalWriteHost } from './journalOps.js';
 import type { CurrentTurnMarker } from './historyChronology.js';
 
-/** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
+/** The published repair owns its original version's pin until `close`. */
 export interface JournalRepair {
   readonly inserted: IContent[];
   rollback(): Promise<void>;
-  close(): void;
+  close(): void | Promise<void>;
 }
 
 /** Opens the journal a store keeps its rows in; it must yield an empty journal. */
@@ -489,7 +489,7 @@ export class JournalHistoryStore implements HistoryStorePort {
       await waitForDetachedCapture(() => this.waitForDurable(), signal);
       this.assertSettled(snapshot, 'captured');
     } catch (error) {
-      snapshot.close();
+      await snapshot.close();
       throw error;
     }
     return snapshot;
@@ -640,7 +640,7 @@ export class JournalHistoryStore implements HistoryStorePort {
         this.options.counters,
       );
     } catch (error) {
-      snapshot.close();
+      await snapshot.close();
       throw error;
     }
   }
@@ -779,11 +779,11 @@ export class JournalHistoryStore implements HistoryStorePort {
         request.stamp,
       );
     } catch (error) {
-      snapshot.close();
+      await snapshot.close();
       throw error;
     }
     if (plan.inserts.length === 0 || snapshot.version === undefined) {
-      snapshot.close();
+      await snapshot.close();
       return {
         inserted: plan.inserted,
         rollback: async () => {},
@@ -865,7 +865,7 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */
   async releaseCompensation(mark: JournalCompensationMark): Promise<void> {
-    (await mark.saved).close();
+    await (await mark.saved).close();
   }
 
   /**
@@ -1062,10 +1062,10 @@ export class JournalHistoryStore implements HistoryStorePort {
         this.ack = group.ack;
         return group.ack;
       } finally {
-        group.close();
+        await group.close();
       }
     } finally {
-      snapshot.close();
+      await snapshot.close();
     }
   }
 

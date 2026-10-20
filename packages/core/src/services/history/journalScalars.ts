@@ -3,6 +3,7 @@ import type { Aggregate } from '../../journal/aggregate.js';
 import { EMPTY_AGGREGATE } from '../../journal/aggregateComposition.js';
 import { CHRONOLOGY_SEQ_NONE } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { releaseRead } from '../../journal/pinLease.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
@@ -26,6 +27,7 @@ export async function* streamSnapshotRows(
   query?: HistorySuffixQuery,
   signal?: AbortSignal,
 ): AsyncGenerator<IContent, void, unknown> {
+  let failure: { readonly error: unknown } | undefined;
   try {
     signal?.throwIfAborted();
     const start = await suffixStart(
@@ -46,8 +48,11 @@ export async function* streamSnapshotRows(
       }
     }
     signal?.throwIfAborted();
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    snapshot.close();
+    await releaseRead(snapshot, failure);
   }
 }
 
@@ -252,10 +257,14 @@ export async function withVersionSnapshot<T>(
   snapshot: VersionSnapshot,
   read: (snapshot: VersionSnapshot) => Promise<T>,
 ): Promise<T> {
+  let failure: { readonly error: unknown } | undefined;
   try {
     return await read(snapshot);
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    snapshot.close();
+    await releaseRead(snapshot, failure);
   }
 }
 

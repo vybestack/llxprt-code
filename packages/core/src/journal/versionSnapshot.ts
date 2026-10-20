@@ -50,13 +50,13 @@ export class VersionSnapshot {
   }
 
   /** Another hold on the snapshot's pin, for a reader that outlives its opener; the returned function releases it. */
-  hold(): () => void {
+  hold(): () => void | Promise<void> {
     return this.read.hold();
   }
 
   /** Releases the snapshot's pin. */
-  close(): void {
-    this.read.close();
+  close(): void | Promise<void> {
+    return this.read.close();
   }
 
   /** The number of live rows. */

@@ -13,13 +13,13 @@ import { JournalFormatError } from './errors.js';
 export class PinLease {
   private holders = 1;
   /** Releases the creator's hold. A second call is a mistake and throws. */
-  readonly close: () => void;
+  readonly close: () => void | Promise<void>;
 
-  constructor(private readonly onFree: () => void) {
+  constructor(private readonly onFree: () => void | Promise<void>) {
     this.close = this.releaser();
   }
 
-  hold(): () => void {
+  hold(): () => void | Promise<void> {
     this.require();
     this.holders += 1;
     return this.releaser();
@@ -33,14 +33,35 @@ export class PinLease {
     }
   }
 
-  private releaser(): () => void {
+  private releaser(): () => void | Promise<void> {
     let released = false;
     return () => {
       if (released) throw new Error('A journal pin was released twice');
       released = true;
       this.holders -= 1;
-      if (this.holders === 0) this.onFree();
+      if (this.holders === 0) return this.onFree();
+      return undefined;
     };
+  }
+}
+
+export function releaseRead(
+  read: { close(): void | Promise<void> },
+  failure?: { readonly error: unknown },
+): void | Promise<void> {
+  const rethrow = (cleanup: unknown): never => {
+    if (failure !== undefined) {
+      throw new AggregateError(
+        [failure.error, cleanup],
+        'Journal read and descriptor release failed',
+      );
+    }
+    throw cleanup;
+  };
+  try {
+    return read.close()?.catch(rethrow);
+  } catch (cleanup) {
+    return rethrow(cleanup);
   }
 }
 
@@ -96,11 +117,11 @@ export class PinnedRead {
   }
 
   /** Another hold on the pin, for a reader that outlives the one who opened this; the returned function releases it. */
-  hold(): () => void {
+  hold(): () => void | Promise<void> {
     return this.lease.hold();
   }
 
-  close(): void {
-    this.lease.close();
+  close(): void | Promise<void> {
+    return this.lease.close();
   }
 }

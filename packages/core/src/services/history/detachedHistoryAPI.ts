@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryStorePort } from './historyStorePort.js';
+import { releaseRead } from '../../journal/pinLease.js';
 import type { HistoryServiceCore } from './HistoryServiceCore.js';
 import type { ChronologyStamper } from './historyChronology.js';
 import type { SpanWindow } from './historySpanWindow.js';
@@ -80,7 +81,7 @@ export function notifyDetachedRows(
   history: HistoryServiceCore,
   ownership: RowOwnership | undefined,
   source: HistoryBatchRowSource,
-): void {
+): void | Promise<void> {
   try {
     history.emit(
       'contentBatchAdded',
@@ -101,9 +102,16 @@ export function notifyDetachedRows(
             retire: () => source.retire(),
           },
     );
-  } finally {
-    source.retire();
+  } catch (error) {
+    const released = releaseRead({ close: () => source.retire() }, { error });
+    if (released !== undefined) {
+      return released.then(() => {
+        throw error;
+      });
+    }
+    throw error;
   }
+  return source.retire();
 }
 
 export function createDetachedHistoryAPI(

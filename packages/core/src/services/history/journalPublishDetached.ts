@@ -67,7 +67,7 @@ export async function publishDetachedOnJournal(
   const failures: unknown[] = [];
   for (const close of [() => snapshot?.close(), () => task.dispose?.()]) {
     try {
-      close();
+      await close();
     } catch (error) {
       failures.push(error);
     }
@@ -295,7 +295,7 @@ async function finishPublication(
   const delta = candidate.tokens - previousTokens;
   if (options.publishBatch === true) {
     // One event, after the ack, over the committed version: observers never hear of rows a failed group dropped.
-    host.notifyRows(
+    await host.notifyRows(
       await store.committedBatch(appendOnly ? candidate.count : undefined),
     );
     host.notifyTokens(delta);

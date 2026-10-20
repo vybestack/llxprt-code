@@ -22,7 +22,7 @@ export interface HistoryBatchRowSource {
    * `retire` the passes already started finish, then the pin is released, and a
    * pass started later throws.
    */
-  retire(): void;
+  retire(): void | Promise<void>;
 }
 /**
  * What the old store's `contentBatchAdded` carries: the one row source

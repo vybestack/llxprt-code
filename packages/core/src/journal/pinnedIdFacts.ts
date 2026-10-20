@@ -12,7 +12,7 @@ export class PinnedIdFacts extends IdFactQueries {
     super(source, deps);
   }
 
-  close(): void {
-    this.read.close();
+  close(): void | Promise<void> {
+    return this.read.close();
   }
 }

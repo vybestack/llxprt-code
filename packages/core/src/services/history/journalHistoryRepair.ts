@@ -113,7 +113,7 @@ export async function planToolPairingRepair(
         unanswered.push({ afterLabel: entry.label, missing });
     }
   } finally {
-    facts.close();
+    await facts.close();
   }
   // Every existing marker has been seen by now, so a fresh one cannot collide with a later row.
   const plan: PlannedRepair = { inserted: [], inserts: [] };

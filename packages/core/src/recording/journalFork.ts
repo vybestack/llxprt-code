@@ -126,7 +126,7 @@ async function cloneIntoChild(
       },
     );
   } finally {
-    read.close();
+    await read.close();
   }
 }
 

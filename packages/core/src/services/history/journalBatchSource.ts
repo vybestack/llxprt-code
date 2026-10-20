@@ -30,10 +30,10 @@ export function committedBatchSource(
   let retired = false;
   let passes = 0;
   let closed = false;
-  const closeWhenIdle = (): void => {
+  const closeWhenIdle = (): void | Promise<void> => {
     if (retired && passes === 0 && !closed) {
       closed = true;
-      snapshot.close();
+      return snapshot.close();
     }
   };
   return {
@@ -60,12 +60,12 @@ export function committedBatchSource(
         }
       } finally {
         passes -= 1;
-        closeWhenIdle();
+        await closeWhenIdle();
       }
     },
     retire() {
       retired = true;
-      closeWhenIdle();
+      return closeWhenIdle();
     },
   };
 }

@@ -588,7 +588,7 @@ export class HistoryService extends HistoryServiceReads {
       throw error;
     }
     if (repair.inserted.length === 0) {
-      repair.close();
+      await repair.close();
       return;
     }
     const tokens = this.runSerializedTokenOperation(async () => {
@@ -616,7 +616,7 @@ export class HistoryService extends HistoryServiceReads {
         }
         throw error;
       } finally {
-        repair.close();
+        await repair.close();
       }
     });
     this.observeTokenizerOperation(tokens);

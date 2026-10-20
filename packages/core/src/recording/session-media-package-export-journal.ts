@@ -49,14 +49,14 @@ async function exportSource(
     await session.store.idle();
     const read = await session.store.openRead();
     if (read.version === undefined) {
-      read.close();
+      await read.close();
       throw new Error('Export source has no committed session');
     }
     return {
       size: read.version.durableEnd,
       sessionId: recording.getSessionId(),
       close: async () => {
-        read.close();
+        await read.close();
       },
     };
   }

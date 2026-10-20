@@ -17,6 +17,7 @@ import { decodeStoredRow } from './journalRowCodec.js';
  */
 export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   private closed = false;
+  private closing: Promise<void> | undefined;
   /** The releases of rows a reader holds right now; close() lets them go. */
   private readonly held = new Set<() => void>();
 
@@ -63,10 +64,11 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     if (!this.closed) {
       this.closed = true;
       for (const release of [...this.held]) release();
-      this.snapshot.close();
-      this.onClose();
+      this.closing = Promise.resolve(this.snapshot.close()).finally(
+        this.onClose,
+      );
     }
-    return Promise.resolve();
+    return this.closing ?? Promise.resolve();
   }
 
   private assertOpen(): void {

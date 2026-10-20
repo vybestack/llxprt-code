@@ -176,7 +176,7 @@ export async function mirrorEdits(
   try {
     return await editsFor(delta, target, await stateOf(read));
   } finally {
-    read.close();
+    await read.close();
   }
 }
 

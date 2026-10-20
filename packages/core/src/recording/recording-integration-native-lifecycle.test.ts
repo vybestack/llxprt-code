@@ -113,8 +113,9 @@ describe('native recording integration lifecycle', () => {
   for (const kind of ['write', 'flush'] as const) {
     it(`reports an unobserved mirror ${kind} failure on disposal while detaching later rows`, async () => {
       const { history, integration, failures, seams, texts } = fixture();
-      await integration.subscribeToJournal(history);
       history.add(nativeText('durable baseline'));
+      await history.waitForCommit();
+      await integration.subscribeToJournal(history);
       await integration.flushAtTurnBoundary();
       const count = seams.events.filter((event) => event.type === kind).length;
       if (kind === 'write') failures.failWriteAt = count;
@@ -295,8 +296,9 @@ describe('native recording integration lifecycle', () => {
   it('refuses a replacement subscription after a failed detach without binding the new history', async () => {
     const { history, integration, failures, seams, histories, texts } =
       fixture();
-    await integration.subscribeToJournal(history);
     history.add(nativeText('baseline'));
+    await history.waitForCommit();
+    await integration.subscribeToJournal(history);
     await integration.flushAtTurnBoundary();
     failures.failWriteAt = seams.events.filter(
       (event) => event.type === 'write',

@@ -51,7 +51,7 @@ export async function cloneJournalHistory(
     await rm(targetPath, { force: true });
     throw error;
   } finally {
-    read.close();
+    await read.close();
   }
 }
 
@@ -144,7 +144,7 @@ async function* liveRows(
       yield ownedByDestination(row, ids);
     }
   } finally {
-    read.close();
+    await read.close();
   }
 }
 

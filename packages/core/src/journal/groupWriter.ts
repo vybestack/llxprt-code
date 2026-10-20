@@ -99,6 +99,9 @@ export class JournalGroupWriter {
   private queue: Promise<void> = Promise.resolve();
   private failure: { readonly error: unknown } | undefined;
   private closed = false;
+  private readerHolds = 0;
+  private retired = false;
+  private fileClose: Promise<void> | undefined;
   /** True from the moment the swap detaches the descriptor until it attaches one again. */
   private detached = false;
 
@@ -162,7 +165,30 @@ export class JournalGroupWriter {
   async close(): Promise<void> {
     this.closed = true;
     await this.queue;
-    if (!this.detached) await this.handle.close();
+    this.retired = true;
+    if (this.readerHolds === 0) await this.closeFile();
+  }
+
+  retainReader(): () => void | Promise<void> {
+    if (this.closed) throw new Error('The journal writer is closed');
+    this.readerHolds += 1;
+    let released = false;
+    return () => {
+      if (released) throw new Error('A journal reader was released twice');
+      released = true;
+      this.readerHolds -= 1;
+      if (this.retired && this.readerHolds === 0) return this.closeFile();
+      return undefined;
+    };
+  }
+
+  private closeFile(): Promise<void> {
+    if (this.detached) return Promise.resolve();
+    this.fileClose ??= this.handle.close().catch((error: unknown) => {
+      this.fileClose = undefined;
+      throw error;
+    });
+    return this.fileClose;
   }
 
   /** What a restore must put back: the file as the writer holds it now. */

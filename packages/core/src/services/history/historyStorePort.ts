@@ -147,7 +147,7 @@ export interface HistoryRepair {
   readonly inserted: Iterable<IContent> & { readonly length: number };
   /** Takes the published repair back out of the store. */
   rollback(): Promise<void>;
-  close(): void;
+  close(): void | Promise<void>;
 }
 
 /** One tail removal: the policy of HistoryService, the rows and their restore are the store's. */
