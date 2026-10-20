@@ -1,0 +1,1649 @@
+{
+  "created": "2026-10-20T07:58:38.524Z",
+  "startingHead": "63298ebea74e28304adff30f3d0707e69aa8944c",
+  "sourceCommit": "12d92e628c9b65309f800607c173e7e4d1a4e74e",
+  "rawRoot": "tmp/854-notes/p4/w23/frontend-run-e",
+  "status": "Bounded green frontend subset committed; CLI native protocol remains one observed RED. W23 is not complete.",
+  "totals": {
+    "isolatedGreenExecutions": 10,
+    "passes": 74,
+    "journalOuterPasses": 38,
+    "oldComparisonPasses": 36,
+    "failures": 0,
+    "skips": 0,
+    "qualityGates": 10,
+    "remainingCliFailures": 1
+  },
+  "hostBoundaryChecks": [
+    {
+      "command": "bun scripts/check-a2a-import-boundary.ts",
+      "code": 0,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/final-a2a-boundary.log",
+        "sha256": "d8454e6c714dbc546c730ace64d18ccb0a0faa3d6033493a0eacf1d98ebb5249"
+      }
+    },
+    {
+      "command": "bun scripts/check-cli-import-boundary.ts",
+      "code": 0,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/final-cli-boundary.log",
+        "sha256": "287fd904766c02a9b7ae56f29e7439b4e1cb6e210695351cf80a40d0fc85963c"
+      }
+    }
+  ],
+  "provenanceNote": "Early collector inventory head fields contain the old literal 40be79a2d; verified starting Git HEAD and source hashes identify this task boundary. Final B-lane inventories read HEAD dynamically. A successful driver exit alone does not mean every file passed.",
+  "source": [
+    {
+      "path": "packages/a2a-server/src/http/native-task-protocol.test.ts",
+      "sha256": "f1508f163e9baf8f5615487633e22022206d26ecd31e34f10765b942d1531109",
+      "committed": true
+    },
+    {
+      "path": "packages/cli/src/__tests__/cli-session-list-delete-helpers.ts",
+      "sha256": "5bc2c39a29c9df835bee5752b34c985273da36b965dbd6f092f550ae3aae4962",
+      "committed": true
+    },
+    {
+      "path": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+      "sha256": "3db95dc9d26cc2e7d01dd1df38a3c540f4c996a8f2065893456caafb85fc2c86",
+      "committed": true
+    },
+    {
+      "path": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+      "sha256": "57bff77a4d7f7f4b4700a061a4adac6a9edbc7810d2f24e94e3dffc9efba8eed",
+      "committed": true
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-session-protocol.test.ts",
+      "sha256": "58ec75844ac666e30c40dc35a476b2f2e65e61bf616fc772fae202ddfea47dde",
+      "committed": true
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-listing.test.ts",
+      "sha256": "be3b480834b38adfe24654ccf3392c6e3375301bbaae0b1e018fe9c7cf208be8",
+      "committed": true
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+      "sha256": "f8038247c9071fc48e5c3d601fd5c525d3cf34051b443fdf1c38fce3925f006c",
+      "committed": true
+    },
+    {
+      "path": "packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+      "sha256": "320f9b07cff9f9fa79e4f0414543489af3a698ce2642b5621f587b1949c3e37d",
+      "committed": false
+    }
+  ],
+  "tests": [
+    {
+      "lane": "finalize-native-b",
+      "index": 0,
+      "path": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+      "backend": "journal",
+      "passes": 11,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "3db95dc9d26cc2e7d01dd1df38a3c540f4c996a8f2065893456caafb85fc2c86",
+      "pid": 15238,
+      "command": [
+        "bun",
+        "test",
+        "./src/cliSessionListAndDelete.behavior.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/000.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/000.log",
+        "sha256": "9c209982aabb4c8f4613af975d21b76f367aed5b2852bb7545322633fb2d0870"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/000.xml",
+        "sha256": "83fcddb9ebd1997e431741ffe85c491ff15efb5a7255cab6ca1dcff4e089648a"
+      }
+    },
+    {
+      "lane": "finalize-native-b",
+      "index": 1,
+      "path": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+      "backend": "journal",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "57bff77a4d7f7f4b4700a061a4adac6a9edbc7810d2f24e94e3dffc9efba8eed",
+      "pid": 15503,
+      "command": [
+        "bun",
+        "test",
+        "./src/cliSessionListAndDelete.storageParity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/001.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/001.log",
+        "sha256": "099d29a6d2086dafd2334def694f571c1c7be0bce7f3ae35c7e04738d561e34a"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/001.xml",
+        "sha256": "161e7c69adbfbd4935aa43e9f06bc282c5c5d5bb607f214208f1716f0eb6f848"
+      }
+    },
+    {
+      "lane": "finalize-native-a",
+      "index": 3,
+      "path": "packages/zed-acp/src/zed-session-listing.test.ts",
+      "backend": "journal",
+      "passes": 15,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "be3b480834b38adfe24654ccf3392c6e3375301bbaae0b1e018fe9c7cf208be8",
+      "pid": 12049,
+      "command": [
+        "bun",
+        "test",
+        "./src/zed-session-listing.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/003.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/003.log",
+        "sha256": "e87e591543989c67f283b31e76b780d939c022137db072eee8fc6eb3791f9ea1"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/003.xml",
+        "sha256": "92c93721fef4d756bf3c3a9c22074f249531c672628d9a52d11a6844e500b311"
+      }
+    },
+    {
+      "lane": "finalize-native-a",
+      "index": 4,
+      "path": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+      "backend": "journal",
+      "passes": 7,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "f8038247c9071fc48e5c3d601fd5c525d3cf34051b443fdf1c38fce3925f006c",
+      "pid": 12075,
+      "command": [
+        "bun",
+        "test",
+        "./src/zedIntegration.sessionInfo.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/004.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/004.log",
+        "sha256": "fc7007046505bb36a38ed51c648eb0bdda1dc083a839550b417dea51afb8a094"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/004.xml",
+        "sha256": "3004598aebc6b7f1373a125e6e5e01c6de13cdf8ea5ca6e0d9616310b0106da1"
+      }
+    },
+    {
+      "lane": "finalize-native-b",
+      "index": 3,
+      "path": "packages/zed-acp/src/zed-native-session-protocol.test.ts",
+      "backend": "journal",
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "58ec75844ac666e30c40dc35a476b2f2e65e61bf616fc772fae202ddfea47dde",
+      "pid": 15583,
+      "command": [
+        "bun",
+        "test",
+        "./src/zed-native-session-protocol.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/003.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/003.log",
+        "sha256": "35dc6f8e3e98be0e31abc7edcf2b329fab4366167ae3f3c64cdcce8993d2c8d8"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/003.xml",
+        "sha256": "de545db694a047da869126c3b6b7067d678bf11a6302091907d2daf8447031c6"
+      }
+    },
+    {
+      "lane": "finalize-native-a",
+      "index": 5,
+      "path": "packages/a2a-server/src/http/native-task-protocol.test.ts",
+      "backend": "journal",
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "f1508f163e9baf8f5615487633e22022206d26ecd31e34f10765b942d1531109",
+      "pid": 12101,
+      "command": [
+        "bun",
+        "test",
+        "./src/http/native-task-protocol.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/005.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/005.log",
+        "sha256": "bd950b60d94a302cf50684f7c53f831e5baeda6ab99a5d4f83a4fc8805901772"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a/005.xml",
+        "sha256": "eafbc9703b868f0e6900cb00aaa1981c5df927fc2cb021ce53b9ed563adaf66c"
+      }
+    },
+    {
+      "lane": "finalize-old-b",
+      "index": 0,
+      "path": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+      "backend": "old",
+      "passes": 11,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "3db95dc9d26cc2e7d01dd1df38a3c540f4c996a8f2065893456caafb85fc2c86",
+      "pid": 15611,
+      "command": [
+        "bun",
+        "test",
+        "./src/cliSessionListAndDelete.behavior.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/000.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/000.log",
+        "sha256": "b57ffac11b70ed8248f417783e077f7d23148adf186795cc9e77eda9d0eddbb9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/000.xml",
+        "sha256": "4105afe65c6c6b442f7e9245c529b741c4e5d5eef093dd543329f3d3aed8832e"
+      }
+    },
+    {
+      "lane": "finalize-old-b",
+      "index": 1,
+      "path": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+      "backend": "old",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "57bff77a4d7f7f4b4700a061a4adac6a9edbc7810d2f24e94e3dffc9efba8eed",
+      "pid": 15846,
+      "command": [
+        "bun",
+        "test",
+        "./src/cliSessionListAndDelete.storageParity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/001.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/001.log",
+        "sha256": "667d2a49850af11609991621357f40b42537eea02ada7bc0ca845e1181c5f95c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b/001.xml",
+        "sha256": "1f57a2dcff0fadaf2fe12728a7c097748b18dfbff2e6e3eeb50cced2ad97f1aa"
+      }
+    },
+    {
+      "lane": "finalize-old-a",
+      "index": 2,
+      "path": "packages/zed-acp/src/zed-session-listing.test.ts",
+      "backend": "old",
+      "passes": 15,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "be3b480834b38adfe24654ccf3392c6e3375301bbaae0b1e018fe9c7cf208be8",
+      "pid": 12485,
+      "command": [
+        "bun",
+        "test",
+        "./src/zed-session-listing.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/002.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/002.log",
+        "sha256": "78217177e1024ef36993aa3a51c93be5bb28f41f432749ee8c25b924609f28b7"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/002.xml",
+        "sha256": "b545640ef46bc1cd8ea5ab17afd9359f9c59f47dad35d8ebb11579bb60b30d37"
+      }
+    },
+    {
+      "lane": "finalize-old-a",
+      "index": 3,
+      "path": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+      "backend": "old",
+      "passes": 7,
+      "failures": 0,
+      "skips": 0,
+      "sourceSha256": "f8038247c9071fc48e5c3d601fd5c525d3cf34051b443fdf1c38fce3925f006c",
+      "pid": 12496,
+      "command": [
+        "bun",
+        "test",
+        "./src/zedIntegration.sessionInfo.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/003.xml"
+      ],
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/003.log",
+        "sha256": "4b2dcc667daea20ed48c9c6b5cb46c400e12460345661da352b22b7041c9ffaa"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a/003.xml",
+        "sha256": "18cc748a7c0c10186a67f6895d90def302a759a1afc9341ec8cfcb8c99765a0c"
+      }
+    }
+  ],
+  "gates": [
+    {
+      "gate": "build-types-cli",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "cwd": "packages/cli",
+      "code": 0,
+      "pid": 15900,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/build-types-cli.log",
+        "sha256": "a69b141ea33fe7711b5f8ba329bd421f4215c05989bfd0232e6b2dbd099e8213"
+      }
+    },
+    {
+      "gate": "build-types-zed-acp",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "cwd": "packages/zed-acp",
+      "code": 0,
+      "pid": 15978,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/build-types-zed-acp.log",
+        "sha256": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4"
+      }
+    },
+    {
+      "gate": "build-types-a2a-server",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "cwd": "packages/a2a-server",
+      "code": 0,
+      "pid": 16001,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/build-types-a2a-server.log",
+        "sha256": "eb1d43cc00ea63c45c23d73ef0521a39ab9702242580ad60168f4e6cef2b2b90"
+      }
+    },
+    {
+      "gate": "types-cli",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "cwd": "packages/cli",
+      "code": 0,
+      "pid": 16117,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/types-cli.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "gate": "types-zed-acp",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "cwd": "packages/zed-acp",
+      "code": 0,
+      "pid": 16350,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/types-zed-acp.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "gate": "types-a2a-server",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "cwd": "packages/a2a-server",
+      "code": 0,
+      "pid": 16424,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/types-a2a-server.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "gate": "lint",
+      "command": "node_modules/.bin/eslint --max-warnings 0 packages/cli/src/__tests__/cli-session-list-delete-helpers.ts packages/cli/src/cliSessionListAndDelete.behavior.test.ts packages/cli/src/cliSessionListAndDelete.storageParity.test.ts packages/cli/src/ui/hooks/native-command-protocol.test.ts packages/zed-acp/src/zed-native-session-protocol.test.ts packages/zed-acp/src/zed-session-listing.test.ts packages/zed-acp/src/zedIntegration.sessionInfo.test.ts packages/a2a-server/src/http/native-task-protocol.test.ts",
+      "cwd": ".",
+      "code": 0,
+      "pid": 16442,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "gate": "format",
+      "command": "node_modules/.bin/prettier --check packages/cli/src/__tests__/cli-session-list-delete-helpers.ts packages/cli/src/cliSessionListAndDelete.behavior.test.ts packages/cli/src/cliSessionListAndDelete.storageParity.test.ts packages/cli/src/ui/hooks/native-command-protocol.test.ts packages/zed-acp/src/zed-native-session-protocol.test.ts packages/zed-acp/src/zed-session-listing.test.ts packages/zed-acp/src/zedIntegration.sessionInfo.test.ts packages/a2a-server/src/http/native-task-protocol.test.ts",
+      "cwd": ".",
+      "code": 0,
+      "pid": 16622,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      }
+    },
+    {
+      "gate": "affected-graph",
+      "command": "bun scripts/check-affected-test-shards.ts",
+      "cwd": ".",
+      "code": 0,
+      "pid": 16635,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/affected-graph.log",
+        "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+      }
+    },
+    {
+      "gate": "audit",
+      "command": "bun scripts/test-audit/scan.ts tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/audit",
+      "cwd": ".",
+      "code": 0,
+      "pid": 16690,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/audit.log",
+        "sha256": "f694e4385a8b78155818f741cd60e33d8264787d98f37e46222d8ba02ecd0dd8"
+      }
+    }
+  ],
+  "audit": {
+    "results": {
+      "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c/audit/findings.tsv",
+      "sha256": "0d65b65b60724acb1474fe391c2ee343e7111b05a27282ad921e62984b81a8bb"
+    },
+    "highRiskTouchedFindings": 0,
+    "notices": [
+      "packages/zed-acp/src/zed-native-session-protocol.test.ts\t43\tnative ACP session protocol > records a real tool turn, closes, loads over ACP, and continues without duplicating durable rows\tDUP_ASSERT\t2x identical assertion: expect( (await readdir(config.projectChatsDir)).filter((file) => file.endsWith('.lock'), )\tzed-acp",
+      "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect((await durable(await recording(agent))).count).toBe(4)\tcli",
+      "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect(displayed).toHaveLength(2)\tcli",
+      "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect(await durable(await recording(agent))).toStrictEqual({ ...initial, })\tcli"
+    ],
+    "interpretation": "DUP_ASSERT notices compare the same value at distinct lifecycle phases; all equalities remain. Copied expected snapshots preserve conservation checks across state-changing calls."
+  },
+  "scope": [
+    {
+      "files": [
+        "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+        "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts"
+      ],
+      "casesPerBackend": 14,
+      "kind": "Actual CLI subprocess list/delete against matching native or old recorder seeds. Shared/public behavior; not fourteen native disk-row assertions."
+    },
+    {
+      "files": [
+        "packages/zed-acp/src/zed-session-listing.test.ts"
+      ],
+      "casesPerBackend": 15,
+      "kind": "Actual discovery/listing with matching recorder seeds; title normalization and metadata/live merging. Not live ACP turn execution."
+    },
+    {
+      "files": [
+        "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts"
+      ],
+      "casesPerBackend": 7,
+      "kind": "One real recording owner/title/reopen case and six existing stub-backed session-notification cases. Native title fact reader and original old JSONL assertion both retained."
+    },
+    {
+      "files": [
+        "packages/zed-acp/src/zed-native-session-protocol.test.ts"
+      ],
+      "journalOnlyCases": 1,
+      "kind": "Real ACP transport, ZedAgent, Agent runtime, read_file execution, close/list/load, replay counts, independent committed disk-prefix digest, rejected foreign cwd, locks and next turn. Reload creates a new FakeProvider, so it repeats the real read tool turn: 4 initial rows + 4 continuation rows, not 6."
+    },
+    {
+      "files": [
+        "packages/a2a-server/src/http/native-task-protocol.test.ts"
+      ],
+      "journalOnlyCases": 1,
+      "kind": "Real local HTTP/SSE app/executor/Agent runtime, pending approval, real write_file, confirmation continuation, next message under task/context identity, one Agent, pending second write, tasks/cancel, canceled TaskStore state, absent unapproved output, independent native rows and released lock. Only provider and unrelated startup inputs are faked; small assertion helper collects bounded test rows."
+    }
+  ],
+  "preservedAssertions": {
+    "created": "2026-10-20T07:56:19.689Z",
+    "base": "63298ebea",
+    "method": "TypeScript assertion-chain token multisets, ignoring whitespace and comma tokens; no assertion or threshold exclusions.",
+    "rows": [
+      {
+        "path": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+        "originalAssertions": 11,
+        "currentAssertions": 11,
+        "preserved": true,
+        "normalizedOriginalDigest": "c012f40203e90cbcf11b085a9b56fea86d28fcb1f3bcbfc955218d70403457cb",
+        "originalSha256": "f0fc46b75bf91caf4cbbdc9eb7863382e27bbc55d378de33b1399b5736c66360",
+        "exception": "Three diagnostic template literals select the format-specific parser error; the old error string remains unchanged in the fixture helper."
+      },
+      {
+        "path": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+        "originalAssertions": 3,
+        "currentAssertions": 3,
+        "preserved": true,
+        "normalizedOriginalDigest": "e7a00f1fb82884ed1cfc37804138306a5295b52ec94b0cdb6b41ea5e852a934a",
+        "originalSha256": "7a88a838032929319a7cef56aeeb3f39d8ea114c509ef0d4c1645f8a8f2976f2",
+        "exception": null
+      },
+      {
+        "path": "packages/zed-acp/src/zed-session-listing.test.ts",
+        "originalAssertions": 27,
+        "currentAssertions": 27,
+        "preserved": true,
+        "normalizedOriginalDigest": "8af9bb168428ea9da2327e58e1d38c76578b387c65325a5eb628883ba56fb903",
+        "originalSha256": "3294dcf10d6c4e49c6ae71ec8c8b3cb3be11e97f2c870565474f35fef4d89893",
+        "exception": null
+      },
+      {
+        "path": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+        "originalAssertions": 19,
+        "currentAssertions": 20,
+        "preserved": true,
+        "normalizedOriginalDigest": "7b7a8a9f35200eacbc27b6e0740bbfb55274ec19ce1ce213fcc29856589e350f",
+        "originalSha256": "a2ee8ad35fa488c2d8743f341b83125eee46f1e228e17fd87b2dfd4ee7945fb8",
+        "exception": null
+      }
+    ]
+  },
+  "parserExceptions": {
+    "cli": "Journal malformed session:provider fact and original malformed JSONL session_start retain their distinct parser messages.",
+    "zed": "Native session:title state fact is decoded; the original old JSONL title substring remains in assertJsonlTitle.",
+    "helperMove": "Moved CLI fixture into __tests__, retaining behavior and updating two imports/entrypoint depth. Graph testOnlyEdges policy and runtime dependency declarations remain unchanged."
+  },
+  "unchangedSource": {
+    "base": "63298ebea",
+    "checkedFiles": 7862,
+    "unchangedFiles": 7857,
+    "changed": [
+      {
+        "path": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+        "currentPath": "packages/cli/src/cliSessionListAndDelete.behavior.test.ts",
+        "sha256": "3db95dc9d26cc2e7d01dd1df38a3c540f4c996a8f2065893456caafb85fc2c86",
+        "originalBlob": "cebf95432e41fc325f03fd9209da69f78a617926",
+        "actualBlob": "0a5e61ab687af202eb9a89e81aed5b3dfac1170b",
+        "unchanged": false
+      },
+      {
+        "path": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+        "currentPath": "packages/cli/src/cliSessionListAndDelete.storageParity.test.ts",
+        "sha256": "57bff77a4d7f7f4b4700a061a4adac6a9edbc7810d2f24e94e3dffc9efba8eed",
+        "originalBlob": "09c9349244b5f227d83077b1f7a73475bc22c847",
+        "actualBlob": "ce07c263c1a2122ab894ce51ead2d0d19f5248fa",
+        "unchanged": false
+      },
+      {
+        "path": "packages/cli/src/cliSessionListAndDelete.testHelpers.ts",
+        "currentPath": "packages/cli/src/__tests__/cli-session-list-delete-helpers.ts",
+        "sha256": "5bc2c39a29c9df835bee5752b34c985273da36b965dbd6f092f550ae3aae4962",
+        "originalBlob": "db07835cb0b00a29f0370111029e9f40c525ac7a",
+        "actualBlob": "ea37d25ee7efb92b0003455703dfc5beeeca8587",
+        "unchanged": false
+      },
+      {
+        "path": "packages/zed-acp/src/zed-session-listing.test.ts",
+        "currentPath": "packages/zed-acp/src/zed-session-listing.test.ts",
+        "sha256": "be3b480834b38adfe24654ccf3392c6e3375301bbaae0b1e018fe9c7cf208be8",
+        "originalBlob": "1d519e9bfc0879eb18c7a922daacccc493644e6d",
+        "actualBlob": "0daf52b7a1088a5dbb3d2d51ad126272e7755979",
+        "unchanged": false
+      },
+      {
+        "path": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+        "currentPath": "packages/zed-acp/src/zedIntegration.sessionInfo.test.ts",
+        "sha256": "f8038247c9071fc48e5c3d601fd5c525d3cf34051b443fdf1c38fce3925f006c",
+        "originalBlob": "c1a3d179852b7c7f8f6acf320e0e76b14782586a",
+        "actualBlob": "73d9b421f455b659f55c3ca137b2d16cb33b59fa",
+        "unchanged": false
+      }
+    ],
+    "frozenInputs": 128,
+    "frozenMismatches": 0,
+    "frozenDigest": "95e65de9c8f0d97fd8c042e0e41d9a173d3bd642595473dc7cb9a6c9865fa5a8",
+    "manifest": "tmp/854-notes/p4/w23/frontend-run-e/package-source-boundary.json",
+    "manifestSha256": "f8835ec2a284e5220b3f38086090c9d9692423f682d0b32b409a44e135032bd2",
+    "packageTreeAtStart": "7e54f85ae62de6893b01d708c0235d447f3f0016",
+    "productionChanges": 0,
+    "explanation": "Every original tracked regular package file was blob-checked against starting HEAD. Exactly five original test/helper files differ, with the helper mapped to its new path; the seven committed current source paths and one uncommitted candidate are hashed above."
+  },
+  "frozenInputs": [
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/alias-surface/index.d.ts",
+      "sha256": "836582b45faadaa37603a35f166b65a3418426c8050f465de8efd8c3a1b84ede",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/alias-surface/types.d.ts",
+      "sha256": "276bc1621bf4c3b884ed63a8b4f46a9ae64742778026b9a322ce96fc06e5f3a4",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/basic-text.jsonl",
+      "sha256": "d9705533e9ae8e00eefd80750645a4d2fb228160b55c785b77235a009674ddc6",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/multi-tool-then-answer.jsonl",
+      "sha256": "a314d0cf7ca4fe9af5f541a0c48a6d4f7d36de843f4c05f384306fae97953dda",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/multi-turn-text.jsonl",
+      "sha256": "4d867ef7836c2a2e4a91824731a2c8a290e5735ed747b4173d2707b32f055695",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/parity-toolcall.jsonl",
+      "sha256": "6afc863dc4f1fb58b4882c1c730bfca5f357316590c3809c6c5e52ef45a8516a",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/plain-text.jsonl",
+      "sha256": "e0f22aa24b332ccf2cd2a1963755026c53d90aa675708e2f6d36932b44bfa0d9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-invalid-malformed.json",
+      "sha256": "a216e309dfd95763391ceccda807819baf861c633df5b94d2748baf5240692cb",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-invalid-missing-model.json",
+      "sha256": "9daac6fc7f5461d71a77a1a7fc4d8981d07af62c9d8a5684d21156d1b501153e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-invalid-missing-name.json",
+      "sha256": "5c8bd4d3901f91a02e8dfd1f7c47edf9b5da8dd4076d92f94ae3e2fe435838a9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-invalid-missing-provider.json",
+      "sha256": "7b3f3666b4a0640d710ba0a42400e799f4094b087645f652bbd56791c04635bd",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-invalid-not-object.json",
+      "sha256": "5d40507a55ff8eed1dff8dbb82fe813c5afa6cf4ec9e21aee34cd2cfa224a7a7",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-load-balancer.json",
+      "sha256": "41bbfbaf3be6d1e40dcbb69ff632bc3df4e6f2a63e9c8bdc65516557ec95f15b",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/profile-standard.json",
+      "sha256": "ae9f6b41f379c42a15806f6941ffc5a10144a98d5674fb7ac62cdacad759c9ef",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/provider-switch-two-turn.jsonl",
+      "sha256": "2aa0125d44a5af0e1242cda7c17e69e7e7c527ba375104db373acc937d301811",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/recording-remaining-hooks.jsonl",
+      "sha256": "0ce1303021febe56e12b5f94017cda8904613f60c563741c5062fdd337a683bf",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/recording-tool-owner.jsonl",
+      "sha256": "838079299035334698bde9b4ef5b851437b84b3b0f18bb07d31c22dd22104a98",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/thinking-text.jsonl",
+      "sha256": "cb05de6d7f22ac71cd229888b2a31122d08a17272e24d8898249485a6a248b0a",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/fixtures/tool-call-then-answer.jsonl",
+      "sha256": "6fed2d8d78f45789c698367ce146e0957628cdb0b91ba7c1bcb0f9832771c0e4",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/helpers/app-service-fixtures.ts",
+      "sha256": "cb62d81a7a26011c1859cb2a38ef344fa186518c0d05b45a1e03391ed65e4b0e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/helpers/provider-auth-fixtures.ts",
+      "sha256": "b488d02a415d4e2b7284226dd07b63a9365945ad8f11ffe08230a845f4d91808",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/compression-regression-fixtures.ts",
+      "sha256": "86d5d8ac78aa26dd72744dc1a8fd6446fa2f82fe88b5d8f552377cd8172d6366",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/raw-compression-fixtures.ts",
+      "sha256": "d0616f49e22d9d8a4b18b140e8c66f01a849cebb0e4a630916c2da9a4376941d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/tool-truncation-test-fixtures.ts",
+      "sha256": "378be0736163e510d407f506f223c22b357b9142a647de0ae64e8c0f9c9c3104",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/core/__tests__/helpers/structural-access-test-fixtures.ts",
+      "sha256": "ec1f1b159cc774eda0668bb07fb83899a194e6d367f436796a99b53f7fe436b5",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/core/__tests__/support/client-media-history-fixtures.ts",
+      "sha256": "f903dc06c74a8d2bf356e43e1ef7125bd869dd30fba82f781a154453b18a119c",
+      "unchanged": true
+    },
+    {
+      "path": "packages/agents/src/core/chatSession.media-history-fixtures.ts",
+      "sha256": "ef12fcfaecff404538eb6d1f564ddf79ea896c8dc95b42d1a087cdf22d74d66c",
+      "unchanged": true
+    },
+    {
+      "path": "packages/auth/test-fixtures/self-sigterm.fixture.ts",
+      "sha256": "d2fdd2649ee1847d6db1a36b2f92adf598dbaf29bd8cbaa576f6e71fb94d12c7",
+      "unchanged": true
+    },
+    {
+      "path": "packages/cli/src/ui/commands/dumpcontext-command-test-helpers-fixtures.ts",
+      "sha256": "d55e80c54bf5726f15170e388b8af017a40a14575e001e6d34e12dea5661dae4",
+      "unchanged": true
+    },
+    {
+      "path": "packages/cli/src/ui/components/shared/golden-snapshot.test.ts",
+      "sha256": "c2a9932c28b8d0ff70bf2518162b2d2f955f4f16a99f2fea13dc8114b9e08611",
+      "unchanged": true
+    },
+    {
+      "path": "packages/cli/src/ui/hooks/agentStream/__tests__/fixtures/providerIgnoreCancel.fake.jsonl",
+      "sha256": "75f25fb5d8129170359522223fed239354140949f32d71e3614e03100a2fc58f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/cli/test/fixtures/test-summary.pdf",
+      "sha256": "014c76aaddaaa077e293e1ff368ff6cc47262262a41c979c02c5000a9a0289bc",
+      "unchanged": true
+    },
+    {
+      "path": "packages/cli/test/fixtures/test.pdf",
+      "sha256": "014c76aaddaaa077e293e1ff368ff6cc47262262a41c979c02c5000a9a0289bc",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/recording/__tests__/recording-file-fixtures.ts",
+      "sha256": "953eb3ac7e2100d108ff5613a8abc108ac9789c13cc9a7a68b61605862b3202d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/density-history-test-fixtures.ts",
+      "sha256": "6de26be1158b7c83ab98650e1f3ea44350115dcde92eb81daf87cb01540f3ba0",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/append-and-pop.json",
+      "sha256": "2c34803f8120a0d4c08a9350fd436fc399d45e3b791ee9ade587afd20918952e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/clear.json",
+      "sha256": "49ed59b934d2b8287b1cbaaa400c9c9e5771c8bffb2830003b0c8182919e31cc",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/compress.json",
+      "sha256": "6783341112bd8175645535e198ff765a3d61bbb46bc0faea2115a30a4010b262",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/density-changed-3.json",
+      "sha256": "eb8e76443dc49900678df238c5230164c057a01d150e95888105d3d9697d83e8",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/density-changed-5000.json",
+      "sha256": "00c70f8c57cd60174978d76180f56450ccaaf26aff1acaa4d27b729651cd693f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/density-changed-64.json",
+      "sha256": "2f4acb921fb70bc877c0d0c5d548a05994e491ad338b5c31d0c54cc5b1ca3503",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/density-changed-65.json",
+      "sha256": "ebf880e1af90795b3c417d058398f75e62820ab90791e275cfe80059f9c23fa8",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/density-small.json",
+      "sha256": "d03f7d05643adce270728635729836e4ed45ca4b4b5a41f0d986b8614fd25312",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/insert-by-repair.json",
+      "sha256": "8bbc9591b97eee218f2ce65adfc0dea144ce983dfe0e7b3a571243be9e9480f6",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/known-defect-2.json",
+      "sha256": "7c4548087434d0b9bb2bcc3f551e55d782f1be8ba1e748a10752da618a9745e3",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/merge.json",
+      "sha256": "5ca62b3b165ca881cdf3ee7f75ff10b3fcd6c8d9022be5f9e770bc0346acefe1",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/mixed.json",
+      "sha256": "63dcb7ff4cb3b930e53757c5a6f84df9a1c3eadee5e2a5ab46e275dff01dd680",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/replace-all.json",
+      "sha256": "2117fb67a01a891fa53f845315c67607d2d47be168f10f9ac34c5ef4eb5f2380",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/rewind-by-truncate.json",
+      "sha256": "3e170ffd0d47f4b2f2d182bcc2d083f01c6dc6254a977dc23a8b02b0dd21ebc0",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-11.json",
+      "sha256": "f58f90c038bc65f2d4a9775e601c28908f9d254ebfeb635c42d95e8a91e27aee",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-23.json",
+      "sha256": "17d3c587ccb1da890845c5a328ac0216f9882a26c66c82ac0dfd2b3fbab796f2",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-37.json",
+      "sha256": "61bda887c5aec32f5c2a6df1323a97e0d05a42f88adc26f9c7fbc40af3b3c876",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-41.json",
+      "sha256": "97b179f15685a725677fbc9cc2001e985748125a463add66cb385433e15cd020",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-59.json",
+      "sha256": "624641b4c39197e82c7fe22c9c558e7de44c732ada5c45c847589f4c7ce4b13e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/fixtures/mutation-sequence/seeded-71.json",
+      "sha256": "b56f50b7900be0e9c188ca50f5d9b87ef8d16fc4d411650a5283cc4936415c04",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/services/history/__tests__/support/transform-value-fixtures-test-helpers.ts",
+      "sha256": "7178f5a627c20455a02eebda2a9f83bda2ea38ef256fcff0c4dad269df436e32",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/src/utils/__fixtures__/dummy.wasm",
+      "sha256": "1a538f3873326cea8f805292e047ecbbc31dbde8759dfe4ccd20807f4cf5ef7c",
+      "unchanged": true
+    },
+    {
+      "path": "packages/core/test/models/__fixtures__/mock-data.ts",
+      "sha256": "bc42f2a21f9d45f58510b0dff3edf2599164fe65d64369183248539a23a0e4df",
+      "unchanged": true
+    },
+    {
+      "path": "packages/lsp/test/fixtures/fake-lsp-server-content-length.ts",
+      "sha256": "8c4b0d95e62df1f94802d71323deb13f47bcd9a05052e409d5cddad4837f582f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/lsp/test/fixtures/fake-lsp-server.ts",
+      "sha256": "9944908e957598fce389987f86e9948dbe96ed40d267a3dcdb3dfd15bf233b05",
+      "unchanged": true
+    },
+    {
+      "path": "packages/mcp/src/client/__tests__/manager-fixtures.ts",
+      "sha256": "52894e840358bff9a78c201d2b9b7090726ff53c7ab8a888c4823f41447b119b",
+      "unchanged": true
+    },
+    {
+      "path": "packages/mcp/src/client/__tests__/manager-trust-fixtures.ts",
+      "sha256": "135bb5238525abddb7c631b078196e224ea9193a4c9db33a744785b7086ca0ea",
+      "unchanged": true
+    },
+    {
+      "path": "packages/mcp/src/client/__tests__/mcp-client.oauth.fixtures.ts",
+      "sha256": "1f7a4ae4ce8d099e1da1c9547def5be6a90842b8834c77518c00d9fa2b3016cb",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-1h.json",
+      "sha256": "ceed31a20b50feb0fd25bf3ae1726f69b1248802432795bb398fe599f8bdad87",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-off.json",
+      "sha256": "274c319fb23914bea14a3806d8acdca52b5a5d3ffb66582c5ee7c534e1370d23",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-1h.json",
+      "sha256": "38dbc0b0daaa0fd16e7b589d8a5a2ae6e365d4bb0014a1944568fa386e8d207f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-off.json",
+      "sha256": "5be2d77a54cdaa489a1aba441f88cc58b28f6905539b7f06082d8d521dfdc840",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-1h.json",
+      "sha256": "e69f3be468d24b9be21778a8142761819af0faa0ac2dc9b92e9773b9978057ee",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-off.json",
+      "sha256": "67c9437d8711e5bb201c90e1472538f328964a23a55dbe539c3f8c2986a53a67",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-kimi.json",
+      "sha256": "8ac917d1c4d4803cedc7896fe9f3afae7f1cdf4b67edbebc7c58545fd7d29bf9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-mistral.json",
+      "sha256": "3de886d562a80070557f83e1858b94781ad13a895e5560c041e3f46b12c15ac3",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-plain.json",
+      "sha256": "d5f64153ebcb85143d495150719589ca2d886191c53b1623193c56adc022d1e5",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-kimi.json",
+      "sha256": "c97e1e62d158cbe2b2c3d67fc09d0bc1bbfb2122d1842fb637784e1063accbd0",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-mistral.json",
+      "sha256": "965370db4216bf93ddf140e56cf878b660fcadbb012dfe02400bfb940c89859c",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-plain.json",
+      "sha256": "65759b2bad98265971339cd2ee80279b68a9aa9a26f243cb6418ebe6a04b75c9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.cases.tsv",
+      "sha256": "c0f7eb328c2674e4e1882fd1394abe3d40f70bdf54db6df88f2b7cdbcd96b320",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.json",
+      "sha256": "65e9d112e7eef5fa4513b4b0954f0d15af0c38680f90f7cba7e5304f5f33df5d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.cases.tsv",
+      "sha256": "cd4c2cf0b222e74ad2e62653dab56df636872d01494e05ed4ca9db38de46901d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.json",
+      "sha256": "49319a3e7780a0f1c6ae09a0c7d9b64528f66a7ad31213d06b2bdadc39ebae70",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.cases.tsv",
+      "sha256": "7a481b2d0046e10d249a8adfe43bd7e5c965d40bfa8d016ded2dfcdcd40fd668",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.json",
+      "sha256": "bec4f5c50c9b11205a452cb93cee688d65a6125168118fb661a9163a587eac7e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.cases.tsv",
+      "sha256": "d9eb669c0a89538c0de3533a028b06f0ca17aa926490d90bf35fd696b157b111",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.json",
+      "sha256": "06a4b8fc1c90120e3e57ca82cf494a8453c38ca3811954fb9c3b98b684d9d6fe",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-anthropic.json",
+      "sha256": "95b9290eb0e3969a840bfad71ba64207955c909a2f7082c6e361b5961f9b7255",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-chat.json",
+      "sha256": "7bcd27c4e69e3bd76c10c9634b844983e1ab5adcdea6b06c3b7a362eb8b80851",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-keys.json",
+      "sha256": "541b0100bd0c5b4a2d13184887b171e2ae5b1ac4e22b5b1cd49483f715298304",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-normalizer.json",
+      "sha256": "9aea39bc452f53f78dc840344ee7b7e096462c493405ccc25fb3c0278aeb0582",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-purge-boundary.json",
+      "sha256": "595f092541a975981d92003a1e6d246c2ada271f6016b70d8db732d002b62c26",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-responses.json",
+      "sha256": "6b73517d7d19113addbcd5f18db6d8b7fbf67be7c5f5aa89415de5134e277cc9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.cases.tsv",
+      "sha256": "ca7f948bd5ce9920287f97fd2b302269153f86dd14a1a615a63a82219066b322",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.json",
+      "sha256": "1152ee3d5e32613853f5e88385a7a16ffd9f3deee75b1fe2d774cfe2097203b9",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.cases.tsv",
+      "sha256": "92363bcc9fcf6cd11e8c6947ed6a5e4da7ade994bae1d8d4d51eea3655af2616",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.json",
+      "sha256": "5e47044b9b6f7058ab8bcb72772e2c32a300b29183504bd554cae8184cea118f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.cases.tsv",
+      "sha256": "366a5c69d14de71c50d503c3ad54c38130bf5e741bf1bd4fc0ae7037cf43de4d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.json",
+      "sha256": "813df737b814d410ca81bff09fa475549f450973e96afdc1637f0c024bcd9b28",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.cases.tsv",
+      "sha256": "86ad0b2a5810c43a3343845769803e8cb60eae33b327aaf48b8791c9cd69545e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.json",
+      "sha256": "8aa52ab1c96a57750a8c97bad93023f40fe2e923e47626c98421e167a09790bc",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.cases.tsv",
+      "sha256": "d25536f85ebf8555eec729d5c9ccb734ec77e8051960bb816ed14b600398d10f",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.json",
+      "sha256": "c7d88001b8ae59262466a26870c3592499366c8d31959fa8027353aa948ee15a",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json",
+      "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json",
+      "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json",
+      "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json",
+      "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json",
+      "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json",
+      "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json",
+      "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json",
+      "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/journal-wire-body-golden.test.ts",
+      "sha256": "d1046f1e32a4dafd98f3ac1df4f739de93754f56bf0c6a4100e21790fb439f02",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/provider-formatting-fixtures.ts",
+      "sha256": "5eac81ddda93faf0c076c5ed3d4089c2f6b29a20bc56e9bdac7db01c1dfb715b",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/extracted-helpers-fixtures.ts",
+      "sha256": "e5f139bda0968eb55776a9bc946d1491a98d6b2d66ee6d5ae9f4080d32a4dd42",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/load-balancing-tokenizer-fixtures.ts",
+      "sha256": "ee3ea3502420c3e7a65f9247bb3a60d65ed456751f69dc01bf124d319b32b4de",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/fixtures/dump-golden.json",
+      "sha256": "6788c9dff44329c1118904e49d45e91392a1fba63c08d131893b48d36f6356b6",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/message-table-golden.test.ts",
+      "sha256": "3cb6f27e316700f727ddfed26afbd2ea9627f1ba4ccc68823d9a189640c03e84",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/openai-shared/__tests__/openai-boundary-fixtures.ts",
+      "sha256": "816c4ca76c931e4bf86c7db3f295148c1bf059dbe24d8efc94c74d0f20b71455",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/support/kimi-cache-transport-fixtures.ts",
+      "sha256": "5d495564ece56b2f98e45b3c19728743fcc58f956bf8d6c402f82799f3507dfa",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/claude/fixtures/claude-fable-5-provider-usage-v1.json",
+      "sha256": "bc050a7de04aa7f6983bbde09b9cd9e2e7070c1ee749f8520a7acd2cf60400c4",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/claude/fixtures/claude-haiku-5-5-provider-usage-v1.json",
+      "sha256": "ce000f8933173baff65c3bf1abf93b7ba817029f0f19dacfdb7ba8ea31931749",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/claude/fixtures/claude-opus-5-5-provider-usage-v1.json",
+      "sha256": "f34b031fd723890e2247a7a95fc15862a90f60ebb12601a180a0fc574c879f0b",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/claude/fixtures/claude-opus-5-provider-usage-v1.json",
+      "sha256": "665e15f2de0d4bfd5bf11822975811033e6f60406ca38089b549cecf2e8ef07d",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/claude/fixtures/claude-sonnet-5-5-provider-usage-v1.json",
+      "sha256": "4586f7a854f02f97c77bc5cb0bf440734dbefd8471bf7310752de29e19edd601",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/fixtures/README.md",
+      "sha256": "fa1e7ef24e5bd8468e2a018b303f64285ac7c6d25287ac6d3f017d717b4c516a",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/fixtures/gpt56-provider-usage-v1.json",
+      "sha256": "6d7a3fbe26a428f4d0af06d95a7a761538414b128bf5486a1d0ac14fdb37f013",
+      "unchanged": true
+    },
+    {
+      "path": "packages/providers/src/tokenizers/fixtures/o200k-base-v1.json",
+      "sha256": "c41a3ac8dc92509763fcdba61ab1face250ce42ff61364b9bd86e19a9b6ffa48",
+      "unchanged": true
+    },
+    {
+      "path": "packages/tools/src/__tests__/fixtures/filesystem-tool-fixtures.ts",
+      "sha256": "15c88fe2ca9c729634abbdf3dad89da5f7403e1a1ea54e5ccf3803ab86c7bb2e",
+      "unchanged": true
+    },
+    {
+      "path": "packages/tools/src/__tests__/fixtures/key-storage-fixtures.ts",
+      "sha256": "cd77ad71a1da78599ed4dd42431daa7a572ba288c483cea7a1ed60d0ac6897d0",
+      "unchanged": true
+    },
+    {
+      "path": "packages/tools/src/__tests__/fixtures/provider-formatting-fixtures.ts",
+      "sha256": "b5d2d4bc887699323139c05700242879e1e9039127fc2b2a352b3ff24dc69c65",
+      "unchanged": true
+    },
+    {
+      "path": "packages/tools/src/tools/ast-edit/__tests__/ast-edit-3242-fixtures.ts",
+      "sha256": "cfce36cb3e46dd832d41a2cffc1d3f13a24eb08dc90472bdc48910b0cf6a1c14",
+      "unchanged": true
+    },
+    {
+      "path": "packages/tools/src/tools/ast-edit/__tests__/ast-read-git-fixtures.ts",
+      "sha256": "5a87c411fccf8d937536453bd4751a056b7a60bc954c17459c2f84011e284408",
+      "unchanged": true
+    }
+  ],
+  "cliRed": {
+    "issue": "https://github.com/vybestack/llxprt-code/issues/3907",
+    "path": "packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+    "sourceSha256": "320f9b07cff9f9fa79e4f0414543489af3a698ce2642b5621f587b1949c3e37d",
+    "sourceCopy": {
+      "path": "tmp/854-notes/p4/w23/frontend-run-e/native-cli-red-source.ts",
+      "sha256": "320f9b07cff9f9fa79e4f0414543489af3a698ce2642b5621f587b1949c3e37d"
+    },
+    "log": {
+      "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/002.log",
+      "sha256": "ff44afe6fc201e43331fc9b93540482886e7bda3b8be4c615ec3787e2fb04cd0"
+    },
+    "junit": {
+      "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b/002.xml",
+      "sha256": "9b039a6b1f3c106d524490153fafb3d97991c116a34aef72abe700a7465fddbc"
+    },
+    "assertionsBeforeFailure": 31,
+    "rootCause": "A native durable row contains an admitted media reference, but its object is absent from the recording archive after Agent disposal. SessionMediaOwner intentionally removes live media. Native JournalMirrors/journalRecordingService lack the old SessionRecordingService publishRecordedMedia step. No production repair or contract removal was attempted.",
+    "earlierFixtureErrors": [
+      "Insufficient FakeProvider canned turns",
+      "Fork ancestry checked in start fact instead of fork fact",
+      "Calling a disposed LocalMediaStore",
+      "Reading the intentionally removed live-media directory instead of durable archive"
+    ],
+    "next": "Preserve the failed candidate intact; implement native archive publication with owner/rollback/cold-reopen proof in a scoped persistence task. Do not count this CLI protocol as a pass."
+  },
+  "retainedAttempts": [
+    {
+      "lane": "protocols-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-a-done.json",
+        "sha256": "fd92ffdb3e4a97e4361ce57c2911ab120173e2c1e94f87f4bbfaa89ff57977ff"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-a-state.json",
+        "sha256": "8182fe752385285c469d04febe27eb959f07edc41277963973484ec381110c21"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-a-results.jsonl",
+        "sha256": "8c0351d51792cde2e256549c3a088e8ff5086dd92d93a2853c57063e78b6c240"
+      }
+    },
+    {
+      "lane": "protocols-b",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-b-done.json",
+        "sha256": "8b750f522357dfdd28457cae18845dc935d774ea9bde405df2f8f093b1aeafef"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-b-state.json",
+        "sha256": "3f66323520c5471e276b01ee9f2e39a3ba37c9c7d6d330cfd04f586d51e88c6f"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-b-results.jsonl",
+        "sha256": "756a505c1ea634de93531292cfad8982517e618b47ff82b2232a43a018eba54c"
+      }
+    },
+    {
+      "lane": "protocols-c",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-c-done.json",
+        "sha256": "7fd8ba9abef240aeac0501c6fb7a11d2b6ff0329e3878a7de14550ff9fcc55b1"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-c-state.json",
+        "sha256": "92afb627b994685002b5992ddbda4f5a28fc6a25e204bdb9dfcb3fcdec2e84b9"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/protocols-c-results.jsonl",
+        "sha256": "380bae8d19448a7b3e7d19d3854ec30f78b81ae8648e115f3cbac3d20e9f030a"
+      }
+    },
+    {
+      "lane": "baseline-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/baseline-a-done.json",
+        "sha256": "56ec1478862a063dd6d8f4e0014d711c50187ae1d55d0897a9f4f3d6c747db0f"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/baseline-a-state.json",
+        "sha256": "43c3bd070178faac055a473151bb005caadb6144cb2451d86b597a32c67ed2bb"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/baseline-a-results.jsonl",
+        "sha256": "e1e2b95f20cf321dd44784cd5ec608e38d1dacac7c95a1a554050c37a80fab14"
+      }
+    },
+    {
+      "lane": "zed-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/zed-a-done.json",
+        "sha256": "ded8dbd5a60beed6277d9f3c23e43094039ab0546c06444ee70f508aaf9fabc1"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/zed-a-state.json",
+        "sha256": "2afcd760f08cbe88f578a81e3c0420ea386143664d33b31bb40aa7bf7a1d8122"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/zed-a-results.jsonl",
+        "sha256": "8356efb8551ee6c32f944acf472299d6200a05d5ccc266a6b3167d9472f40e71"
+      }
+    },
+    {
+      "lane": "finalize-native-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a-done.json",
+        "sha256": "040a0935879ff48aefeb25fb69f6e82f4f80f21a3888f61a13470dc63b8b1093"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a-state.json",
+        "sha256": "68f095d09bdb352cb0ff876e8ef2f44646617da51a7c4c546a72ca10f3e899a7"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-a-results.jsonl",
+        "sha256": "7920d31029bdb9e03f89cc3180438293bb9673dfe20d9f5499abbd99783e7f25"
+      }
+    },
+    {
+      "lane": "finalize-native-b",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b-done.json",
+        "sha256": "c71e37bdf7373d089916dc2b6ee2926fc2c3b35047106dfc40d8c0e7e95262ac"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b-state.json",
+        "sha256": "763b5aa18f47e508aaab7d52b4421597e2ca904150c7066af9b512d677a19594"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-native-b-results.jsonl",
+        "sha256": "d71c75fa86af1b167c4d04a5f3e5b3f6cfb2e13a4f5febf096479029637930ed"
+      }
+    },
+    {
+      "lane": "finalize-old-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a-done.json",
+        "sha256": "53420da102ae59dbe1ce4f01e6ca7e56d63481d77d0bb3616122a169cb255385"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a-state.json",
+        "sha256": "7b2441f4d349ec11fae48bef64f5c12d82a1f56782f2f512c832b490e51b9a5c"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-a-results.jsonl",
+        "sha256": "99a70d3ebdf44debf406d192c4ab7e921d9b1cda4508163c071d6681f8cc9fe8"
+      }
+    },
+    {
+      "lane": "finalize-old-b",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b-done.json",
+        "sha256": "471c39ec71891a18efbe6763ca765a0c19c688d9846e06b9694c50ad8c220c62"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b-state.json",
+        "sha256": "b18c2867ab88bc44f82f03a8d2dee2e5e175380ec931ac62d9fa7c5ec81ad950"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-old-b-results.jsonl",
+        "sha256": "033f4dba62f0b34d4b1c29b114126c76c796bfc8d6a7389333e1f0f8ff160b78"
+      }
+    },
+    {
+      "lane": "finalize-gates-a",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-a-done.json",
+        "sha256": "d941319847bf40e4c4a6d09a5dd688035f4caae9461524f5b44afd73d999cbd5"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-a-state.json",
+        "sha256": "806e9020c5aca62eb364294c38509ff86f84e8f3ca804d986a6e23292b8177f4"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-a-results.jsonl",
+        "sha256": "0d553ed5a33c9e248f8fd96bd4b4f276ec8982e5536ba247a1b0a71153b36961"
+      }
+    },
+    {
+      "lane": "finalize-gates-b",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-b-done.json",
+        "sha256": "c3ead828365be6670d7db8a438ebb448c4d38aa5fb8fe4350b3ed0cb2dc7ff7f"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-b-state.json",
+        "sha256": "570e0e0b0875260824c26665518f69c14b833d86aac62436f2d5facdc6305e49"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-b-results.jsonl",
+        "sha256": "9fe4fe69bb8287a40fadfe694947757a297e60c2b390fe4e5ce72f9f38e56a68"
+      }
+    },
+    {
+      "lane": "finalize-gates-c",
+      "done": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c-done.json",
+        "sha256": "3126e0a032bc290981a5cdb0af742c38581fc26fb02063cf8d90577fa3ba38d4"
+      },
+      "state": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c-state.json",
+        "sha256": "0699d45b457cba80952191f5adf6f798f6830a0d33321832541a8872bcddd478"
+      },
+      "results": {
+        "path": "tmp/854-notes/p4/w23/frontend-run-e/finalize-gates-c-results.jsonl",
+        "sha256": "8e086411ec7cab4f6c86592d7c4be59b8978c7b17757b1433dd35120a30e2904"
+      }
+    }
+  ],
+  "processProof": {
+    "checked": 167,
+    "pids": [
+      3361,
+      3363,
+      3392,
+      3409,
+      3421,
+      5567,
+      5570,
+      5593,
+      6535,
+      6538,
+      6558,
+      9493,
+      9496,
+      9548,
+      9562,
+      9639,
+      9896,
+      9980,
+      10008,
+      10157,
+      10159,
+      10195,
+      11695,
+      11698,
+      11699,
+      11969,
+      12021,
+      12049,
+      12075,
+      12101,
+      12126,
+      12127,
+      12438,
+      12485,
+      12496,
+      12506,
+      12507,
+      12558,
+      12580,
+      12632,
+      12921,
+      13025,
+      13074,
+      13197,
+      13205,
+      13235,
+      15233,
+      15235,
+      15238,
+      15503,
+      15555,
+      15583,
+      15609,
+      15611,
+      15846,
+      15899,
+      15900,
+      15978,
+      16001,
+      16117,
+      16350,
+      16424,
+      16442,
+      16622,
+      16635,
+      16690,
+      83391,
+      83393,
+      83735,
+      83766,
+      83790,
+      84088,
+      84264,
+      84290,
+      84318,
+      84329,
+      84565,
+      84617,
+      84627,
+      84639,
+      84649,
+      84658,
+      84665,
+      84677,
+      84694,
+      84701,
+      84707,
+      84718,
+      84749,
+      84763,
+      84782,
+      84809,
+      84820,
+      84827,
+      86536,
+      86539,
+      86558,
+      86577,
+      86592,
+      86615,
+      87017,
+      87019,
+      87524,
+      87545,
+      87566,
+      87587,
+      88726,
+      88728,
+      89259,
+      89289,
+      89312,
+      89341,
+      89379,
+      89380,
+      89675,
+      89693,
+      89723,
+      89744,
+      89769,
+      89770,
+      89822,
+      90123,
+      90252,
+      90257,
+      90293,
+      91261,
+      91263,
+      91297,
+      91321,
+      91357,
+      91382,
+      91411,
+      91412,
+      91420,
+      91439,
+      91470,
+      91492,
+      91519,
+      91520,
+      91571,
+      91597,
+      91674,
+      91675,
+      91729,
+      93104,
+      93105,
+      93637,
+      93667,
+      93687,
+      93716,
+      93742,
+      93744,
+      93956,
+      93985,
+      94022,
+      94067,
+      94104,
+      94105,
+      94174,
+      94433,
+      94539,
+      94543,
+      94592,
+      98824,
+      98825,
+      98856,
+      98864
+    ],
+    "alive": [],
+    "checkedAt": "2026-10-20T07:58:38.559Z",
+    "activeProductionMutants": false,
+    "explanation": "No production source was edited by this task; full package source boundary has only test/helper differences."
+  },
+  "remaining": [
+    "Uncommitted CLI native protocol media lifetime failure #3907",
+    "Bounded native frontdoors proved here do not cover every CLI/ACP/A2A command, task restoration, concurrent client or cancellation variant",
+    "Twelve suffix/curated/borrowed/recomposition candidates in run-a/native-remainder-inventory.json; rebind prior receipts to actual current dependencies",
+    "Full native 5000-seed corpora, randomized purge and remaining trap mappings",
+    "Eight unchanged decoded-row-free planning/header RED assertions depend on phases 5/6 -> 7; zero HTTP entry is not no-decode planning",
+    "Phase-4 provider spools, W24-W26 and phases 5-9; old backend default unchanged"
+  ],
+  "notClaimed": [
+    "Full repository, package or affected-shard test execution",
+    "Green CLI native protocol",
+    "W23 completion",
+    "No per-operation temporary files or phase-7 planner completion"
+  ],
+  "review": "review skipped per Andrew 2026-10-09",
+  "safety": "No cleanup, generated obstruction relocation, .llxprt edit/staging, raw recovery bulk stage, skip, weaker check, backend default change, OCR, push or merge."
+}

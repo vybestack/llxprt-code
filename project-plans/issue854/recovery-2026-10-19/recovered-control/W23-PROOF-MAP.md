@@ -1,5 +1,32 @@
 # W23 proof map
 
+## Frontend protocols and matching recorders, 2026-10-20T07:56Z
+
+Green source commit: `12d92e628c9b65309f800607c173e7e4d1a4e74e`. Authority: `W23-FRONTEND-PROTOCOL-PROOF.json`; raw root: `tmp/854-notes/p4/w23/frontend-run-e/`. The following ten accepted file executions total **74 passes, zero failures/skips**, with source hashes and raw/JUnit counts checked. These are bounded contracts, not whole-package native coverage.
+
+| File | Journal / old passes | Accepted receipts | What actually runs |
+| --- | ---: | --- | --- |
+| CLI `cliSessionListAndDelete.behavior.test.ts` | 11 / 11 | `finalize-native-b/000`, `finalize-old-b/000` | Actual non-TTY CLI subprocess list/delete, corrupt-recording warning counts, error paths and unchanged files. |
+| CLI `cliSessionListAndDelete.storageParity.test.ts` | 3 / 3 | `finalize-native-b/001`, `finalize-old-b/001` | Actual CLI subprocess with untrusted-workspace/user-global log-root routing, seeded by the selected real recorder. |
+| Zed `zed-session-listing.test.ts` | 15 / 15 | `finalize-native-a/003`, `finalize-old-a/002` | Real discovery/listing, title/cwd/timestamps, title precedence and live merging; no live ACP turn claimed here. |
+| Zed `zedIntegration.sessionInfo.test.ts` | 7 / 7 | `finalize-native-a/004`, `finalize-old-a/003` | One real owning Agent/title/resume case, six existing stub-backed notification cases. Native title fact and old JSONL assertion stay distinct. |
+| Zed `zed-native-session-protocol.test.ts` | 1 / not run | `finalize-native-b/003` | Actual ACP peer/ZedAgent/Agent runtime, real read tool, close/list/load/replay, rejected foreign cwd, preserved native prefix, continuation and released locks. |
+| A2A `http/native-task-protocol.test.ts` | 1 / not run | `finalize-native-a/005` | Actual local HTTP/SSE app/executor/Agent, approval/real write/continuation/next message, same task/context, pending second write, `tasks/cancel`, canceled store state, absent unapproved output, native file rows and lock release. |
+
+Native ACP has four initial rows and four after reload: the reconstructed FakeProvider restarts its canned turns and executes the real read tool again. The full initial four-row digest remains unchanged. A2A checks four rows after confirmation, six after the next human/AI exchange, then three human rows and two tool calls after cancellation/disposal. Its assertion-only test-utils reader collects this small bounded history; no production memory-bound claim follows. External providers and unrelated startup input are fake; recording, mutation, runtime scheduling, tools and task cancellation are real.
+
+Original assertion-chain token multisets are preserved: CLI behavior 11, storage parity three, Zed listing 27, Zed session info 19 plus one native assertion. The three CLI diagnostic templates now choose the matching parser error. Old JSONL required-field text remains unchanged; native corrupt input is a malformed `session:provider` fact. Native titles are read from `session:title`; old titles retain the original JSONL substring check. The CLI helper's move into `__tests__` fixes a genuine test/production edge classification without editing the graph, manifest policy or checks.
+
+`finalize-gates-c` passes all ten final-source gates: three declaration builds, three package type gates including CLI's Bun-test project, lint, format, graph and audit. Both CLI/A2A boundary checks also pass. No forbidden high-risk touched audit finding remains. One ACP DUP_ASSERT notice and three notices on the uncommitted CLI candidate observe equalities at different lifecycle phases; no assertion was dropped. Reuse is bounded by matching test/helper hashes and a 7,862-file original package blob check: only five original test/helper files differ. All 128 frozen fixture/golden/corpus inputs match. The full local source manifest hash and per-input hashes are in the proof. No production mutation was made or remains active.
+
+### Preserved CLI RED and handoff
+
+`finalize-native-b/002` is **zero pass/one failure after 31 assertions**, not accepted evidence. Candidate `packages/cli/src/ui/hooks/native-command-protocol.test.ts` SHA-256 `320f9b07cff9f9fa79e4f0414543489af3a698ce2642b5621f587b1949c3e37d` remains intact and uncommitted, with a byte-identical raw source copy. The independent durable archive lacks the image object named by the recorded native reference after Agent disposal. [#3907](https://github.com/vybestack/llxprt-code/issues/3907) records the failure. Relevant ownership path: `storage/session-media-owner.ts:17-25,34-45`; old publication: `recording/SessionRecordingService.ts:647-673` and `storage/recorded-media-transfer.ts:48-56`; native mirror commit: `services/history/journalMirrors.ts:67-76`. Do not weaken or exclude this candidate to claim full CLI protocol coverage.
+
+Earlier protocol authoring errors remain in `protocols-a/b/c`, including insufficient canned responses, the ancestry fact location, canonical workspace path and reading a disposed live store. The final archive failure is separate. The initial scoped gate failures remain in `finalize-gates-a/b`; final type fixes use actual declared API types, while the graph failure was resolved by relocating the helper. The collector's earliest inventory `head` fields contain its older literal `40be79a2d`; source hashes and the verified Git base `63298ebea` identify this task boundary, and final B-lane inventories read HEAD dynamically. Driver exit alone is not green proof.
+
+All 167 recorded frontend PIDs are absent. No task, production mutant or restoration is pending. Next W23 work remains native archived-media publication/cold reopen; the twelve suffix/curated/borrowed/recomposition candidates; full native seeds/randomized purge and remaining traps; eight planning/header RED cases on phases 5/6 through 7. Broader frontend restoration/concurrency/cancellation variants remain unproved. Phase-4 spools, W24-W26 and the old default are unchanged. Review skipped per Andrew 2026-10-09. No cleanup, `.llxprt` edit/staging, raw recovery bulk staging, weaker checks, OCR, push or merge.
+
 
 ## Frontend mutation subset, 2026-10-20T07:26Z
 
