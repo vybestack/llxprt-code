@@ -2,8 +2,13 @@
 
 Optional LLxprt Code runtime plugin packages (issue #2759). Each directory in
 this tree is a standalone package context that sits OUTSIDE the root
-workspaces: a root `bun install` or `npm install` never installs anything from
-here, and the root lockfiles never record plugin workspace membership.
+workspaces, and the root lockfiles never record plugin workspace membership.
+In a Git checkout, root postinstall installs the explicitly declared first-party
+plugin contexts with a private Bun 1.4.2 tool installation, frozen plugin locks,
+and omitted host peers. It removes that tool installation afterwards. This
+supplies the plugins used by the repository's scripts, provider and CLI suites
+without adding Google dependencies to the base package. Source-package and
+published-package consumers without checkout metadata do not install plugins.
 
 ## Why plugins live outside the workspaces
 

@@ -1,4 +1,7 @@
 import { adoptFixture } from './helpers/adoption-fixture.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
   ProviderManager,
@@ -130,10 +133,12 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     manager: ProviderManager,
     client: AgentClientContract,
   ): Promise<Agent> {
+    const directory = await makeScratchDir('agent-unconfigured-');
+    releases.push(() => rm(directory, { recursive: true, force: true }));
     const config = new Config({
       sessionId: 'test-unconfigured-session',
-      targetDir: '/tmp',
-      cwd: '/tmp',
+      targetDir: directory,
+      cwd: directory,
       debugMode: false,
       model: PLACEHOLDER_MODEL,
       telemetry: { enabled: false },
@@ -156,7 +161,7 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     releases.push(() => workspace.dispose());
     await workspace.initialize();
     const mediaStore = new LocalMediaStore({
-      rootDirectory: '/tmp/agent-unconfigured-media',
+      rootDirectory: join(directory, 'media'),
       quotaBytes: 1024,
     });
     Object.assign(client, {

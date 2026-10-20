@@ -203,6 +203,7 @@ describe('Session owner cleanup joining', () => {
     const entered = createGate();
     const released = createGate();
     const server = createServer((request, response) => {
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
       response.end(request.url);
     });
     server.listen(0, '127.0.0.1');

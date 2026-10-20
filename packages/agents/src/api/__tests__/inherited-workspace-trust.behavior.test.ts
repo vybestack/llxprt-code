@@ -16,7 +16,9 @@ describe('Agent-owned inherited workspace trust', () => {
   const credentials = useOwnedCredentials();
   const cleanup: Array<() => void | Promise<void>> = [];
   let directory: string;
+  let temporaryRoot: string;
   beforeEach(async () => {
+    temporaryRoot = await realpath(tmpdir());
     directory = await realpath(
       await mkdtemp(join(tmpdir(), 'inherited-trust-')),
     );
@@ -49,7 +51,7 @@ describe('Agent-owned inherited workspace trust', () => {
     await agent.ide.setTrustedFolderLive(false);
     expect(parent.isTrustedFolder()).toBe(true);
     expect(peer.ide.isTrustedFolder()).toBe(true);
-    expect(() => agent.workspace.addDirectory(tmpdir())).toThrow(
+    expect(() => agent.workspace.addDirectory(temporaryRoot)).toThrow(
       'trusted workspace',
     );
     const revoked = parent.setTrustedFolderLive(false);
@@ -57,7 +59,7 @@ describe('Agent-owned inherited workspace trust', () => {
     await revoked;
     await parent.setTrustedFolderLive(true);
     expect(agent.ide.isTrustedFolder()).toBe(true);
-    agent.workspace.addDirectory(tmpdir());
+    agent.workspace.addDirectory(temporaryRoot);
     expect(agent.workspace.getDirectories()).toContain(
       await realpath(tmpdir()),
     );

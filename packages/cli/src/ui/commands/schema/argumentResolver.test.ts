@@ -59,10 +59,10 @@ function processToken(
   hasQuotes: boolean,
 ): string {
   if (hasEscapes && Math.random() > 0.5) {
-    return token.replace(/'/g, "\\'");
+    return JSON.stringify(token);
   }
   if (hasQuotes && Math.random() > 0.5) {
-    return `"${token}"`;
+    return JSON.stringify(token);
   }
   return token;
 }

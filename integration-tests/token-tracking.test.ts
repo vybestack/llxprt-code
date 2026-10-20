@@ -21,7 +21,7 @@
  * cuts that per-leg cost rather than relocating it.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
@@ -35,6 +35,8 @@ import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.j
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { formatSessionTokenUsage } from '../packages/cli/src/ui/utils/tokenFormatters.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 /**
  * Property-based test helper — a runner-portable replacement for the `itProp`
@@ -124,6 +126,13 @@ function useProviderManager(suite: string): {
 } {
   let providerManager: ProviderManager;
   let providerConfig: Config;
+  let sessionSettings: SessionSettingsOwner;
+
+  afterEach(async () => {
+    providerManager.dispose();
+    await sessionSettings.dispose();
+    await providerConfig.dispose();
+  });
 
   beforeEach(() => {
     const runtimeId = `${suite}.${Math.random().toString(36).slice(2, 10)}`;
@@ -145,7 +154,20 @@ function useProviderManager(suite: string): {
       providerConfig: undefined,
       oauthManager: undefined,
     });
-    providerManager = new ProviderManager(testRuntime);
+    const settings = new SettingsService();
+    sessionSettings = new SessionSettingsOwner(settings);
+    sessionSettings.bindTelemetry(providerConfig);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      undefined,
+      testRuntime,
+      undefined,
+      sessionSettings,
+    );
     providerManager.setConfig(providerConfig);
   });
 

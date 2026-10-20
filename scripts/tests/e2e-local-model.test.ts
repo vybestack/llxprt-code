@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { posix, resolve } from 'node:path';
 import {
   asOptionalRecord,
   asRecord,
@@ -70,6 +70,19 @@ function runBackendVerifier(
   mkdirSync(processDir, { recursive: true });
   mkdirSync(parentDir, { recursive: true });
   mkdirSync(ollamaDir, { recursive: true });
+  const shellDirectory = spawnSync('bash', ['-c', 'pwd -P'], {
+    cwd: fixture,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (shellDirectory.error) throw shellDirectory.error;
+  if (shellDirectory.status !== 0) {
+    throw new Error(shellDirectory.stderr);
+  }
+  const shellRoot = shellDirectory.stdout.trim();
+  const shellRunnerTemp = posix.join(shellRoot, 'runner-temp');
+  const shellProcRoot = posix.join(shellRoot, 'proc');
+  const shellBin = posix.join(shellRoot, 'bin');
   writeFileSync(
     resolve(procRoot, 'cpuinfo'),
     `vendor_id : ${options.vendor ?? 'GenuineIntel'}\n`,
@@ -77,7 +90,7 @@ function runBackendVerifier(
   writeFileSync(
     resolve(processDir, 'cmdline'),
     options.cmdline ??
-      `${resolve(ollamaDir, 'llama-server')}\0--model\0gemma\0`,
+      `${posix.join(shellRunnerTemp, 'ollama/lib/ollama/llama-server')}\0--model\0gemma\0`,
   );
   writeFileSync(
     resolve(processDir, 'status'),
@@ -96,12 +109,12 @@ function runBackendVerifier(
       '-c',
       'printf %s "$1" > "$2"',
       '--',
-      maps.replaceAll('/runner-temp', runnerTemp),
-      mapsPath,
+      maps.replaceAll('/runner-temp', shellRunnerTemp),
+      posix.join(shellProcRoot, '4242/maps'),
     ]);
     writer.unref();
   } else {
-    writeFileSync(mapsPath, maps.replaceAll('/runner-temp', runnerTemp));
+    writeFileSync(mapsPath, maps.replaceAll('/runner-temp', shellRunnerTemp));
   }
   writeFileSync(
     resolve(runnerTemp, 'ollama-server.log'),
@@ -116,22 +129,27 @@ function runBackendVerifier(
   writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
   let pgrepBody = 'exit 1';
   if (options.mapsDisappearAfterPgrep) {
-    pgrepBody = `rm -rf '${processDir}'; printf '%s\\n' 4242`;
+    pgrepBody = `rm -rf -- "$LLXPRT_PROC_ROOT/4242"; printf '%s\\n' 4242`;
   } else if (livePid) {
     pgrepBody = `printf '%s\\n' 4242`;
   }
   writeExecutable(bin, 'pgrep', pgrepBody);
   const script = asString(step('Verify CPU backend warm-up').run);
-  const result = spawnSync('bash', ['-c', script], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      PATH: `${bin}:${process.env.PATH ?? ''}`,
-      RUNNER_TEMP: runnerTemp,
-      LLXPRT_PROC_ROOT: procRoot,
-      OLLAMA_HOST: '127.0.0.1:12644',
+  const result = spawnSync(
+    'bash',
+    ['-c', `export PATH="$LLXPRT_FIXTURE_BIN:$PATH"\n${script}`],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        LLXPRT_FIXTURE_BIN: shellBin,
+        RUNNER_TEMP: shellRunnerTemp,
+        LLXPRT_PROC_ROOT: shellProcRoot,
+        OLLAMA_HOST: '127.0.0.1:12644',
+      },
     },
-  });
+  );
   rmSync(fixture, { recursive: true, force: true });
   return {
     stdout: result.stdout,

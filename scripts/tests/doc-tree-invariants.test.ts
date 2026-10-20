@@ -24,7 +24,7 @@ import {
 } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { repoRoot } from './doc-guard-helpers.ts';
 import { extractHeadingSlugs } from '../doc-links/heading-slugger.ts';
 import { collectMarkdownFiles } from '../doc-links/file-scanner.ts';
@@ -60,7 +60,7 @@ function repoBlobOrTreePattern(): RegExp {
 
 function collectMarkdownUnder(relDir: string): string[] {
   return collectMarkdownFiles([join(repoRoot, relDir)]).map((p) =>
-    relative(repoRoot, p),
+    relative(repoRoot, p).split(sep).join('/'),
   );
 }
 
@@ -122,7 +122,7 @@ function searchRepoForMarker(
 ): string[] {
   const results: string[] = [];
   collectFilesWithMarker(root, marker, NESTED_CHECKOUT_EXCLUDE_DIRS, results);
-  return results.map((p) => relative(root, p));
+  return results.map((p) => relative(root, p).split(sep).join('/'));
 }
 
 function isBenignFsError(error: unknown): boolean {
@@ -316,7 +316,7 @@ describe('doc-tree invariants (real repo state)', () => {
           mkdirSync(dir, { recursive: true });
           const file = join(dir, 'keyboard-shortcuts.md');
           writeFileSync(file, `<!-- ${marker} -->\n`);
-          return relative(root, file);
+          return relative(root, file).split(sep).join('/');
         };
         // Mimic a nested checkout whose own docs carry the marker. Also
         // plant a non-excluded sibling to prove the walk is not simply

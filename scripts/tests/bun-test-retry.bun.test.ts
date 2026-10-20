@@ -434,15 +434,13 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { withTerminatedNativeProcessTree } from './native-process-tree-fixture.js';
 import {
   buildCliJUnitCases,
   buildCoreJUnitCases,
   buildAuthJUnitCases,
   renderJUnitReport,
   cleanupAttemptDirectory,
-  observeChildClose,
-  killChildTreeAndWait,
   junitReportContainsPerTestTimeout,
   JUNIT_SCAN_CHUNK_BYTES,
 } from '../lib/bun-test-retry.js';
@@ -785,14 +783,22 @@ describe('mechanical composition', () => {
     ).rejects.toBe(error);
   });
   it('reaps a real detached child and observes close', async () => {
-    const child = spawn(
-      process.execPath,
-      ['-e', 'setInterval(() => {}, 1000)'],
-      { detached: process.platform !== 'win32', stdio: 'ignore' },
-    );
-    const closed = observeChildClose(child);
-    await killChildTreeAndWait(child, closed, { reapTimeoutMs: 8000 });
-    expect(child.signalCode).not.toBeNull();
-    expect(child.exitCode).toBeNull();
+    await withTerminatedNativeProcessTree((child, descendantPid) => {
+      if (child.pid === undefined)
+        throw new Error('Missing native child identity');
+      for (const pid of [child.pid, descendantPid]) {
+        expect(() => process.kill(pid, 0)).toThrow(
+          expect.objectContaining({ code: 'ESRCH' }),
+        );
+      }
+      if (process.platform === 'win32') {
+        expect(child.signalCode).toBeNull();
+        expect(child.exitCode).not.toBeNull();
+        expect(child.exitCode).not.toBe(0);
+      } else {
+        expect(child.signalCode).not.toBeNull();
+        expect(child.exitCode).toBeNull();
+      }
+    });
   });
 });

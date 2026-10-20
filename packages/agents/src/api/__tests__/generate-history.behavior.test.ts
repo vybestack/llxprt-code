@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import * as recordingFs from 'node:fs/promises';
 import { withOwners } from './turn-revision-capture.fixture.js';
 import {
   useRecordingPrompts,
@@ -14,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgentFromContent } from './helpers/agentHarness.js';
 import { generationGate } from './helpers/generation-owner-fixture.js';
+import { nativeHookInputCommand } from './helpers/native-hook-command.js';
 import {
   HookEventName,
   HookType,
@@ -207,7 +209,7 @@ describe('Agent.generate independent history flags', () => {
   });
 
   it('attributes option-bearing hooks to the executing facade and its live stopped or resumed transcript without writing a turn', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'generation-hooks-'));
+    const directory = await mkdtemp(join(tmpdir(), "generation hooks ' Ω-"));
     const output = join(directory, 'hooks.jsonl');
     const events = [
       HookEventName.BeforeToolSelection,
@@ -288,7 +290,7 @@ describe('Agent.generate independent history flags', () => {
                   hooks: [
                     {
                       type: HookType.Command,
-                      command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                      command: nativeHookInputCommand(output, 'append'),
                     },
                   ],
                 },
@@ -328,6 +330,74 @@ describe('Agent.generate independent history flags', () => {
         expect(await agent.generate('primary survives borrower')).toBe(
           'turn two reply',
         );
+      },
+    );
+  });
+
+  it('joins the invoking facade recording append before generation returns', async () => {
+    await withRecordingLifetimeFixture(
+      async (agent, _config, _owner, _settings, _oauth, borrow) => {
+        const peer = await borrow();
+        await agent.setHistory(structuredClone(seed));
+        await agent.session.setRecording({ enabled: true });
+        await peer.session.setRecording({ enabled: true });
+        const aPath = agent.session.getRecording().path;
+        const bPath = peer.session.getRecording().path;
+        if (aPath === undefined || bPath === undefined)
+          throw new Error('Missing facade recording');
+        const entered = generationGate();
+        const held = generationGate();
+        const append = recordingFs.appendFile;
+        const boundary = spyOn(recordingFs, 'appendFile').mockImplementation(
+          async (...args) => {
+            if (
+              args[0] === bPath &&
+              String(args[1]).includes('held B exchange')
+            ) {
+              entered.release();
+              await held.promise;
+            }
+            return append(...args);
+          },
+        );
+        const generation = peer.generate('held B exchange', {
+          writeHistory: true,
+          model: 'held-recording-model',
+        });
+        try {
+          await entered.promise;
+          const first = await Promise.race([
+            generation.then(() => 'generation-returned'),
+            readFile(bPath, 'utf8').then(() => 'append-still-held'),
+          ]);
+          expect(first).toBe('append-still-held');
+          expect(await readFile(bPath, 'utf8')).not.toContain(
+            'held B exchange',
+          );
+          expect(await readFile(aPath, 'utf8')).not.toContain(
+            'held B exchange',
+          );
+          held.release();
+          expect(await generation).toBe('turn one reply');
+          const published = await readFile(bPath, 'utf8');
+          expect(published).toContain('held B exchange');
+          expect(published).toContain('held-recording-model');
+          expect(published).toContain('turn one reply');
+          expect(await readFile(aPath, 'utf8')).not.toContain(
+            'held B exchange',
+          );
+          await peer.dispose();
+          expect(await agent.generate('primary after accepted append')).toBe(
+            'turn two reply',
+          );
+        } finally {
+          held.release();
+          try {
+            await generation;
+          } finally {
+            boundary.mockRestore();
+          }
+        }
       },
     );
   });

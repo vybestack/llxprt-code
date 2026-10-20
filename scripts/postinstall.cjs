@@ -326,6 +326,23 @@ function installWindowsNativeLaunchers() {
   }
 }
 
+function installCheckoutPlugins() {
+  if (!fs.existsSync(path.join(repoRoot, '.git'))) {
+    return;
+  }
+  const result = spawnSync(
+    process.execPath,
+    [path.join(repoRoot, 'scripts', 'install-checkout-plugins.ts')],
+    { cwd: repoRoot, stdio: ['ignore', 'inherit', 'inherit'] },
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `Checkout plugin installation failed (status=${String(result.status)}, signal=${String(result.signal)})`,
+    );
+  }
+}
+
 try {
   applyDependencyPatches();
 } catch (error) {
@@ -344,6 +361,7 @@ try {
 if (detectInstaller() === 'bun') {
   symlinkBunWorkspaceCopies();
   installWindowsNativeLaunchers();
+  installCheckoutPlugins();
   process.exit(0);
 }
 
@@ -365,3 +383,4 @@ if (hasWorkspaceSources) {
 }
 
 installWindowsNativeLaunchers();
+installCheckoutPlugins();

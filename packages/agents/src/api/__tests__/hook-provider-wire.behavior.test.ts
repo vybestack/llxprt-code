@@ -17,7 +17,7 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { nativeHookCommand } from './helpers/native-hook-command.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
@@ -77,7 +77,9 @@ describe('public Agent physical model hooks', () => {
       script,
       `import { writeFileSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
-writeFileSync(${JSON.stringify(inputPath)}, JSON.stringify(input));
+const output = process.argv[2];
+if (output === undefined) throw new Error('Missing hook input path');
+writeFileSync(output, JSON.stringify(input), 'utf8');
 console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...input.llm_request.contents, { speaker: 'human', blocks: [{ type: 'text', text: input.session_id + ':physical instruction' }] }] } } }));
 `,
     );
@@ -132,7 +134,7 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                  command: nativeHookCommand(script, [inputPath]),
                 },
               ],
             },

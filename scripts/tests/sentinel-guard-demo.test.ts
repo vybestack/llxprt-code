@@ -65,7 +65,12 @@ function buildFakeRealEnv(fakeRealHome: string): NodeJS.ProcessEnv {
     delete env[key];
   }
   env.HOME = fakeRealHome;
+  env.USERPROFILE = fakeRealHome;
   env.TMPDIR = join(fakeRealHome, 'tmp');
+  env.TEMP = env.TMPDIR;
+  env.TMP = env.TMPDIR;
+  env.APPDATA = join(fakeRealHome, 'AppData', 'Roaming');
+  env.LOCALAPPDATA = join(fakeRealHome, 'AppData', 'Local');
   mkdirSync(env.TMPDIR, { recursive: true });
   env.LLXPRT_CONFIG_HOME = join(fakeRealHome, 'platform-config');
   env.LLXPRT_LOG_HOME = join(fakeRealHome, 'platform-log');
@@ -122,7 +127,9 @@ describe('real-home sentinel guard end-to-end demo (issue #3622)', () => {
       const leak = await runSharedRunner(repoRoot, leakEnv);
       expect(leak.exitCode).toBe(1);
       expect(leak.stderr).toContain('Real-home sentinel violation');
-      expect(leak.stderr).toContain('fixtures/sentinel-leak-fixture.test.ts');
+      expect(leak.stderr).toContain(
+        join('fixtures', 'sentinel-leak-fixture.test.ts'),
+      );
       const leakSentinels = sentinelFiles(legacyDir);
 
       // Control: same runner over the same file, fixture unarmed.

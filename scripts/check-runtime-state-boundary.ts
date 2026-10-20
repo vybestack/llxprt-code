@@ -5,7 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { existsSync, mkdirSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
+import { portableRelativePath as relative } from './compiler-source-path.js';
 import { parseArgs } from 'node:util';
 import ts from 'typescript';
 import { verifyJavascriptModuleIdentities } from './tests/runtime-javascript-module-identity.js';
@@ -370,7 +371,7 @@ function auditProgram(
       ...new Set([
         ...configuration.fileNames.filter(
           (file) =>
-            files.includes(file) ||
+            files.includes(workspacePath(workspace, file)) ||
             file.endsWith('.json') ||
             (!isTestSource(file) && /\.d\.(?:ts|mts|cts)$/.test(file)),
         ),
@@ -401,11 +402,18 @@ function declarationCandidates(
     : defaultConfig;
   if (!existsSync(workspacePath(workspace, config))) return [source];
   const parsed = compilerConfiguration(workspace, config);
-  if (!parsed.fileNames.includes(source)) return [source];
+  const compilerSource = parsed.fileNames.find(
+    (file) => workspacePath(workspace, file) === source,
+  );
+  if (compilerSource === undefined) return [source];
   return [
     source,
     ...ts
-      .getOutputFileNames(parsed, source, !ts.sys.useCaseSensitiveFileNames)
+      .getOutputFileNames(
+        parsed,
+        compilerSource,
+        !ts.sys.useCaseSensitiveFileNames,
+      )
       .filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file)),
   ];
 }

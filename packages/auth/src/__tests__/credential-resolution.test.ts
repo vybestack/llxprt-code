@@ -9,6 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   AuthPrecedenceResolver,
   CredentialResolutionError,
@@ -69,7 +70,10 @@ async function startProxy(behavior: ProxyBehavior): Promise<ProxyHarness> {
   const directory = await fs.mkdtemp(
     path.join(os.tmpdir(), 'llxprt-credential-resolution-'),
   );
-  const socketPath = path.join(directory, 'proxy.sock');
+  const socketPath =
+    process.platform === 'win32'
+      ? `\\\\.\\pipe\\llxprt-credential-${process.pid}-${randomUUID()}`
+      : path.join(directory, 'proxy.sock');
   const sockets = new Set<net.Socket>();
   let requestCount = 0;
   const server = net.createServer((socket) => {

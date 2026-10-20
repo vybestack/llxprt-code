@@ -15,7 +15,10 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import {
+  nativeHookCommand,
+  nativeHookInputCommand,
+} from './helpers/native-hook-command.js';
 
 /**
  * @license
@@ -135,7 +138,7 @@ if (input.hook_event_name === 'BeforeAgent') {
 }
 `,
   );
-  return `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
+  return nativeHookCommand(script);
 }
 
 describe('public Agent hook shutdown', () => {
@@ -161,7 +164,7 @@ describe('public Agent hook shutdown', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat > ${escapeShellArg(input, 'bash')}`,
+                    command: nativeHookInputCommand(input, 'write'),
                   },
                 ],
               },
@@ -224,7 +227,7 @@ describe('public Agent hook shutdown', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> ${escapeShellArg(output, 'bash')}; printf '\\n' >> ${escapeShellArg(output, 'bash')}`,
+                    command: nativeHookInputCommand(output, 'append'),
                   },
                 ],
               },
@@ -327,7 +330,7 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                   hooks: [
                     {
                       type: HookType.Command,
-                      command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                      command: nativeHookCommand(script),
                     },
                   ],
                 },

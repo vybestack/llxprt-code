@@ -4,36 +4,53 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
+import { afterEach, describe, it, expect } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import type { IProvider, IModel } from '@vybestack/llxprt-code-providers';
-import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
-function createManager() {
+const resources: Array<{
+  manager: ProviderManager;
+  owner: SessionSettingsOwner;
+  config: Config;
+}> = [];
+
+afterEach(async () => {
+  for (const { manager, owner, config } of resources.splice(0)) {
+    manager.dispose();
+    await owner.dispose();
+    await config.dispose();
+  }
+});
+
+function createManager(): ProviderManager {
   const settingsService = new SettingsService();
   const runtime = createProviderRuntimeContext({});
-  const { manager } = createProviderManager(
+  const config = new Config({
+    sessionId: 'provider-gemini-switching',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'model-1',
+    debugMode: false,
+    telemetry: { enabled: false, logConversations: false },
+  });
+  const owner = new SessionSettingsOwner(settingsService);
+  owner.bindTelemetry(config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
+    undefined,
     runtime,
     undefined,
-    new CredentialAuthority(),
-    new NodeFileSystem(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    true,
+    owner,
   );
+  resources.push({ manager, owner, config });
   return manager;
 }
 

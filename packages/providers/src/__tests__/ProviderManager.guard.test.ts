@@ -10,6 +10,7 @@ const acquireConfig = installOwnedConfig();
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { resolve } from 'node:path';
 import { ProviderManager } from '../ProviderManager.js';
 import {
   BaseProvider,
@@ -523,7 +524,7 @@ describe('ProviderManager selected workspace binding', () => {
       }))
         chunks.push(chunk);
       expect(chunks).toMatchObject([
-        { blocks: [{ text: '/workspace-selected' }] },
+        { blocks: [{ text: resolve('/workspace-selected') }] },
       ]);
     } finally {
       manager.dispose();

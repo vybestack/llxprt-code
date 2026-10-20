@@ -54,6 +54,7 @@ describe('root-owned proxy fetch', () => {
     const admitted = Promise.withResolvers<void>();
     const server = createServer((request, response) => {
       request.resume();
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
       if (request.url === '/held') {
         admitted.resolve();
         void held.promise.then(() => response.end(request.url));

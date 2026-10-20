@@ -355,7 +355,8 @@ export class GeminiProvider extends BaseProvider {
       httpOptions:
         baseURL &&
         (!isVertex ||
-          !baseURL.startsWith('https://generativelanguage.googleapis.com'))
+          new URL(baseURL).origin !==
+            'https://generativelanguage.googleapis.com')
           ? { ...httpOptions, baseUrl: baseURL }
           : httpOptions,
     };

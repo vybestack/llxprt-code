@@ -40,6 +40,7 @@ export async function appendGenerationHistory(
     signal.throwIfAborted();
     await history.addBatch(ownership?.history ?? entries, model, {
       origin: historyOrigin,
+      recordingCompletion: 'appended',
       afterPublication: () => signal.throwIfAborted(),
     });
   } catch (error) {

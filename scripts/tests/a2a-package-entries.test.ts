@@ -36,7 +36,7 @@ function outputFor(source: string, extension: string): string {
     )
     .find((file) => file.endsWith(extension));
   if (!output) throw new Error(`No ${extension} output for ${source}`);
-  return output;
+  return resolve(output);
 }
 
 it('imports the history binding through its typed package export in Node', () => {
@@ -74,11 +74,9 @@ it('imports the history binding through its typed package export in Node', () =>
     'packages/core/tsconfig.build.json',
   );
   expect(coreBuild.errors).toEqual([]);
-  const outputs = ts.getOutputFileNames(
-    coreBuild,
-    source,
-    !ts.sys.useCaseSensitiveFileNames,
-  );
+  const outputs = ts
+    .getOutputFileNames(coreBuild, source, !ts.sys.useCaseSensitiveFileNames)
+    .map((file) => resolve(file));
   expect(resolve(coreRoot, entry.bun)).toBe(source);
   for (const target of [entry.types, entry.import]) {
     expect(outputs).toContain(resolve(coreRoot, target));
@@ -171,6 +169,8 @@ it('discovers the declared A2A main and bin as their distinct true source entrie
     projectReferences: build.projectReferences,
   });
   for (const entry of selection.entries) {
-    expect(program.getSourceFile(entry)?.fileName).toBe(entry);
+    expect(program.getSourceFile(entry)?.fileName).toBe(
+      entry.replaceAll('\\', '/'),
+    );
   }
 });

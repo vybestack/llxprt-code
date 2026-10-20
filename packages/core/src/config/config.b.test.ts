@@ -194,6 +194,6 @@ describe('Server Config (config.ts)', () => {
 
   it('retains the declared workspace root as data without constructing discovery', () => {
     const config = new Config(baseParams);
-    expect(config.getTargetDir()).toBe(baseParams.targetDir);
+    expect(config.getTargetDir()).toBe(path.resolve(baseParams.targetDir));
   });
 });

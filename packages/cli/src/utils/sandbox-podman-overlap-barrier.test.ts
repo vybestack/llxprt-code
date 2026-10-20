@@ -35,14 +35,13 @@ describe('Podman overlap fixture admission', () => {
       const probeEntered = path.join(root, 'probe-entered');
       const sshHeld = path.join(root, 'ssh-held');
       const fixtureReceipt = path.join(root, 'fixture-root');
-      const quote = (value: string): string =>
-        `'${value.replaceAll("'", "'\\''")}'`;
       fs.writeFileSync(
         preload,
         [
           "import fs from 'node:fs';",
           "import path from 'node:path';",
-          `const root = ${JSON.stringify(root)};`,
+          "const root = process.env['LLXPRT_PODMAN_OVERLAP_ROOT'];",
+          "if (!root) throw new Error('Missing overlap fixture root');",
           'const write = fs.writeFileSync.bind(fs);',
           'const remove = fs.rmSync.bind(fs);',
           "let fixtureRoot = '';",
@@ -50,12 +49,12 @@ describe('Podman overlap fixture admission', () => {
           "  if (typeof file === 'string' && typeof data === 'string') {",
           "    if (path.basename(file) === 'ssh') {",
           '      fixtureRoot = path.dirname(file);',
-          `      write(${JSON.stringify(fixtureReceipt)}, fixtureRoot);`,
-          `      const gate = ${JSON.stringify(`printf '%s\n' "$$" > ${quote(sshHeld)}\nwhile [ ! -s ${quote(release)} ]; do sleep 0.01; done\n`)};`,
-          `      data = data.replace(${JSON.stringify('#!/bin/sh\n')}, () => ${JSON.stringify('#!/bin/sh\n')} + gate);`,
+          "      write(path.join(root, 'fixture-root'), fixtureRoot);",
+          String.raw`      const gate = 'printf \'%s\\n\' "$$" > "$LLXPRT_PODMAN_OVERLAP_ROOT/ssh-held"\nwhile [ ! -s "$LLXPRT_PODMAN_OVERLAP_ROOT/release-ssh" ]; do sleep 0.01; done\n';`,
+          String.raw`      data = data.replace('#!/bin/sh\n', () => '#!/bin/sh\n' + gate);`,
           "    } else if (path.basename(file) === 'podman') {",
-          `      const entry = ${JSON.stringify(`    printf '%s\n' "$$" > ${quote(probeEntered)}\n`)};`,
-          `      data = data.replace(${JSON.stringify('  *)\n')}, () => ${JSON.stringify('  *)\n')} + entry);`,
+          String.raw`      const entry = '    printf \'%s\\n\' "$$" > "$LLXPRT_PODMAN_OVERLAP_ROOT/probe-entered"\n';`,
+          String.raw`      data = data.replace('  *)\n', () => '  *)\n' + entry);`,
           '    }',
           '  }',
           '  return write(file, data, options);',
@@ -89,6 +88,7 @@ describe('Podman overlap fixture admission', () => {
         ],
         {
           cwd: path.resolve(import.meta.dirname, '../..'),
+          env: { ...process.env, LLXPRT_PODMAN_OVERLAP_ROOT: root },
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: 10000,
         },

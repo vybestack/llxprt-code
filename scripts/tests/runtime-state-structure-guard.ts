@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import ts from 'typescript';
+import { compilerSourcePath } from '../compiler-source-path.js';
 import {
   isModuleOwned,
   isStatic,
@@ -616,21 +617,30 @@ function isolatedSource(
     allowJs: true,
   };
   const host: ts.CompilerHost = {
-    getSourceFile: (name) => (name === filename ? sourceFile : undefined),
+    getSourceFile: (name) =>
+      compilerSourcePath(name) === compilerSourcePath(filename)
+        ? sourceFile
+        : undefined,
     getDefaultLibFileName: () => '',
     writeFile: () => undefined,
     getCurrentDirectory: () => '',
     getDirectories: () => [],
-    fileExists: (name) => name === filename,
-    readFile: (name) => (name === filename ? source : undefined),
+    fileExists: (name) =>
+      compilerSourcePath(name) === compilerSourcePath(filename),
+    readFile: (name) =>
+      compilerSourcePath(name) === compilerSourcePath(filename)
+        ? source
+        : undefined,
     getCanonicalFileName: (name) => name,
     useCaseSensitiveFileNames: () => true,
     getNewLine: () => '\n',
   };
-  return {
-    sourceFile,
-    checker: ts.createProgram([filename], options, host).getTypeChecker(),
-  };
+  const program = ts.createProgram(
+    [compilerSourcePath(filename)],
+    options,
+    host,
+  );
+  return resolvedSource(program, compilerSourcePath(filename));
 }
 
 function resolvedSource(

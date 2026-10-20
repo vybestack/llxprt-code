@@ -10,6 +10,7 @@
 
 import { createReadStream, createWriteStream } from 'node:fs';
 import { stderr } from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 import {
   createMessageConnection,
@@ -394,7 +395,7 @@ const isMainModule = (): boolean => {
   }
 
   try {
-    return import.meta.url === new URL(argvEntry, 'file://').href;
+    return import.meta.url === pathToFileURL(argvEntry).href;
   } catch {
     return false;
   }

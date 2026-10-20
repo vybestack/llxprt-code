@@ -3,7 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { dirname, resolve } from 'node:path';
+import { posix } from 'node:path';
+import { compilerSourcePath } from '../compiler-source-path.js';
 import ts from 'typescript';
 import { javascriptExpressionTypes } from './runtime-javascript-inference.js';
 import {
@@ -45,7 +46,7 @@ function resolveRoots(
   const checker = program.getTypeChecker();
   return new Set(
     roots.map((root) => {
-      const file = program.getSourceFile(resolve(root.file));
+      const file = program.getSourceFile(compilerSourcePath(root.file));
       const module = file && checker.getSymbolAtLocation(file);
       const exported =
         module &&
@@ -96,7 +97,8 @@ function isAssemblyNode(
     !!owner?.name &&
     !!options.assembly?.some(
       (entry) =>
-        resolve(entry.file) === resolve(owner.getSourceFile().fileName) &&
+        compilerSourcePath(entry.file) ===
+          compilerSourcePath(owner.getSourceFile().fileName) &&
         entry.functionName === owner.name?.text,
     )
   );
@@ -296,7 +298,7 @@ export function scanRuntimeServiceProgram(
   );
   const findings: RuntimeServiceShapeFinding[] = [];
   for (const file of files) {
-    const source = program.getSourceFile(resolve(file));
+    const source = program.getSourceFile(compilerSourcePath(file));
     if (!source) throw new Error(`Missing scan source: ${file}`);
     const reported = new Set<string>();
     function report(
@@ -430,26 +432,30 @@ export function scanRuntimeServiceShapes(
     types: [],
     skipLibCheck: true,
   };
-  const sourceMap = new Map(
-    Object.entries(sources).map(([file, text]) => [resolve(file), text]),
-  );
   const base = ts.createCompilerHost(compilerOptions, true);
-  const libDirectory = dirname(ts.getDefaultLibFilePath(compilerOptions));
+  const key = (file: string): string =>
+    base.getCanonicalFileName(compilerSourcePath(file));
+  const sourceMap = new Map(
+    Object.entries(sources).map(([file, text]) => [key(file), text]),
+  );
+  const libDirectory = posix.dirname(
+    key(ts.getDefaultLibFilePath(compilerOptions)),
+  );
   const isLib = (file: string): boolean =>
-    dirname(resolve(file)) === libDirectory && /lib\..*\.d\.ts$/.test(file);
+    posix.dirname(key(file)) === libDirectory && /lib\..*\.d\.ts$/.test(file);
   const host: ts.CompilerHost = {
     ...base,
     fileExists: (file) =>
-      sourceMap.has(resolve(file)) || (isLib(file) && base.fileExists(file)),
+      sourceMap.has(key(file)) || (isLib(file) && base.fileExists(file)),
     readFile: (file) =>
-      sourceMap.get(resolve(file)) ??
+      sourceMap.get(key(file)) ??
       (isLib(file) ? base.readFile(file) : undefined),
     directoryExists: (directory) =>
       [...sourceMap.keys()].some((file) =>
-        file.startsWith(`${resolve(directory)}/`),
-      ) || resolve(directory) === libDirectory,
+        file.startsWith(`${key(directory)}/`),
+      ) || key(directory) === libDirectory,
     getSourceFile: (file, languageVersion) => {
-      const text = sourceMap.get(resolve(file));
+      const text = sourceMap.get(key(file));
       if (text !== undefined)
         return ts.createSourceFile(file, text, languageVersion, true);
       return isLib(file)
