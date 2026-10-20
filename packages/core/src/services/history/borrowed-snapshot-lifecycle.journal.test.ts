@@ -9,6 +9,35 @@ import { detachedDigest } from './detached-rollback-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 
+describe('native borrowed callback and cleanup failures', () => {
+  it('preserves both errors, releases every reader and balances decoded accounting', async () => {
+    await withNativeBorrowedFixture(512, 2048, async (history, owners) => {
+      const primary = new Error('borrowed callback failed');
+      const cleanup = new Error('borrowed release failed');
+      const failure = await rejectedValue(
+        history.readRows(async (view) => {
+          await view.rows().next();
+          await view.rows().next();
+          expect(owners.snapshot().liveRows).toBe(2);
+          owners.releaseFailure = cleanup;
+          throw primary;
+        }),
+      );
+      expect(failure).toBeInstanceOf(AggregateError);
+      if (!(failure instanceof AggregateError)) throw failure;
+      expect(failure.errors[0]).toBe(primary);
+      const release = failure.errors[1];
+      expect(release).toBeInstanceOf(AggregateError);
+      if (!(release instanceof AggregateError)) throw release;
+      expect(release.errors).toStrictEqual([cleanup]);
+      expect(owners.snapshot().liveRows).toBe(0);
+      await history.readRows(async (view) => {
+        expect((await view.rows().next()).done).toBe(false);
+      });
+    });
+  }, 120_000);
+});
+
 describe('native borrowed row facts cancellation', () => {
   it('rejects native row facts with the original in-scope abort reason', async () => {
     await withNativeBorrowedFixture(512, 2048, async (history) => {

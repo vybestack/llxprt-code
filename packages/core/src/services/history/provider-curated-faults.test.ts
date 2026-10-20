@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -83,5 +86,50 @@ describe('independent provider cursor membership', () => {
       await later.return();
       await history.dispose();
     }
+  });
+});
+
+describe('native public provider preparation faults', () => {
+  it('propagates the actual journal read failure and releases its source before a fresh preparation', async () => {
+    await withCoreSuffixFixture(
+      512,
+      async (history, owners, counters) => {
+        const root = mkdtempSync(join(tmpdir(), 'provider-native-fault-'));
+        const primary = new Error('journal row read failed');
+        const fault = spyOn(
+          VersionSnapshot.prototype,
+          'readRow',
+        ).mockRejectedValueOnce(primary);
+        try {
+          expect(
+            await rejectedValue(
+              history
+                .prepareCuratedForProviderSnapshot([], { root })
+                .then(() => {}),
+            ),
+          ).toBe(primary);
+          expect(owners.snapshot().liveRows).toBe(0);
+          expect(readdirSync(root)).toHaveLength(0);
+        } finally {
+          fault.mockRestore();
+        }
+        const snapshot = await history.prepareCuratedForProviderSnapshot([], {
+          root,
+        });
+        try {
+          expect(snapshot.count).toBe(512);
+          expect((await snapshot.openReader().next()).done).toBe(false);
+          expect(counters.snapshot().peakDecodedRows).toBe(1);
+        } finally {
+          snapshot.close();
+          rmSync(root, { recursive: true, force: true });
+        }
+      },
+      0,
+      undefined,
+      undefined,
+      undefined,
+      'journal',
+    );
   });
 });

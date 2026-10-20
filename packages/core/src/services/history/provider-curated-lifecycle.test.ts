@@ -13,6 +13,8 @@ import { consumeCuratedExit } from './__tests__/support/curated-stream-test-help
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 const logger = new DebugLogger('test:provider-lifecycle');
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
 async function* source(
   size: number,
   bytes = 2048,
@@ -245,5 +247,94 @@ describe('provider large rows and pre-serialization decisions', () => {
     expect(JSON.stringify(result)).toBe(
       JSON.stringify(buildProviderContent(rows, [], logger)),
     );
+  });
+});
+
+describe('public committed provider snapshot lifecycle', () => {
+  for (const exit of ['return', 'throw', 'break', 'consumer-throw'] as const) {
+    it(`keeps repeatable selection until its owner closes after ${exit}`, async () => {
+      await withRoot(async (root) => {
+        await withCoreSuffixFixture(
+          512,
+          async (history, inputOwners, counters) => {
+            const outputOwners = new RowOwnership();
+            const snapshot = await history.prepareCuratedForProviderSnapshot(
+              [],
+              { root, ownership: outputOwners },
+            );
+            try {
+              expect(snapshot.count).toBe(512);
+              const stream = snapshot.openReader();
+              expect((await stream.next()).done).toBe(false);
+              expect(inputOwners.snapshot().liveRows).toBe(0);
+              expect(counters.snapshot().peakDecodedRows).toBe(1);
+              expect(outputOwners.snapshot().liveRows).toBe(1);
+              const failures = {
+                return: undefined,
+                throw: 'iterator failed',
+                break: undefined,
+                'consumer-throw': 'consumer failed',
+              };
+              expect(await consumeCuratedExit(stream, exit)).toBe(
+                failures[exit],
+              );
+              expect(outputOwners.snapshot().liveRows).toBe(0);
+              const reopened = snapshot.openReader();
+              expect((await reopened.next()).done).toBe(false);
+              expect(readdirSync(root)).toHaveLength(1);
+            } finally {
+              snapshot.close();
+            }
+            expect(outputOwners.snapshot().liveRows).toBe(0);
+            expect(readdirSync(root)).toHaveLength(0);
+            expect(() => snapshot.openReader()).toThrow('closed');
+          },
+        );
+      });
+    });
+  }
+
+  it('preserves exact abort reasons during preparation and for active or unopened readers', async () => {
+    await withRoot(async (root) => {
+      await withCoreSuffixFixture(512, async (history) => {
+        const preparing = new AbortController();
+        const captureFailure = new Error('public preparation aborted');
+        const timer = setTimeout(() => preparing.abort(captureFailure), 0);
+        try {
+          expect(
+            await rejectedValue(
+              history
+                .prepareCuratedForProviderSnapshot([], {
+                  root,
+                  signal: preparing.signal,
+                })
+                .then(() => {}),
+            ),
+          ).toBe(captureFailure);
+          expect(readdirSync(root)).toHaveLength(0);
+        } finally {
+          clearTimeout(timer);
+        }
+        const active = new AbortController();
+        const reason = new Error('public selection aborted');
+        const owned = new RowOwnership();
+        const snapshot = await history.prepareCuratedForProviderSnapshot([], {
+          root,
+          signal: active.signal,
+          ownership: owned,
+        });
+        const first = snapshot.openReader();
+        const unstarted = snapshot.openReader();
+        expect((await first.next()).done).toBe(false);
+        active.abort(reason);
+        expect(await rejectedValue(first.next().then(() => {}))).toBe(reason);
+        expect(await rejectedValue(unstarted.next().then(() => {}))).toBe(
+          reason,
+        );
+        expect(owned.snapshot().liveRows).toBe(0);
+        expect(readdirSync(root)).toHaveLength(0);
+        snapshot.close();
+      });
+    });
   });
 });

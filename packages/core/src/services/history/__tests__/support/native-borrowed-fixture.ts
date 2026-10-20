@@ -23,6 +23,7 @@ export class NativeBorrowedHistory extends HistoryService {
 
 class BorrowedCensus extends RowOwnership {
   failure: Error | undefined;
+  releaseFailure: Error | undefined;
   releases = 0;
 
   override retain(row: object): void {
@@ -37,6 +38,11 @@ class BorrowedCensus extends RowOwnership {
   override release(row: object): void {
     super.release(row);
     this.releases++;
+    if (this.releaseFailure !== undefined) {
+      const failure = this.releaseFailure;
+      this.releaseFailure = undefined;
+      throw failure;
+    }
   }
 }
 

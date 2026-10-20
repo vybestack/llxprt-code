@@ -10,19 +10,36 @@ import type { IContent } from './IContent.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 
+import { providerCurationRuleCases } from './__tests__/support/provider-curated-rule-cases.js';
+import { buildCuratedHistory } from './historyCuration.js';
 class CursorOnlyProviderHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
     super(options);
     forbidHistoryMaterializationForTest(this, 'eager provider preparation');
   }
+
+  async eagerRowsForTest(): Promise<IContent[]> {
+    return this.journal.materialize();
+  }
 }
 
 describe('journal materialization guard', () => {
+  it('preserves the synchronous old materialization trap', async () => {
+    const history = new CursorOnlyProviderHistory({ backend: 'old' });
+    try {
+      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+        'eager provider preparation',
+      );
+    } finally {
+      await history.dispose();
+    }
+  });
+
   it('CursorOnlyProviderHistory rejects journal eager materialization', async () => {
     const history = new CursorOnlyProviderHistory();
 
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(history.eagerRowsForTest()).rejects.toThrow(
         'eager provider preparation',
       );
     } finally {
@@ -143,4 +160,47 @@ describe('pending block identity during adjacency', () => {
       await history.dispose();
     }
   });
+});
+
+describe('committed provider curation rules R1 through R8', () => {
+  for (const rule of providerCurationRuleCases) {
+    it(`${rule.name}`, async () => {
+      const expected = buildProviderContent(
+        buildCuratedHistory(logger, rule.rows, false),
+        [],
+        logger,
+      );
+      await withCoreSuffixFixture(
+        rule.rows.length,
+        async (history, owners, counters) => {
+          const snapshot = await history.prepareCuratedForProviderSnapshot();
+          try {
+            expect(snapshot.count).toBe(expected.length);
+            expect(await digest(snapshot.openReader())).toBe(
+              await digest(expected),
+            );
+            expect(await digest(snapshot.openReader())).toBe(
+              await digest(expected),
+            );
+            for (let index = 0; index < snapshot.count; index++) {
+              expect(snapshot.readAt(index)).toStrictEqual(expected[index]);
+              expect(snapshot.isPending(index)).toBe(false);
+            }
+            expect(snapshot.pending).toStrictEqual({
+              inputCount: 0,
+              firstOutputIndex: undefined,
+            });
+            expect(owners.snapshot().liveRows).toBe(0);
+            expect(counters.snapshot().peakDecodedRows).toBeLessThanOrEqual(1);
+          } finally {
+            snapshot.close();
+          }
+        },
+        0,
+        (index) => rule.rows[index],
+        undefined,
+        (options) => new CursorOnlyProviderHistory(options),
+      );
+    });
+  }
 });

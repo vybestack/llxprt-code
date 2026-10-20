@@ -273,9 +273,20 @@ export async function withRowView<T>(
   { execute, counters, signal }: RowViewScope<T>,
 ): Promise<T> {
   const view = new JournalRowView(snapshot, owners, boundary, counters, signal);
+  let result: T;
   try {
-    return await execute(view);
-  } finally {
-    await view.close();
+    result = await execute(view);
+  } catch (primary) {
+    try {
+      await view.close();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [primary, cleanup],
+        'Row view callback and cleanup failed',
+      );
+    }
+    throw primary;
   }
+  await view.close();
+  return result;
 }

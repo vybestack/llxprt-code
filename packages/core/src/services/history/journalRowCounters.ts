@@ -23,8 +23,12 @@ export function countDecodedRow(
   let held: IContent | undefined = row;
   return () => {
     if (held === undefined) throw new Error('Decoded row already released');
-    counters.ownership?.release(held);
+    const released = held;
     held = undefined;
-    counters.rowReleased();
+    try {
+      counters.ownership?.release(released);
+    } finally {
+      counters.rowReleased();
+    }
   };
 }
