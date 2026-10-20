@@ -1,3 +1,9 @@
+## 2026-10-20: native Mistral assignment before Kimi/tail expansion
+
+Use the existing id trie, namespace 3 and mappedRef VALUE relocation. Activate mapping-only slots through a separate fill, keeping format summary admission and provider sends unchanged. Persist exact raw ownership and insertion salt; preserve current converter pass-through collisions; rebuild from surviving raw id pieces after removal/insertion. Start a mapped lineage on activation and retain its mask through prefix rebuilds, because pre-fill roots and emptied bases otherwise lose mappings. Full policy and limits: PHASE5-MISTRAL-DECISIONS.md.
+
+The 160 native mapping comparisons supplement frozen 5000 normalization proofs. Wrong-salt and raw-reference controls prove their assertions reject defects; all-ID retention is only a read-budget control. Kimi emitted facts, typed normalized tail queries, Mistral tail/lazy continuation, complete format/settings/LENS, provider routing and heap/CRC closure remain future work. Commit product/tests before source-bound proof documentation under the existing slice hook policy; no cleanup, push, merge or default change.
+
 ## Phase 5 normalized occurrence decisions, 2026-10-20
 
 Keep raw source facts separate from emitted-unit occurrence facts. Enable the native session's explicit source-with-normalized capability only with append/rebuild maintenance of the existing namespaces 1/2. Use the injected pure tools transforms, retain exact namespace numbers and count/ordinal layouts, and derive R1/stripped-self/adjacent-unit coordinates from finalized source facts. Human-call targets and later-AI orphan creation remain distinct. Empty IDs and many-to-one prefix transforms are ordinary normalized keys, and reconstructed duplicate calls retain duplicate positions.

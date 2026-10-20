@@ -1,3 +1,9 @@
+## 2026-10-20: native Mistral mappings persisted
+
+Implementation `819ca78dbeac092dfea8ad4e165ee17ebd4b3a90`, starting `2bba0b8e3`. Native mapping-only slot fill now writes namespace 3 and raw-owned mappedRef/salt values through production append/rebuild, with pinned reads and existing clone/compaction remapping. Pop cannot cross activation into unmapped ancestors; empty-prefix rebuild retains activation. Independent mapping differential: 160 comparisons; unchanged 5000 normalized fixtures remain exact. 110 isolated serial processes over 55 files, 856 passes, 933836 assertions, zero failures or skips; eight gates; three intended rejecting controls restored by cmp/hash. Read-budget retention rejection is not heap proof. 302 recorded PIDs absent, none live. Source/log/JUnit receipts: PHASE5-MISTRAL-PROOF.json and tmp/854-notes/p5/mapping-run-f/.
+
+Kimi, normalized request-tail queries, Mistral lazy/tail continuation, format/settings/LENS, provider routing, full heap, range CRC, W26/W23/W25 remain open. Provider/default unchanged; excluded declarations, .llxprt and raw recovery retained. Review skipped per Andrew 2026-10-09.
+
 ## Phase 5 normalized occurrence maintenance, 2026-10-20
 
 Continued the inherited occurrence WIP from `4e23b8fdc` and committed the first green product/test slice as `9235a4420ad49bd9a15ce104c83a9de2c15781f6`. Read initial logs/scripts and independently checked all recorded PIDs before executing. Initial tests/declarations had passed; strict types failed because the new inline-media fixture lacked `encoding`. Corrected that field, then resolved twelve lint failures with a normal type import and smaller production/oracle functions. The initial runner also lacked explicit `--timeout 180000`; final acceptance supplies it. No assertion, bound or source timeout changed.

@@ -1,6 +1,16 @@
 # Phase 5 proof map
 
-## Current normalized occurrence increment
+## Current native Mistral increment
+
+Starting HEAD `2bba0b8e3`; implementation `819ca78dbeac092dfea8ad4e165ee17ebd4b3a90`. [PHASE5-MISTRAL-PROOF.json](PHASE5-MISTRAL-PROOF.json) binds 16 committed source/test paths and 8846 package/script hashes. Acceptance: **110 isolated serial processes over 55 files, 856 passes, 933836 assertions, zero failures or skips**, both outer backends, unchanged 180000 timeout, eight passing scoped gates. 302 recorded PIDs are absent; none live.
+
+Native mapping-only slot fills now maintain namespace 3 and raw-ID-owned mappedRef VALUEs with retained salts. Append, reconstruction, density/removal rebuild, insertion, pop across activation, empty-prefix pop, reopen, owner, fork and compaction are covered against the existing tools mapper. The 160 new collision-heavy comparisons supplement the unchanged 5000-case normalized unit/occurrence/rank/count/pending corpus and frozen provider fixtures.
+
+The wrong-salt and wrong-raw-reference controls fail actual mapping/corruption assertions. The retained-all-ID control fails the unchanged <150 response-append read bound at 14193 reads. All restore byte-identically before final acceptance. This is read-budget evidence, not heap proof. One repeated pinned-mapping assertion spans before/after mutation and remains; no prohibited touched audit finding is accepted.
+
+This proves native assignment rather than the older hand-populated library/copy fixtures. It does not prove Kimi emitted bookkeeping, Mistral tail/lazy continuation, normalized request-only tail queries, format/settings/LENS, provider cutover, full retained heap or range CRC closure. W26, W23's eight planning/header cases and W25/default remain open. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [PHASE5-MISTRAL-DECISIONS.md](PHASE5-MISTRAL-DECISIONS.md). Review skipped per Andrew 2026-10-09.
+
+## Historical normalized occurrence increment
 
 Starting HEAD `4e23b8fdc`; implementation `9235a4420ad49bd9a15ce104c83a9de2c15781f6`. [PHASE5-OCCURRENCES-PROOF.json](PHASE5-OCCURRENCES-PROOF.json) binds 17 committed product/test paths and an 8606-entry tracked package/script source inventory. Acceptance is **102 isolated serial processes over 51 files, 708 passes, 931526 assertions, no failures or skips**, with both outer backends and explicit `--timeout 180000`. Six scoped gates pass. All 229 recorded child/driver PIDs are absent.
 
