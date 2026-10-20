@@ -62,10 +62,20 @@ function referenceResponsesRows(rows: readonly IContent[]): IContent[] {
       },
     ],
   }));
+  const original = rows.map((row) =>
+    row.speaker !== 'ai' || responses.has(normalizeToHistoryToolId(''))
+      ? row
+      : {
+          ...row,
+          blocks: row.blocks.filter(
+            (block) => block.type !== 'tool_call' || block.id !== '',
+          ),
+        },
+  );
   return structuredClone([
-    ...rows.slice(0, lastCall + 1),
+    ...original.slice(0, lastCall + 1),
     ...synthetic,
-    ...rows.slice(lastCall + 1),
+    ...original.slice(lastCall + 1),
   ]);
 }
 import {

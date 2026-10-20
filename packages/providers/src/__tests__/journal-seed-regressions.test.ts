@@ -15,10 +15,12 @@ describe('native service seeded empty-id reconstruction', () => {
   beforeAll(() => setSystemTime(new Date(PINNED_CLOCK)));
   afterAll(() => setSystemTime());
   for (const format of ['openai-responses-via-openai', 'openai-responses']) {
-    it(`${format} preserves the frozen empty-id pairing boundary after service reconstruction`, async () => {
-      await expect(
-        checkNativeSeed(formatById(format), 2),
-      ).resolves.toBeUndefined();
-    });
+    for (const seed of [2, 178, 179, 180]) {
+      it(`${format} seed ${seed} preserves frozen provider bytes and independent service bytes`, async () => {
+        await expect(
+          checkNativeSeed(formatById(format), seed),
+        ).resolves.toBeUndefined();
+      });
+    }
   }
 });
