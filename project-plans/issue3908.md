@@ -55,6 +55,8 @@ CodeRabbit identified continued polling after a failed owner released its lock a
 
 Final remediation focused suite: **14 passed, 0 failed**, 37 assertions, approximately 4.8 seconds, pinned Bun 1.3.14 under 512 MiB/no swap. Log: `/tmp/issue3908-remediation-focused.log`. Remote CI will validate typechecking and the broad suites on the revised commit.
 
+Second CI run: all seven test shards, full typechecking, and both Linux E2E modes passed. The sole failure was the linter's unnecessary-condition rule on `while (true)`; the loop now directly uses its existing monotonic deadline condition and retains cancellation checking on exit. Focused regressions remain **14 passed**, 37 assertions, under the same cap (log `/tmp/issue3908-deadline-focused.log`).
+
 Remote OCR was attempted automatically but its model connectivity preflight returned HTTP 401; the workflow's success status does not mean OCR actually reviewed the patch. Fixing that credential requires repository infrastructure access and is not a code change in this issue.
 
 ## GitHub tracking

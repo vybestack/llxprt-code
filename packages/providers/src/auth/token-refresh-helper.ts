@@ -62,7 +62,7 @@ export async function handleRefreshLockMiss(
   };
   const deadline = performance.now() + 35_000;
   let pollDelayMs = 25;
-  while (true) {
+  while (performance.now() < deadline) {
     const token = await readFreshToken();
     if (token) return token;
 
@@ -89,6 +89,8 @@ export async function handleRefreshLockMiss(
     }
     pollDelayMs = Math.min(pollDelayMs * 2, 1000);
   }
+  signal?.throwIfAborted();
+  return null;
 }
 
 // --------------------------------------------------------------------------
