@@ -28,6 +28,7 @@ import {
   mkdirSync,
   writeFileSync,
   rmSync,
+  chmodSync,
   readFileSync,
   statSync,
 } from 'node:fs';
@@ -48,6 +49,8 @@ import {
   parseEntryOutput,
   placeBundledBun,
   placeOvenBun,
+  placePlaceholder,
+  placeScriptDisabledBun,
   readCapture,
   runShim,
   shimSrc,
@@ -166,6 +169,59 @@ describe('packages/cli/bin/llxprt.mjs node-shebang shim (issue #2978)', () => {
     const out = parseEntryOutput(res.stdout);
     expect(out, `stdout: ${res.stdout}`).not.toBeNull();
     expect(out?.argv).toEqual(['--oven']);
+  });
+
+  for (const hoisted of [false, true]) {
+    it(`skips an executable placeholder for the ${hoisted ? 'hoisted' : 'local'} host @oven payload without global Bun`, () => {
+      const layout = makeLayout(tempDir);
+      const env = placeScriptDisabledBun(layout, hoisted);
+      writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+
+      const result = runShim(layout, ['placeholder', 'space & value'], env);
+
+      expect(result.status, result.stderr).toBe(0);
+      const output = parseEntryOutput(result.stdout);
+      expect(output?.argv).toEqual(['placeholder', 'space & value']);
+      expect(output?.exe).toContain(`${path.sep}@oven${path.sep}`);
+    });
+  }
+
+  it('retains materialized Bun precedence and does not retry a failed application', () => {
+    const layout = makeLayout(tempDir);
+    const native = placeBundledBun(layout.nodeModules);
+    for (const variant of hostOvenVariants())
+      placeOvenBun(layout.nodeModules, variant);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+
+    const result = runShim(layout, [], { LLXPRT_TEST_EXIT: '17' });
+
+    expect(result.status).toBe(17);
+    expect(parseEntryOutput(result.stdout)?.exe).toBe(native);
+    expect(result.stdout.trim().split('\n')).toHaveLength(1);
+  });
+
+  it.skipIf(isWin)('rejects non-executable native runtimes', () => {
+    const layout = makeLayout(tempDir);
+    const native = placeBundledBun(layout.nodeModules);
+    chmodSync(native, 0o644);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+
+    const result = runShim(layout);
+
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toContain('bundled Bun runtime was not found');
+  });
+
+  it('reports the LLxprt missing-runtime diagnostic when only the placeholder exists', () => {
+    const layout = makeLayout(tempDir);
+    placePlaceholder(layout.nodeModules);
+    writeSourceEntry(layout.pkgRoot, defaultEntryBody);
+
+    const result = runShim(layout);
+
+    expect(result.status).toBe(LAUNCHER_FAILURE_EXIT);
+    expect(result.stderr).toContain('bundled Bun runtime was not found');
+    expect(result.stderr).not.toContain('postinstall script was not run');
   });
 });
 

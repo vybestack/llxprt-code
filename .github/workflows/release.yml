@@ -451,6 +451,27 @@ jobs:
           npm run build:packages
           npm run prepare:package
 
+      - name: Prove scripts-disabled release consumers
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+          LLXPRT_RELEASE_PROOF_DIR: ${{ runner.temp }}/release-proof
+        run: |
+          npm run bundle:cli
+          bun scripts/tests/release-bound-artifact-helpers.ts
+
+      - name: Upload release consumer proof
+        if: ${{ always() && steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # ratchet:actions/upload-artifact@v4
+        with:
+          name: scripts-disabled-release-proof
+          path: |
+            ${{ runner.temp }}/release-proof/*.json
+            ${{ runner.temp }}/release-proof/*.log
+            ${{ runner.temp }}/release-proof/local/*.log
+            ${{ runner.temp }}/release-proof/global/*.log
+          if-no-files-found: error
+
       - name: Sync VS Code extension version
         if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.should_run_standard_release == 'false' }}
         run: |
@@ -515,59 +536,59 @@ jobs:
 
       - name: Publish @vybestack/llxprt-code-tools
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-tools --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-tools-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-storage
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-storage --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-storage-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-auth
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-auth --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-auth-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-settings
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-settings --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-settings-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-telemetry
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-telemetry --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-telemetry-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-ide-integration
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-ide-integration --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-ide-integration-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-policy
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-policy --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-policy-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-mcp
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-mcp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-mcp-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-core
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-core --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-core-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-lsp
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-lsp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-lsp-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-providers
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-providers --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-providers-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-agents
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-agents --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-agents-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code-zed-acp
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code-zed-acp --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-zed-acp-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --access public --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Publish @vybestack/llxprt-code
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        run: npm publish --workspace=@vybestack/llxprt-code --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
+        run: npm publish "${{ runner.temp }}/release-proof/vybestack-llxprt-code-${{ steps.version.outputs.RELEASE_VERSION }}.tgz" --ignore-scripts --provenance --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
 
       # Runtime plugins (issue #2759) live OUTSIDE the root workspaces, so
       # they cannot be published with --workspace. They publish from their own
@@ -764,10 +785,8 @@ jobs:
           fi
           TARGET_SHA="$(git rev-parse "${TARGET_REF}^{commit}")"
 
-          # Ship the source-containing CLI npm tarball as the release asset
-          # instead of the esbuild bundle (retired by S4). The tarball is
-          # packed in the "Prepare sandbox package tarballs" step above.
-          CLI_TARBALL="packages/cli/dist/vybestack-llxprt-code-${RELEASE_VERSION}.tgz"
+          # Attach the same CLI tarball that passed scripts-disabled consumer proof.
+          CLI_TARBALL="${RUNNER_TEMP}/release-proof/vybestack-llxprt-code-${RELEASE_VERSION}.tgz"
           if [[ ! -f "$CLI_TARBALL" ]]; then
             echo "CLI tarball not found at $CLI_TARBALL; cannot create release" >&2
             exit 1
