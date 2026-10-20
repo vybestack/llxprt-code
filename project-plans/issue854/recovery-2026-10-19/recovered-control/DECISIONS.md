@@ -1,5 +1,13 @@
 # Recovered decision guidance
 
+## W22 retained/read-cost finalization, 2026-10-20
+
+Commit green product source first at `888461db478884b0d29b69694e9b5a496d51255e`; preserve recorder-fixture `c69b1c85b`. Reuse completed memory runs and source-matched gates. Move current-turn lookup behind the async store port because original production demonstrably reads history twice. Preserve old streaming behavior and native metadata-only suffix lookup; do not claim constant metadata work for arbitrary unmarked tails.
+
+Keep 1 MiB/every-checkpoint and 262144-byte late-growth gates unchanged. Both real traps reject as intended; a small final release-trap heap does not excuse earlier retention. Correct the marker fixture's admitted/stamped tail through its existing historical-write route, retaining marker/scale/ownership assertions. Narrow census acceptance to four exact target paths after the observed overbroad-batch RED; do not supply invented classifications for related passes.
+
+Effective matrix: 110 passes, no failures/skips; all scoped gates pass. Final census 805/0/1, 6568 verified passes, seven inconsistent runner passes withheld. Unknown runner, classification and W23-W26 remain open. Sixty-eight owned PIDs absent, no pending mutation. Full values/source/gate/control proof: W22-RETAINED-READ-COST-PROOF.md/.json. Review skipped per Andrew 2026-10-09. No cleanup, `.llxprt` edits/staging, broad recovery staging, weaker checks, default flip, OCR, push or merge.
+
 ## W22 child ownership and transport, 2026-10-20T03:47:22.276Z
 
 **The three child suites are green and committed; W22 remains incomplete.** Base `e8319c766` verified. Five test/fixture paths committed first at `77fa25a02346870fb7e1323c24a3ff642212a6fa`; exact-source census acceptance at `38e0696f0d552d16b19ab6694aef1285c99198b6`. Production and backend default unchanged.

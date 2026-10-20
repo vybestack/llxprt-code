@@ -1,5 +1,11 @@
 # Recovery chronology, reconstructed
 
+## W22 retained/read-cost finalization, 2026-10-20
+
+Product `888461db478884b0d29b69694e9b5a496d51255e` follows fixture `c69b1c85b`. Existing serial journal/old collection finished without duplicate memory runs. Effective matrix: 55 passes each; native marker correction ran only the affected supplemental check. Original production control PID 39290 fails both read-cost cases; byte-restored PID 39331 passes. Final census suites pass fourteen cases/183 expectations; all scoped gates pass.
+
+Published generation `ccbaa4bd-6aac-4b0e-a356-3305480eaeb0`: 801/4/1 becomes 805/0/1, verified 6568/0/0. Preserve intermediate fixture failures and the publisher's rejected 803/0/3 boundary; a rejecting scope test establishes why batch acceptance must exclude unrelated regression rows. No result or classification was invented. Sixty-eight recorded owned PIDs are absent. Exact measurements, controls, hashes and remaining unknown are in W22-RETAINED-READ-COST-PROOF.md/.json and W22-STATUS.md. Review skipped per Andrew 2026-10-09. No further functional family, cleanup, `.llxprt` staging, OCR, push or merge.
+
 ## W22 child ownership and transport, 2026-10-20T03:47:22.276Z
 
 **The three child suites are green and committed; W22 remains incomplete.** Base `e8319c766` verified. Five test/fixture paths committed first at `77fa25a02346870fb7e1323c24a3ff642212a6fa`; exact-source census acceptance at `38e0696f0d552d16b19ab6694aef1285c99198b6`. Production and backend default unchanged.

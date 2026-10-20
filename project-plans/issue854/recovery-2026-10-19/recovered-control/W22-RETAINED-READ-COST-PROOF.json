@@ -1,0 +1,1071 @@
+{
+  "sourceCommit": "888461db478884b0d29b69694e9b5a496d51255e",
+  "generation": "ccbaa4bd-6aac-4b0e-a356-3305480eaeb0",
+  "partition": {
+    "green": 805,
+    "red": 0,
+    "unverified": 1,
+    "unrun": 0
+  },
+  "verified": {
+    "pass": 6568,
+    "fail": 0,
+    "skip": 0
+  },
+  "recorded": {
+    "pass": 6575,
+    "fail": 0,
+    "skip": 0
+  },
+  "classifications": {
+    "native-history": 401,
+    "journal-selected-shared-public": 359,
+    "explicit-old": 44,
+    "classification-pending": 5764,
+    "unclassified": 0
+  },
+  "attempts": 1497,
+  "historicalMissingAttempts": 26,
+  "latestMissingFiles": 0,
+  "changed": [
+    {
+      "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+      "pid": 34488,
+      "sourceHash": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+      "batch": "retained-final-journal-o-a",
+      "cases": [
+        {
+          "classname": "retained growth trap: context held between compressions then released",
+          "name": "context retained between compressions and released before the last checkpoint fails",
+          "time": "56.237511",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "native-history",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        }
+      ],
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+      "pid": 33709,
+      "sourceHash": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+      "batch": "retained-final-journal-o-a",
+      "cases": [
+        {
+          "classname": "retained growth trap: a request-row-keeping observer",
+          "name": "a test-installed observer keeping every request row fails the same predicate",
+          "time": "55.955298",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "native-history",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        }
+      ],
+      "counts": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+      "pid": 32815,
+      "sourceHash": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+      "batch": "retained-final-journal-o-a",
+      "cases": [
+        {
+          "classname": "repeated-turn retained growth over the real journal-backed send path",
+          "name": "stays inside the allowance and does not accumulate with turn count",
+          "time": "56.129592",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "native-history",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "repeated-turn retained growth over the real journal-backed send path",
+          "name": "predicate rejects settled checkpoints above the allowance even when a later checkpoint is small",
+          "time": "0.000033",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "accepts the CI series (one 220 KB step, then flat) with a flat tail",
+          "time": "0.00004",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "rejects a steady leak of 2 KB per turn that stays under the allowance",
+          "time": "0.000066",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "rejects a leak of one row per turn",
+          "time": "0.000032",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "accepts a single 250 KB step in the first half with a flat tail",
+          "time": "0.000015",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "rejects a step in the second half combined with continued growth",
+          "time": "0.000012",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "accepts flat noise",
+          "time": "0.000014",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "late-window accumulation gate &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "rejects a first-half step that is above the allowance even when the tail is flat",
+          "time": "0.000014",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "converges on the CI series despite isolated dips, by turn 600",
+          "time": "0.000089",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "converges on the CI series from either 10-turn phase of the recording",
+          "time": "0.000038",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "does not converge while the heap keeps rising",
+          "time": "0.000202",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "does not converge on a slow climb whose neighbouring steps are each under the noise",
+          "time": "0.000108",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "converges on a flat series with periodic dips",
+          "time": "0.000046",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "warm-up convergence &gt; repeated-turn retained growth over the real journal-backed send path",
+          "name": "needs three full windows of readings",
+          "time": "0.000013",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "journal-selected-shared-public",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        }
+      ],
+      "counts": {
+        "pass": 15,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+      "pid": 35383,
+      "sourceHash": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+      "batch": "retained-final-journal-o-a",
+      "cases": [
+        {
+          "classname": "journal snapshots per send",
+          "name": "opens one curated snapshot and three journal captures per send under the limit, at any history size",
+          "time": "3.088452",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "native-history",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        },
+        {
+          "classname": "journal snapshots per send",
+          "name": "rebuilds the snapshot once per ladder mutation, with a fixed number of captures per rebuild",
+          "time": "3.135015",
+          "status": "passed",
+          "failureMessage": null,
+          "classification": "native-history",
+          "classificationProvenance": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/retained-run-o/classification.json"
+        }
+      ],
+      "counts": {
+        "pass": 2,
+        "fail": 0,
+        "skip": 0
+      }
+    }
+  ],
+  "remaining": [
+    {
+      "path": "packages/agents/test-bun/run-bun-tests.issue3253.bun.ts",
+      "state": "unverified",
+      "pid": 62524,
+      "batch": "package-resume-g-0600",
+      "sourceHash": "58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5",
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "skip": 0
+      }
+    }
+  ],
+  "sourceHashes": {
+    "packages/agents/src/core/__tests__/send-journal-opens.test.ts": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+    "packages/core/src/services/history/HistoryServiceReads.ts": "652fd79c2b43e7e9cba71b6bbd7583793b8943ea5aca1d0e71a9b89a05e604a0",
+    "packages/core/src/services/history/historyBackend.test.ts": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+    "packages/core/src/services/history/historyJournalStore.ts": "ba5ab3f626b2205ed591fb07e30c45c68b111b9a8cc325b41efc0f3efc91f15b",
+    "packages/core/src/services/history/historyOldStoreOps.ts": "fa1a75ac169f3172a71364392a2d1ce717a61829d3089d113daafc762014c853",
+    "packages/core/src/services/history/historyStorePort.ts": "547e8801280aafdf5aba8a5199fdfc9a1ab782ef23777c26c94f9adabf81c43a",
+    "packages/core/src/services/history/journalHistoryStore.scalars.test.ts": "c10212ef9faaaaff81c0a981bd825d34a34a3d66d5a19ab5dc3a90460a5b1be2",
+    "packages/core/src/services/history/journalHistoryStore.ts": "4dfbf55a01cefac27cad19d8961f2af297ebf42715ec249c6ca7210be7c27a7e",
+    "packages/core/src/services/history/journalScalars.ts": "f7c8d0b2e34b3ac5aa7a204cc3747debfcf1de655e31b5fc53b5182e1b30e142",
+    "packages/core/src/services/history/raw-history-marker.test.ts": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+    "packages/agents/src/core/__tests__/support/journal-read-cost.ts": "f40f7990488ab94128021ab82715aa16f3249271d63bdcd6a950d80ee8b8c5cf",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-workload.ts": "680ac73bdf0119b8c4412f29e454c68e3a40f50c7e867f8e4103408393a12c0e",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-harness.ts": "8763562b540123627ca412e50eda27493101f97089658c4a78d69d8f149d2aba",
+    "packages/agents/src/core/__tests__/journal-retained-growth.test.ts": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+    "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+    "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-worker.ts": "b4ed992e2a200c0d729d94e3cac1ddcbf22f9d3216c5acfc95c6b84e638fb5d4",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-predicate.ts": "99a10da628d2c1d74bbb486df7c1aa7c7464ce4235ae4d832bfe5d6d170f44e4",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-plan.ts": "551e14ffb215c51459889a4431ca48f508386c5cdf2e62781730f34a1b795987",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-text.ts": "50374e152ae6b0723f34259e1705fe7cd5744a095a77415ae944840a06b34332"
+  },
+  "matrices": [
+    {
+      "backend": "journal",
+      "files": 11,
+      "pass": 55,
+      "fail": 0,
+      "skip": 0,
+      "rows": [
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+          "pid": 32815,
+          "sourceHash": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "pass": 15,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0457-journal-retained-growth.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0457-journal-retained-growth.test.ts.xml",
+          "logHash": "404271076255cec436614a7c16ebb79da137864c32da3ae306be03384b31125c",
+          "junitHash": "550311d97dd4a1de92f934a09c4b61e6ed91ee0fa4a0770d74f215f47875523b"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+          "pid": 33709,
+          "sourceHash": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "pass": 1,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0456-journal-retained-growth-retaining-trap.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0456-journal-retained-growth-retaining-trap.test.ts.xml",
+          "logHash": "0d9c3d4154d8757f60bf787f86b68afd4f63f9fe9e3c294442a8ce7f2bfcdccf",
+          "junitHash": "88816aa1f1c0a737b6a6bf2ea69a1433fb281be62203eed1096eab231a80be9b"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+          "pid": 34488,
+          "sourceHash": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "pass": 1,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0455-journal-retained-growth-release-trap.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0455-journal-retained-growth-release-trap.test.ts.xml",
+          "logHash": "92dd68f8475582a729c0362205ce2090689348f62bc16e2856ab895c014ee8e4",
+          "junitHash": "f8c1018652991bc846a26de0433c42824b4743f6748bc2ef71358ec56dc8b7a8"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+          "pid": 35383,
+          "sourceHash": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+          "pass": 2,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0460-send-journal-opens.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0460-send-journal-opens.test.ts.xml",
+          "logHash": "554222329e66c9efcba0d624bfff1ac4b9fc27ef8d3f2965e7b6ac4707ecfb8d",
+          "junitHash": "fe38cc4b2e4149be9a4e884b0f0c19948354ee028adef8661e3aaed08b8c71c5"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.scalars.test.ts",
+          "pid": 35472,
+          "sourceHash": "c10212ef9faaaaff81c0a981bd825d34a34a3d66d5a19ab5dc3a90460a5b1be2",
+          "pass": 6,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0810-journalHistoryStore.scalars.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0810-journalHistoryStore.scalars.test.ts.xml",
+          "logHash": "4636cc07e7e904e6e0796aec07333f9bb5ff181a0470bf8384bde7866cf27396",
+          "junitHash": "445e5217b6adfcf2cd28a3ff9ade68d9a21c74d04a894597f64318db350cf7e6"
+        },
+        {
+          "path": "packages/core/src/services/history/raw-history-marker.test.ts",
+          "pid": 38936,
+          "sourceHash": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+          "pass": 3,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-marker-journal-o-c/0806-raw-history-marker.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-marker-journal-o-c/0806-raw-history-marker.test.ts.xml",
+          "logHash": "45ab3af3f2bbebacaed31f4ca21897d4d603c9f6ca66de003547ef2a44fbb600",
+          "junitHash": "04b43ebabfd2f1c3f0bde27e19f05b601709faca0cd74526deabc6cf0a5ba6ce"
+        },
+        {
+          "path": "packages/core/src/services/history/historyBackend.test.ts",
+          "pid": 35516,
+          "sourceHash": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+          "pass": 12,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0812-historyBackend.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0812-historyBackend.test.ts.xml",
+          "logHash": "dfb884a73b64b3127145ad62c6ab8440e67c25646a5c316c2cf45f9f68e2d422",
+          "junitHash": "a6a5a85af35f02df30ca73a12322fab2a7ae5e6cf343a569c57a4ad626d7aeba"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.streamed.test.ts",
+          "pid": 35519,
+          "sourceHash": "09b614f93991c09387d323de8ff4f8f42a33dfa1b8fc9279cc46966d79e86cdf",
+          "pass": 5,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0813-journalHistoryStore.streamed.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0813-journalHistoryStore.streamed.test.ts.xml",
+          "logHash": "bcb0cb5737ae83d0058a8ed543d8d80482812e93124f5c574128f447e8227bc9",
+          "junitHash": "975ced2eba28c1a5918dae6d8d929372578235d5e0428e307887890610367d9b"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.dump.test.ts",
+          "pid": 35533,
+          "sourceHash": "41a0e9088f41c36238cbae38db8256f0877f49bce55144ef6aa134d7eb4fb99a",
+          "pass": 3,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0814-journalHistoryStore.dump.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0814-journalHistoryStore.dump.test.ts.xml",
+          "logHash": "46c4526af1b706aff741fa3c40c15e9119aa1d2be2811dd9c36be0db52ad7e52",
+          "junitHash": "3dfcd8a32e754ca1cccfd9306b71d5a15d80a19bb0b446a398861f4300b9f95a"
+        },
+        {
+          "path": "packages/agents/src/core/orchestrator-history-ide.test.ts",
+          "pid": 35544,
+          "sourceHash": "52dd1dac583505f60a24f46bb5b6d7e190da140d3949819f5bca609747d8935c",
+          "pass": 5,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0622-orchestrator-history-ide.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0622-orchestrator-history-ide.test.ts.xml",
+          "logHash": "a98bb95d6a507696e4591dcc9d114d1dba9ec8190e4176357e85d897cfa8f1b4",
+          "junitHash": "79f4e1c9d3afae076fca21f960c52073a496d17b0bec04d0a96837f2aca8a26b"
+        },
+        {
+          "path": "packages/agents/src/core/client-source-token-totals.test.ts",
+          "pid": 36155,
+          "sourceHash": "afdf18bc3a100d1b13110fffec144de0fe19ef3ced38fd0fd4b2915d4c26ef1a",
+          "pass": 2,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0543-client-source-token-totals.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0543-client-source-token-totals.test.ts.xml",
+          "logHash": "3884dea3edba035b9f8555eb9afe3a25df4b010532e87c1b4108d1d9c792bbdf",
+          "junitHash": "0e887969b71138fb9ee2ee46f543ac58993cb532c11864e4a683c60ef2e89813"
+        }
+      ]
+    },
+    {
+      "backend": "old",
+      "files": 11,
+      "pass": 55,
+      "fail": 0,
+      "skip": 0,
+      "rows": [
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+          "pid": 36179,
+          "sourceHash": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "pass": 15,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0457-journal-retained-growth.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0457-journal-retained-growth.test.ts.xml",
+          "logHash": "94288f2da5045a06cb9a5062c0dda7a022bc3f2a0450cabd1c880490f469faeb",
+          "junitHash": "b47e8b7bc7a01f3cb27017860b910f4c1d2bca46e001bc797a46f7685eab745c"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+          "pid": 36854,
+          "sourceHash": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "pass": 1,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0456-journal-retained-growth-retaining-trap.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0456-journal-retained-growth-retaining-trap.test.ts.xml",
+          "logHash": "e8cfc130c9bd29985082da8cc25a5ffac15e46214f363dc951a2cc6450cfc5c3",
+          "junitHash": "6ac95db0ec5f1722dcadbd98c952a16d985cef3b9f8b9041c9d1fa4c88d510c3"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+          "pid": 37528,
+          "sourceHash": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "pass": 1,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0455-journal-retained-growth-release-trap.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0455-journal-retained-growth-release-trap.test.ts.xml",
+          "logHash": "a2114b58e35b0be01c265d26b82cfa1b822556c80e3d9e17e92eee753e251ba7",
+          "junitHash": "4929770c5e4dd1bfc2ea4aa69336072b34368005d8a13ab6461cb214a40be3ef"
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+          "pid": 38158,
+          "sourceHash": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+          "pass": 2,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0460-send-journal-opens.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0460-send-journal-opens.test.ts.xml",
+          "logHash": "06669cc930c76b34dfad479d3cd6680e32322652f8d2fb706abd081615e21f29",
+          "junitHash": "ad0f0a42927e7ff35cc1348dcbda1acabf5a7ccdaf33f55c8ef5331639729351"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.scalars.test.ts",
+          "pid": 38189,
+          "sourceHash": "c10212ef9faaaaff81c0a981bd825d34a34a3d66d5a19ab5dc3a90460a5b1be2",
+          "pass": 6,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0810-journalHistoryStore.scalars.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0810-journalHistoryStore.scalars.test.ts.xml",
+          "logHash": "d5de7c69f4f0e46bbc8cbf082f0c9e51c4ea43e1db50a342e67de46ab18bd4a9",
+          "junitHash": "126ba1bfb1107d4452ad8988c70bdf4571ac7087bcd3d5a08119298c7ca0ab5a"
+        },
+        {
+          "path": "packages/core/src/services/history/raw-history-marker.test.ts",
+          "pid": 39415,
+          "sourceHash": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+          "pass": 3,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-marker-old-o-c/0806-raw-history-marker.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-marker-old-o-c/0806-raw-history-marker.test.ts.xml",
+          "logHash": "8657cfc249f7b0cff701cb3b72cba3f4810ab442cd2f40fa0635607cb50c5465",
+          "junitHash": "aba7cba4acb7cab55febfefdc2b25d0cbdeb631b319a236154d8bddbd5802d04"
+        },
+        {
+          "path": "packages/core/src/services/history/historyBackend.test.ts",
+          "pid": 38219,
+          "sourceHash": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+          "pass": 12,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0812-historyBackend.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0812-historyBackend.test.ts.xml",
+          "logHash": "978d532123f17918e2bb92814ec2d21ca4f0507562f224240461a48e6ce9975f",
+          "junitHash": "2baee1ae7d6bd7f920d68655d3b50a94bd3c3fedb8bd6fdd1a8bef4813eff7ee"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.streamed.test.ts",
+          "pid": 38224,
+          "sourceHash": "09b614f93991c09387d323de8ff4f8f42a33dfa1b8fc9279cc46966d79e86cdf",
+          "pass": 5,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0813-journalHistoryStore.streamed.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0813-journalHistoryStore.streamed.test.ts.xml",
+          "logHash": "00be29fc752a74dd0a5011f8911a7ed0e94f050797258bba1a02929c3ca7b903",
+          "junitHash": "7a97facf8202c927b7e92a5ef5bdb6ee31667f7395afd9e8949e3b902e28a0bf"
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.dump.test.ts",
+          "pid": 38228,
+          "sourceHash": "41a0e9088f41c36238cbae38db8256f0877f49bce55144ef6aa134d7eb4fb99a",
+          "pass": 3,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0814-journalHistoryStore.dump.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0814-journalHistoryStore.dump.test.ts.xml",
+          "logHash": "b15ee925a1444a3f2538e1b8cb8f77e1a6733bb91d6400c607d1baa5b6d167a3",
+          "junitHash": "0729696a77c5cb4032bf2be168bb7f3ecb151e8709c95b33eaae575f2adb2cc4"
+        },
+        {
+          "path": "packages/agents/src/core/orchestrator-history-ide.test.ts",
+          "pid": 38234,
+          "sourceHash": "52dd1dac583505f60a24f46bb5b6d7e190da140d3949819f5bca609747d8935c",
+          "pass": 5,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0622-orchestrator-history-ide.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0622-orchestrator-history-ide.test.ts.xml",
+          "logHash": "8d50236266c07f937649183211d606e41796a1273b60a97157f8f911b8363d1a",
+          "junitHash": "c9006ed27260f5d9f7a3b108be8d41831af12b45f5ff80e9b10a3e0f791e22dd"
+        },
+        {
+          "path": "packages/agents/src/core/client-source-token-totals.test.ts",
+          "pid": 38720,
+          "sourceHash": "afdf18bc3a100d1b13110fffec144de0fe19ef3ced38fd0fd4b2915d4c26ef1a",
+          "pass": 2,
+          "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0543-client-source-token-totals.test.ts.log",
+          "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-old-o-a/0543-client-source-token-totals.test.ts.xml",
+          "logHash": "72b21c57c14200ddc56f6162b8f1727258a08f45de98ab50dd9db2844764d6e9",
+          "junitHash": "7b3d60fed4e108ad1ac0d5e82bfce9b0340cdb239c94182540df1ed3188edbdc"
+        }
+      ]
+    }
+  ],
+  "measurements": [
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/normal-DAEnmc/result.json",
+      "sha256": "88b8ad0a6466ab08b67959a93d0a7d7877ed9979d2af93e3d486f5462d3f29e2",
+      "mode": "normal",
+      "pid": 32817,
+      "baseline": {
+        "turn": 545,
+        "heapBytes": 186039073
+      },
+      "checkpoints": [
+        {
+          "turn": 595,
+          "heapBytes": 186253893
+        },
+        {
+          "turn": 645,
+          "heapBytes": 186312845
+        },
+        {
+          "turn": 695,
+          "heapBytes": 186354720
+        },
+        {
+          "turn": 745,
+          "heapBytes": 186222314
+        },
+        {
+          "turn": 795,
+          "heapBytes": 186285820
+        },
+        {
+          "turn": 845,
+          "heapBytes": 186357330
+        }
+      ],
+      "requests": 845,
+      "retainedRows": 0,
+      "compressions": 89,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 59958017,
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "retainedBytes": 318257,
+        "checkpointDeltas": [214820, 273772, 315647, 183241, 246747, 318257],
+        "intervalGrowth": [214820, 58952, 41875, -132406, 63506, 71510],
+        "lateFittedGrowthBytes": 21400.8,
+        "lateEndpointGrowthBytes": 2610
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/trap-zdn00A/result.json",
+      "sha256": "e82754ad2caa067ac2bed876dbeac6b8462015aaf347b17df61a89fc3dac9eca",
+      "mode": "trap",
+      "pid": 33715,
+      "baseline": {
+        "turn": 550,
+        "heapBytes": 186050725
+      },
+      "checkpoints": [
+        {
+          "turn": 600,
+          "heapBytes": 194948544
+        },
+        {
+          "turn": 650,
+          "heapBytes": 208819882
+        },
+        {
+          "turn": 700,
+          "heapBytes": 222450840
+        },
+        {
+          "turn": 750,
+          "heapBytes": 235503789
+        },
+        {
+          "turn": 800,
+          "heapBytes": 249790245
+        },
+        {
+          "turn": 850,
+          "heapBytes": 263867123
+        }
+      ],
+      "requests": 850,
+      "retainedRows": 31032,
+      "compressions": 90,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 60373251,
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 8897819 bytes at turn 600 exceeds allowance 1048576",
+          "retained 22769157 bytes at turn 650 exceeds allowance 1048576",
+          "retained 36400115 bytes at turn 700 exceeds allowance 1048576",
+          "retained 49453064 bytes at turn 750 exceeds allowance 1048576",
+          "retained 63739520 bytes at turn 800 exceeds allowance 1048576",
+          "retained 77816398 bytes at turn 850 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 41560592 bytes over turns 700 to 850 exceeds 262144 bytes of settle noise",
+          "heap grew 41416283 bytes from turn 700 to 850, above 262144 bytes of settle noise"
+        ],
+        "retainedBytes": 77816398,
+        "checkpointDeltas": [
+          8897819, 22769157, 36400115, 49453064, 63739520, 77816398
+        ],
+        "intervalGrowth": [
+          8897819, 13871338, 13630958, 13052949, 14286456, 14076878
+        ],
+        "lateFittedGrowthBytes": 41560591.5,
+        "lateEndpointGrowthBytes": 41416283
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/release-trap-JarNza/result.json",
+      "sha256": "c3006c72366f26ca3d85d3c16a5be1657f2b35ef66dd994988aa92843018b7a1",
+      "mode": "release-trap",
+      "pid": 34507,
+      "baseline": {
+        "turn": 550,
+        "heapBytes": 186147360
+      },
+      "checkpoints": [
+        {
+          "turn": 600,
+          "heapBytes": 194910451
+        },
+        {
+          "turn": 650,
+          "heapBytes": 208730042
+        },
+        {
+          "turn": 700,
+          "heapBytes": 222478334
+        },
+        {
+          "turn": 750,
+          "heapBytes": 186250208
+        },
+        {
+          "turn": 800,
+          "heapBytes": 186381719
+        },
+        {
+          "turn": 850,
+          "heapBytes": 186470047
+        }
+      ],
+      "requests": 850,
+      "retainedRows": 0,
+      "compressions": 90,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 60373258,
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 8763091 bytes at turn 600 exceeds allowance 1048576",
+          "retained 22582682 bytes at turn 650 exceeds allowance 1048576",
+          "retained 36330974 bytes at turn 700 exceeds allowance 1048576"
+        ],
+        "retainedBytes": 322687,
+        "checkpointDeltas": [
+          8763091, 22582682, 36330974, 102848, 234359, 322687
+        ],
+        "intervalGrowth": [
+          8763091, 13819591, 13748292, -36228126, 131511, 88328
+        ],
+        "lateFittedGrowthBytes": -32368005,
+        "lateEndpointGrowthBytes": -36008287
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/normal-cgtowr/result.json",
+      "sha256": "868b0c1aba96261ba135c0044ec9412397e4c20d8af246ddf0d3acf4aacdb992",
+      "mode": "normal",
+      "pid": 36180,
+      "baseline": {
+        "turn": 545,
+        "heapBytes": 181992928
+      },
+      "checkpoints": [
+        {
+          "turn": 595,
+          "heapBytes": 182025069
+        },
+        {
+          "turn": 645,
+          "heapBytes": 181900136
+        },
+        {
+          "turn": 695,
+          "heapBytes": 182064199
+        },
+        {
+          "turn": 745,
+          "heapBytes": 182054241
+        },
+        {
+          "turn": 795,
+          "heapBytes": 182095280
+        },
+        {
+          "turn": 845,
+          "heapBytes": 182087566
+        }
+      ],
+      "requests": 845,
+      "retainedRows": 0,
+      "compressions": 89,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 14780345,
+      "verdict": {
+        "pass": true,
+        "failures": [],
+        "retainedBytes": 94638,
+        "checkpointDeltas": [32141, -92792, 71271, 61313, 102352, 94638],
+        "intervalGrowth": [32141, -124933, 164063, -9958, 41039, -7714],
+        "lateFittedGrowthBytes": 33342,
+        "lateEndpointGrowthBytes": 23367
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/trap-Tm37XA/result.json",
+      "sha256": "c60f9270e64df36da1e619444789dcdad7f53e718fb5de45cb6083d8645e9f77",
+      "mode": "trap",
+      "pid": 36855,
+      "baseline": {
+        "turn": 550,
+        "heapBytes": 182043958
+      },
+      "checkpoints": [
+        {
+          "turn": 600,
+          "heapBytes": 190646803
+        },
+        {
+          "turn": 650,
+          "heapBytes": 204376183
+        },
+        {
+          "turn": 700,
+          "heapBytes": 218216954
+        },
+        {
+          "turn": 750,
+          "heapBytes": 231832100
+        },
+        {
+          "turn": 800,
+          "heapBytes": 245552064
+        },
+        {
+          "turn": 850,
+          "heapBytes": 259719352
+        }
+      ],
+      "requests": 850,
+      "retainedRows": 31032,
+      "compressions": 90,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 14900389,
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 8602845 bytes at turn 600 exceeds allowance 1048576",
+          "retained 22332225 bytes at turn 650 exceeds allowance 1048576",
+          "retained 36172996 bytes at turn 700 exceeds allowance 1048576",
+          "retained 49788142 bytes at turn 750 exceeds allowance 1048576",
+          "retained 63508106 bytes at turn 800 exceeds allowance 1048576",
+          "retained 77675394 bytes at turn 850 exceeds allowance 1048576",
+          "heap growth scales with turn count: fitted 41468147 bytes over turns 700 to 850 exceeds 262144 bytes of settle noise",
+          "heap grew 41502398 bytes from turn 700 to 850, above 262144 bytes of settle noise"
+        ],
+        "retainedBytes": 77675394,
+        "checkpointDeltas": [
+          8602845, 22332225, 36172996, 49788142, 63508106, 77675394
+        ],
+        "intervalGrowth": [
+          8602845, 13729380, 13840771, 13615146, 13719964, 14167288
+        ],
+        "lateFittedGrowthBytes": 41468147.4,
+        "lateEndpointGrowthBytes": 41502398
+      }
+    },
+    {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/release-trap-VYeAth/result.json",
+      "sha256": "bc70b30ba5028ac8b0b7319149ac2cea449075fac91ee5580b62a43356ae68fb",
+      "mode": "release-trap",
+      "pid": 37539,
+      "baseline": {
+        "turn": 550,
+        "heapBytes": 182063489
+      },
+      "checkpoints": [
+        {
+          "turn": 600,
+          "heapBytes": 190610657
+        },
+        {
+          "turn": 650,
+          "heapBytes": 204385609
+        },
+        {
+          "turn": 700,
+          "heapBytes": 218154953
+        },
+        {
+          "turn": 750,
+          "heapBytes": 182146431
+        },
+        {
+          "turn": 800,
+          "heapBytes": 182129018
+        },
+        {
+          "turn": 850,
+          "heapBytes": 182180678
+        }
+      ],
+      "requests": 850,
+      "retainedRows": 0,
+      "compressions": 90,
+      "maxHistoryTokens": 36625,
+      "journalBytes": 14900405,
+      "verdict": {
+        "pass": false,
+        "failures": [
+          "retained 8547168 bytes at turn 600 exceeds allowance 1048576",
+          "retained 22322120 bytes at turn 650 exceeds allowance 1048576",
+          "retained 36091464 bytes at turn 700 exceeds allowance 1048576"
+        ],
+        "retainedBytes": 117189,
+        "checkpointDeltas": [8547168, 22322120, 36091464, 82942, 65529, 117189],
+        "intervalGrowth": [
+          8547168, 13774952, 13769344, -36008522, -17413, 51660
+        ],
+        "lateFittedGrowthBytes": -32382071.4,
+        "lateEndpointGrowthBytes": -35974275
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "core-types-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/core-types-d-result.json",
+      "pid": 40039,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-types-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/agents-types-d-result.json",
+      "pid": 40075,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-bun-types-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/agents-bun-types-d-result.json",
+      "pid": 40101,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "touched-types-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/touched-types-d-result.json",
+      "pid": 40170,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "lint-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/lint-d-result.json",
+      "pid": 40246,
+      "code": 0,
+      "logHash": "9558a23e1e8314c5cac44617146065218f9c4393fa4c828233dabcdd3fe7c38a"
+    },
+    {
+      "name": "format-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/format-d-result.json",
+      "pid": 41000,
+      "code": 0,
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "audit-d",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/audit-d-result.json",
+      "pid": 41092,
+      "code": 0,
+      "logHash": "ac6862a6919a0e946c6e68f94af7b780905ee00a4a8c40a008310fd6e5a883a8"
+    },
+    {
+      "name": "census-test-e-0",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-test-e-0-result.json",
+      "pid": 42666,
+      "code": 0,
+      "logHash": "eaa95ead6f2c6f8a383393c63b27fd21352d34d2939d54796bd11c4af5181324"
+    },
+    {
+      "name": "census-test-e-1",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-test-e-1-result.json",
+      "pid": 42670,
+      "code": 0,
+      "logHash": "d5f6afc787a25006c16ca7951ae9ec1ee059bc6d30ea93cd13fab557bc463853"
+    },
+    {
+      "name": "census-test-e-2",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-test-e-2-result.json",
+      "pid": 42677,
+      "code": 0,
+      "logHash": "9dff5223868c069a968c5ec6a91b7c5e6b45383b4400bb4c83745233184e2e5a"
+    },
+    {
+      "name": "census-test-e-3",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-test-e-3-result.json",
+      "pid": 42687,
+      "code": 0,
+      "logHash": "f331c020cf3c4e8023a7b8e8d394a84bb369effe5cc2ff9cdbcf5e3c755f9479"
+    },
+    {
+      "name": "census-test-e-4",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-test-e-4-result.json",
+      "pid": 42697,
+      "code": 0,
+      "logHash": "019ea8d755f64a34923a1b9c8a39d3fd27cce7ed580b56012f63b1f970e94f0d"
+    },
+    {
+      "name": "census-types-e",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-types-e-result.json",
+      "pid": 42708,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "census-lint-e",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-lint-e-result.json",
+      "pid": 42719,
+      "code": 0,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "census-format-e",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/census-format-e-result.json",
+      "pid": 42727,
+      "code": 0,
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph-e",
+      "path": "tmp/854-notes/p4/w22/retained-run-o/graph-e-result.json",
+      "pid": 42729,
+      "code": 0,
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    }
+  ],
+  "controls": {
+    "readcost": {
+      "originalCommit": "c69b1c85b",
+      "path": "packages/core/src/services/history/HistoryServiceReads.ts",
+      "pid": 39290,
+      "pass": 0,
+      "fail": 2,
+      "cmp": 0,
+      "restoredHash": "652fd79c2b43e7e9cba71b6bbd7583793b8943ea5aca1d0e71a9b89a05e604a0"
+    },
+    "censusScope": {
+      "redLog": "tmp/854-notes/p4/w22/retained-run-o/red-census-scope-e.log",
+      "red": {
+        "pass": 2,
+        "fail": 1
+      },
+      "initialPublication": {
+        "green": 803,
+        "red": 0,
+        "unverified": 3
+      },
+      "cause": "Related regression rows were accepted without target case contracts; retained acceptance now selects only its four exact target paths."
+    }
+  },
+  "reusedDeclarationBuild": {
+    "log": "tmp/854-notes/p4/w22/retained-run-o/build-types-final-c.log",
+    "sha256": "9e8c0ef0a2cda0482790d71350a5f6c4590599786dc17bf4c1f4b6a778519b77"
+  },
+  "sourceBoundary": {
+    "packages/agents/src/core/__tests__/send-journal-opens.test.ts": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+    "packages/core/src/services/history/HistoryServiceReads.ts": "652fd79c2b43e7e9cba71b6bbd7583793b8943ea5aca1d0e71a9b89a05e604a0",
+    "packages/core/src/services/history/historyBackend.test.ts": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+    "packages/core/src/services/history/historyJournalStore.ts": "ba5ab3f626b2205ed591fb07e30c45c68b111b9a8cc325b41efc0f3efc91f15b",
+    "packages/core/src/services/history/historyOldStoreOps.ts": "fa1a75ac169f3172a71364392a2d1ce717a61829d3089d113daafc762014c853",
+    "packages/core/src/services/history/historyStorePort.ts": "547e8801280aafdf5aba8a5199fdfc9a1ab782ef23777c26c94f9adabf81c43a",
+    "packages/core/src/services/history/journalHistoryStore.scalars.test.ts": "c10212ef9faaaaff81c0a981bd825d34a34a3d66d5a19ab5dc3a90460a5b1be2",
+    "packages/core/src/services/history/journalHistoryStore.ts": "4dfbf55a01cefac27cad19d8961f2af297ebf42715ec249c6ca7210be7c27a7e",
+    "packages/core/src/services/history/journalScalars.ts": "f7c8d0b2e34b3ac5aa7a204cc3747debfcf1de655e31b5fc53b5182e1b30e142",
+    "packages/core/src/services/history/raw-history-marker.test.ts": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+    "packages/agents/src/core/__tests__/support/journal-read-cost.ts": "f40f7990488ab94128021ab82715aa16f3249271d63bdcd6a950d80ee8b8c5cf",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-workload.ts": "680ac73bdf0119b8c4412f29e454c68e3a40f50c7e867f8e4103408393a12c0e",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-harness.ts": "8763562b540123627ca412e50eda27493101f97089658c4a78d69d8f149d2aba",
+    "packages/agents/src/core/__tests__/journal-retained-growth.test.ts": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+    "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+    "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-worker.ts": "b4ed992e2a200c0d729d94e3cac1ddcbf22f9d3216c5acfc95c6b84e638fb5d4",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-predicate.ts": "99a10da628d2c1d74bbb486df7c1aa7c7464ce4235ae4d832bfe5d6d170f44e4",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-plan.ts": "551e14ffb215c51459889a4431ca48f508386c5cdf2e62781730f34a1b795987",
+    "packages/agents/src/core/__tests__/support/journal-retained-growth-text.ts": "50374e152ae6b0723f34259e1705fe7cd5744a095a77415ae944840a06b34332"
+  },
+  "censusSourceHashes": {
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-census-runner.ts": "54015ce4316e8c34254b2710810d4052d96281c1ca2359cefe397db935fec76b",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/w22-fault-census.test.ts": "9bdbe612cffcd3122e8ddf8f4858a1747cad199d596a8a82dc1badbb2e934995"
+  },
+  "frozen": {
+    "census": {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/frozen-final/census.json",
+      "sha256": "56be52d9c86641e1de865733ee4d8d707b83734a672c477b02567af8dee1f3c5"
+    },
+    "allAttempts": {
+      "path": "tmp/854-notes/p4/w22/retained-run-o/frozen-final/all-attempts.json",
+      "sha256": "2570f8a3d58ac9fe2be3675784b3764259a3bfc454950288ad3247af1d1d5b95"
+    }
+  },
+  "processes": {
+    "checkedAt": "2026-10-20T04:30:39.387Z",
+    "owned": [
+      32812, 32813, 32814, 32815, 32817, 33709, 33715, 34488, 34507, 35383,
+      35472, 35480, 35516, 35519, 35533, 35544, 36155, 36178, 36179, 36180,
+      36854, 36855, 37528, 37539, 38158, 38189, 38194, 38219, 38224, 38228,
+      38234, 38720, 38935, 38936, 39289, 39290, 39330, 39331, 39414, 39415,
+      40032, 40033, 40038, 40039, 40075, 40101, 40170, 40246, 41000, 41002,
+      41014, 41022, 41032, 41035, 41041, 41043, 41047, 41048, 41092, 42666,
+      42670, 42677, 42687, 42697, 42708, 42719, 42727, 42729
+    ],
+    "live": []
+  },
+  "limits": {
+    "retainedBytes": 1048576,
+    "lateTrendBytes": 262144,
+    "changed": false
+  },
+  "review": "review skipped per Andrew 2026-10-09",
+  "scope": "Four accepted target rows only; cumulative census is not a final-source whole-package run. Runner accounting, classifications and W23-W26 remain open."
+}

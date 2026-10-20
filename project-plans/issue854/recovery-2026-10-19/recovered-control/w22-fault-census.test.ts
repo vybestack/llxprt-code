@@ -1,30 +1,45 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect, it } from 'bun:test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { runCensus } from './w22-census-runner.ts';
 
-it.each(['fault', 'child'] as const)(
+it.each(['fault', 'child', 'retained'] as const)(
   'accepts %s contracts only with exact source, complete cases and a distinct completed native counterpart',
   (family) => {
-    const nativeBatch =
-      family === 'fault'
-        ? 'fault-final-journal-m-a'
-        : 'child-final-journal-n-e';
-    const oldBatch =
-      family === 'fault' ? 'fault-final-old-m-a' : 'child-final-old-n-e';
-    const contractDirectory =
-      family === 'fault' ? 'core-fault-run-m' : 'childownership-run-n';
+    const families = {
+      fault: {
+        native: 'fault-final-journal-m-a',
+        old: 'fault-final-old-m-a',
+        directory: 'core-fault-run-m',
+      },
+      child: {
+        native: 'child-final-journal-n-e',
+        old: 'child-final-old-n-e',
+        directory: 'childownership-run-n',
+      },
+      retained: {
+        native: 'retained-final-journal-o-a',
+        old: 'retained-final-old-o-a',
+        directory: 'retained-run-o',
+      },
+    };
+    const nativeBatch = families[family].native;
+    const oldBatch = families[family].old;
+    const contractDirectory = families[family].directory;
     const evidence = resolve('tmp/854-notes/p4/w22', contractDirectory);
     mkdirSync(evidence, { recursive: true });
     const root = mkdtempSync(join(evidence, 'census-fixture-'));
     const w22 = join(root, 'tmp/854-notes/p4/w22');
     const run = join(w22, 'run-20261019-a');
     mkdirSync(run, { recursive: true });
-    const path =
-      family === 'fault'
-        ? 'packages/agents/src/core/semantic-purge-array-seam.test.ts'
-        : 'packages/agents/src/core/__tests__/childaccept-body.test.ts';
+    const paths = {
+      fault: 'packages/agents/src/core/semantic-purge-array-seam.test.ts',
+      child: 'packages/agents/src/core/__tests__/childaccept-body.test.ts',
+      retained:
+        'packages/agents/src/core/__tests__/journal-retained-growth.test.ts',
+    };
+    const path = paths[family];
     writeFileSync(join(run, 'inventory.json'), JSON.stringify([{ path }]));
     let finalLog = '';
     const batches: Array<[string, number, string]> = [
@@ -186,5 +201,25 @@ it.each(['fault', 'child'] as const)(
       ' 1 pass\n 1 fail\n 0 skip\nRan 2 tests across 1 file.\n',
     );
     expect(runCensus(root).partition.green).toBe(0);
+    if (family === 'retained') {
+      const unrelated =
+        'packages/agents/src/core/orchestrator-history-ide.test.ts';
+      writeFileSync(
+        join(run, 'inventory.json'),
+        JSON.stringify([{ path }, { path: unrelated }]),
+      );
+      const resultsPath = join(run, nativeBatch, 'results.json');
+      const results: object[] = JSON.parse(readFileSync(resultsPath, 'utf8'));
+      writeFileSync(
+        resultsPath,
+        JSON.stringify([
+          ...results,
+          { ...results[0], path: unrelated, pid: 5 },
+        ]),
+      );
+      expect(
+        runCensus(root).attempts.find((row) => row.pid === 5)?.accepted,
+      ).toBe(false);
+    }
   },
 );

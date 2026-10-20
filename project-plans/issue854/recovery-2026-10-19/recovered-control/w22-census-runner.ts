@@ -29,10 +29,20 @@ const CORE_FAULT_BATCHES = [
   'fault-changed-final-journal-m-c',
 ];
 const CHILD_OWNERSHIP_BATCHES = ['child-final-journal-n-e'];
+const RETAINED_BATCHES = ['retained-final-journal-o-a'];
+const RETAINED_PATHS = new Set(
+  [
+    'journal-retained-growth.test.ts',
+    'journal-retained-growth-retaining-trap.test.ts',
+    'journal-retained-growth-release-trap.test.ts',
+    'send-journal-opens.test.ts',
+  ].map((name) => `packages/agents/src/core/__tests__/${name}`),
+);
 const OBSERVATION_CONTRACT_BATCHES = [
   ...OBSERVATION_BATCHES,
   ...CORE_FAULT_BATCHES,
   ...CHILD_OWNERSHIP_BATCHES,
+  ...RETAINED_BATCHES,
 ];
 const REQUEST_BATCHES = [
   'request-middle-final-journal-k-b',
@@ -42,6 +52,7 @@ const REQUEST_NATIVE_BATCHES = [
   ...REQUEST_BATCHES,
   ...CORE_FAULT_BATCHES,
   ...CHILD_OWNERSHIP_BATCHES,
+  ...RETAINED_BATCHES,
   'request-related-final-journal-k-b',
   'request-related-completion-journal-k-e',
   'request-media-final-journal-k-h',
@@ -181,6 +192,10 @@ function acceptedBatches(
     {
       reference: 'childownership-run-n/verify-current.json',
       batches: CHILD_OWNERSHIP_BATCHES,
+    },
+    {
+      reference: 'retained-run-o/verify-current.json',
+      batches: RETAINED_BATCHES,
     },
   ];
   return layers.flatMap((layer) =>
@@ -490,6 +505,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
     'core-observation-run-l/classification.json',
     'core-fault-run-m/classification.json',
     'childownership-run-n/classification.json',
+    'retained-run-o/classification.json',
   ]);
   const checkpoints = [
     join(run, 'accounting.json'),
@@ -501,7 +517,11 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const gathered = references.flatMap((reference) =>
     resultRows(json(reference)).map((input) => {
       const normalized = normalize(input, run);
-      const boundary = order.get(normalized.batch);
+      const boundary =
+        RETAINED_BATCHES.includes(normalized.batch) &&
+        !RETAINED_PATHS.has(normalized.input.path)
+          ? undefined
+          : order.get(normalized.batch);
       const inPrimaryRun = dirname(dirname(normalized.input.junit)) === run;
       const provenance: Provenance = {
         batch: normalized.batch,
