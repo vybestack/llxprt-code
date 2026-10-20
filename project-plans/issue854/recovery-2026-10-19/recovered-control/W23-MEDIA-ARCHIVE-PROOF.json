@@ -1,0 +1,2039 @@
+{
+  "created": "2026-10-20T08:29:21.419Z",
+  "startingHead": "17f468b02",
+  "rootFixCommit": "571c74c0eae4522fe188f5978fbd81a14dff77e4",
+  "sourceCommit": "98f09fa6dedb38c89e87e405b393145c696a0186",
+  "rawRoot": "tmp/854-notes/p4/w23/media-archive-run-f",
+  "status": "Native CLI archive and cold-reopen contract green; W23 remains open",
+  "totals": {
+    "acceptedFileExecutions": 53,
+    "passes": 405,
+    "failures": 0,
+    "skips": 0,
+    "finalGates": 12,
+    "recordedPids": 86,
+    "livePids": []
+  },
+  "sources": {
+    "packages/core/src/journal/commitEffect.ts": "6b40f7fb63a75a650cec4fd138277664c2a0d319ace87496fa04cf75eadc4449",
+    "packages/core/src/journal/journalStore.ts": "8873cd58565c90f985e6c7d379b38b349886e5088634f54b748b79b10550f0b9",
+    "packages/core/src/recording/journalRecordingMedia.ts": "443f1ee5dd2b69f4265a15c05b18e54a926d4f96b45628acf85cc55780bb14f3",
+    "packages/core/src/recording/journalRecordingService.ts": "cbf2d244cb43afbaf2b7863a14887b45c9d99b212043f34ea1d473ab50c0c26c",
+    "packages/core/src/recording/sessionRecorderFactory.ts": "3b5b54e4cf2ef1575535fe222df1908f2b30c7c7ff8e8de7d6371c245b221b9e",
+    "packages/core/src/recording/journalResume.ts": "5912ab6a299e20fb72761e7903c96efc51cb265eced8a784f055c1f94d9a3d8a",
+    "packages/core/src/recording/journalResumeAdoption.ts": "85afcb6fe5dd5aab57c42d9a1d2566445f7d87fb4f128f30408d2bb377952ec7",
+    "packages/core/src/recording/resumeSession.ts": "d5fb40f080458644ee9eec49d864be3b08ff368a5e1f987102594ed5621e349a",
+    "packages/core/src/recording/journalFork.ts": "003666483915fab33f2920e172cfc10f8afe8a425a6dcf12da44aacc7220f010",
+    "packages/core/src/recording/SessionTransitionService.ts": "70fd9de07bc9223b328091430f1df840e898ca01d052a60569db6d8068b51fc3",
+    "packages/core/src/recording/journal-recording-media.test.ts": "595e9bb4aadc8420cbb89dbe37e6e6cab5c7da82726fe3c3d99e43f1c2a28d17",
+    "packages/cli/src/ui/hooks/native-command-protocol.test.ts": "1c2f1205dbd1dbfdb0a35b94bbf49953fdb25aee9b1dcad95958e553d719ba5e"
+  },
+  "accepted": [
+    {
+      "name": "core-journal-recording-journalRecordingService.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalRecordingService.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/1.xml",
+      "backend": "journal",
+      "index": 1,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42773,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/001.log",
+      "started": "2026-10-20T08:21:29.059Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "13 pass\n 0 fail\n 58 expect() calls\nRan 13 tests across 1 file. [321.00ms]",
+      "finished": "2026-10-20T08:21:29.389Z",
+      "sha256": "d0557fc76a059ffc7f5ddb54c1060e82c6789aa72cc0023a4180cec5368f4f65",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/1.xml",
+        "sha256": "bc176af13bded004bca58dde4bd0d858a02b1858116b6aae09502e11618657b6"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalRecordingService.refusal.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalRecordingService.refusal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/2.xml",
+      "backend": "journal",
+      "index": 2,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42782,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/002.log",
+      "started": "2026-10-20T08:21:29.390Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "3 pass\n 0 fail\n 12 expect() calls\nRan 3 tests across 1 file. [284.00ms]",
+      "finished": "2026-10-20T08:21:29.683Z",
+      "sha256": "395612ca6f7761bdfbf396a08fa5ee6400d8c668ea067739b7f68ba5c54c9e73",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/2.xml",
+        "sha256": "da6bdf8fef8bef8235b139979b6818a63ea5f614c8d8677616cc1a73bdefb562"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journal-recording-metadata-contracts.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journal-recording-metadata-contracts.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/3.xml",
+      "backend": "journal",
+      "index": 3,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42792,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/003.log",
+      "started": "2026-10-20T08:21:29.684Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [334.00ms]",
+      "finished": "2026-10-20T08:21:30.027Z",
+      "sha256": "810bf8a52f6d15c31d320cb39b0189403a02b01e34b1c6d9301f5049f11f753f",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/3.xml",
+        "sha256": "b4f6e050caf1a1bee0b8baf775dc4e76395784bf38ccf9f01b2333691c69fbed"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalResume.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResume.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/4.xml",
+      "backend": "journal",
+      "index": 4,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42793,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/004.log",
+      "started": "2026-10-20T08:21:30.028Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "12 pass\n 0 fail\n 29 expect() calls\nRan 12 tests across 1 file. [330.00ms]",
+      "finished": "2026-10-20T08:21:30.367Z",
+      "sha256": "0c5dad0e7b254e20e877fc6d8cfe150747faa63740864f87d2ec5bd4c8199a12",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/4.xml",
+        "sha256": "aefeb80037d47333cab8918090cdac1fcd8e92d3b9ffd0db6a05603dbacd307b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalResumeAdoption.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResumeAdoption.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/5.xml",
+      "backend": "journal",
+      "index": 5,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42799,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/005.log",
+      "started": "2026-10-20T08:21:30.368Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "8 pass\n 0 fail\n 32 expect() calls\nRan 8 tests across 1 file. [459.00ms]",
+      "finished": "2026-10-20T08:21:30.836Z",
+      "sha256": "e59cfecf8cf8e20f8f61aff1dab19d8923ee6985e1ae804d46cd54b3483ab483",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/5.xml",
+        "sha256": "c0c29892fa3f69ee70379258f0835cbcbd8183f13dc948698f039090e2b7a429"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalResumeAdoption.detach.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResumeAdoption.detach.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/6.xml",
+      "backend": "journal",
+      "index": 6,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42803,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/006.log",
+      "started": "2026-10-20T08:21:30.837Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 7 expect() calls\nRan 2 tests across 1 file. [340.00ms]",
+      "finished": "2026-10-20T08:21:31.186Z",
+      "sha256": "bd1bcd02eb3e80265dfa8c84cb7e32a166a64b571fc3186b818a2fedc29ceb93",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/6.xml",
+        "sha256": "6f1b1a8169a819f5dae3e713a4c4111939c10122dfdb14949ab4e45a631470ee"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalResumeAdoption.bound.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResumeAdoption.bound.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/7.xml",
+      "backend": "journal",
+      "index": 7,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42807,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/007.log",
+      "started": "2026-10-20T08:21:31.187Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "15 pass\n 0 fail\n 41 expect() calls\nRan 15 tests across 1 file. [474.00ms]",
+      "finished": "2026-10-20T08:21:31.672Z",
+      "sha256": "58f40346da82b57dcae78e22cf7ecc18886772aa1995c74f349a247399099479",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/7.xml",
+        "sha256": "b514bfbe9a3be0b01b3f82ec3a0844ee95fbee36384497538e460b29b9924925"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journalFork.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalFork.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/8.xml",
+      "backend": "journal",
+      "index": 8,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42812,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/008.log",
+      "started": "2026-10-20T08:21:31.673Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "4 pass\n 0 fail\n 18 expect() calls\nRan 4 tests across 1 file. [311.00ms]",
+      "finished": "2026-10-20T08:21:31.993Z",
+      "sha256": "05f1c775617c92afba50df909221258e7ccd7de25565cabf853299657e6897bd",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/8.xml",
+        "sha256": "96ab9fcb4e0c4a2f97a952cee478271c87259774a3860c2000707ee3a214f604"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-fork-late-ownership.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-fork-late-ownership.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/9.xml",
+      "backend": "journal",
+      "index": 9,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42813,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/009.log",
+      "started": "2026-10-20T08:21:31.993Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 7 expect() calls\nRan 1 test across 1 file. [472.00ms]",
+      "finished": "2026-10-20T08:21:32.475Z",
+      "sha256": "117b67762bba7ff21657683dcff3bd55c74c2dcde88ee050a90f5ada3b0b2e32",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/9.xml",
+        "sha256": "edbff52b9fb61d4d9470a96415e723fbf7f8f123ad5452b1e9bcc2d9c32ffa2f"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-fork-offset-audit.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-fork-offset-audit.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/10.xml",
+      "backend": "journal",
+      "index": 10,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42826,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/010.log",
+      "started": "2026-10-20T08:21:32.476Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 982 expect() calls\nRan 1 test across 1 file. [426.00ms]",
+      "finished": "2026-10-20T08:21:32.911Z",
+      "sha256": "9470d5a7a92d7332d920ea40422aa9e6c23d0d7a78f3a69245aa9366995a4a89",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/10.xml",
+        "sha256": "fea6b9e3f424d6dfdc51b95565f66c36e708ece1143b5ea61e1aa5e4b2124d43"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-core.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-core.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/11.xml",
+      "backend": "journal",
+      "index": 11,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42832,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/011.log",
+      "started": "2026-10-20T08:21:32.912Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "19 pass\n 0 fail\n 21 expect() calls\nRan 19 tests across 1 file. [681.00ms]",
+      "finished": "2026-10-20T08:21:33.603Z",
+      "sha256": "f9c41dad9f2030e439da3d965a5b02b4316a6541967184c5a0bb8596e3f4c646",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/11.xml",
+        "sha256": "267e9e6dd30023f3ed96b5638493ccce2a93d7d7615632bee54e7c2e6c8be247"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-boundary.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-boundary.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/12.xml",
+      "backend": "journal",
+      "index": 12,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42839,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/012.log",
+      "started": "2026-10-20T08:21:33.604Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "14 pass\n 0 fail\n 61 expect() calls\nRan 14 tests across 1 file. [704.00ms]",
+      "finished": "2026-10-20T08:21:34.318Z",
+      "sha256": "e9b8b586f961ae54d703732fd2e6a583e5d1f5a0735e27284306b4e064c7bbd1",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/12.xml",
+        "sha256": "3c69157eef6947cd5b667e5be2de9953b77e02ddf5fba85956ec306e2a2c8adf"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-faults.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-faults.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/13.xml",
+      "backend": "journal",
+      "index": 13,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42847,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/013.log",
+      "started": "2026-10-20T08:21:34.319Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "6 pass\n 0 fail\n 36 expect() calls\nRan 6 tests across 1 file. [483.00ms]",
+      "finished": "2026-10-20T08:21:34.813Z",
+      "sha256": "b7e2a16583074f4b876e9e95c4ebf5fe8712cc8afdc07469a8ecfd3090f45305",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/13.xml",
+        "sha256": "72e6156b1c33d0722a810939587e5fdbf33d3827430ab115bd4a7949f169c590"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-lifecycle.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-lifecycle.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/14.xml",
+      "backend": "journal",
+      "index": 14,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42855,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/014.log",
+      "started": "2026-10-20T08:21:34.813Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "14 pass\n 0 fail\n 41 expect() calls\nRan 14 tests across 1 file. [563.00ms]",
+      "finished": "2026-10-20T08:21:35.387Z",
+      "sha256": "cf2ee8ffe9a3eabac55a4b30348882a92753dfc3f8c25825b3d35734d83a61cc",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/14.xml",
+        "sha256": "833a7f86b532a30c12256b620bb8e7a1c7b2e605b50d0cd836a8b77795439bca"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-ownership.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-ownership.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/15.xml",
+      "backend": "journal",
+      "index": 15,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42862,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/015.log",
+      "started": "2026-10-20T08:21:35.388Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 13 expect() calls\nRan 2 tests across 1 file. [415.00ms]",
+      "finished": "2026-10-20T08:21:35.813Z",
+      "sha256": "6aac77e09fe638f987073cf5d428dc98ce2ff51fe0810a770b1febd5722185b2",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/15.xml",
+        "sha256": "489f142f86cb79e497c2808471e961e42cd643f5856fca44264ceb486225607b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-recording-integration-native-replay.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-integration-native-replay.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/16.xml",
+      "backend": "journal",
+      "index": 16,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42872,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/016.log",
+      "started": "2026-10-20T08:21:35.813Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "8 pass\n 0 fail\n 53 expect() calls\nRan 8 tests across 1 file. [1010.00ms]",
+      "finished": "2026-10-20T08:21:36.834Z",
+      "sha256": "6eef8cb8dd32d18240586d0843f74cce6829c8b064819eacaa05a84e3072d1f6",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/16.xml",
+        "sha256": "1512b762b1ceb524cb3555b9015ad46b5d5a874338807d76491bc81440a95ab5"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-services-history-journalHistoryStore.recorder.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/services/history/journalHistoryStore.recorder.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/17.xml",
+      "backend": "journal",
+      "index": 17,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42881,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/017.log",
+      "started": "2026-10-20T08:21:36.834Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "14 pass\n 0 fail\n 43 expect() calls\nRan 14 tests across 1 file. [1161.00ms]",
+      "finished": "2026-10-20T08:21:38.005Z",
+      "sha256": "311ff427a4b3a6c334177dfdadc483bede1603f74ca300b64595a43185784274",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/17.xml",
+        "sha256": "049b6ebc10389ff486df3325e5c99cf7ecfbcbde1d77e38901e6218d5ed767b7"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-services-history-journalHistoryStore.fanout.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/services/history/journalHistoryStore.fanout.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/18.xml",
+      "backend": "journal",
+      "index": 18,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 42890,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/018.log",
+      "started": "2026-10-20T08:21:38.006Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "16 pass\n 0 fail\n 37 expect() calls\nRan 16 tests across 1 file. [63.83s]",
+      "finished": "2026-10-20T08:22:41.843Z",
+      "sha256": "9fefcc4522495f00f0ca56251608655bceead847ed0eac1180ad13a38eaeabec",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/18.xml",
+        "sha256": "14cadd4c45628ba3640634e1d16e896b5e6374491e6d415c104a924f04f1b625"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-services-history-history-journal-adoption.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/services/history/history-journal-adoption.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/19.xml",
+      "backend": "journal",
+      "index": 19,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43837,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/019.log",
+      "started": "2026-10-20T08:22:41.844Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "7 pass\n 0 fail\n 30 expect() calls\nRan 7 tests across 1 file. [335.00ms]",
+      "finished": "2026-10-20T08:22:42.188Z",
+      "sha256": "f58ad59d626f5f4847f2b13c903ee1c47f56c9d542b2befd650da0c6b0389ab3",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/19.xml",
+        "sha256": "7db0237d3b64c625fd2d36d3ee5112ae0ed728d7db98c5140d78722d89eef655"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-media-package.journal.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.journal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/20.xml",
+      "backend": "journal",
+      "index": 20,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43838,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/020.log",
+      "started": "2026-10-20T08:22:42.189Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "10 pass\n 0 fail\n 27 expect() calls\nRan 10 tests across 1 file. [571.00ms]",
+      "finished": "2026-10-20T08:22:42.770Z",
+      "sha256": "bdc9269fc434eb7c7a360550ca29d3d5f0822ac5b90f7223542332f83b91a961",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/20.xml",
+        "sha256": "8a25214cc3713eb0a426ca47576460e922d3e7cec3e6a982c7987ba0c942897c"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-media-package.export-journal.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.export-journal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/21.xml",
+      "backend": "journal",
+      "index": 21,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43844,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/021.log",
+      "started": "2026-10-20T08:22:42.771Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "9 pass\n 0 fail\n 33 expect() calls\nRan 9 tests across 1 file. [617.00ms]",
+      "finished": "2026-10-20T08:22:43.398Z",
+      "sha256": "77444d82ae83113b8bb7d9d2d8715c497e8533cebe3040ba0dc88bcb9ea84fe6",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/21.xml",
+        "sha256": "6c74d77d8009c3e24b9a71b743d560b0c0be7945d3e608434ce02ffe69e53c3e"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-sessionDiscovery.journalScans.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/sessionDiscovery.journalScans.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/23.xml",
+      "backend": "journal",
+      "index": 23,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43859,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/023.log",
+      "started": "2026-10-20T08:22:43.645Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "4 pass\n 0 fail\n 14 expect() calls\nRan 4 tests across 1 file. [287.00ms]",
+      "finished": "2026-10-20T08:22:43.941Z",
+      "sha256": "06fe6c9fb9f1a541ef0e75405820632b701e0de0d2083d061fb790626a2a3dc0",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/23.xml",
+        "sha256": "c2f7ce7ab2b286d161fa5a4b6d3eb8d558a1a009e94862ba4b19b3d28b367b27"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-journal-groupWriter.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/journal/groupWriter.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/24.xml",
+      "backend": "journal",
+      "index": 24,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43860,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/024.log",
+      "started": "2026-10-20T08:22:43.942Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "24 pass\n 0 fail\n 73 expect() calls\nRan 24 tests across 1 file. [171.00ms]",
+      "finished": "2026-10-20T08:22:44.122Z",
+      "sha256": "719bcf336757e40e915eaa7cfd54fe560878d4da7720bbc6f106e5fd49454065",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/24.xml",
+        "sha256": "002895e1e56bae0f097a10cadc6dc237ae50284983620ae1a46b6b99689ca965"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-old-storage-session-media-owner-durability.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/storage/session-media-owner-durability.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/25.xml",
+      "backend": "old",
+      "index": 25,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43861,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/025.log",
+      "started": "2026-10-20T08:22:44.123Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "9 pass\n 0 fail\n 14 expect() calls\nRan 9 tests across 1 file. [669.00ms]",
+      "finished": "2026-10-20T08:22:44.801Z",
+      "sha256": "2496a48392cb95c4d1006176d59845dafcc6e9080bc653bf913fe816c18da9e5",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/25.xml",
+        "sha256": "75710b678e6216b7a94f1b72f88d1da3ce8772655118ae60d538b52ca4f7fd88"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-old-recording-recording-exact-media-replay.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-exact-media-replay.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/29.xml",
+      "backend": "old",
+      "index": 29,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43887,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/029.log",
+      "started": "2026-10-20T08:22:45.526Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "5 pass\n 0 fail\n 101 expect() calls\nRan 5 tests across 1 file. [758.00ms]",
+      "finished": "2026-10-20T08:22:46.294Z",
+      "sha256": "01b12eead91acffb9718a588cb890486f48290bd407b151784748dcfac2fa0f4",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/29.xml",
+        "sha256": "a85a835d399d0a404de73e640ecae58c4ae1ca150c715d4dd7dd8d5664dc566b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-old-recording-resume-media-reservation.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/resume-media-reservation.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/30.xml",
+      "backend": "old",
+      "index": 30,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43894,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/030.log",
+      "started": "2026-10-20T08:22:46.295Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 4 expect() calls\nRan 1 test across 1 file. [181.00ms]",
+      "finished": "2026-10-20T08:22:46.485Z",
+      "sha256": "51bfb7b6545e7f86fa6015c88f14d4428929d791e8c6f4e3d6726316d567e03b",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/30.xml",
+        "sha256": "e5b345758404bbacb4daf9a6ffe2ee1108b9cc9f1409fdd7c92827d7af76553d"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-old-recording-resume-text-rows-media-store.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/resume-text-rows-media-store.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/31.xml",
+      "backend": "old",
+      "index": 31,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43899,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/031.log",
+      "started": "2026-10-20T08:22:46.486Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 4 expect() calls\nRan 1 test across 1 file. [168.00ms]",
+      "finished": "2026-10-20T08:22:46.662Z",
+      "sha256": "82ccb5e05df4db1f245328a69b7facad931145dcc1c43ee16a1f9749bccf5154",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/31.xml",
+        "sha256": "652c7d9f1f93a0a1e262b52eb4c195feb2a4862e957e9ff592d998febdf780e6"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "agents-old-api-__tests__-recorded-history-persistence.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/recorded-history-persistence.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/33.xml",
+      "backend": "old",
+      "index": 33,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43901,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/033.log",
+      "started": "2026-10-20T08:22:46.799Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [645.00ms]",
+      "finished": "2026-10-20T08:22:47.453Z",
+      "sha256": "1be2d171b32a1f5473501db77e9978c9178b34da83bce5b57b4dd33e31914a7b",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/33.xml",
+        "sha256": "049379884a2c1ed0b8a8ee349aaec4e6dcbac8622e86488b4686b470d4d8ea31"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "agents-old-api-__tests__-session-owner-restore-checkpoint.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/34.xml",
+      "backend": "old",
+      "index": 34,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43909,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/034.log",
+      "started": "2026-10-20T08:22:47.454Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "18 pass\n 0 fail\n 119 expect() calls\nRan 18 tests across 1 file. [2.94s]",
+      "finished": "2026-10-20T08:22:50.412Z",
+      "sha256": "08768b731b80e290ae3ff6ae6e84ba5993bf41b5fcaaeae4abd6fe5489a0653d",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/34.xml",
+        "sha256": "88511be5a99ca756162fc4373762d008e516ef0a8b6af773764f1258d29ee489"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-old-ui-commands-chat-mutation-media.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-media.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/36.xml",
+      "backend": "old",
+      "index": 36,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44061,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/036.log",
+      "started": "2026-10-20T08:22:52.130Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [1358.00ms]",
+      "finished": "2026-10-20T08:22:53.501Z",
+      "sha256": "1b19a4d25ae4e0dab1ee7934ff95b923a7e87c170a022b705f22d5fe9d3de295",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/36.xml",
+        "sha256": "5523d3c49feb5ac9db9455d66fd96dfe8c420c1b49d3f2f6b7ea8e83934e3641"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-old-ui-commands-chat-mutation-stream.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-stream.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/37.xml",
+      "backend": "old",
+      "index": 37,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44092,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/037.log",
+      "started": "2026-10-20T08:22:53.501Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "4 pass\n 0 fail\n 28 expect() calls\nRan 4 tests across 1 file. [16.01s]",
+      "finished": "2026-10-20T08:23:09.544Z",
+      "sha256": "62304d0bc9c7c4b1ac13e515f4592533ee05859fde872fc1fc77aa942e41f11d",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/37.xml",
+        "sha256": "672477751c3df3caf5ffdced482dd98ff0f98174b4d3521b2870fd68b31ccbae"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-old-ui-commands-chat-mutation-anchor.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-anchor.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/38.xml",
+      "backend": "old",
+      "index": 38,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44385,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/038.log",
+      "started": "2026-10-20T08:23:09.545Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [1264.00ms]",
+      "finished": "2026-10-20T08:23:10.822Z",
+      "sha256": "66a4ebc9278363e68ec5941ad258338259fc594c0820c27acb56ba5fe692c649",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/38.xml",
+        "sha256": "95f2834d127622e76781087df09f9f99e03b04a168512bdb5e7b82a50d3be341"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-old-ui-commands-chat-mutation-cancel.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-cancel.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/39.xml",
+      "backend": "old",
+      "index": 39,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44418,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/039.log",
+      "started": "2026-10-20T08:23:10.823Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [1281.00ms]",
+      "finished": "2026-10-20T08:23:12.117Z",
+      "sha256": "a0a6f7d4fa8a1b4132488e230bf8a316e2a4a55aac91970b0505ffa1b32dce7b",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/39.xml",
+        "sha256": "4d7053cf242c5c0d2dad23ad80af3c8cbf5d96cb58b77551df03514740057a36"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "agents-journal-api-__tests__-recorded-history-persistence.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/recorded-history-persistence.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/40.xml",
+      "backend": "journal",
+      "index": 40,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44447,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/040.log",
+      "started": "2026-10-20T08:23:12.118Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [650.00ms]",
+      "finished": "2026-10-20T08:23:12.779Z",
+      "sha256": "f4cc636a1c1289e9c9d4660937bcc5b16112e92cb81ef832a30bec891209664e",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/40.xml",
+        "sha256": "a64f89b176eeb54d29d864320d777188993b5c3001cfd55c262297e7f447363c"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "agents-journal-api-__tests__-session-owner-restore-checkpoint.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/41.xml",
+      "backend": "journal",
+      "index": 41,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44451,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/041.log",
+      "started": "2026-10-20T08:23:12.780Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "18 pass\n 0 fail\n 119 expect() calls\nRan 18 tests across 1 file. [2.94s]",
+      "finished": "2026-10-20T08:23:15.731Z",
+      "sha256": "618b9a103089b8d1ddee78b0299a9f9b7c0da25b47189fd95115856ac5ad1a1a",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/41.xml",
+        "sha256": "958f291af8cf35d9c277466fcc149dcf170e1c88b378d0f0e9e5ee040bf4d1b4"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-journal-ui-commands-chat-mutation-media.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-media.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/43.xml",
+      "backend": "journal",
+      "index": 43,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44613,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/043.log",
+      "started": "2026-10-20T08:23:17.471Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [1.50s]",
+      "finished": "2026-10-20T08:23:18.986Z",
+      "sha256": "13157cf70cd66c4414ae4d37e2113d2f0a6f3e173e030d4d5cc5098f8272b627",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/43.xml",
+        "sha256": "5d4454a7eeb920ae068bcb111e434ad9d303af156949fc137f557f32d275848a"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-journal-ui-commands-chat-mutation-stream.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-stream.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/44.xml",
+      "backend": "journal",
+      "index": 44,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 44642,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/044.log",
+      "started": "2026-10-20T08:23:18.986Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "4 pass\n 0 fail\n 24 expect() calls\nRan 4 tests across 1 file. [35.83s]",
+      "finished": "2026-10-20T08:23:54.833Z",
+      "sha256": "e216ec64dc445438b1a7d46f1d7245d357809d50d829d653c7b569281ae15ed5",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/44.xml",
+        "sha256": "e99c48c084b1c4c3498b3cafb704fb95ec22222d9a185899ea3015c4c9c9b5a6"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-journal-ui-commands-chat-mutation-anchor.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-anchor.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/45.xml",
+      "backend": "journal",
+      "index": 45,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 45169,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/045.log",
+      "started": "2026-10-20T08:23:54.834Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [1358.00ms]",
+      "finished": "2026-10-20T08:23:56.205Z",
+      "sha256": "b7b8d1835f98c268d071bc9d4dce32261b238bbb50f7095287082e996af45af7",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/45.xml",
+        "sha256": "266035e2a6162b005f30daa85cefacb58d58788bf7ec1a9de56275167362df2e"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "cli-journal-ui-commands-chat-mutation-cancel.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/commands/chat-mutation-cancel.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/46.xml",
+      "backend": "journal",
+      "index": 46,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 45194,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/046.log",
+      "started": "2026-10-20T08:23:56.206Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [1399.00ms]",
+      "finished": "2026-10-20T08:23:57.618Z",
+      "sha256": "f8c4ab08758dc49563449f1c2cd1970d0a73965cc803d721bda7a47b35cf8b2c",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/46.xml",
+        "sha256": "4d8d2851166f8097a79aee75a28468d4ae34fed84eaa240f65aed471242b0310"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "providers-journal-__tests__-journal-native-row-liveness.test.ts",
+      "cwd": "packages/providers",
+      "command": "bun test ./src/__tests__/journal-native-row-liveness.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/47.xml",
+      "backend": "journal",
+      "index": 47,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 45225,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/047.log",
+      "started": "2026-10-20T08:23:57.619Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "4 pass\n 0 fail\n 36 expect() calls\nRan 4 tests across 1 file. [7.09s]",
+      "finished": "2026-10-20T08:24:04.721Z",
+      "sha256": "d452ecb901f53191f019969032ae27fcb47c494e1f0fc9d8969e2dc68fa8de64",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/47.xml",
+        "sha256": "91a755df521526ee2a6bcf417c1206d1773a54b2e43321e2179fa45cbbeb2178"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-sources.json",
+        "sha256": "db9a0182c260104dff3d49dbeb528befddbc18a774b850b2c1e06b3846cc0933"
+      }
+    },
+    {
+      "name": "core-journal-recording-journal-recording-media.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journal-recording-media.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s0.xml",
+      "backend": "journal",
+      "index": 0,
+      "total": 25,
+      "pid": 47955,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-0.log",
+      "started": "2026-10-20T08:27:06.298Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "5 pass\n 0 fail\n 37 expect() calls\nRan 5 tests across 1 file. [417.00ms]",
+      "finished": "2026-10-20T08:27:06.724Z",
+      "sha256": "21a7cff4edb11983b52e4a6fbfdfe59fbd67e137030f1bb5610a772461647b93",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s0.xml",
+        "sha256": "7b79de7f307aceb6e34f582a1d7465f2dc4bdd41cdec91ffac464d562954e17d"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-media-package.bounds.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.bounds.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s1.xml",
+      "backend": "journal",
+      "index": 1,
+      "total": 25,
+      "pid": 47957,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-1.log",
+      "started": "2026-10-20T08:27:06.724Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "12 pass\n 0 fail\n 17 expect() calls\nRan 12 tests across 1 file. [622.00ms]",
+      "finished": "2026-10-20T08:27:07.356Z",
+      "sha256": "bad124b24bd14a411d887149852a2380a6f86b3b1d01f3e6af0e5e817609a601",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s1.xml",
+        "sha256": "e69780dc04c2e4228536c18d65dbbfe4ac54a331c0d02613f63e1246ccd78f19"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s2.xml",
+      "backend": "old",
+      "index": 2,
+      "total": 25,
+      "pid": 47964,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-2.log",
+      "started": "2026-10-20T08:27:07.356Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "11 pass\n 0 fail\n 40 expect() calls\nRan 11 tests across 1 file. [623.00ms]",
+      "finished": "2026-10-20T08:27:07.989Z",
+      "sha256": "60371730a646d53cc2764844483b82dd97cd597493ba0c119adc3e692f31b7cb",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s2.xml",
+        "sha256": "67ffe9ea22569ed8c8e9565d88a2a8d2e6c77b38a554c069f76f95e73187208b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.integrity.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.integrity.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s3.xml",
+      "backend": "old",
+      "index": 3,
+      "total": 25,
+      "pid": 47974,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-3.log",
+      "started": "2026-10-20T08:27:07.990Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "7 pass\n 0 fail\n 42 expect() calls\nRan 7 tests across 1 file. [559.00ms]",
+      "finished": "2026-10-20T08:27:08.559Z",
+      "sha256": "62f7209d0847543655d962f40583ab95f200cf965d44421e877c9832c60f17b4",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s3.xml",
+        "sha256": "efe9cf11b2c508e72a96ae3736b15f71351f2445ea3598271c38947561359158"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.streaming.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.streaming.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s4.xml",
+      "backend": "old",
+      "index": 4,
+      "total": 25,
+      "pid": 47979,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-4.log",
+      "started": "2026-10-20T08:27:08.559Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "8 pass\n 0 fail\n 333 expect() calls\nRan 8 tests across 1 file. [4.13s]",
+      "finished": "2026-10-20T08:27:12.706Z",
+      "sha256": "3fdb7c9136788a741c7e8865abd4dd43ae285501ca6a3ede6e7677b81a8f2a56",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s4.xml",
+        "sha256": "9a855694b9cbf3986953cbf66d8ca3de13032f0c84728702290fc166666382e5"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-checkpointLifecycle.integration.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/checkpointLifecycle.integration.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s5.xml",
+      "backend": "old",
+      "index": 5,
+      "total": 25,
+      "pid": 48026,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-5.log",
+      "started": "2026-10-20T08:27:12.707Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "13 pass\n 0 fail\n 32 expect() calls\nRan 13 tests across 1 file. [290.00ms]",
+      "finished": "2026-10-20T08:27:13.005Z",
+      "sha256": "dc38d71048afd95a37770287388ee2a223bdb96aa654e42d6cf126dab10f796a",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s5.xml",
+        "sha256": "06a5777200d0fac3e18758b1d4ae8a6c347dc3716ff8d23aea0162852843a048"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "cli-old-ui-hooks-native-command-protocol.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-protocol.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s6.xml",
+      "backend": "old",
+      "index": 6,
+      "total": 25,
+      "pid": 48030,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-6.log",
+      "started": "2026-10-20T08:27:13.006Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 39 expect() calls\nRan 1 test across 1 file. [2.40s]",
+      "finished": "2026-10-20T08:27:15.418Z",
+      "sha256": "16bc9ae43d1f434d3dc64acf482055fd5ab86640985c4ef244b27d0ebad48228",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s6.xml",
+        "sha256": "c2d1f65f697767a45dd03f496f412ad1cb14c1f55389c184676b376c11ae3caf"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "cli-journal-ui-hooks-native-command-protocol.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-protocol.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s7.xml",
+      "backend": "journal",
+      "index": 7,
+      "total": 25,
+      "pid": 48071,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-7.log",
+      "started": "2026-10-20T08:27:15.419Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "1 pass\n 0 fail\n 39 expect() calls\nRan 1 test across 1 file. [1.72s]",
+      "finished": "2026-10-20T08:27:17.155Z",
+      "sha256": "bc55c80dff4caa9f1dbede96197e17246172cf4fc1309fb3ac8ae781adc16ac0",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s7.xml",
+        "sha256": "1c893c8de3312e2d2175c0e07cb72982c92c62812d280fa554b80807855a5c4b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-journal-recording-session-media-package.bounds.test.ts-other-outer",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.bounds.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s8.xml",
+      "backend": "old",
+      "index": 8,
+      "total": 25,
+      "pid": 48099,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-8.log",
+      "started": "2026-10-20T08:27:17.155Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "12 pass\n 0 fail\n 17 expect() calls\nRan 12 tests across 1 file. [552.00ms]",
+      "finished": "2026-10-20T08:27:17.717Z",
+      "sha256": "c54d24d5227d3e82df84dd87031bea335f4b0573c1a1199340c0fbaf3279fc92",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s8.xml",
+        "sha256": "161b43da967dba14e6406c15a0e4aad37c2d71984b5c8de151a0bdc72464f35c"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.test.ts-other-outer",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s9.xml",
+      "backend": "journal",
+      "index": 9,
+      "total": 25,
+      "pid": 48115,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-9.log",
+      "started": "2026-10-20T08:27:17.718Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "11 pass\n 0 fail\n 40 expect() calls\nRan 11 tests across 1 file. [748.00ms]",
+      "finished": "2026-10-20T08:27:18.476Z",
+      "sha256": "6fdef1c4d9c5fa3c925c1069027b9df233e39e0a7c042776a3d832e0acd5f951",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s9.xml",
+        "sha256": "a7dc18debeba3e93ee045d8b4aa2b4494c536bd9f2caf1206dab89c567e6adaa"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.integrity.test.ts-other-outer",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.integrity.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s10.xml",
+      "backend": "journal",
+      "index": 10,
+      "total": 25,
+      "pid": 48130,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-10.log",
+      "started": "2026-10-20T08:27:18.477Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "7 pass\n 0 fail\n 42 expect() calls\nRan 7 tests across 1 file. [578.00ms]",
+      "finished": "2026-10-20T08:27:19.064Z",
+      "sha256": "5731a1a4123ca6d340b1ad5c18c422af7dfb482d04ae5ce69d149cd7897230c1",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s10.xml",
+        "sha256": "7b2b72ade4a9fe9b3f0f9d39d83208fd95fe86c34e3be9c7434efe7fcbb1cc0d"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-session-media-package.streaming.test.ts-other-outer",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.streaming.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s11.xml",
+      "backend": "journal",
+      "index": 11,
+      "total": 25,
+      "pid": 48134,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-11.log",
+      "started": "2026-10-20T08:27:19.065Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "8 pass\n 0 fail\n 332 expect() calls\nRan 8 tests across 1 file. [4.07s]",
+      "finished": "2026-10-20T08:27:23.156Z",
+      "sha256": "1a998508dfa06fb8fc867899e8180412d1b4111a9a1f0e76a34d1f937cba65a5",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s11.xml",
+        "sha256": "61e535dcb852699a7d73c7cdd95fc1092acf6837eb5f2da0341ecde00977a921"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "core-old-recording-checkpointLifecycle.integration.test.ts-other-outer",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/checkpointLifecycle.integration.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/s12.xml",
+      "backend": "journal",
+      "index": 12,
+      "total": 25,
+      "pid": 48181,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-12.log",
+      "started": "2026-10-20T08:27:23.157Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "summary": "13 pass\n 0 fail\n 32 expect() calls\nRan 13 tests across 1 file. [299.00ms]",
+      "finished": "2026-10-20T08:27:23.464Z",
+      "sha256": "c4bf2cefcad69db360dd9f377e78152c2a9b4005e0f3fddb25273a58b9c7cb10",
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/tests/s12.xml",
+        "sha256": "39a90c6b53a3cdb35ed4c3dc3700222b25a425ae3164c64999b10160d791104b"
+      },
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "test-utils-declarations",
+      "cwd": "packages/test-utils",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 13,
+      "total": 25,
+      "pid": 48184,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-13.log",
+      "started": "2026-10-20T08:27:23.465Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:24.768Z",
+      "sha256": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "build-types-core",
+      "cwd": "packages/core",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 14,
+      "total": 25,
+      "pid": 48206,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-14.log",
+      "started": "2026-10-20T08:27:24.769Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:28.342Z",
+      "sha256": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "build-types-agents",
+      "cwd": "packages/agents",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 15,
+      "total": 25,
+      "pid": 48252,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-15.log",
+      "started": "2026-10-20T08:27:28.343Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:30.388Z",
+      "sha256": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "build-types-cli",
+      "cwd": "packages/cli",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 16,
+      "total": 25,
+      "pid": 48283,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-16.log",
+      "started": "2026-10-20T08:27:30.389Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:33.783Z",
+      "sha256": "a69b141ea33fe7711b5f8ba329bd421f4215c05989bfd0232e6b2dbd099e8213",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "types-core",
+      "cwd": "packages/core",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 17,
+      "total": 25,
+      "pid": 48322,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-17.log",
+      "started": "2026-10-20T08:27:33.784Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:39.997Z",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "types-agents",
+      "cwd": "packages/agents",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 18,
+      "total": 25,
+      "pid": 48454,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-18.log",
+      "started": "2026-10-20T08:27:39.998Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:27:54.164Z",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "types-cli",
+      "cwd": "packages/cli",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 19,
+      "total": 25,
+      "pid": 48684,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-19.log",
+      "started": "2026-10-20T08:27:54.165Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:13.069Z",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "lint",
+      "cwd": ".",
+      "command": "node_modules/.bin/eslint --max-warnings 0 packages/core/src/journal/commitEffect.ts packages/core/src/journal/journalStore.ts packages/core/src/recording/journalRecordingMedia.ts packages/core/src/recording/journalRecordingService.ts packages/core/src/recording/sessionRecorderFactory.ts packages/core/src/recording/journalResume.ts packages/core/src/recording/journalResumeAdoption.ts packages/core/src/recording/resumeSession.ts packages/core/src/recording/journalFork.ts packages/core/src/recording/SessionTransitionService.ts packages/core/src/recording/journal-recording-media.test.ts packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+      "backend": "old",
+      "index": 20,
+      "total": 25,
+      "pid": 48900,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-20.log",
+      "started": "2026-10-20T08:28:13.070Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:24.243Z",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "format",
+      "cwd": ".",
+      "command": "node_modules/.bin/prettier --check packages/core/src/journal/commitEffect.ts packages/core/src/journal/journalStore.ts packages/core/src/recording/journalRecordingMedia.ts packages/core/src/recording/journalRecordingService.ts packages/core/src/recording/sessionRecorderFactory.ts packages/core/src/recording/journalResume.ts packages/core/src/recording/journalResumeAdoption.ts packages/core/src/recording/resumeSession.ts packages/core/src/recording/journalFork.ts packages/core/src/recording/SessionTransitionService.ts packages/core/src/recording/journal-recording-media.test.ts packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+      "backend": "old",
+      "index": 21,
+      "total": 25,
+      "pid": 49163,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-21.log",
+      "started": "2026-10-20T08:28:24.245Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:24.508Z",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "affected-graph",
+      "cwd": ".",
+      "command": "bun scripts/check-affected-test-shards.ts",
+      "backend": "old",
+      "index": 22,
+      "total": 25,
+      "pid": 49169,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-22.log",
+      "started": "2026-10-20T08:28:24.509Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:27.551Z",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "audit",
+      "cwd": ".",
+      "command": "bun scripts/test-audit/scan.ts tmp/854-notes/p4/w23/media-archive-run-f/audit-final",
+      "backend": "old",
+      "index": 23,
+      "total": 25,
+      "pid": 49204,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-23.log",
+      "started": "2026-10-20T08:28:27.552Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:30.483Z",
+      "sha256": "a5735df84a99aa097dd70649ae4f2b1c8010341e45ccd69049cfd61147479e31",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    },
+    {
+      "name": "cli-boundary",
+      "cwd": ".",
+      "command": "bun scripts/check-cli-import-boundary.ts",
+      "backend": "old",
+      "index": 24,
+      "total": 25,
+      "pid": 49238,
+      "driverPid": 47954,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-24.log",
+      "started": "2026-10-20T08:28:30.485Z",
+      "code": 0,
+      "signal": null,
+      "status": "green",
+      "finished": "2026-10-20T08:28:31.393Z",
+      "sha256": "287fd904766c02a9b7ae56f29e7439b4e1cb6e210695351cf80a40d0fc85963c",
+      "sourceManifest": {
+        "path": "tmp/854-notes/p4/w23/media-archive-run-f/final-sources.json",
+        "sha256": "5fdfdeacd4c981dea83f3ac6cae142da8d91419c8d1e8b119410f204060c7b0f"
+      }
+    }
+  ],
+  "preservedLoaderFailures": [
+    {
+      "name": "core-journal-recording-session-media-package.bounds.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.bounds.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/22.xml",
+      "backend": "journal",
+      "index": 22,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43854,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/022.log",
+      "started": "2026-10-20T08:22:43.399Z",
+      "code": 1,
+      "signal": null,
+      "status": "red",
+      "summary": "0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [237.00ms]",
+      "finished": "2026-10-20T08:22:43.644Z",
+      "sha256": "0c41fdaae960586a63281c83e13071d6e549787d801ddf81cb097111d1d4c704"
+    },
+    {
+      "name": "core-old-recording-session-media-package.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/26.xml",
+      "backend": "old",
+      "index": 26,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43880,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/026.log",
+      "started": "2026-10-20T08:22:44.802Z",
+      "code": 1,
+      "signal": null,
+      "status": "red",
+      "summary": "0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [232.00ms]",
+      "finished": "2026-10-20T08:22:45.042Z",
+      "sha256": "fcd186a10aa787187fbc5a2e58a7504f7027d2d0dd7fc144ed5d706fa00792f4"
+    },
+    {
+      "name": "core-old-recording-session-media-package.integrity.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.integrity.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/27.xml",
+      "backend": "old",
+      "index": 27,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43882,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/027.log",
+      "started": "2026-10-20T08:22:45.043Z",
+      "code": 1,
+      "signal": null,
+      "status": "red",
+      "summary": "0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [230.00ms]",
+      "finished": "2026-10-20T08:22:45.281Z",
+      "sha256": "9c69aa952c60e438be82b935f8da47955aa8b878c049c8c704adc31f9eb2bf96"
+    },
+    {
+      "name": "core-old-recording-session-media-package.streaming.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/session-media-package.streaming.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/28.xml",
+      "backend": "old",
+      "index": 28,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43884,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/028.log",
+      "started": "2026-10-20T08:22:45.282Z",
+      "code": 1,
+      "signal": null,
+      "status": "red",
+      "summary": "0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [234.00ms]",
+      "finished": "2026-10-20T08:22:45.525Z",
+      "sha256": "6cde55636e782a98bcdf0c589d27c7215a4c66e8424bdb3b960bdc1110782e86"
+    },
+    {
+      "name": "core-old-recording-checkpointLifecycle.integration.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/checkpointLifecycle.integration.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/media-archive-run-f/tests/32.xml",
+      "backend": "old",
+      "index": 32,
+      "total": 59,
+      "driverPid": 42771,
+      "pid": 43900,
+      "log": "tmp/854-notes/p4/w23/media-archive-run-f/032.log",
+      "started": "2026-10-20T08:22:46.663Z",
+      "code": 1,
+      "signal": null,
+      "status": "red",
+      "summary": "0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [127.00ms]",
+      "finished": "2026-10-20T08:22:46.798Z",
+      "sha256": "be423ee60ce1c227b017bb43e250f2871e015bdb799b4d64c3411671fea5503e"
+    }
+  ],
+  "mutation": {
+    "pid": 42126,
+    "originalSha256": "cbf2d244cb43afbaf2b7863a14887b45c9d99b212043f34ea1d473ab50c0c26c",
+    "mutationStatus": 1,
+    "behavioralFailure": "MediaObjectMissingError after 31 assertions",
+    "restored": true
+  },
+  "auditNotices": [
+    "packages/core/src/recording/journal-recording-media.test.ts\t95\tnative recording media archive > retains both objects through clear and checkpoints, releases its lease and hydrates a reopened recording\tDUP_ASSERT\t2x identical assertion: expect(await archive.readVerified(reference)).toStrictEqual(bytes)\tcore",
+    "packages/core/src/recording/journal-recording-media.test.ts\t176\tnative recording media archive > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await archive.readVerified(old)).toStrictEqual( new Uint8Array([1, 2, 3]), )\tcore",
+    "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect((await durable(await recording(agent))).count).toBe(4)\tcli",
+    "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect(displayed).toHaveLength(2)\tcli",
+    "packages/cli/src/ui/hooks/native-command-protocol.test.ts\t97\tnative CLI command protocol > dispatches save, restore, continue and checkpoint forks through real owners with UI replay and rollback\tDUP_ASSERT\t2x identical assertion: expect(await durable(await recording(agent))).toStrictEqual({ ...initial, })\tcli"
+  ],
+  "scopeNotes": [
+    "Failed groups release their archive owners; newly staged unreferenced objects become janitor-eligible. Tests reopen the journal to recover unfinished tails before reclamation, assert only prior committed bytes remain, and preserve the old object. No whole-project scan is added to commits.",
+    "Dictionary stores compact ownership references, excluding caller annotations; original row metadata is unchanged. Its cache is capped, and pending entries live in journal state, not history-sized maps or per-operation files.",
+    "The first acceptance test source precedes the supplemental explicit commitSeq=2 and rows=1 assertions. Final supplemental test receipts and final source hashes supersede its test hash; production sources match throughout.",
+    "Five initial tests could not load because tsconfig aliases reached declaration-only test-utils/dist. The verified ignored untracked directory was moved intact to held-test-utils-20261020T0827, the tests reran under both outer backends, and declarations were rebuilt before final type gates.",
+    "Graph validation does not establish shard execution. No full package, full-native seeded corpus, phase-6/7 planning or W24/default-selection closure is claimed.",
+    "Finalization independently verifies all twelve source hashes against worktree and final commit, seventy log hashes and fifty-three JUnit files. The only between-lane source change is the superseded core test. All eighty-seven acceptance/mutation PIDs are absent.",
+    "Native CLI cases select journal internally under both outer backend values; the outer old value does not establish an old-backend CLI protocol case.",
+    "The held test-utils directory remains intact. The existing CLI declaration-build artifact guard separately reports removal of eleven generated test artifacts."
+  ],
+  "finalization": {
+    "checked": "2026-10-20T08:32:45.088Z",
+    "sourceCommit": "98f09fa6dedb38c89e87e405b393145c696a0186",
+    "sourceFilesVerified": 12,
+    "sourceChangesBetweenLanes": [
+      {
+        "path": "packages/core/src/recording/journal-recording-media.test.ts",
+        "initial": "a3799e58378919f6448eaf2b451e3cf9d2642b44d22f0c5e0caa04dd32791cfe",
+        "final": "595e9bb4aadc8420cbb89dbe37e6e6cab5c7da82726fe3c3d99e43f1c2a28d17"
+      }
+    ],
+    "receiptsVerified": 70,
+    "junitFilesVerified": 53,
+    "passes": 405,
+    "finalGates": 12,
+    "recordedPids": [
+      42772,
+      42771,
+      42773,
+      42782,
+      42792,
+      42793,
+      42799,
+      42803,
+      42807,
+      42812,
+      42813,
+      42826,
+      42832,
+      42839,
+      42847,
+      42855,
+      42862,
+      42872,
+      42881,
+      42890,
+      43837,
+      43838,
+      43844,
+      43854,
+      43859,
+      43860,
+      43861,
+      43880,
+      43882,
+      43884,
+      43887,
+      43894,
+      43899,
+      43900,
+      43901,
+      43909,
+      44033,
+      44061,
+      44092,
+      44385,
+      44418,
+      44447,
+      44451,
+      44585,
+      44613,
+      44642,
+      45169,
+      45194,
+      45225,
+      45311,
+      45360,
+      45388,
+      45430,
+      45516,
+      45767,
+      45987,
+      46189,
+      46199,
+      46255,
+      46286,
+      47955,
+      47954,
+      47957,
+      47964,
+      47974,
+      47979,
+      48026,
+      48030,
+      48071,
+      48099,
+      48115,
+      48130,
+      48134,
+      48181,
+      48184,
+      48206,
+      48252,
+      48283,
+      48322,
+      48454,
+      48684,
+      48900,
+      49163,
+      49169,
+      49204,
+      49238,
+      42126
+    ],
+    "livePids": [],
+    "mutationCmpExit": 0,
+    "highRiskTouchedAuditFindings": [],
+    "verificationReceipt": {
+      "path": "tmp/854-notes/p4/w23/media-archive-run-f/proof-finalization-verified.json",
+      "sha256": "cb2bbf1f2e0c483d9941db5e1959538e42e7d2709669ef3b96017196ed48c63c"
+    },
+    "typeScopeReceipt": {
+      "path": "tmp/854-notes/p4/w23/media-archive-run-f/type-scope-verified.json",
+      "sha256": "07f633f7debb55848c7198f84051b2404335273c354879a531b78d7f1cfcc4d5"
+    },
+    "typeProjects": [
+      {
+        "config": "packages/core/tsconfig.noemit.json",
+        "sha256": "87cb87292f371215f6f02182954f553ba8d364b8e6f1928cc2d9d2790bae94af",
+        "strict": true,
+        "rootFileCount": 1788,
+        "touchedTest": "packages/core/src/recording/journal-recording-media.test.ts",
+        "touchedTestIncluded": true
+      },
+      {
+        "config": "packages/agents/tsconfig.noemit.json",
+        "sha256": "ef20780d011cffcbde84779f3996352adba217c6b7e3c7a260e9d2453b7345a4",
+        "strict": true,
+        "rootFileCount": 1179
+      },
+      {
+        "config": "packages/agents/tsconfig.test-bun.json",
+        "sha256": "e948a4c33a928d38f456cbc69c565f4546283c4020aa910ae066dcfcf778ed91",
+        "strict": true,
+        "rootFileCount": 9,
+        "declaredInclude": [
+          "../../bun-test-corrections.d.ts",
+          "test-bun/**/*.ts"
+        ]
+      },
+      {
+        "config": "packages/cli/tsconfig.noemit.json",
+        "sha256": "5d8fad75361d24ceb5a89d1bb16ee4acf6409feaa95eee418779d0859303fa18",
+        "strict": true,
+        "rootFileCount": 3173,
+        "touchedTest": "packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+        "touchedTestIncluded": true
+      },
+      {
+        "config": "packages/cli/tsconfig.test-bun.json",
+        "sha256": "e648b1c0c754c784d94acfcbce9e2addba151ef9b3ce6680ba3899ed53e0dd33",
+        "strict": true,
+        "rootFileCount": 12,
+        "touchedTest": "packages/cli/src/ui/hooks/native-command-protocol.test.ts",
+        "touchedTestIncluded": false,
+        "declaredInclude": [
+          "../../bun-test-corrections.d.ts",
+          "test-bun/**/*.ts"
+        ]
+      }
+    ],
+    "testsRerun": false,
+    "productionEdited": false,
+    "review": "skipped per Andrew 2026-10-09",
+    "preservedObstruction": {
+      "path": "tmp/854-notes/p4/w23/media-archive-run-f/held-test-utils-20261020T0827",
+      "isDirectory": true
+    },
+    "gateScope": {
+      "declarations": [
+        "test-utils",
+        "core",
+        "agents",
+        "cli"
+      ],
+      "types": "Unchanged strict core/agents/CLI tsconfig.noemit.json projects plus agents/CLI tsconfig.test-bun.json; the touched src tests are in noemit, while test-bun includes test-bun/.",
+      "lint": "Twelve touched source/test files, --max-warnings 0",
+      "format": "Twelve touched source/test files",
+      "graph": "Import-graph drift validation only; no shard execution",
+      "audit": "Full AST scan with zero high-risk touched findings; five lifecycle DUP_ASSERT notices retained",
+      "boundary": "CLI import boundary",
+      "notClaimed": [
+        "full build",
+        "whole-package type/test execution",
+        "affected-shard execution",
+        "new archive-specific retained-heap measurement"
+      ]
+    },
+    "boundedAlgorithm": {
+      "cacheBytes": 65536,
+      "identity": "originalContentId/selectedContentId",
+      "ownership": "Disk-backed keyed state and current-group predecessor chain; one recorder lease",
+      "rowBuffers": "Current row media blocks and current original/selected object bytes",
+      "finishAndRollback": "Visit only the current group new owners",
+      "disposal": "One committed-state traversal releases this lease",
+      "noAdded": [
+        "history-sized in-memory ownership map",
+        "history-sized media/size array or new size field",
+        "ordinary-commit whole-history count/fallback scan",
+        "per-operation temporary file"
+      ]
+    },
+    "controls": [
+      {
+        "kind": "observed original CLI RED",
+        "log": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/original-red.log",
+          "sha256": "5a0490318b335084ee51d4a00569391b631c43e33f8e33903fa2313bf4ca5801"
+        },
+        "result": "MediaObjectMissingError after 31 assertions"
+      },
+      {
+        "kind": "publication-disabled source mutation",
+        "log": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/publication-disabled-red.log",
+          "sha256": "071e8e39b49e01b8a1f762eac67135b6a623fff90530a4ff83776c0e5035e3b4"
+        },
+        "record": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/mutation.json",
+          "sha256": "984bfe5f6061d6700f06a0a4089876452b586b9eb59c6cb4f8eefebd7843343b"
+        },
+        "restoredCopy": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/accepted-journalRecordingService.ts",
+          "sha256": "cbf2d244cb43afbaf2b7863a14887b45c9d99b212043f34ea1d473ab50c0c26c"
+        },
+        "result": "MediaObjectMissingError after 31 assertions; final cmp exit 0",
+        "scope": "Control predates appended cold-reopen assertions; publication boundary and restored service bytes match final source"
+      },
+      {
+        "kind": "observed ownership-value RED",
+        "log": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/annotation-red.log",
+          "sha256": "bc11c1de1226e61e0255a2283344c2649ea084bf5d03d3e4edbda3354218021c"
+        },
+        "result": "4 passes/1 failure; 131977-byte copied annotation exceeds unchanged 16384-byte map-value cap"
+      },
+      {
+        "kind": "archive/journal fault injection",
+        "log": {
+          "path": "tmp/854-notes/p4/w23/media-archive-run-f/supplement-0.log",
+          "sha256": "21a7cff4edb11983b52e4a6fbfdfe59fbd67e137030f1bb5610a772461647b93"
+        },
+        "result": "5 passes/37 assertions; rejection preserves commitSeq 2 and rows 1, releases failed owner, preserves prior owner and bytes, and permits orphan reclamation",
+        "scope": "Behavioral injected external failures, not additional production-source mutants"
+      }
+    ],
+    "remainingW23": [
+      "Other frontend frontdoors and restoration/concurrency/cancellation variants",
+      "Twelve suffix/curated/borrowed/recomposition candidates",
+      "Full native 5000-seed corpus, randomized purge and remaining trap mappings",
+      "Eight unchanged planning/header RED cases requiring phases 5/6 normalization/converter/measurer facts through phase 7 stored-summary planning"
+    ],
+    "unchanged": [
+      "phase-4 per-send spools",
+      "W24-W26",
+      "old backend default"
+    ]
+  }
+}
