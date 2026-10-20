@@ -867,12 +867,11 @@ describe('runTestFileWithTimeoutRetry', () => {
   });
 });
 
+const SHORT_PER_FILE_TIMEOUT_MS = 4000;
+
 async function withShortPerFileTimeout<T>(run: () => Promise<T>): Promise<T> {
   const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
-  // 4s leaves headroom for child Bun startup under CI load while staying far
-  // below the child's 30s sleep, so attempt 1 is killed mid-sleep, not at
-  // spawn.
-  process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
+  process.env[PER_FILE_TIMEOUT_ENV_VAR] = String(SHORT_PER_FILE_TIMEOUT_MS);
   try {
     return await run();
   } finally {
@@ -881,6 +880,58 @@ async function withShortPerFileTimeout<T>(run: () => Promise<T>): Promise<T> {
     } else {
       process.env[PER_FILE_TIMEOUT_ENV_VAR] = saved;
     }
+  }
+}
+
+/**
+ * Runs `run` while holding the runner's per-file budget timer, so the test
+ * decides when the budget expires instead of the host's scheduler. Child Bun
+ * startup can take longer than any short budget on a loaded host (#3882), so
+ * a real 4 s timer could kill the child meant to pass, or kill the child meant
+ * to hang before it wrote its pid. Every timer the runner arms with the short
+ * budget is held. With `hangingChildMarker`, the first one fires once that
+ * child has written its pid; any others, and every one without a marker,
+ * never fire. All other timers, including Bun's own test timeout, stay real.
+ */
+async function withHeldBudgetTimer<T>(
+  run: () => Promise<T>,
+  hangingChildMarker?: string,
+): Promise<T> {
+  const realSetTimeout = globalThis.setTimeout;
+  const held: Array<{ fire: () => void }> = [];
+  const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+    callback: (...args: unknown[]) => void,
+    delay?: number,
+    ...args: unknown[]
+  ) => {
+    if (delay !== SHORT_PER_FILE_TIMEOUT_MS) {
+      return realSetTimeout(callback, delay, ...args);
+    }
+    // A real handle the runner can still clear, which never fires itself.
+    const handle = realSetTimeout(() => undefined, 2_147_483_647);
+    held.push({
+      fire: () => {
+        clearTimeout(handle);
+        callback(...args);
+      },
+    });
+    return handle;
+  }) as typeof setTimeout);
+  try {
+    const result = run();
+    if (hangingChildMarker !== undefined) {
+      while (
+        held.length === 0 ||
+        !existsSync(hangingChildMarker) ||
+        readFileSync(hangingChildMarker, 'utf8') === ''
+      ) {
+        await Bun.sleep(25);
+      }
+      held[0].fire();
+    }
+    return await result;
+  } finally {
+    setTimeoutSpy.mockRestore();
   }
 }
 
@@ -950,7 +1001,9 @@ writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME
 it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       );
       process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
-      const result = await runTestFile(file, childEnv);
+      const result = await withHeldBudgetTimer(() =>
+        runTestFile(file, childEnv),
+      );
       expect(result.passed, result.output).toBe(true);
       expect(result.timedOut).toBe(false);
       expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
@@ -983,10 +1036,14 @@ it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       const logs: string[] = [];
 
       const result = await withShortPerFileTimeout(() =>
-        runTestFileWithTimeoutRetry(
-          file,
-          () => runTestFile(file),
-          (message) => logs.push(message),
+        withHeldBudgetTimer(
+          () =>
+            runTestFileWithTimeoutRetry(
+              file,
+              () => runTestFile(file),
+              (message) => logs.push(message),
+            ),
+          marker,
         ),
       );
 
@@ -1051,9 +1108,13 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
   try {
     const file = writeFlakyThenPassTest(dir);
     const result = await withShortPerFileTimeout(() =>
-      runTestFile(file, undefined, () => {
-        throw new Error('notification failed');
-      }),
+      withHeldBudgetTimer(
+        () =>
+          runTestFile(file, undefined, () => {
+            throw new Error('notification failed');
+          }),
+        join(dir, 'first-attempt.marker'),
+      ),
     );
     expect(result.timedOut).toBe(true);
     expect(result.passed).toBe(false);
@@ -1093,5 +1154,6 @@ describe('external signal classification', () => {
         rmSync(root, { recursive: true, force: true });
       }
     },
+    15_000,
   );
 });
