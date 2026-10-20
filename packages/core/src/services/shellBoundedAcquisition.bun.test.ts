@@ -48,6 +48,8 @@ let producerDir = '';
 let producerScript = '';
 
 const PRODUCER_CODE = `
+import { writeSync } from 'node:fs';
+
 const size = parseInt(process.argv[2] || '1024', 10);
 const stream = process.argv[3] || 'stdout';
 const mode = process.argv[4] || 'ascii';
@@ -71,17 +73,27 @@ if (mode === 'tiny') {
   target.write(data);
   target.end();
 } else {
-  // ASCII filler.
+  // ASCII filler, written to the raw fd. Touching process.stdout or
+  // process.stderr in Bun puts an inherited pipe into non-blocking mode and
+  // leaves it that way on exit. The shell shares that pipe, so a chained
+  // command such as echo then fails with EAGAIN whenever the reader is
+  // behind, which is what happens under host load (#3877). writeSync on the
+  // fd blocks until the reader catches up and leaves the pipe's mode alone.
+  // writeSync can return a short count, so keep writing until it is all out.
+  const writeAll = (fd, text) => {
+    const bytes = Buffer.from(text);
+    let offset = 0;
+    while (offset < bytes.length) {
+      offset += writeSync(fd, bytes, offset, bytes.length - offset);
+    }
+  };
   const data = 'A'.repeat(size);
   if (stream === 'both') {
-    process.stdout.write(data);
-    process.stderr.write('ERR:' + data.slice(0, Math.min(size, 1024)));
+    writeAll(1, data);
+    writeAll(2, 'ERR:' + data.slice(0, Math.min(size, 1024)));
   } else {
-    const target = stream === 'stderr' ? process.stderr : process.stdout;
-    target.write(data);
+    writeAll(stream === 'stderr' ? 2 : 1, data);
   }
-  process.stdout.end();
-  process.stderr.end();
 }
 `;
 
