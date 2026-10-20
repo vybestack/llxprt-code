@@ -3,6 +3,8 @@ import { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryDensityRequest } from './historyStorePort.js';
 import { diskDensityTransform } from './historyValueEntries.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
+import { retryWithBackoff } from '../../utils/retry.js';
+import { shouldRetryCompressionError } from '../../core/compression/types.js';
 
 /**
  * The optimizer reads rows by index, so the durable rows are copied once into
@@ -24,8 +26,21 @@ export async function optimizeDensityOnJournal(
     try {
       if (result.removalCount === 0 && result.replacementCount === 0) return;
       await store.publishDetached(
-        { transform: diskDensityTransform(result) },
-        request.host,
+        { transform: diskDensityTransform(result, request.ownership) },
+        {
+          ...request.host,
+          estimate: (contents, model, signal) =>
+            retryWithBackoff(
+              () => request.host.estimate(contents, model, signal),
+              {
+                maxAttempts: 3,
+                initialDelayMs: 2000,
+                maxDelayMs: 10000,
+                shouldRetryOnError: shouldRetryCompressionError,
+                signal,
+              },
+            ),
+        },
         undefined,
         { publishTokens: true, densityShape: true },
       );

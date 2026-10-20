@@ -36,14 +36,21 @@ export class DensitySpanRows {
     const sorted = new DensitySpanRows();
     try {
       for (const span of accumulated) sorted.append(span);
-      for (let index = 0; index < this.rows.length; index++)
-        sorted.append(this.read(index));
+      this.appendOrderedTo(sorted);
       for (const span of trailing) sorted.append(span);
       sorted.rows.sort();
       return this.merge(sorted);
     } finally {
       sorted.close();
     }
+  }
+  private appendOrderedTo(target: DensitySpanRows): void {
+    for (const removed of [true, false])
+      for (let index = 0; index < this.rows.length; index++) {
+        const span = this.read(index);
+        if ((span.reason === 'density-removed') === removed)
+          target.append(span);
+      }
   }
   private merge(sorted: DensitySpanRows): RemovedInteriorSpan[] {
     const retained: RemovedInteriorSpan[] = [];
