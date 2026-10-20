@@ -1,3 +1,51 @@
+## Current-source memory and provider receipt map, 2026-10-20T12:26:51Z
+
+Authority: `W23-SOURCE-REBIND-PROOF.json`, SHA-256 **`3bc1755e968608895e2e5b53581815d1b7b4e614ce8c4b9bd956865eb5dea9fb`**. Tested source `551f6e56e6d1a273290ded029f7312ce57d34ad6`; raw root `tmp/854-notes/p4/w23/source-rebind-run-m/`. One original file per package-directory Bun process, fourteen serial executions, no retries or source edits.
+
+| Original file                                           |  Passes | Assertions | Actual boundary                                                                                                  |
+| ------------------------------------------------------- | ------: | ---------: | ---------------------------------------------------------------------------------------------------------------- |
+| core `raw-history-marker.test.ts`                       |       3 |         10 | 512/8192 native rows: one marked-row decode, peak one, live zero; empty acquires none.                           |
+| agents `send-journal-opens.test.ts`                     |       2 |         28 | Original 40/400 rows, actual ChatSession, fixed selected-snapshot/capture and per-rebuild costs.                 |
+| agents `journal-retained-growth.test.ts`                |      15 |         37 | Full real native positive plus unchanged predicate/convergence cases.                                            |
+| agents `journal-retained-growth-retaining-trap.test.ts` |       1 |         10 | Full retaining observer rejects allowance, late fit and endpoint predicates.                                     |
+| agents `journal-retained-growth-release-trap.test.ts`   |       1 |         11 | Full release control rejects intermediate retention despite final recovery.                                      |
+| providers `journal-selected-provider-parity.test.ts`    |     163 |        978 | All seven configured wire routes, independent eager curation/frozen bytes, changed-row/settings controls.        |
+| providers `journal-provider-dump-parity.test.ts`        |     256 |       1576 | Three Chat and two Anthropic routes; dump expectations remain separate from wire expectations.                   |
+| providers `journal-provider-recovery-parity.test.ts`    |     139 |        916 | Three Chat continuation routes and two Anthropic image-recovery routes.                                          |
+| providers `journal-responses-retry-parity.test.ts`      |       7 |         93 | Both Responses routes, rejected-parent state/reset, pinned source and complete-history retry.                    |
+| providers `journal-native-row-liveness.test.ts`         |       4 |         36 | Chat plain, both Responses, Anthropic cache-off: forty 1 MiB rows with admitted images, peak 2/2/2 against nine. |
+| providers `sendPeak.openaiChatTextOnly.test.ts`         |       2 |          5 | Chat plain text with estimate; native selected rows and independent hash sink.                                   |
+| providers `sendPeak.anthropicTextOnly.test.ts`          |       2 |          5 | Anthropic cache-1h text with estimate.                                                                           |
+| providers `sendPeak.openaiResponsesViaOpenai.test.ts`   |       4 |         10 | Via-OpenAI Responses text and tool-heavy shapes.                                                                 |
+| providers `sendPeak.responsesDiskText.test.ts`          |       2 |          5 | Standalone Responses text.                                                                                       |
+| **Total**                                               | **601** |   **3720** | **14 files, zero failures/skips.**                                                                               |
+
+Native selected routes are exactly `openai-chat-plain`, `openai-chat-kimi`, `openai-chat-mistral`, `openai-responses-via-openai`, `openai-responses`, `anthropic-cache-1h`, `anthropic-cache-off`. No unset-route or all-route memory claim. Selections come from locked native recording/HistoryService, with eager/contents traps and live/closed pin assertions. Stored references use actual LocalMediaStore admission. SendPeak uses a separate hash-sink process, preserving provider route/settings and hashing without body accumulation. WeakRef uses its existing noncollecting local hash sink.
+
+| Real retained worker | Requests / compressions | Peak / final delta (bytes) | Late fitted / endpoint (bytes) | Predicate                                                        |
+| -------------------- | ----------------------- | -------------------------- | ------------------------------ | ---------------------------------------------------------------- |
+| normal               | 995 / 105               | 316790 / 316790            | 101070.3 / 163970              | Pass, zero held rows.                                            |
+| retaining            | 850 / 90                | 77877575 / 77877575        | 42163134.9 / 41930019          | Reject, 31032 held rows, all three gates.                        |
+| release              | 850 / 90                | 36050588 / 210726          | -32226603 / -35839862          | Reject, first three checkpoint violations; final held rows zero. |
+
+Original 1048576-byte allowance, 262144-byte late bounds, six checkpoints 50 turns apart, nine readings/window and 290000-ms worker timeout remain. Normal baseline turn 695 follows the unchanged convergence rule; its larger request total is actual execution, not a new input plan. Under-limit read-cost observations: before=46/406, snapshots=1, walks=1, entries=48/408, rows=49/409. Ladder observations: snapshots=4/3, walks=14/10, entries=338/2614, rows=338/2615, satisfying the unchanged per-mutation formula.
+
+| Current sendPeak route / shape | Small / large body bytes | Heap / ArrayBuffer / retained growth bytes |
+| ------------------------------ | ------------------------ | ------------------------------------------ |
+| Chat plain / text              | 1073412 / 8596228        | -228441 / -32768 / 0                       |
+| Anthropic cache-1h / text      | 1073562 / 8596378        | -1062395 / -32768 / 0                      |
+| Responses via OpenAI / text    | 1073396 / 8596212        | -170582 / 0 / 172136                       |
+| Responses via OpenAI / tools   | 1446412 / 11582131       | 804748 / 0 / 27846                         |
+| Responses / text               | 1073396 / 8596212        | -235486 / 0 / 270891                       |
+
+Each complete received SHA-256 and Content-Length matches its independent oracle and the saved original body receipt. All original growth bounds stay 1 MiB. Historical provider positive-assertion controls `022..026` reject array/Chat estimate/Anthropic estimate/fill/retain, respectively at 14453617/14027816/13698656/40391639 heap-growth bytes and 84756100 retained bytes. Historical WeakRef control `028` rejects at 80 objects on Chat's two readers, 40 on other routes. Their tests, injection/predicate helpers, per-row release source and raw/JUnit hashes match; these six executions are preserved historical sensitivity proof, not fourteen-file additions. Changed common scalar/suffix/borrowed/marker and JournalStore paths are rebound by the new original workload and named provider positives. Archive publication is only entered with a recorder media store; send fixtures omit it. Actual archive-aware cold-reopen/fault proof stays in `W23-MEDIA-ARCHIVE-PROOF.json`.
+
+Eight historical native single-row sends contain 41943040 raw text bytes, separately without/with an admitted image. Rehashed body byte counts are Chat **41943164/41943259**, Responses via OpenAI **41943148/41943243**, Responses **41943148/41943243**, Anthropic cache-off **41943171/41943279**; complete hashes and equal Content-Length are in the JSON. They are not new single-row measurements. Current stored-image liveness independently exercises forty 1 MiB rows. No repeated large-send grid was added.
+
+Validation checks 7746 stable package sources, 44 immutable inputs, 169 receipt hashes and all 79 recorded task PIDs absent. No mutation occurred. Scoped formatting covers the five added document sections and full new JSON; historical suffixes are byte-preserved. Product/test source is unchanged, so no build/package sweep is claimed. Full seeded-corpus proof remains complete and was not rerun.
+
+**W23 remains partial only for eight unchanged planning/header zero-decode assertions on phases 5/6 through 7.** Owned frontend queue stays closed; independent W24 may proceed without closing W23/W24 or changing the old default. No later spool/blob-lease/deletion claim. Review skipped per Andrew 2026-10-09.
+
 ## ACP retire-first contract accepted; frontend queue closed, 2026-10-20T12:12Z
 
 Current source: `52dac04ba09cad685c45c76a5a3724e56eca0994`. Authority: `W23-ACP-CONTRACT-PROOF.json`, with exact source/case/log/JUnit hashes and `tmp/854-notes/p4/w23/acp-contract-run-m/final-validation.json`. Earlier run-l evidence below stays historical. Its prior-preservation row is superseded by the disposition here.

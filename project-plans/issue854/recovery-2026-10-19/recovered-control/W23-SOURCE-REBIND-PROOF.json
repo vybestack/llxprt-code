@@ -1,0 +1,2599 @@
+{
+  "created": "2026-10-20T12:31:11.551Z",
+  "sourceCommit": "551f6e56e6d1a273290ded029f7312ce57d34ad6",
+  "rawRoot": "tmp/854-notes/p4/w23/source-rebind-run-m",
+  "verdict": "Fourteen original files rebound on unchanged current package sources. Owned frontend queue remains closed. W23 remains partial only for eight existing zero-decoded-row planning/header assertions on phases 5/6 through 7.",
+  "totals": {
+    "files": 14,
+    "passes": 601,
+    "failures": 0,
+    "skips": 0,
+    "assertions": 3720
+  },
+  "matrix": [
+    {
+      "index": 0,
+      "file": "packages/core/src/services/history/raw-history-marker.test.ts",
+      "sourceSha256": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+      "driverPid": 51454,
+      "childPid": 51461,
+      "started": "2026-10-20T12:19:11.720Z",
+      "finished": "2026-10-20T12:19:15.220Z",
+      "cwd": "packages/core",
+      "args": [
+        "bun",
+        "test",
+        "./src/services/history/raw-history-marker.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/000.xml"
+      ],
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 10,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/000.log",
+        "sha256": "a98f91a6166474f530bacb4610e564da9edc96c37e97976212ffb4baa8126783"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/000.xml",
+        "sha256": "ced1bcfdc22a5751ec941d3df269376021738ba57d2886f2673d77dc989bf109"
+      },
+      "measurements": []
+    },
+    {
+      "index": 1,
+      "file": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+      "sourceSha256": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+      "driverPid": 51454,
+      "childPid": 51507,
+      "started": "2026-10-20T12:19:15.483Z",
+      "finished": "2026-10-20T12:19:22.675Z",
+      "cwd": "packages/agents",
+      "args": [
+        "bun",
+        "test",
+        "./src/core/__tests__/send-journal-opens.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/001.xml"
+      ],
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 28,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/001.log",
+        "sha256": "90173daeb9892112243d1825c5dbbcb0fd8d155a81d1c5bf1222e8dd48c615c2"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/001.xml",
+        "sha256": "714d164ee5be6b379fad5a9df5d8dcb4235eb944cd9b9fd40350e2609bbf23af"
+      },
+      "measurements": []
+    },
+    {
+      "index": 2,
+      "file": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+      "sourceSha256": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+      "driverPid": 51454,
+      "childPid": 51615,
+      "started": "2026-10-20T12:19:22.941Z",
+      "finished": "2026-10-20T12:20:32.919Z",
+      "cwd": "packages/agents",
+      "args": [
+        "bun",
+        "test",
+        "./src/core/__tests__/journal-retained-growth.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/002.xml"
+      ],
+      "passes": 15,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 37,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/002.log",
+        "sha256": "8591a6dd97256236c4f0ec67ceca3123b1af4e53e6272a46c707a740828cab22"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/002.xml",
+        "sha256": "1e881954e3c5a357767e6cce3edb6a91c091c9963680f3460a2d8f4dff371f2b"
+      },
+      "measurements": []
+    },
+    {
+      "index": 3,
+      "file": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+      "sourceSha256": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+      "driverPid": 51454,
+      "childPid": 52733,
+      "started": "2026-10-20T12:20:33.188Z",
+      "finished": "2026-10-20T12:21:32.841Z",
+      "cwd": "packages/agents",
+      "args": [
+        "bun",
+        "test",
+        "./src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/003.xml"
+      ],
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 10,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/003.log",
+        "sha256": "aad03ee3d1e39add9f0a02dd256403531502611c5f3a23b8cecc9eb8ad2be4c9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/003.xml",
+        "sha256": "ed9b8c3f5a1246d202d48c3b73d4c6956bbf6c3c8caf63e7ea75829f1501439d"
+      },
+      "measurements": []
+    },
+    {
+      "index": 4,
+      "file": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+      "sourceSha256": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+      "driverPid": 51454,
+      "childPid": 53608,
+      "started": "2026-10-20T12:21:33.113Z",
+      "finished": "2026-10-20T12:22:34.597Z",
+      "cwd": "packages/agents",
+      "args": [
+        "bun",
+        "test",
+        "./src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/004.xml"
+      ],
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 11,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/004.log",
+        "sha256": "ad17d9d0012e18966b90d20140166e7bb239d9a4dae1879967247f49269dd137"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/004.xml",
+        "sha256": "a8f7370881cfddab7ae003fad1240ecd8fc12777d3b79c75da4fe876ad12dc19"
+      },
+      "measurements": []
+    },
+    {
+      "index": 5,
+      "file": "packages/providers/src/__tests__/journal-selected-provider-parity.test.ts",
+      "sourceSha256": "d17a3d849afb1a0c2e80a5249599eb9a90b110efa046f6f2436d6841f017a91d",
+      "driverPid": 51454,
+      "childPid": 54627,
+      "started": "2026-10-20T12:22:34.864Z",
+      "finished": "2026-10-20T12:22:41.146Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/journal-selected-provider-parity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/005.xml"
+      ],
+      "passes": 163,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 978,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/005.log",
+        "sha256": "d7eb684f51d768f020b513231c0fe6940b94f1dedbf3f6da2706484ff47259e9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/005.xml",
+        "sha256": "3e80614a8e20f25a4a037a93e9aeae0d277b18bf6d2c8ee74241ad1f0dfd7702"
+      },
+      "measurements": []
+    },
+    {
+      "index": 6,
+      "file": "packages/providers/src/__tests__/journal-provider-dump-parity.test.ts",
+      "sourceSha256": "37b35d0af9252840b856b65d467ce7db49cd9ea6f2d54b9c58d7110b909f5624",
+      "driverPid": 51454,
+      "childPid": 54708,
+      "started": "2026-10-20T12:22:41.427Z",
+      "finished": "2026-10-20T12:22:51.728Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/journal-provider-dump-parity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/006.xml"
+      ],
+      "passes": 256,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 1576,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/006.log",
+        "sha256": "07021b06957059649f0e06908ba2697b891ca58acd6595a7aee6a789f513bf4a"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/006.xml",
+        "sha256": "32e5a5d8d3fb8dbea5fc2766c30a5835aaa138b8dbbf38999c49ad2d97084660"
+      },
+      "measurements": []
+    },
+    {
+      "index": 7,
+      "file": "packages/providers/src/__tests__/journal-provider-recovery-parity.test.ts",
+      "sourceSha256": "e219269b0097582732f7e37826fc519d466ebf0ae00b6772bed964fbf7e22360",
+      "driverPid": 51454,
+      "childPid": 54869,
+      "started": "2026-10-20T12:22:52.011Z",
+      "finished": "2026-10-20T12:22:57.723Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/journal-provider-recovery-parity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/007.xml"
+      ],
+      "passes": 139,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 916,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/007.log",
+        "sha256": "75447c1a2b125531ce3f06ee01d0924e24bc939a3aa975c899ae82a24f7c9b3e"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/007.xml",
+        "sha256": "2bba9e98c687e7de1f732f61d308e2950428c3fd4f115b6f62d446ea0bb8ff05"
+      },
+      "measurements": []
+    },
+    {
+      "index": 8,
+      "file": "packages/providers/src/__tests__/journal-responses-retry-parity.test.ts",
+      "sourceSha256": "36e142011124913f987db816a5bdd70c44c6853e75b3f2f7ff53fd3805b0b3e4",
+      "driverPid": 51454,
+      "childPid": 54940,
+      "started": "2026-10-20T12:22:58.011Z",
+      "finished": "2026-10-20T12:22:59.516Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/journal-responses-retry-parity.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/008.xml"
+      ],
+      "passes": 7,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 93,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/008.log",
+        "sha256": "747b8f424ab539f7f505d5fa8d9a8decdb69f1e6b2f05a2f589c7d23c0e91496"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/008.xml",
+        "sha256": "f1538e1da0301785b69846802c263fb20fba2135b204f0363b032145e6db85b8"
+      },
+      "measurements": []
+    },
+    {
+      "index": 9,
+      "file": "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+      "sourceSha256": "17c4ccacde5835770b44561f5195682a7479a2f22ade7d7d92fda92ae0bf1594",
+      "driverPid": 51454,
+      "childPid": 54976,
+      "started": "2026-10-20T12:22:59.798Z",
+      "finished": "2026-10-20T12:23:12.399Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/journal-native-row-liveness.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/009.xml"
+      ],
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 36,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/009.log",
+        "sha256": "c3277c7d0bb1252b1244f1edfb20bb6741b07bdce166fab6523530be475dd0f1"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/009.xml",
+        "sha256": "8b93b462e7a79335b12277f5e933abfa52224ae40c8b86ba05179db10b98f638"
+      },
+      "measurements": [
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/009.measurements.jsonl",
+          "sha256": "e64305033062b649ce1151d28d477930746fab7cb3b342b2674954d5e5be0f17"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "file": "packages/providers/src/__tests__/sendPeak.openaiChatTextOnly.test.ts",
+      "sourceSha256": "ba8f79d6633a4dce596f3b4f16ffdfa98fe5258bf1585b7076ed5b89de24d8d2",
+      "driverPid": 51454,
+      "childPid": 55217,
+      "started": "2026-10-20T12:23:12.671Z",
+      "finished": "2026-10-20T12:23:57.545Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/sendPeak.openaiChatTextOnly.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/010.xml"
+      ],
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 5,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.log",
+        "sha256": "29510686b9db3c969596280b5a2478552256873f2f6fe830d3225c87691eea1d"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.xml",
+        "sha256": "234ccba5ec5fe5153d8e390bb8435116482902cb8bc6190707bf60971b7436a1"
+      },
+      "measurements": [
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.measurements.jsonl.sink-pids.jsonl",
+          "sha256": "c3d76e5510193cdc256f2e38e19602a1c2333a9fdf56a0d732c3dcf83deb9048"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.measurements.jsonl",
+          "sha256": "166a889d575352033af0dc27d79d1325865db39b226617ec9b0a93125306f58f"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.measurements.jsonl.probe-pids.jsonl",
+          "sha256": "9fe6a446761bddfcc993edcc92470b48e4dbddbfc2dc413eb056c99d584478b6"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.measurements.jsonl.raw.jsonl",
+          "sha256": "fdb4412e7a1e7bc5513a5365568739c76849b50223a67fce91f14174661e14bc"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/010.measurements.jsonl.samples.jsonl",
+          "sha256": "d8df16e0fd299f176efc1f1b69c5627f12e19dc8d9a5160eb31bf70efba7f027"
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "file": "packages/providers/src/__tests__/sendPeak.anthropicTextOnly.test.ts",
+      "sourceSha256": "b4f5e5393bc9ef7c722e879ae9d3bab1afdb75b13f82198712f395ce3ee13c95",
+      "driverPid": 51454,
+      "childPid": 55914,
+      "started": "2026-10-20T12:23:57.810Z",
+      "finished": "2026-10-20T12:24:47.487Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/sendPeak.anthropicTextOnly.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/011.xml"
+      ],
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 5,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.log",
+        "sha256": "3cac63e7bc2c98255a5b5b0c224bd38afb6ab59766b571158b6d69b29ad6f2f4"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.xml",
+        "sha256": "74f0366860b51a37ed8331e9389984be6f5e7ba2abe3add0ad926b635a239a2f"
+      },
+      "measurements": [
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.measurements.jsonl.sink-pids.jsonl",
+          "sha256": "bcdcbc814c8df5c31ea132c406ce88f30be2803ad6a5cbbf6686a23d17bb0d52"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.measurements.jsonl.raw.jsonl",
+          "sha256": "6f89686dba6400687779eaaf33efcdb931649c9015fc691cdc70c9b798555d00"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.measurements.jsonl.probe-pids.jsonl",
+          "sha256": "e0eb60ca0b90f0fbd446b10fefb831e9bdf0dc30884be50c1c35cc2e338e9d9b"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.measurements.jsonl",
+          "sha256": "bd37001a3334278ef092d84a8b8eb9e27252fe8a0c713259918fec93eb8ce9bf"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/011.measurements.jsonl.samples.jsonl",
+          "sha256": "36cdc7260db4278aa443ebf1be2ebd1f4e894d09b0c0a69a6e7b07c860bab3e0"
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "file": "packages/providers/src/__tests__/sendPeak.openaiResponsesViaOpenai.test.ts",
+      "sourceSha256": "81d7baae99f09dabbb19e891c77b3968f535ab64eac78b5392c51d99c3d77704",
+      "driverPid": 51454,
+      "childPid": 56678,
+      "started": "2026-10-20T12:24:47.760Z",
+      "finished": "2026-10-20T12:26:05.360Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/sendPeak.openaiResponsesViaOpenai.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/012.xml"
+      ],
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 10,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.log",
+        "sha256": "29733c370f0b75ed5a415f5aff307c19941c05fc5c676c96bfc1ab31aea91c6a"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.xml",
+        "sha256": "0c0ded364a91b9c6154cf2a6d8255e37cdb5f89735068f6f29961dac6dff4ed8"
+      },
+      "measurements": [
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.measurements.jsonl.raw.jsonl",
+          "sha256": "1255e13eb87c98da95ad0dc447e2dd9b83c1d88be4d18b4b78f11adf8a0b9754"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.measurements.jsonl.sink-pids.jsonl",
+          "sha256": "e49ba411a369ae21e51b87ff8139ae75d5ec0bbc55e07c31477631d7a5226738"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.measurements.jsonl.samples.jsonl",
+          "sha256": "7145a445d0595b0698864e5eac783ae2a8f850a36ff156877e2bdfcdcf6e70f1"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.measurements.jsonl.probe-pids.jsonl",
+          "sha256": "273b473e9f953a82ed58ab6e307be4a5dde9f7ed36e498fb84e022fa19b7292f"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/012.measurements.jsonl",
+          "sha256": "b1b75fd6c16e2a1d67f897aba9bf584100f8ade925854a75c3c31b1b11dcd995"
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "file": "packages/providers/src/__tests__/sendPeak.responsesDiskText.test.ts",
+      "sourceSha256": "959a7da00e9e242cdb89b9de36f438b204e2065d5ce93e4af859da85c704e2c4",
+      "driverPid": 51454,
+      "childPid": 57831,
+      "started": "2026-10-20T12:26:05.641Z",
+      "finished": "2026-10-20T12:26:50.887Z",
+      "cwd": "packages/providers",
+      "args": [
+        "bun",
+        "test",
+        "./src/__tests__/sendPeak.responsesDiskText.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/source-rebind-run-m/013.xml"
+      ],
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 5,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.log",
+        "sha256": "e0c69de2cd993aea4276a60f88adb2406d0f9e1e897283ae2d72e1371930aa31"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.xml",
+        "sha256": "8e51994b69d19204775cd571e4e9e88d7c14264b0f68396fb1db394d0d52e62a"
+      },
+      "measurements": [
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.measurements.jsonl",
+          "sha256": "8f4513b3c9be976155079b3bb52190f86be246b2f60c9764646f0292b39776cb"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.measurements.jsonl.samples.jsonl",
+          "sha256": "6ab48e47f432eb8f03139fb2e8853d17afdc0bf59cfd5abc7c6bcee649988100"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.measurements.jsonl.raw.jsonl",
+          "sha256": "f24fedc66deb18289d385192d2b28148179be52d7ebe2916aaec90d16d3e8128"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.measurements.jsonl.probe-pids.jsonl",
+          "sha256": "f9ff51bff37008491a3b983f9101cfc9f9cfb9968240f91b288e81cd718b92a1"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/013.measurements.jsonl.sink-pids.jsonl",
+          "sha256": "09ea14a9726cac44c6d9e96c8c199e972442ef2dce4f8cde7c347d829a04d5d5"
+        }
+      ]
+    }
+  ],
+  "source": {
+    "manifest": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/source-manifest.json",
+      "sha256": "519751ebe78d28bde5c585c8cb06b0a854baf57f74242f4d701d5137aa1cf00f"
+    },
+    "count": 7746,
+    "unchangedDuringAndAfterEveryFile": true,
+    "changedPackageFiles": [],
+    "immutableCount": 44,
+    "immutable": [
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-1h.json",
+        "sha256": "ceed31a20b50feb0fd25bf3ae1726f69b1248802432795bb398fe599f8bdad87"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-off.json",
+        "sha256": "274c319fb23914bea14a3806d8acdca52b5a5d3ffb66582c5ee7c534e1370d23"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-1h.json",
+        "sha256": "38dbc0b0daaa0fd16e7b589d8a5a2ae6e365d4bb0014a1944568fa386e8d207f"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-off.json",
+        "sha256": "5be2d77a54cdaa489a1aba441f88cc58b28f6905539b7f06082d8d521dfdc840"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-1h.json",
+        "sha256": "e69f3be468d24b9be21778a8142761819af0faa0ac2dc9b92e9773b9978057ee"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-off.json",
+        "sha256": "67c9437d8711e5bb201c90e1472538f328964a23a55dbe539c3f8c2986a53a67"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-kimi.json",
+        "sha256": "8ac917d1c4d4803cedc7896fe9f3afae7f1cdf4b67edbebc7c58545fd7d29bf9"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-mistral.json",
+        "sha256": "3de886d562a80070557f83e1858b94781ad13a895e5560c041e3f46b12c15ac3"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-plain.json",
+        "sha256": "d5f64153ebcb85143d495150719589ca2d886191c53b1623193c56adc022d1e5"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-kimi.json",
+        "sha256": "c97e1e62d158cbe2b2c3d67fc09d0bc1bbfb2122d1842fb637784e1063accbd0"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-mistral.json",
+        "sha256": "965370db4216bf93ddf140e56cf878b660fcadbb012dfe02400bfb940c89859c"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-plain.json",
+        "sha256": "65759b2bad98265971339cd2ee80279b68a9aa9a26f243cb6418ebe6a04b75c9"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.cases.tsv",
+        "sha256": "c0f7eb328c2674e4e1882fd1394abe3d40f70bdf54db6df88f2b7cdbcd96b320"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.json",
+        "sha256": "65e9d112e7eef5fa4513b4b0954f0d15af0c38680f90f7cba7e5304f5f33df5d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.cases.tsv",
+        "sha256": "cd4c2cf0b222e74ad2e62653dab56df636872d01494e05ed4ca9db38de46901d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.json",
+        "sha256": "49319a3e7780a0f1c6ae09a0c7d9b64528f66a7ad31213d06b2bdadc39ebae70"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.cases.tsv",
+        "sha256": "7a481b2d0046e10d249a8adfe43bd7e5c965d40bfa8d016ded2dfcdcd40fd668"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.json",
+        "sha256": "bec4f5c50c9b11205a452cb93cee688d65a6125168118fb661a9163a587eac7e"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.cases.tsv",
+        "sha256": "d9eb669c0a89538c0de3533a028b06f0ca17aa926490d90bf35fd696b157b111"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.json",
+        "sha256": "06a4b8fc1c90120e3e57ca82cf494a8453c38ca3811954fb9c3b98b684d9d6fe"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-anthropic.json",
+        "sha256": "95b9290eb0e3969a840bfad71ba64207955c909a2f7082c6e361b5961f9b7255"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-chat.json",
+        "sha256": "7bcd27c4e69e3bd76c10c9634b844983e1ab5adcdea6b06c3b7a362eb8b80851"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-keys.json",
+        "sha256": "541b0100bd0c5b4a2d13184887b171e2ae5b1ac4e22b5b1cd49483f715298304"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-normalizer.json",
+        "sha256": "9aea39bc452f53f78dc840344ee7b7e096462c493405ccc25fb3c0278aeb0582"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-purge-boundary.json",
+        "sha256": "595f092541a975981d92003a1e6d246c2ada271f6016b70d8db732d002b62c26"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-responses.json",
+        "sha256": "6b73517d7d19113addbcd5f18db6d8b7fbf67be7c5f5aa89415de5134e277cc9"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.cases.tsv",
+        "sha256": "ca7f948bd5ce9920287f97fd2b302269153f86dd14a1a615a63a82219066b322"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.json",
+        "sha256": "1152ee3d5e32613853f5e88385a7a16ffd9f3deee75b1fe2d774cfe2097203b9"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.cases.tsv",
+        "sha256": "92363bcc9fcf6cd11e8c6947ed6a5e4da7ade994bae1d8d4d51eea3655af2616"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.json",
+        "sha256": "5e47044b9b6f7058ab8bcb72772e2c32a300b29183504bd554cae8184cea118f"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.cases.tsv",
+        "sha256": "366a5c69d14de71c50d503c3ad54c38130bf5e741bf1bd4fc0ae7037cf43de4d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.json",
+        "sha256": "813df737b814d410ca81bff09fa475549f450973e96afdc1637f0c024bcd9b28"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.cases.tsv",
+        "sha256": "86ad0b2a5810c43a3343845769803e8cb60eae33b327aaf48b8791c9cd69545e"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.json",
+        "sha256": "8aa52ab1c96a57750a8c97bad93023f40fe2e923e47626c98421e167a09790bc"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.cases.tsv",
+        "sha256": "d25536f85ebf8555eec729d5c9ccb734ec77e8051960bb816ed14b600398d10f"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.json",
+        "sha256": "c7d88001b8ae59262466a26870c3592499366c8d31959fa8027353aa948ee15a"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json",
+        "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json",
+        "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json",
+        "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json",
+        "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json",
+        "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json",
+        "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json",
+        "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46"
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json",
+        "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b"
+      }
+    ],
+    "inventory": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/inventory.json",
+      "sha256": "791247f2e435fd3235cc54f723edafb39e8daaab4afcd11a4b4ff89ebc6dcc8a"
+    },
+    "results": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/results.jsonl",
+      "sha256": "5e5ee331625efd6b4c4e16f42e778690f89cca1ca5eb2d394eafe587f4618d12"
+    },
+    "driver": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/driver.ts",
+      "sha256": "46ede47152c120dde82b7a376b9dd848b7760ec858b16413115dd02320a9f976"
+    },
+    "done": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/done.json",
+      "sha256": "40c9985d29b8e46fc753538f0cd2ae0e71ecc0410829cb17ad183a08117e7177"
+    },
+    "caseReceipts": {
+      "path": "tmp/854-notes/p4/w23/source-rebind-run-m/accepted-case-receipts.json",
+      "sha256": "664bf55d5e89a3959b3868f2713ae83819cecf8bc96f79e56e6945c4bdfad978"
+    }
+  },
+  "retained": {
+    "allowanceBytes": 1048576,
+    "lateBoundBytes": 262144,
+    "workerTimeoutMs": 290000,
+    "samplesPerWindow": 9,
+    "checkpointCount": 6,
+    "spacingTurns": 50,
+    "originalFilesUnchanged": true,
+    "results": [
+      {
+        "mode": "normal",
+        "pid": 51618,
+        "warmup": [
+          { "turn": 360, "heapBytes": 185873377 },
+          { "turn": 370, "heapBytes": 186014506 },
+          { "turn": 380, "heapBytes": 186077128 },
+          { "turn": 390, "heapBytes": 186118714 },
+          { "turn": 400, "heapBytes": 186131734 },
+          { "turn": 410, "heapBytes": 186037110 },
+          { "turn": 420, "heapBytes": 186183921 },
+          { "turn": 430, "heapBytes": 186251859 },
+          { "turn": 440, "heapBytes": 186238272 },
+          { "turn": 450, "heapBytes": 186301111 },
+          { "turn": 460, "heapBytes": 184703454 },
+          { "turn": 470, "heapBytes": 186237212 },
+          { "turn": 480, "heapBytes": 185443938 },
+          { "turn": 490, "heapBytes": 185882275 },
+          { "turn": 500, "heapBytes": 185313829 },
+          { "turn": 510, "heapBytes": 186095325 },
+          { "turn": 520, "heapBytes": 185960419 },
+          { "turn": 530, "heapBytes": 186217423 },
+          { "turn": 540, "heapBytes": 186335642 },
+          { "turn": 550, "heapBytes": 186316831 },
+          { "turn": 560, "heapBytes": 186055998 },
+          { "turn": 570, "heapBytes": 186264199 },
+          { "turn": 580, "heapBytes": 186284259 },
+          { "turn": 590, "heapBytes": 186339020 },
+          { "turn": 600, "heapBytes": 186370630 },
+          { "turn": 610, "heapBytes": 186392009 },
+          { "turn": 620, "heapBytes": 186372284 },
+          { "turn": 630, "heapBytes": 186252943 },
+          { "turn": 640, "heapBytes": 186384701 },
+          { "turn": 650, "heapBytes": 186453257 }
+        ],
+        "baseline": {
+          "turn": 695,
+          "heapBytes": 186318297,
+          "readings": [
+            186403360, 186434276, 186392034, 186398681, 184882979, 186177702,
+            186234886, 186318297, 185575380
+          ]
+        },
+        "checkpoints": [
+          {
+            "turn": 745,
+            "heapBytes": 186239226,
+            "readings": [
+              186333197, 186242912, 186297405, 185485261, 185549515, 186153107,
+              186080125, 186239226, 186251333
+            ]
+          },
+          {
+            "turn": 795,
+            "heapBytes": 186368738,
+            "readings": [
+              186388381, 186425926, 186406194, 186422205, 186156908, 186186336,
+              186368265, 186286249, 186368738
+            ]
+          },
+          {
+            "turn": 845,
+            "heapBytes": 186471117,
+            "readings": [
+              186421825, 186461997, 186432078, 186471117, 186485663, 186516735,
+              186488664, 186383402, 186476088
+            ]
+          },
+          {
+            "turn": 895,
+            "heapBytes": 186502431,
+            "readings": [
+              186535259, 186502431, 186534151, 186509356, 186519470, 184953201,
+              186250530, 186342472, 186378181
+            ]
+          },
+          {
+            "turn": 945,
+            "heapBytes": 186347422,
+            "readings": [
+              185681740, 186347422, 186401760, 186457808, 186368311, 186358872,
+              185642040, 186194426, 186343671
+            ]
+          },
+          {
+            "turn": 995,
+            "heapBytes": 186635087,
+            "readings": [
+              186503331, 186499698, 186621411, 186604958, 186781373, 186790596,
+              186885031, 186661933, 186635087
+            ]
+          }
+        ],
+        "requests": 995,
+        "retainedRows": 0,
+        "compressions": 105,
+        "maxHistoryTokens": 36625,
+        "journalBytes": 3268198,
+        "peakDeltaBytes": 316790,
+        "verdict": {
+          "pass": true,
+          "failures": [],
+          "retainedBytes": 316790,
+          "checkpointDeltas": [-79071, 50441, 152820, 184134, 29125, 316790],
+          "intervalGrowth": [-79071, 129512, 102379, 31314, -155009, 287665],
+          "lateFittedGrowthBytes": 101070.3,
+          "lateEndpointGrowthBytes": 163970
+        },
+        "resultReceipt": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/002-workers/normal-8jcyyI/result.json",
+          "sha256": "ab64a31d0e2c9cc38b735041177b0cf047766771ca5721e30b4f167e414623ba"
+        },
+        "workerLog": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/002-workers/normal-8jcyyI/worker.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      {
+        "mode": "trap",
+        "pid": 52734,
+        "warmup": [],
+        "baseline": {
+          "turn": 550,
+          "heapBytes": 186182078,
+          "readings": [
+            185159823, 186161738, 186140425, 186141215, 186182078, 186265899,
+            186263742, 186354925, 186324535
+          ]
+        },
+        "checkpoints": [
+          {
+            "turn": 600,
+            "heapBytes": 194906019,
+            "readings": [
+              189232763, 190244633, 191725000, 193294588, 194906019, 195990740,
+              197792506, 198903066, 200659663
+            ]
+          },
+          {
+            "turn": 650,
+            "heapBytes": 208840276,
+            "readings": [
+              203544590, 204631206, 206148302, 207398069, 208840276, 210046822,
+              211495610, 212944440, 214211214
+            ]
+          },
+          {
+            "turn": 700,
+            "heapBytes": 222129634,
+            "readings": [
+              216818872, 218504277, 219737884, 218820203, 222129634, 223617530,
+              225113177, 226427369, 228077936
+            ]
+          },
+          {
+            "turn": 750,
+            "heapBytes": 235169413,
+            "readings": [
+              230572380, 231765799, 233465642, 234528604, 235169413, 236621612,
+              238762166, 240204125, 241584159
+            ]
+          },
+          {
+            "turn": 800,
+            "heapBytes": 249923139,
+            "readings": [
+              244328482, 245961917, 247149814, 248681640, 249923139, 251215396,
+              252529483, 254220406, 255602593
+            ]
+          },
+          {
+            "turn": 850,
+            "heapBytes": 264059653,
+            "readings": [
+              258426515, 259764071, 261376049, 262482047, 264059653, 265285393,
+              266894681, 268001951, 269697327
+            ]
+          }
+        ],
+        "requests": 850,
+        "retainedRows": 31032,
+        "compressions": 90,
+        "maxHistoryTokens": 36625,
+        "journalBytes": 60373315,
+        "peakDeltaBytes": 77877575,
+        "verdict": {
+          "pass": false,
+          "failures": [
+            "retained 8723941 bytes at turn 600 exceeds allowance 1048576",
+            "retained 22658198 bytes at turn 650 exceeds allowance 1048576",
+            "retained 35947556 bytes at turn 700 exceeds allowance 1048576",
+            "retained 48987335 bytes at turn 750 exceeds allowance 1048576",
+            "retained 63741061 bytes at turn 800 exceeds allowance 1048576",
+            "retained 77877575 bytes at turn 850 exceeds allowance 1048576",
+            "heap growth scales with turn count: fitted 42163135 bytes over turns 700 to 850 exceeds 262144 bytes of settle noise",
+            "heap grew 41930019 bytes from turn 700 to 850, above 262144 bytes of settle noise"
+          ],
+          "retainedBytes": 77877575,
+          "checkpointDeltas": [
+            8723941, 22658198, 35947556, 48987335, 63741061, 77877575
+          ],
+          "intervalGrowth": [
+            8723941, 13934257, 13289358, 13039779, 14753726, 14136514
+          ],
+          "lateFittedGrowthBytes": 42163134.9,
+          "lateEndpointGrowthBytes": 41930019
+        },
+        "resultReceipt": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/003-workers/trap-cBtDJI/result.json",
+          "sha256": "f0bbbcaa93e98ae53ebce1f21563950c3d98da9d7a2a602ca6e9b674697e3c75"
+        },
+        "workerLog": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/003-workers/trap-cBtDJI/worker.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      {
+        "mode": "release-trap",
+        "pid": 53610,
+        "warmup": [],
+        "baseline": {
+          "turn": 550,
+          "heapBytes": 186293271,
+          "readings": [
+            186145353, 186265772, 186293271, 186341004, 186383451, 186053958,
+            186109814, 186303999, 186306380
+          ]
+        },
+        "checkpoints": [
+          {
+            "turn": 600,
+            "heapBytes": 195061177,
+            "readings": [
+              189090481, 190438344, 191957691, 193321099, 195061177, 196061463,
+              197892368, 198925869, 200751658
+            ]
+          },
+          {
+            "turn": 650,
+            "heapBytes": 208841472,
+            "readings": [
+              203541955, 204634340, 206147701, 207405264, 208841472, 210130071,
+              211508265, 212955987, 211884918
+            ]
+          },
+          {
+            "turn": 700,
+            "heapBytes": 222343859,
+            "readings": [
+              216626805, 217984469, 219520327, 220996316, 222343859, 223748295,
+              225159519, 225648814, 228001627
+            ]
+          },
+          {
+            "turn": 750,
+            "heapBytes": 186329131,
+            "readings": [
+              186329131, 186373380, 186273201, 186314513, 186297459, 186391378,
+              186366136, 186426175, 186146305
+            ]
+          },
+          {
+            "turn": 800,
+            "heapBytes": 186426707,
+            "readings": [
+              186348184, 186321497, 186336096, 186385577, 186426707, 186439802,
+              186462863, 186491027, 186472755
+            ]
+          },
+          {
+            "turn": 850,
+            "heapBytes": 186503997,
+            "readings": [
+              186521873, 186533534, 186472490, 186503997, 186473129, 186534767,
+              186447562, 186494222, 186512932
+            ]
+          }
+        ],
+        "requests": 850,
+        "retainedRows": 0,
+        "compressions": 90,
+        "maxHistoryTokens": 36625,
+        "journalBytes": 60373305,
+        "peakDeltaBytes": 36050588,
+        "verdict": {
+          "pass": false,
+          "failures": [
+            "retained 8767906 bytes at turn 600 exceeds allowance 1048576",
+            "retained 22548201 bytes at turn 650 exceeds allowance 1048576",
+            "retained 36050588 bytes at turn 700 exceeds allowance 1048576"
+          ],
+          "retainedBytes": 210726,
+          "checkpointDeltas": [
+            8767906, 22548201, 36050588, 35860, 133436, 210726
+          ],
+          "intervalGrowth": [
+            8767906, 13780295, 13502387, -36014728, 97576, 77290
+          ],
+          "lateFittedGrowthBytes": -32226603,
+          "lateEndpointGrowthBytes": -35839862
+        },
+        "resultReceipt": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/004-workers/release-trap-otaRty/result.json",
+          "sha256": "c0135283419a9c308b0e96ce98a09098f7fa848db2e7f95e6190985298aee49e"
+        },
+        "workerLog": {
+          "path": "tmp/854-notes/p4/w23/source-rebind-run-m/004-workers/release-trap-otaRty/worker.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      }
+    ],
+    "historicalReuse": {
+      "matches": 33,
+      "entries": 35,
+      "checks": [
+        {
+          "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+          "expected": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+          "actual": "53116394c9a977786620eafa21f5fb7ac3080909a651db09d782a5427fd3870e",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/HistoryServiceReads.ts",
+          "expected": "652fd79c2b43e7e9cba71b6bbd7583793b8943ea5aca1d0e71a9b89a05e604a0",
+          "actual": "652fd79c2b43e7e9cba71b6bbd7583793b8943ea5aca1d0e71a9b89a05e604a0",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/historyBackend.test.ts",
+          "expected": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+          "actual": "3b97af8a68842fbb476f2e35da750163a61f356f57a1e32f0f9f9e08c950bb58",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/historyJournalStore.ts",
+          "expected": "ba5ab3f626b2205ed591fb07e30c45c68b111b9a8cc325b41efc0f3efc91f15b",
+          "actual": "ba5ab3f626b2205ed591fb07e30c45c68b111b9a8cc325b41efc0f3efc91f15b",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/historyOldStoreOps.ts",
+          "expected": "fa1a75ac169f3172a71364392a2d1ce717a61829d3089d113daafc762014c853",
+          "actual": "fa1a75ac169f3172a71364392a2d1ce717a61829d3089d113daafc762014c853",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/historyStorePort.ts",
+          "expected": "547e8801280aafdf5aba8a5199fdfc9a1ab782ef23777c26c94f9adabf81c43a",
+          "actual": "547e8801280aafdf5aba8a5199fdfc9a1ab782ef23777c26c94f9adabf81c43a",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.scalars.test.ts",
+          "expected": "c10212ef9faaaaff81c0a981bd825d34a34a3d66d5a19ab5dc3a90460a5b1be2",
+          "actual": "2251538d30c6d2d6b5a0f025a9e1ae5bb52fdd3482f5f33b286f93d975ffb3a1",
+          "matches": false
+        },
+        {
+          "path": "packages/core/src/services/history/journalHistoryStore.ts",
+          "expected": "4dfbf55a01cefac27cad19d8961f2af297ebf42715ec249c6ca7210be7c27a7e",
+          "actual": "4dfbf55a01cefac27cad19d8961f2af297ebf42715ec249c6ca7210be7c27a7e",
+          "matches": true
+        },
+        {
+          "path": "packages/core/src/services/history/journalScalars.ts",
+          "expected": "f7c8d0b2e34b3ac5aa7a204cc3747debfcf1de655e31b5fc53b5182e1b30e142",
+          "actual": "df833b49612b646dc383ff94b3da8357c7fd2f1141762ef1c4c6cd999521bba4",
+          "matches": false
+        },
+        {
+          "path": "packages/core/src/services/history/raw-history-marker.test.ts",
+          "expected": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+          "actual": "c0ad88923cd4830005c368c531d883a09f3a5d38581f8822a4804ec73abb48de",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-read-cost.ts",
+          "expected": "f40f7990488ab94128021ab82715aa16f3249271d63bdcd6a950d80ee8b8c5cf",
+          "actual": "f40f7990488ab94128021ab82715aa16f3249271d63bdcd6a950d80ee8b8c5cf",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-workload.ts",
+          "expected": "680ac73bdf0119b8c4412f29e454c68e3a40f50c7e867f8e4103408393a12c0e",
+          "actual": "680ac73bdf0119b8c4412f29e454c68e3a40f50c7e867f8e4103408393a12c0e",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-harness.ts",
+          "expected": "8763562b540123627ca412e50eda27493101f97089658c4a78d69d8f149d2aba",
+          "actual": "8763562b540123627ca412e50eda27493101f97089658c4a78d69d8f149d2aba",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+          "expected": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "actual": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+          "expected": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "actual": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+          "expected": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "actual": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-worker.ts",
+          "expected": "b4ed992e2a200c0d729d94e3cac1ddcbf22f9d3216c5acfc95c6b84e638fb5d4",
+          "actual": "b4ed992e2a200c0d729d94e3cac1ddcbf22f9d3216c5acfc95c6b84e638fb5d4",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-predicate.ts",
+          "expected": "99a10da628d2c1d74bbb486df7c1aa7c7464ce4235ae4d832bfe5d6d170f44e4",
+          "actual": "99a10da628d2c1d74bbb486df7c1aa7c7464ce4235ae4d832bfe5d6d170f44e4",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-plan.ts",
+          "expected": "551e14ffb215c51459889a4431ca48f508386c5cdf2e62781730f34a1b795987",
+          "actual": "551e14ffb215c51459889a4431ca48f508386c5cdf2e62781730f34a1b795987",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/support/journal-retained-growth-text.ts",
+          "expected": "50374e152ae6b0723f34259e1705fe7cd5744a095a77415ae944840a06b34332",
+          "actual": "50374e152ae6b0723f34259e1705fe7cd5744a095a77415ae944840a06b34332",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/normal-DAEnmc/result.json",
+          "expected": "88b8ad0a6466ab08b67959a93d0a7d7877ed9979d2af93e3d486f5462d3f29e2",
+          "actual": "88b8ad0a6466ab08b67959a93d0a7d7877ed9979d2af93e3d486f5462d3f29e2",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/trap-zdn00A/result.json",
+          "expected": "e82754ad2caa067ac2bed876dbeac6b8462015aaf347b17df61a89fc3dac9eca",
+          "actual": "e82754ad2caa067ac2bed876dbeac6b8462015aaf347b17df61a89fc3dac9eca",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/release-trap-JarNza/result.json",
+          "expected": "c3006c72366f26ca3d85d3c16a5be1657f2b35ef66dd994988aa92843018b7a1",
+          "actual": "c3006c72366f26ca3d85d3c16a5be1657f2b35ef66dd994988aa92843018b7a1",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/normal-cgtowr/result.json",
+          "expected": "868b0c1aba96261ba135c0044ec9412397e4c20d8af246ddf0d3acf4aacdb992",
+          "actual": "868b0c1aba96261ba135c0044ec9412397e4c20d8af246ddf0d3acf4aacdb992",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/trap-Tm37XA/result.json",
+          "expected": "c60f9270e64df36da1e619444789dcdad7f53e718fb5de45cb6083d8645e9f77",
+          "actual": "c60f9270e64df36da1e619444789dcdad7f53e718fb5de45cb6083d8645e9f77",
+          "matches": true
+        },
+        {
+          "path": "tmp/854-notes/p4/w22/retained-run-o/release-trap-VYeAth/result.json",
+          "expected": "bc70b30ba5028ac8b0b7319149ac2cea449075fac91ee5580b62a43356ae68fb",
+          "actual": "bc70b30ba5028ac8b0b7319149ac2cea449075fac91ee5580b62a43356ae68fb",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+          "expected": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "actual": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0457-journal-retained-growth.test.ts.log",
+          "expected": "404271076255cec436614a7c16ebb79da137864c32da3ae306be03384b31125c",
+          "actual": "404271076255cec436614a7c16ebb79da137864c32da3ae306be03384b31125c",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0457-journal-retained-growth.test.ts.xml",
+          "expected": "550311d97dd4a1de92f934a09c4b61e6ed91ee0fa4a0770d74f215f47875523b",
+          "actual": "550311d97dd4a1de92f934a09c4b61e6ed91ee0fa4a0770d74f215f47875523b",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+          "expected": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "actual": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0456-journal-retained-growth-retaining-trap.test.ts.log",
+          "expected": "0d9c3d4154d8757f60bf787f86b68afd4f63f9fe9e3c294442a8ce7f2bfcdccf",
+          "actual": "0d9c3d4154d8757f60bf787f86b68afd4f63f9fe9e3c294442a8ce7f2bfcdccf",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0456-journal-retained-growth-retaining-trap.test.ts.xml",
+          "expected": "88816aa1f1c0a737b6a6bf2ea69a1433fb281be62203eed1096eab231a80be9b",
+          "actual": "88816aa1f1c0a737b6a6bf2ea69a1433fb281be62203eed1096eab231a80be9b",
+          "matches": true
+        },
+        {
+          "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+          "expected": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "actual": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0455-journal-retained-growth-release-trap.test.ts.log",
+          "expected": "92dd68f8475582a729c0362205ce2090689348f62bc16e2856ab895c014ee8e4",
+          "actual": "92dd68f8475582a729c0362205ce2090689348f62bc16e2856ab895c014ee8e4",
+          "matches": true
+        },
+        {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/retained-final-journal-o-a/0455-journal-retained-growth-release-trap.test.ts.xml",
+          "expected": "f8c1018652991bc846a26de0433c42824b4743f6748bc2ef71358ec56dc8b7a8",
+          "actual": "f8c1018652991bc846a26de0433c42824b4743f6748bc2ef71358ec56dc8b7a8",
+          "matches": true
+        }
+      ],
+      "disposition": "Historical only. Changed journalScalars and scalar test required this new execution; old normal/control counts are not substituted."
+    }
+  },
+  "readCost": {
+    "marker": "512/8192 committed rows: one decoded marked row, peak one, zero live; empty acquires none.",
+    "measurements": [
+      { "before": 46, "snapshots": 1, "walks": 1, "entries": 48, "rows": 49 },
+      {
+        "before": 406,
+        "snapshots": 1,
+        "walks": 1,
+        "entries": 408,
+        "rows": 409
+      },
+      {
+        "before": 46,
+        "snapshots": 4,
+        "walks": 14,
+        "entries": 338,
+        "rows": 338
+      },
+      {
+        "before": 406,
+        "snapshots": 3,
+        "walks": 10,
+        "entries": 2614,
+        "rows": 2615
+      }
+    ],
+    "bound": "One selected snapshot and one native capture at 40/400 rows under limit. Per rebuild: initial two plus four per mutation; original 3..4 snapshot bound unchanged."
+  },
+  "provider": {
+    "liveness": [
+      {
+        "route": "openai-chat-plain",
+        "trap": "",
+        "rowCount": 40,
+        "rowTextBytes": 1048576,
+        "liveBound": 9,
+        "peak": { "rows": 2, "text": 2, "media": 2 }
+      },
+      {
+        "route": "openai-responses-via-openai",
+        "trap": "",
+        "rowCount": 40,
+        "rowTextBytes": 1048576,
+        "liveBound": 9,
+        "peak": { "rows": 2, "text": 2, "media": 2 }
+      },
+      {
+        "route": "openai-responses",
+        "trap": "",
+        "rowCount": 40,
+        "rowTextBytes": 1048576,
+        "liveBound": 9,
+        "peak": { "rows": 2, "text": 2, "media": 2 }
+      },
+      {
+        "route": "anthropic-cache-off",
+        "trap": "",
+        "rowCount": 40,
+        "rowTextBytes": 1048576,
+        "liveBound": 9,
+        "peak": { "rows": 2, "text": 2, "media": 2 }
+      }
+    ],
+    "sendPeak": [
+      {
+        "routeId": "openai-chat-plain",
+        "shape": "text-only",
+        "source": "rows",
+        "trap": null,
+        "bytes": [1073412, 8596228],
+        "contentLength": "8596228",
+        "verdict": {
+          "bytesMatchOracle": true,
+          "contentLengthMatchesBytes": true,
+          "heapGrowth": -228441,
+          "arrayBufferGrowth": -32768,
+          "retainedGrowth": 0,
+          "heapGrowthWithinBound": true,
+          "arrayBufferGrowthWithinBound": true,
+          "retainedGrowthWithinBound": true,
+          "retainedEndpointGrowth": 0,
+          "medians": {
+            "peakHeap": { "small": 472365, "large": 243924 },
+            "peakArrayBuffers": { "small": 131296, "large": 98528 },
+            "peakRss": { "small": 612761600, "large": 711737344 },
+            "peakLive": { "small": 1, "large": 2 }
+          }
+        },
+        "estimate": true,
+        "seconds": 43.68992325,
+        "accumulation": [
+          { "heap": 103158732, "arrayBuffers": 30708853 },
+          { "heap": 103027714, "arrayBuffers": 30708853 },
+          { "heap": 102918931, "arrayBuffers": 30708853 },
+          { "heap": 103422515, "arrayBuffers": 30708853 },
+          { "heap": 103604736, "arrayBuffers": 30708853 },
+          { "heap": 102704743, "arrayBuffers": 30708853 }
+        ],
+        "bodies": {
+          "small": [
+            {
+              "bytes": 1073412,
+              "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+              "contentLength": "1073412",
+              "modelRequests": 1,
+              "routeId": "openai-chat-plain",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 472365,
+              "peakArrayBuffers": 131296,
+              "peakRss": 612761600,
+              "samples": 11,
+              "peakLive": 1
+            }
+          ],
+          "large": [
+            {
+              "bytes": 8596228,
+              "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+              "contentLength": "8596228",
+              "modelRequests": 1,
+              "routeId": "openai-chat-plain",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 243924,
+              "peakArrayBuffers": 98528,
+              "peakRss": 711737344,
+              "samples": 37,
+              "peakLive": 2
+            }
+          ]
+        },
+        "originalBodyReceipt": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/000-measurements.jsonl.raw.jsonl",
+          "sha256": "b97f736bb9349c91d2741d383baf3a27a718fd1ea1b0387cbbd0e30d43f04741"
+        },
+        "rehashMatchesOriginalBodies": true
+      },
+      {
+        "routeId": "anthropic-cache-1h",
+        "shape": "text-only",
+        "source": "rows",
+        "trap": null,
+        "bytes": [1073562, 8596378],
+        "contentLength": "8596378",
+        "verdict": {
+          "bytesMatchOracle": true,
+          "contentLengthMatchesBytes": true,
+          "heapGrowth": -1062395,
+          "arrayBufferGrowth": -32768,
+          "retainedGrowth": 0,
+          "heapGrowthWithinBound": true,
+          "arrayBufferGrowthWithinBound": true,
+          "retainedGrowthWithinBound": true,
+          "retainedEndpointGrowth": 0,
+          "medians": {
+            "peakHeap": { "small": 1244996, "large": 182601 },
+            "peakArrayBuffers": { "small": 131552, "large": 98784 },
+            "peakRss": { "small": 671727616, "large": 903905280 },
+            "peakLive": { "small": 1, "large": 1 }
+          }
+        },
+        "estimate": true,
+        "seconds": 48.485024749999994,
+        "accumulation": [
+          { "heap": 103352525, "arrayBuffers": 30709093 },
+          { "heap": 102831641, "arrayBuffers": 30709093 },
+          { "heap": 103340126, "arrayBuffers": 30709093 },
+          { "heap": 103172398, "arrayBuffers": 30709093 },
+          { "heap": 103273403, "arrayBuffers": 30709093 },
+          { "heap": 103109952, "arrayBuffers": 30709093 }
+        ],
+        "bodies": {
+          "small": [
+            {
+              "bytes": 1073562,
+              "sha256": "cf316537fea8c2a826fbdc3de0a78e0349f797b72d3017f4075112d89dc864b3",
+              "contentLength": "1073562",
+              "modelRequests": 1,
+              "routeId": "anthropic-cache-1h",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1244996,
+              "peakArrayBuffers": 131552,
+              "peakRss": 671727616,
+              "samples": 10,
+              "peakLive": 1
+            }
+          ],
+          "large": [
+            {
+              "bytes": 8596378,
+              "sha256": "a7b3ed252b7e97d9367c83ba89ec9f7a9a9e662887404cf7613542a89c9ad6f8",
+              "contentLength": "8596378",
+              "modelRequests": 1,
+              "routeId": "anthropic-cache-1h",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 182601,
+              "peakArrayBuffers": 98784,
+              "peakRss": 903905280,
+              "samples": 36,
+              "peakLive": 1
+            }
+          ]
+        },
+        "originalBodyReceipt": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/002-measurements.jsonl.raw.jsonl",
+          "sha256": "d60524010542efb748fdeda2b20562938c2949d395b59607ff062ae2aae1000d"
+        },
+        "rehashMatchesOriginalBodies": true
+      },
+      {
+        "routeId": "openai-responses-via-openai",
+        "shape": "text-only",
+        "source": "rows",
+        "trap": null,
+        "bytes": [1073396, 8596212],
+        "contentLength": "8596212",
+        "verdict": {
+          "bytesMatchOracle": true,
+          "contentLengthMatchesBytes": true,
+          "heapGrowth": -170582,
+          "arrayBufferGrowth": 0,
+          "retainedGrowth": 172136,
+          "heapGrowthWithinBound": true,
+          "arrayBufferGrowthWithinBound": true,
+          "retainedGrowthWithinBound": true,
+          "retainedEndpointGrowth": 172136,
+          "medians": {
+            "peakHeap": { "small": 497883, "large": 327301 },
+            "peakArrayBuffers": { "small": 196944, "large": 196944 },
+            "peakRss": { "small": 594804736, "large": 594821120 },
+            "peakLive": { "small": 1, "large": 1 }
+          }
+        },
+        "estimate": false,
+        "seconds": 76.094390958,
+        "accumulation": [
+          { "heap": 51616419, "arrayBuffers": 1147105 },
+          { "heap": 51869087, "arrayBuffers": 1147105 },
+          { "heap": 51168280, "arrayBuffers": 1147105 },
+          { "heap": 51228013, "arrayBuffers": 1147105 },
+          { "heap": 51874623, "arrayBuffers": 1147105 },
+          { "heap": 51788555, "arrayBuffers": 1147105 }
+        ],
+        "bodies": {
+          "small": [
+            {
+              "bytes": 1073396,
+              "sha256": "338d20afe272f32294a40bea15563a1b9968e0debb6d303b06a1d1b8b2cea45e",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 497883,
+              "peakArrayBuffers": 196944,
+              "peakRss": 581992448,
+              "samples": 4,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1073396,
+              "sha256": "338d20afe272f32294a40bea15563a1b9968e0debb6d303b06a1d1b8b2cea45e",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1063714,
+              "peakArrayBuffers": 196944,
+              "peakRss": 594804736,
+              "samples": 4,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1073396,
+              "sha256": "338d20afe272f32294a40bea15563a1b9968e0debb6d303b06a1d1b8b2cea45e",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 280606,
+              "peakArrayBuffers": 196944,
+              "peakRss": 594870272,
+              "samples": 4,
+              "peakLive": 1
+            }
+          ],
+          "large": [
+            {
+              "bytes": 8596212,
+              "sha256": "04e5a3466c7243c1483e4321c408f054e118e5da97964253d8b2ff341529a682",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 276215,
+              "peakArrayBuffers": 164176,
+              "peakRss": 594804736,
+              "samples": 13,
+              "peakLive": 1
+            },
+            {
+              "bytes": 8596212,
+              "sha256": "04e5a3466c7243c1483e4321c408f054e118e5da97964253d8b2ff341529a682",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 327301,
+              "peakArrayBuffers": 196944,
+              "peakRss": 594821120,
+              "samples": 13,
+              "peakLive": 1
+            },
+            {
+              "bytes": 8596212,
+              "sha256": "04e5a3466c7243c1483e4321c408f054e118e5da97964253d8b2ff341529a682",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1172294,
+              "peakArrayBuffers": 196944,
+              "peakRss": 596606976,
+              "samples": 13,
+              "peakLive": 1
+            }
+          ]
+        },
+        "originalBodyReceipt": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/004-measurements.jsonl.raw.jsonl",
+          "sha256": "bdad22a423fd9f29c7b8303172b57174d11f9b4a4c3810989f2903bf139618d5"
+        },
+        "rehashMatchesOriginalBodies": true
+      },
+      {
+        "routeId": "openai-responses-via-openai",
+        "shape": "tool-heavy",
+        "source": "rows",
+        "trap": null,
+        "bytes": [1446412, 11582131],
+        "contentLength": "11582131",
+        "verdict": {
+          "bytesMatchOracle": true,
+          "contentLengthMatchesBytes": true,
+          "heapGrowth": 804748,
+          "arrayBufferGrowth": 0,
+          "retainedGrowth": 27846,
+          "heapGrowthWithinBound": true,
+          "arrayBufferGrowthWithinBound": true,
+          "retainedGrowthWithinBound": true,
+          "retainedEndpointGrowth": 27846,
+          "medians": {
+            "peakHeap": { "small": 373409, "large": 1178157 },
+            "peakArrayBuffers": { "small": 0, "large": 0 },
+            "peakRss": { "small": 706641920, "large": 709033984 },
+            "peakLive": { "small": 1, "large": 1 }
+          }
+        },
+        "estimate": false,
+        "seconds": 76.094390958,
+        "accumulation": [
+          { "heap": 52617228, "arrayBuffers": 1081569 },
+          { "heap": 52649168, "arrayBuffers": 1081569 },
+          { "heap": 51594329, "arrayBuffers": 1081569 },
+          { "heap": 52336877, "arrayBuffers": 1081569 },
+          { "heap": 52489312, "arrayBuffers": 1081569 },
+          { "heap": 52645074, "arrayBuffers": 1081569 }
+        ],
+        "bodies": {
+          "small": [
+            {
+              "bytes": 1446412,
+              "sha256": "5231a2fbd7783ff9883bbb83076347192d79430199aea640eb3a0e39f5063687",
+              "contentLength": "1446412",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 281388,
+              "peakArrayBuffers": 0,
+              "peakRss": 651640832,
+              "samples": 5,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1446412,
+              "sha256": "5231a2fbd7783ff9883bbb83076347192d79430199aea640eb3a0e39f5063687",
+              "contentLength": "1446412",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 373409,
+              "peakArrayBuffers": 0,
+              "peakRss": 706641920,
+              "samples": 5,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1446412,
+              "sha256": "5231a2fbd7783ff9883bbb83076347192d79430199aea640eb3a0e39f5063687",
+              "contentLength": "1446412",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 394310,
+              "peakArrayBuffers": 0,
+              "peakRss": 708984832,
+              "samples": 4,
+              "peakLive": 1
+            }
+          ],
+          "large": [
+            {
+              "bytes": 11582131,
+              "sha256": "0ac4b5afc263589f8bb94ee922707948dfc03b40a15c23e0eceb1699b7ee30a3",
+              "contentLength": "11582131",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 608053,
+              "peakArrayBuffers": 0,
+              "peakRss": 706592768,
+              "samples": 15,
+              "peakLive": 1
+            },
+            {
+              "bytes": 11582131,
+              "sha256": "0ac4b5afc263589f8bb94ee922707948dfc03b40a15c23e0eceb1699b7ee30a3",
+              "contentLength": "11582131",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1178157,
+              "peakArrayBuffers": 0,
+              "peakRss": 709033984,
+              "samples": 15,
+              "peakLive": 1
+            },
+            {
+              "bytes": 11582131,
+              "sha256": "0ac4b5afc263589f8bb94ee922707948dfc03b40a15c23e0eceb1699b7ee30a3",
+              "contentLength": "11582131",
+              "modelRequests": 1,
+              "routeId": "openai-responses-via-openai",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1646645,
+              "peakArrayBuffers": 0,
+              "peakRss": 709115904,
+              "samples": 14,
+              "peakLive": 1
+            }
+          ]
+        },
+        "originalBodyReceipt": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/004-measurements.jsonl.raw.jsonl",
+          "sha256": "bdad22a423fd9f29c7b8303172b57174d11f9b4a4c3810989f2903bf139618d5"
+        },
+        "rehashMatchesOriginalBodies": true
+      },
+      {
+        "routeId": "openai-responses",
+        "shape": "text-only",
+        "source": "rows",
+        "trap": null,
+        "bytes": [1073396, 8596212],
+        "contentLength": "8596212",
+        "verdict": {
+          "bytesMatchOracle": true,
+          "contentLengthMatchesBytes": true,
+          "heapGrowth": -235486,
+          "arrayBufferGrowth": 0,
+          "retainedGrowth": 270891,
+          "heapGrowthWithinBound": true,
+          "arrayBufferGrowthWithinBound": true,
+          "retainedGrowthWithinBound": true,
+          "retainedEndpointGrowth": 270891,
+          "medians": {
+            "peakHeap": { "small": 552325, "large": 316839 },
+            "peakArrayBuffers": { "small": 196944, "large": 196944 },
+            "peakRss": { "small": 520224768, "large": 520404992 },
+            "peakLive": { "small": 1, "large": 1 }
+          }
+        },
+        "estimate": false,
+        "seconds": 44.005720916,
+        "accumulation": [
+          { "heap": 47951288, "arrayBuffers": 234501 },
+          { "heap": 48263484, "arrayBuffers": 234501 },
+          { "heap": 47153385, "arrayBuffers": 234501 },
+          { "heap": 48062107, "arrayBuffers": 234501 },
+          { "heap": 48402812, "arrayBuffers": 234501 },
+          { "heap": 48222179, "arrayBuffers": 234501 }
+        ],
+        "bodies": {
+          "small": [
+            {
+              "bytes": 1073396,
+              "sha256": "f0cbc0cc904277ae141b0fc4dd7e5d9508d175ff4c052e2ff5b84584140d47d6",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 552325,
+              "peakArrayBuffers": 196944,
+              "peakRss": 497975296,
+              "samples": 4,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1073396,
+              "sha256": "f0cbc0cc904277ae141b0fc4dd7e5d9508d175ff4c052e2ff5b84584140d47d6",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1029547,
+              "peakArrayBuffers": 196944,
+              "peakRss": 520224768,
+              "samples": 4,
+              "peakLive": 1
+            },
+            {
+              "bytes": 1073396,
+              "sha256": "f0cbc0cc904277ae141b0fc4dd7e5d9508d175ff4c052e2ff5b84584140d47d6",
+              "contentLength": "1073396",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 272410,
+              "peakArrayBuffers": 196944,
+              "peakRss": 520912896,
+              "samples": 4,
+              "peakLive": 1
+            }
+          ],
+          "large": [
+            {
+              "bytes": 8596212,
+              "sha256": "b983d29e915529413e212868099372656c9e797a2456d2bc8c34c1c378d28e88",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 287806,
+              "peakArrayBuffers": 164176,
+              "peakRss": 519782400,
+              "samples": 12,
+              "peakLive": 1
+            },
+            {
+              "bytes": 8596212,
+              "sha256": "b983d29e915529413e212868099372656c9e797a2456d2bc8c34c1c378d28e88",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 316839,
+              "peakArrayBuffers": 196944,
+              "peakRss": 520404992,
+              "samples": 12,
+              "peakLive": 1
+            },
+            {
+              "bytes": 8596212,
+              "sha256": "b983d29e915529413e212868099372656c9e797a2456d2bc8c34c1c378d28e88",
+              "contentLength": "8596212",
+              "modelRequests": 1,
+              "routeId": "openai-responses",
+              "trap": null,
+              "chunks": 0,
+              "peakHeap": 1186170,
+              "peakArrayBuffers": 196944,
+              "peakRss": 521617408,
+              "samples": 13,
+              "peakLive": 1
+            }
+          ]
+        },
+        "originalBodyReceipt": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/005-measurements.jsonl.raw.jsonl",
+          "sha256": "c6d39d8b8fc6c3844306ef04991d191f5f57b93c057e04bb34519217fb478082"
+        },
+        "rehashMatchesOriginalBodies": true
+      }
+    ],
+    "unchangedMechanisms": [
+      {
+        "path": "packages/providers/src/__tests__/support/send-peak-probe.ts",
+        "sha256": "a0f42de550cbdd0aa1cf66e95d07b61e575f1419227299ff970bfddf6b257e6f"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/sendPeakRunner.ts",
+        "sha256": "9d6f3943c81cecff18b7a950c864ca86a6eccef5f2c02255f9a0eb9e29ba0a24"
+      },
+      {
+        "path": "packages/providers/src/openai-responses/responses-row-media.ts",
+        "sha256": "52dfe34f13a43cbf157bd865f6b510f7da8eaf35781f013de46b60a204155f67"
+      },
+      {
+        "path": "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+        "sha256": "17c4ccacde5835770b44561f5195682a7479a2f22ade7d7d92fda92ae0bf1594"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/isolated-wire-hash-sink.ts",
+        "sha256": "3107b0623f4c5dd5ab2a52756101f9fde8f1972115c5cd68972274c2d220db3b"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/native-probe-source.ts",
+        "sha256": "08e299e0e75398a312793d9b52ed6030cd594f0671780c3a77dd0ddad267ab47"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/wire-hash-sink-worker.ts",
+        "sha256": "37e8e97734badde149754052d7098f0074a80a9b635db7c75cc20ea1edbaab89"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/sendPeakMeasurement.ts",
+        "sha256": "3cd24f392691aa7345c36f977918eb951445629de87143fa243641fcfab3f422"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/sendPeakTraps.ts",
+        "sha256": "1e0e4566ee24146e8e611dcc741bba49ffcd5531ed3dc0d82ed43904b3338af7"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+        "sha256": "c1ef1613e9bebf81c7f52726cf7f4111986aa6bdce891ddfd53020c680e89126"
+      }
+    ],
+    "historicalControls": [
+      {
+        "index": 22,
+        "path": "packages/providers/src/__tests__/sendPeak.openaiChatTextOnly.test.ts",
+        "sourceHash": "ba8f79d6633a4dce596f3b4f16ffdfa98fe5258bf1585b7076ed5b89de24d8d2",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/022.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/022.xml",
+        "logSha256": "c426d744d6e9007bf119a65c0319142c7208e71cce007dc22d1009357fa4114c",
+        "junitSha256": "7c6b3bcc25ca51d35b69256ed929cfe3eb35f3b910c37a2f08ffcdcf8b895ad8",
+        "tests": 2,
+        "failures": 1,
+        "skipped": 0,
+        "env": { "ISSUE854_SEND_NATIVE": "1", "ISSUE854_SEND_TRAP": "array" },
+        "measurements": [
+          {
+            "routeId": "openai-chat-plain",
+            "shape": "text-only",
+            "source": "rows",
+            "trap": "array",
+            "bytes": [1073412, 8596228],
+            "contentLength": "8596228",
+            "verdict": {
+              "bytesMatchOracle": true,
+              "contentLengthMatchesBytes": true,
+              "heapGrowth": 14453617,
+              "arrayBufferGrowth": -32768,
+              "retainedGrowth": 1436.6666666666665,
+              "retainedEndpointGrowth": 0,
+              "medians": {
+                "peakHeap": { "small": 2604537, "large": 17058154 },
+                "peakArrayBuffers": { "small": 131296, "large": 98528 },
+                "peakRss": { "small": 612532224, "large": 751910912 },
+                "peakLive": { "small": 64, "large": 64 }
+              }
+            }
+          }
+        ],
+        "rawMeasurements": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/022-measurements.jsonl.raw.jsonl",
+          "sha256": "c6a2ceab8401c8e5b352586b1d111f5a56b74ac796f30a6d67287b9cc8fc3011"
+        },
+        "driverPid": 35437,
+        "pid": 49237,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/sendPeak.openaiChatTextOnly.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/022.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:33:20.967Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:34:06.492Z",
+        "summary": "1 pass\n 1 fail\n 3 expect() calls\nRan 2 tests across 1 file. [45.51s]"
+      },
+      {
+        "index": 23,
+        "path": "packages/providers/src/__tests__/sendPeak.openaiChatTextOnly.test.ts",
+        "sourceHash": "ba8f79d6633a4dce596f3b4f16ffdfa98fe5258bf1585b7076ed5b89de24d8d2",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/023.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/023.xml",
+        "logSha256": "e55723b22da05c6873aeff2e935ffbf363ee23896036796f39617e73603c9425",
+        "junitSha256": "b957b58db2b6c5e5a89a6f84d0dc3ca13b77f2f8ede86afc921288377f2ae49b",
+        "tests": 2,
+        "failures": 1,
+        "skipped": 0,
+        "env": {
+          "ISSUE854_SEND_NATIVE": "1",
+          "ISSUE854_SEND_TRAP": "estimate"
+        },
+        "measurements": [
+          {
+            "routeId": "openai-chat-plain",
+            "shape": "text-only",
+            "source": "rows",
+            "trap": "estimate",
+            "bytes": [1073412, 8596228],
+            "contentLength": "8596228",
+            "verdict": {
+              "bytesMatchOracle": true,
+              "contentLengthMatchesBytes": true,
+              "heapGrowth": 14027816,
+              "arrayBufferGrowth": -32768,
+              "retainedGrowth": 0,
+              "retainedEndpointGrowth": 0,
+              "medians": {
+                "peakHeap": { "small": 2605298, "large": 16633114 },
+                "peakArrayBuffers": { "small": 131296, "large": 98528 },
+                "peakRss": { "small": 615546880, "large": 729153536 },
+                "peakLive": { "small": 64, "large": 64 }
+              }
+            }
+          }
+        ],
+        "rawMeasurements": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/023-measurements.jsonl.raw.jsonl",
+          "sha256": "b109ae06c88f079108993aeac6f17481516269b5aec15b477694543f2f842ad0"
+        },
+        "driverPid": 35437,
+        "pid": 49935,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/sendPeak.openaiChatTextOnly.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/023.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:34:06.493Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:34:51.112Z",
+        "summary": "1 pass\n 1 fail\n 3 expect() calls\nRan 2 tests across 1 file. [44.60s]"
+      },
+      {
+        "index": 24,
+        "path": "packages/providers/src/__tests__/sendPeak.anthropicTextOnly.test.ts",
+        "sourceHash": "b4f5e5393bc9ef7c722e879ae9d3bab1afdb75b13f82198712f395ce3ee13c95",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/024.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/024.xml",
+        "logSha256": "00acf96290324e80a5575e91793c3a7343e3857b4d8369c210cf8199e5460386",
+        "junitSha256": "08bb87de8866614435114f8d1388ed9e14f71c69c70019383ed6e5ee39fc5eb4",
+        "tests": 2,
+        "failures": 1,
+        "skipped": 0,
+        "env": {
+          "ISSUE854_SEND_NATIVE": "1",
+          "ISSUE854_SEND_TRAP": "estimate"
+        },
+        "measurements": [
+          {
+            "routeId": "anthropic-cache-1h",
+            "shape": "text-only",
+            "source": "rows",
+            "trap": "estimate",
+            "bytes": [1073562, 8596378],
+            "contentLength": "8596378",
+            "verdict": {
+              "bytesMatchOracle": true,
+              "contentLengthMatchesBytes": true,
+              "heapGrowth": 13698656,
+              "arrayBufferGrowth": -32768,
+              "retainedGrowth": 0,
+              "retainedEndpointGrowth": 0,
+              "medians": {
+                "peakHeap": { "small": 3131228, "large": 16829884 },
+                "peakArrayBuffers": { "small": 131552, "large": 98784 },
+                "peakRss": { "small": 672366592, "large": 906477568 },
+                "peakLive": { "small": 64, "large": 64 }
+              }
+            }
+          }
+        ],
+        "rawMeasurements": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/024-measurements.jsonl.raw.jsonl",
+          "sha256": "7f230daf102bf1934b80341cc67ee2fcb8053e26de4caf4abcd8628b610b7f0c"
+        },
+        "driverPid": 35437,
+        "pid": 50556,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/sendPeak.anthropicTextOnly.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/024.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:34:51.113Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:35:40.390Z",
+        "summary": "1 pass\n 1 fail\n 3 expect() calls\nRan 2 tests across 1 file. [49.26s]"
+      },
+      {
+        "index": 25,
+        "path": "packages/providers/src/__tests__/sendPeak.responsesLazyTools.test.ts",
+        "sourceHash": "c09f0b51d4e7bb7860b0ca6330fa67178d085731b90b3095bc5a40f01f1dc74c",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/025.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/025.xml",
+        "logSha256": "be3490756bfb45b6b9220f4335278f9912681ccddc2a3b8396e07ecd45859781",
+        "junitSha256": "085371ce8501c3abc02079101408d8248c5b13a5a491656d8b417c9589a63e62",
+        "tests": 2,
+        "failures": 1,
+        "skipped": 0,
+        "env": { "ISSUE854_SEND_NATIVE": "1", "ISSUE854_SEND_TRAP": "fill" },
+        "measurements": [
+          {
+            "routeId": "openai-responses",
+            "shape": "tool-heavy",
+            "source": "stream",
+            "trap": "fill",
+            "bytes": [1446412, 11582131],
+            "contentLength": "11582131",
+            "verdict": {
+              "bytesMatchOracle": true,
+              "contentLengthMatchesBytes": true,
+              "heapGrowth": 40391639,
+              "arrayBufferGrowth": 0,
+              "retainedGrowth": 406352.5,
+              "retainedEndpointGrowth": 0,
+              "medians": {
+                "peakHeap": { "small": 6786278, "large": 47177917 },
+                "peakArrayBuffers": { "small": 69976, "large": 69976 },
+                "peakRss": { "small": 749092864, "large": 751763456 },
+                "peakLive": { "small": 64, "large": 64 }
+              }
+            }
+          }
+        ],
+        "rawMeasurements": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/025-measurements.jsonl.raw.jsonl",
+          "sha256": "30359bba6f0bf9aa0f3c22e16511fddc308aef23cd0f87b266d2e5db28fac22a"
+        },
+        "driverPid": 35437,
+        "pid": 51250,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/sendPeak.responsesLazyTools.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/025.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:35:40.392Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:36:31.062Z",
+        "summary": "1 pass\n 1 fail\n 3 expect() calls\nRan 2 tests across 1 file. [50.66s]"
+      },
+      {
+        "index": 26,
+        "path": "packages/providers/src/__tests__/sendPeak.responsesDiskText.test.ts",
+        "sourceHash": "959a7da00e9e242cdb89b9de36f438b204e2065d5ce93e4af859da85c704e2c4",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/026.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/026.xml",
+        "logSha256": "71dc2dba640e7828c6b4b72a76acf827399a06139d5c16d13ec6b84fbfe0ed42",
+        "junitSha256": "6887dd1c3c66cf4e0f41b528e6a9a3273ae2f3bd1a3af1d421789e383a5f0255",
+        "tests": 2,
+        "failures": 1,
+        "skipped": 0,
+        "env": { "ISSUE854_SEND_NATIVE": "1", "ISSUE854_SEND_TRAP": "retain" },
+        "measurements": [
+          {
+            "routeId": "openai-responses",
+            "shape": "text-only",
+            "source": "rows",
+            "trap": "retain",
+            "bytes": [1073396, 8596212],
+            "contentLength": "8596212",
+            "verdict": {
+              "bytesMatchOracle": true,
+              "contentLengthMatchesBytes": true,
+              "heapGrowth": -237484,
+              "arrayBufferGrowth": 0,
+              "retainedGrowth": 84756100,
+              "retainedEndpointGrowth": 84681551,
+              "medians": {
+                "peakHeap": { "small": 553113, "large": 315629 },
+                "peakArrayBuffers": { "small": 196944, "large": 196944 },
+                "peakRss": { "small": 519831552, "large": 520011776 },
+                "peakLive": { "small": 1, "large": 1 }
+              }
+            }
+          }
+        ],
+        "rawMeasurements": {
+          "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/026-measurements.jsonl.raw.jsonl",
+          "sha256": "bcd6faa5e1c71738b98c83e12e31f79d4770f24bd6b09d78efc27860fd693324"
+        },
+        "driverPid": 35437,
+        "pid": 51951,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/sendPeak.responsesDiskText.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/026.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:36:31.063Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:37:17.168Z",
+        "summary": "1 pass\n 1 fail\n 5 expect() calls\nRan 2 tests across 1 file. [46.09s]"
+      },
+      {
+        "index": 28,
+        "path": "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+        "sourceHash": "17c4ccacde5835770b44561f5195682a7479a2f22ade7d7d92fda92ae0bf1594",
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/028.log",
+        "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/028.xml",
+        "logSha256": "f0eec6c154c990a37e32f8cef1611f1c53c2dee90ebab7bc8143750e28376654",
+        "junitSha256": "72a34acaf3c6c9039e5036b271e6d6d71c130865bb62840bff41f0414929eeb6",
+        "tests": 4,
+        "failures": 4,
+        "skipped": 0,
+        "env": { "ISSUE854_NATIVE_ROW_TRAP": "retain" },
+        "measurements": [
+          {
+            "route": "openai-chat-plain",
+            "trap": "retain",
+            "rowCount": 40,
+            "rowTextBytes": 1048576,
+            "liveBound": 9,
+            "peak": { "rows": 80, "text": 80, "media": 80 }
+          },
+          {
+            "route": "openai-responses-via-openai",
+            "trap": "retain",
+            "rowCount": 40,
+            "rowTextBytes": 1048576,
+            "liveBound": 9,
+            "peak": { "rows": 40, "text": 40, "media": 40 }
+          },
+          {
+            "route": "openai-responses",
+            "trap": "retain",
+            "rowCount": 40,
+            "rowTextBytes": 1048576,
+            "liveBound": 9,
+            "peak": { "rows": 40, "text": 40, "media": 40 }
+          },
+          {
+            "route": "anthropic-cache-off",
+            "trap": "retain",
+            "rowCount": 40,
+            "rowTextBytes": 1048576,
+            "liveBound": 9,
+            "peak": { "rows": 40, "text": 40, "media": 40 }
+          }
+        ],
+        "rawMeasurements": null,
+        "driverPid": 35437,
+        "pid": 52774,
+        "expectedRed": true,
+        "command": "bun test ./src/__tests__/journal-native-row-liveness.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/limits-memory-run-c/final-memory-b/028.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T06:37:24.935Z",
+        "status": "red",
+        "code": 1,
+        "signal": null,
+        "finished": "2026-10-20T06:37:32.317Z",
+        "summary": "0 pass\n 4 fail\n 28 expect() calls\nRan 4 tests across 1 file. [7.34s]"
+      }
+    ],
+    "historicalControlsScope": "Saved six provider-control executions rehashed, not rerun or included in fourteen-file totals. Original positive assertions reject array/estimate/fill/retain or live-object retention; no loader/API failures qualify. Trap injection and predicates plus per-row release source are unchanged. Changed shared read/commit paths are covered by current positives, marker, read-cost, full real retained/control workload and selected/recovery/retry source rebind; no new route/shape/trap grid.",
+    "sourceBoundary": "Native locked recorder/HistoryService selections, real LocalMediaStore admission and pinned readers; forbidden materialization/contents fallback. Archive commit publication requires a configured recorder media store, absent from these send fixtures; its actual CLI cold-reopen/fault proof remains W23-MEDIA-ARCHIVE-PROOF.json. Current common JournalStore, scalar/suffix/borrowed cleanup and marker hooks are included in the unchanged package manifest.",
+    "large40MiB": {
+      "cases": [
+        {
+          "route": "openai-chat-plain",
+          "withImage": false,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943164,
+            "sha256": "b1939bc494e51a2b2cc7aafa431915e72d597a1598080a640b25b0123cfa556a"
+          },
+          "actual": {
+            "bytes": 41943164,
+            "sha256": "b1939bc494e51a2b2cc7aafa431915e72d597a1598080a640b25b0123cfa556a",
+            "contentLength": "41943164"
+          }
+        },
+        {
+          "route": "openai-chat-plain",
+          "withImage": true,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943259,
+            "sha256": "2c0760ddd9bd54534daf33176f58b191408b834589f688793d9b2786505ea007"
+          },
+          "actual": {
+            "bytes": 41943259,
+            "sha256": "2c0760ddd9bd54534daf33176f58b191408b834589f688793d9b2786505ea007",
+            "contentLength": "41943259"
+          }
+        },
+        {
+          "route": "openai-responses-via-openai",
+          "withImage": false,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943148,
+            "sha256": "e76409701be5ea77b8785d265e5ddd0391f0f0e0f2327b824f2933af98baf93a"
+          },
+          "actual": {
+            "bytes": 41943148,
+            "sha256": "e76409701be5ea77b8785d265e5ddd0391f0f0e0f2327b824f2933af98baf93a",
+            "contentLength": "41943148"
+          }
+        },
+        {
+          "route": "openai-responses-via-openai",
+          "withImage": true,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943243,
+            "sha256": "2c7dfd75efca3c425bfba98d9f73654f16121c08935ad8e86db1b38f0ac38c46"
+          },
+          "actual": {
+            "bytes": 41943243,
+            "sha256": "2c7dfd75efca3c425bfba98d9f73654f16121c08935ad8e86db1b38f0ac38c46",
+            "contentLength": "41943243"
+          }
+        },
+        {
+          "route": "openai-responses",
+          "withImage": false,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943148,
+            "sha256": "3e83598497e4032922a62568d24cd67974b5c4271a3f2ff1062940233ead064b"
+          },
+          "actual": {
+            "bytes": 41943148,
+            "sha256": "3e83598497e4032922a62568d24cd67974b5c4271a3f2ff1062940233ead064b",
+            "contentLength": "41943148"
+          }
+        },
+        {
+          "route": "openai-responses",
+          "withImage": true,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943243,
+            "sha256": "c28732025f685ed5fca2174256f87493fecc6c61fa2d49182cf13cb9cd796f21"
+          },
+          "actual": {
+            "bytes": 41943243,
+            "sha256": "c28732025f685ed5fca2174256f87493fecc6c61fa2d49182cf13cb9cd796f21",
+            "contentLength": "41943243"
+          }
+        },
+        {
+          "route": "anthropic-cache-off",
+          "withImage": false,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943171,
+            "sha256": "a1ef4e53c277a170a929af4f63aa31c904ab471a97ed031c53f63faff6908879"
+          },
+          "actual": {
+            "bytes": 41943171,
+            "sha256": "a1ef4e53c277a170a929af4f63aa31c904ab471a97ed031c53f63faff6908879",
+            "contentLength": "41943171"
+          }
+        },
+        {
+          "route": "anthropic-cache-off",
+          "withImage": true,
+          "textBytes": 41943040,
+          "expected": {
+            "length": 41943279,
+            "sha256": "cbd81da4b6f9f09553dfd41f80521a1ea4ef901c4090d839d708894d3a684909"
+          },
+          "actual": {
+            "bytes": 41943279,
+            "sha256": "cbd81da4b6f9f09553dfd41f80521a1ea4ef901c4090d839d708894d3a684909",
+            "contentLength": "41943279"
+          }
+        }
+      ],
+      "receipt": {
+        "path": "tmp/854-notes/p4/w23/planning-run-d/accept/006-measurements.jsonl",
+        "sha256": "55862923e7a1edac60f2759e34d3fa595cc2bef8de3c3d22918c2aab04d0559d"
+      },
+      "execution": {
+        "index": 6,
+        "path": "packages/providers/src/__tests__/journal-large-native-send.test.ts",
+        "sourceHash": "7c6a6c501a8bc219be2b86f77d90eea96b5ba3729093c2fed0aeaee4ad1988fc",
+        "log": "tmp/854-notes/p4/w23/planning-run-d/accept/006.log",
+        "xml": "tmp/854-notes/p4/w23/planning-run-d/accept/006.xml",
+        "logSha256": "b6cf5e3e027ddb055587fccf21859fc1cd79997ca290f319d778ac72e0c2222c",
+        "junitSha256": "114057032e9d36ea35a2138df89bd8d0a645dc6da024cebeb8a2d9fc4bbc6d9a",
+        "driverPid": 75646,
+        "pid": 76846,
+        "command": "bun test ./src/__tests__/journal-large-native-send.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/planning-run-d/accept/006.xml",
+        "cwd": "packages/providers",
+        "started": "2026-10-20T07:05:36.928Z",
+        "status": "green",
+        "code": 0,
+        "signal": null,
+        "finished": "2026-10-20T07:05:44.271Z",
+        "summary": "8 pass\n 0 fail\n 72 expect() calls\nRan 8 tests across 1 file. [7.30s]"
+      },
+      "scope": "Eight historical actual native sends rehashed, not rerun or counted in this fourteen-file lane. Current reachable send/read paths rebound by named files; no newly measured single-row 40 MiB or all-route memory claim."
+    }
+  },
+  "remaining": {
+    "w23": "Eight unchanged zero-decoded-row header/planning assertions only; phase-5 normalization and phase-6 converter/filter facts through phase-7 keyed summaries/measurers.",
+    "header": {
+      "entries": [
+        {
+          "index": 0,
+          "path": "tmp/854-notes/p4/w23/planning-run-d/planning-refusal.test.ts",
+          "sourceHash": "9686c37615e050e4f6164aceb4e3a4578d0a6ef35d6da1e605a53fda4eeef93c",
+          "log": "tmp/854-notes/p4/w23/planning-run-d/header/000.log",
+          "xml": "tmp/854-notes/p4/w23/planning-run-d/header/000.xml",
+          "logSha256": "a87f843c76ebf9f943010e1dc0b5198e7f4c2b41fe82745b4186e0ff8cc7241f",
+          "junitSha256": "a961a5226345d9c3662cef956be3badff963a60ed181c89a45e362fa54e975c1",
+          "driverPid": 78338,
+          "pid": 78345,
+          "cwd": "packages/providers",
+          "expectedRed": true,
+          "command": "bun test ./../../tmp/854-notes/p4/w23/planning-run-d/planning-refusal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/planning-run-d/header/000.xml",
+          "started": "2026-10-20T07:07:17.348Z",
+          "status": "red",
+          "code": 1,
+          "signal": null,
+          "finished": "2026-10-20T07:07:35.013Z",
+          "summary": "0 pass\n 4 fail\n 20 expect() calls\nRan 4 tests across 1 file. [17.56s]"
+        },
+        {
+          "index": 1,
+          "path": "tmp/854-notes/p4/w23/planning-run-d/planning-declared-refusal.test.ts",
+          "sourceHash": "31c8977ec0951bbe54f720b52befcf335d40db72efc3f7e60abbbb8ca165a6b7",
+          "log": "tmp/854-notes/p4/w23/planning-run-d/header/001.log",
+          "xml": "tmp/854-notes/p4/w23/planning-run-d/header/001.xml",
+          "logSha256": "412e8074f86efd4e78a7ff895119afa708e56f2a2722a006bcaf8b0fe3ea003e",
+          "junitSha256": "cc9e3171940d23e3287fbb1a76c5ea18fedb6febcccd632532b155db5d5d5103",
+          "driverPid": 78338,
+          "pid": 78559,
+          "cwd": "packages/providers",
+          "expectedRed": true,
+          "command": "bun test ./../../tmp/854-notes/p4/w23/planning-run-d/planning-declared-refusal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/planning-run-d/header/001.xml",
+          "started": "2026-10-20T07:07:35.013Z",
+          "status": "red",
+          "code": 1,
+          "signal": null,
+          "finished": "2026-10-20T07:07:42.230Z",
+          "summary": "0 pass\n 4 fail\n 20 expect() calls\nRan 4 tests across 1 file. [7.14s]"
+        }
+      ],
+      "copies": [
+        {
+          "path": "tmp/854-notes/p4/w23/planning-run-d/planning-refusal.test.ts",
+          "sha256": "9686c37615e050e4f6164aceb4e3a4578d0a6ef35d6da1e605a53fda4eeef93c"
+        },
+        {
+          "path": "tmp/854-notes/p4/w23/planning-run-d/planning-declared-refusal.test.ts",
+          "sha256": "31c8977ec0951bbe54f720b52befcf335d40db72efc3f7e60abbbb8ca165a6b7"
+        }
+      ]
+    },
+    "frontend": "Closed at mapped native/shared/old boundaries; retire-first ACP preserved. INVALIDORACLE/OUTOFSCOPE live fallback stays out of queue.",
+    "w24": "Independent lifecycle/write-budget evidence may proceed without closing W23/W24 or changing the default.",
+    "unchanged": [
+      "old default",
+      "phase-4 send spools",
+      "WebSocket whole-frame assembly",
+      "W24-W26 closure",
+      "later normalization/filter/summary/blob-lease/deletion proof"
+    ]
+  },
+  "processes": [
+    { "pid": 51454, "active": false },
+    { "pid": 51461, "active": false },
+    { "pid": 51507, "active": false },
+    { "pid": 51615, "active": false },
+    { "pid": 52733, "active": false },
+    { "pid": 53608, "active": false },
+    { "pid": 54627, "active": false },
+    { "pid": 54708, "active": false },
+    { "pid": 54869, "active": false },
+    { "pid": 54940, "active": false },
+    { "pid": 54976, "active": false },
+    { "pid": 55217, "active": false },
+    { "pid": 55914, "active": false },
+    { "pid": 56678, "active": false },
+    { "pid": 57831, "active": false },
+    { "pid": 51618, "active": false },
+    { "pid": 52734, "active": false },
+    { "pid": 53610, "active": false },
+    { "pid": 55555, "active": false },
+    { "pid": 55575, "active": false },
+    { "pid": 55633, "active": false },
+    { "pid": 55725, "active": false },
+    { "pid": 55763, "active": false },
+    { "pid": 55796, "active": false },
+    { "pid": 55820, "active": false },
+    { "pid": 55850, "active": false },
+    { "pid": 55875, "active": false },
+    { "pid": 56225, "active": false },
+    { "pid": 56253, "active": false },
+    { "pid": 56295, "active": false },
+    { "pid": 56396, "active": false },
+    { "pid": 56437, "active": false },
+    { "pid": 56473, "active": false },
+    { "pid": 56515, "active": false },
+    { "pid": 56562, "active": false },
+    { "pid": 56606, "active": false },
+    { "pid": 55252, "active": false },
+    { "pid": 57853, "active": false },
+    { "pid": 57025, "active": false },
+    { "pid": 57042, "active": false },
+    { "pid": 57062, "active": false },
+    { "pid": 57103, "active": false },
+    { "pid": 57135, "active": false },
+    { "pid": 57181, "active": false },
+    { "pid": 57234, "active": false },
+    { "pid": 57275, "active": false },
+    { "pid": 57290, "active": false },
+    { "pid": 57299, "active": false },
+    { "pid": 57312, "active": false },
+    { "pid": 57324, "active": false },
+    { "pid": 57334, "active": false },
+    { "pid": 57345, "active": false },
+    { "pid": 57362, "active": false },
+    { "pid": 57383, "active": false },
+    { "pid": 57440, "active": false },
+    { "pid": 57514, "active": false },
+    { "pid": 57565, "active": false },
+    { "pid": 57665, "active": false },
+    { "pid": 57698, "active": false },
+    { "pid": 57723, "active": false },
+    { "pid": 57743, "active": false },
+    { "pid": 57760, "active": false },
+    { "pid": 57777, "active": false },
+    { "pid": 57799, "active": false },
+    { "pid": 55938, "active": false },
+    { "pid": 58158, "active": false },
+    { "pid": 58177, "active": false },
+    { "pid": 58195, "active": false },
+    { "pid": 58241, "active": false },
+    { "pid": 58262, "active": false },
+    { "pid": 58311, "active": false },
+    { "pid": 58349, "active": false },
+    { "pid": 58395, "active": false },
+    { "pid": 58410, "active": false },
+    { "pid": 58427, "active": false },
+    { "pid": 58444, "active": false },
+    { "pid": 58483, "active": false },
+    { "pid": 58530, "active": false },
+    { "pid": 56710, "active": false }
+  ],
+  "mutations": "None performed; package sources and immutable inputs match. No cleanup/obstruction move, .llxprt edit/staging, assertion/bound/timeout/check change, skipped test, OCR, push or merge.",
+  "launch": "Initial managed shell with trailing ampersand exited before Bun started: empty driver.log, no PID/inventory/measurement. Managed nohup without trailing ampersand started the one actual fourteen-file execution; no measurement was retried.",
+  "review": "review skipped per Andrew 2026-10-09",
+  "validation": {
+    "path": "tmp/854-notes/p4/w23/source-rebind-run-m/receipt-validation.json",
+    "sha256": "4ff3928606f2e9666a36098adec5afdee269927093dd90a95f38915a7ab2885f",
+    "sourceCount": 7746,
+    "immutableCount": 44,
+    "receiptHashCount": 169,
+    "absentPids": 79,
+    "scope": "Receipt/source/corpus verification and scoped added-document formatting. No product/test source change, so no declaration/type/build/package sweep repeated.",
+    "authoring": "Validator-a compared equivalent totals by JSON key order; corrected semantic field comparison. Validator-c also applies the original forty-compression minimum. No workload/predicate/timeout/bound changed and no test was rerun."
+  },
+  "routeMap": {
+    "selected": [
+      "openai-chat-plain",
+      "openai-chat-kimi",
+      "openai-chat-mistral",
+      "openai-responses-via-openai",
+      "openai-responses",
+      "anthropic-cache-1h",
+      "anthropic-cache-off"
+    ],
+    "dumps": [
+      "openai-chat-plain",
+      "openai-chat-kimi",
+      "openai-chat-mistral",
+      "anthropic-cache-1h",
+      "anthropic-cache-off"
+    ],
+    "continuation": [
+      "openai-chat-plain",
+      "openai-chat-kimi",
+      "openai-chat-mistral"
+    ],
+    "imageRecovery": ["anthropic-cache-1h", "anthropic-cache-off"],
+    "rejectedParent": ["openai-responses-via-openai", "openai-responses"],
+    "storedImageLiveness": [
+      "openai-chat-plain",
+      "openai-responses-via-openai",
+      "openai-responses",
+      "anthropic-cache-off"
+    ],
+    "sendPeak": [
+      {
+        "route": "openai-chat-plain",
+        "shapes": ["text-only"],
+        "estimate": true
+      },
+      {
+        "route": "anthropic-cache-1h",
+        "shapes": ["text-only"],
+        "estimate": true
+      },
+      {
+        "route": "openai-responses-via-openai",
+        "shapes": ["text-only", "tool-heavy"],
+        "estimate": false
+      },
+      {
+        "route": "openai-responses",
+        "shapes": ["text-only"],
+        "estimate": false
+      }
+    ],
+    "limit": "These exact routes/shapes executed. No all-route, all-shape or unset-route claim."
+  }
+}
