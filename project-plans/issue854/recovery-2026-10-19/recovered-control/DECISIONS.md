@@ -1,3 +1,7 @@
+## W23 frontend recorder fixtures, 2026-10-20
+
+Use the backend-selected recorder in CLI mutation fixtures, retaining JSONL-only marker assertions on old and independently reading native committed rows on journal. Join history commit/mirror delivery before opening the independent disk snapshot. A recorder flush does not join the history mirror queue; premature snapshots produced three count failures even though live history had the correct prefix. No production change is justified by that fixture race. Preserve native recorder roots for inspection and retain original row ownership, media rollback and timeout limits. The first subset passes eleven cases per backend and six scoped gates. Actual CLI/ACP/A2A native protocol integration and listing/title repairs remain open. Eight before-row-decode planning checks remain open on the phases 5/6 to 7 dependency. No rollout or default flip follows this subset.
+
 # Recovered decision guidance
 
 ## W23 exact-length refusal and the stored-summary dependency, 2026-10-20

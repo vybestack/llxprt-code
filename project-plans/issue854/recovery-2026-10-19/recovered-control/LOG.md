@@ -1,3 +1,7 @@
+## W23 frontend first subset, 2026-10-20
+
+Verified HEAD `40be79a2d`, collected the 27-file native baseline serially, then repaired the shared CLI mutation fixture and durable readers. Final acceptance `frontend-run-e/cli-accept-{native,old}` passes eleven cases each with zero failures/skips; six `cli-accept-gates` pass and touched audit findings are zero. Durable proof `W23-FRONTEND-FIRST-PROOF.json` binds source/log/JUnit hashes. Setup import/syntax/lint errors and three premature mirror-snapshot failures remain preserved. No production change. Listing/title and actual CLI/zed/a2a native protocol work remains queued. Planning's eight decoded-row-free cases remain open on phases 5/6 through 7, separate from this subset. No cleanup, .llxprt staging, weakened enforcement, OCR, push, merge or default flip.
+
 # Recovery chronology, reconstructed
 
 ## W23 pre-transport envelope refusal, 2026-10-20

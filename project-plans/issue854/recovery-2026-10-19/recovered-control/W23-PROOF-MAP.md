@@ -1,5 +1,9 @@
 # W23 proof map
 
+
+## Frontend mutation subset, 2026-10-20T07:26Z
+
+`W23-FRONTEND-FIRST-PROOF.json` binds five isolated executions per backend and six green gates, 22 passing cases total with zero failures/skips. Paths: CLI `src/ui/commands/chat-mutation-stream.test.ts` (four cases per backend), `chat-mutation-failures.test.ts` (one), `chat-mutation-media.test.ts` (two), `chat-mutation-anchor.test.ts` (two), `chat-mutation-cancel.test.ts` (two). Native uses the selected locked recorder, attached real HistoryService and independent `JournalSession.rows()` after the history commit/mirror barrier. Old retains JSONL rewind assertions. Exact live/durable prefix, display counts, rollback digest/tokens/anchor/media lifetime and cancellation remain checked without full-history arrays or relaxed bounds. This is settled-recording proof, not a new UI-before-durability ordering claim. Raw root `tmp/854-notes/p4/w23/frontend-run-e/`, lanes `cli-accept-native`, `cli-accept-old`, `cli-accept-gates`. Broader frontdoor protocol and listing/title fixture work remains open; eight decoded-row-free planning failures depend on phases 5/6 through 7.
 ## Exact known-length refusal, 2026-10-20
 
 Implementation `f1236a8dc`; proof `W23-PLANNING-REFUSAL-PROOF.json`; raw root `tmp/854-notes/p4/w23/planning-run-d/`. `accept/000..027` has 1,258 passes across 28 isolated file executions, zero failures/skips. `accept-gates/000..005` has six green scoped gates, zero touched audit findings. Raw/JUnit totals and final source hashes agree. There is no whole-package or affected-shard execution claim.

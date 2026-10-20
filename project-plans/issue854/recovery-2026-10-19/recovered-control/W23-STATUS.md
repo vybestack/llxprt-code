@@ -1,5 +1,13 @@
 # W23 bounded integration and provider parity
 
+
+## Frontend first subset, 2026-10-20T07:26Z
+
+Starting HEAD verified `40be79a2d54ae96d63baa5507dc67bba969ca381`. The 27-file native baseline is complete under `tmp/854-notes/p4/w23/frontend-run-e/baseline-a/`. CLI mutation tests attached a JSONL recorder to native history; listing/title fixtures also encode the retired layout. The shared mutation fixture now selects the matching recorder. Durable assertions independently stream native rows or the original JSONL fold after `HistoryService.waitForCommit()` and recorder flush. Recorder flush alone does not join asynchronous mirror deliveries. The three intermediate count failures were missing that existing test boundary, not evidence of a product mutation defect.
+
+First accepted subset: five files, eleven passes on each backend, zero failures/skips. Original 512/8192-row inputs, 440-row bounds, rollback/media/cache/cancellation assertions and timeouts remain. Old positive rewind-marker checks remain; both backends now check exact durable row count and digest. Six scoped gates pass, including CLI declarations and noemit/test types with Node/Bun/test-global ambient declarations; touched audit findings zero. `W23-FRONTEND-FIRST-PROOF.json` SHA-256 `32078b49f44bb89da9e0b82bd8c435dba38b3988d7e9a648af71275393c1a4f4` binds source and receipts. Earlier import, syntax and lint failures remain recorded. No production source changed.
+
+Still open: CLI listing fixtures and actual handler save/restore/continue/fork; Zed native listing/title and actual ACP session/tool/load; A2A native HTTP task/recording protocol. Existing baseline protocol passes are not new durable-native proof. Eight decoded-row-free planning cases remain open pending phases 5/6 through 7 and do not block this work. W23 remains partial; W24-W26 and default selection unchanged. Review skipped per Andrew 2026-10-09.
 ## Oversized transport entry fixed; stored-summary refusal remains open, 2026-10-20
 
 Implementation commit `f1236a8dc` starts from verified `a95282299df84f9a0e2acc59e6b28f60fcb6019c`. Responses already knew its exact serialized length but only checked the envelope cap while HTTP consumed the stream. The shared execution planner now rejects before request-size reporting and transport entry, using that memoized length. HTTP keeps its 134,217,728-byte limit. WebSocket keeps its existing 33,554,432-byte complete-frame limit and includes the `response.create` field bytes. Initial sends, rejected-parent recovery, rebuilt HTTP fallback and rebuilt WebSocket renewal use the same planner. No new history read, spool or body materialization was added.

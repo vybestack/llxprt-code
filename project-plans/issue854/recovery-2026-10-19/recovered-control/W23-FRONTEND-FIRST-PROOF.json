@@ -1,0 +1,181 @@
+{
+  "created": "2026-10-20T07:27:45.508Z",
+  "startingHead": "40be79a2d54ae96d63baa5507dc67bba969ca381",
+  "rawRoot": "tmp/854-notes/p4/w23/frontend-run-e",
+  "source": [
+    {
+      "path": "packages/cli/src/ui/commands/chat-mutation-test-helpers.ts",
+      "sha256": "2ac9c576f6464f6e084af64d14f488d367711628a193f7bc2d76cb811290d84a"
+    },
+    {
+      "path": "packages/cli/src/ui/commands/chat-mutation-stream.test.ts",
+      "sha256": "1037591f08e17c9b680382e9f88b9048442d171ae410598804453128bea27edd"
+    },
+    {
+      "path": "packages/cli/src/ui/commands/chat-mutation-media.test.ts",
+      "sha256": "7882d989c5240261640fb6ebbb4a2a2aa0832fb20d0814ad32907d2e5a42a4a6"
+    }
+  ],
+  "receipts": [
+    {
+      "lane": "cli-accept-native",
+      "path": "packages/cli/src/ui/commands/chat-mutation-stream.test.ts",
+      "sourceSha256": "1037591f08e17c9b680382e9f88b9048442d171ae410598804453128bea27edd",
+      "summary": "4 pass\n 0 fail\n 24 expect() calls\nRan 4 tests across 1 file. [36.56s]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/000.log",
+      "logSha256": "2f3a1bde4a86cfbd5a7e7b06db5b2018772a1c534f32a8ef2c687bbef54f9338",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/000.xml",
+      "xmlSha256": "ab85605aabe33aba3696a8e51da29b434da2e044593428bb08e9ffc562e18f68"
+    },
+    {
+      "lane": "cli-accept-native",
+      "path": "packages/cli/src/ui/commands/chat-mutation-failures.test.ts",
+      "sourceSha256": "87260d6139504830fff0ee0d7e6e2c2d7f8f3b407ba90abb4c0a1165ffcfc941",
+      "summary": "1 pass\n 0 fail\n 2 expect() calls\nRan 1 test across 1 file. [1.87s]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/001.log",
+      "logSha256": "89fe04bd490e1b8d83cd74f0d94df587d51df93087e310b5a75b3502bf00f69b",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/001.xml",
+      "xmlSha256": "bab0828c32b2df5f6078e49137c52de26cd5cc5d8417be4223dd0d11d82c5b7f"
+    },
+    {
+      "lane": "cli-accept-native",
+      "path": "packages/cli/src/ui/commands/chat-mutation-media.test.ts",
+      "sourceSha256": "7882d989c5240261640fb6ebbb4a2a2aa0832fb20d0814ad32907d2e5a42a4a6",
+      "summary": "2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [1434.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/002.log",
+      "logSha256": "511c68c78603c7b4fe6e0b658bfb84e79400781cd7325e01f72b4cda7c01d160",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/002.xml",
+      "xmlSha256": "fcdae00bb95d2ca3d8009631faf8b70fa82bea268c36d4564a7e710ceede9dab"
+    },
+    {
+      "lane": "cli-accept-native",
+      "path": "packages/cli/src/ui/commands/chat-mutation-anchor.test.ts",
+      "sourceSha256": "544043c4e4fe47a24fbcd56b39bd3897a2c56fba362ca52bb72f23fc5cc9e2f2",
+      "summary": "2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [1332.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/003.log",
+      "logSha256": "34c69198ff8644e56505d7f84bed769beeda7d6e38c6795666b08d3a0cdb563a",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/003.xml",
+      "xmlSha256": "922ae955e9ebca441f6ad800d46bcb46ba7dee54fbd1dedd6ca04346ace18037"
+    },
+    {
+      "lane": "cli-accept-native",
+      "path": "packages/cli/src/ui/commands/chat-mutation-cancel.test.ts",
+      "sourceSha256": "c986a2f9c89ef03929a232ca59fb150cc9af368a0ec72a3a6e2520f2b20afdf2",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [1338.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/004.log",
+      "logSha256": "ebc28d86fa169a2401f0fe34467a75cc1049d59c49f5ab9043f23f5c0998a444",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-native/004.xml",
+      "xmlSha256": "77eaafb207a95c975de33bcbb8c7232ae269fac75477e13829603ead4ed1b12b"
+    },
+    {
+      "lane": "cli-accept-old",
+      "path": "packages/cli/src/ui/commands/chat-mutation-stream.test.ts",
+      "sourceSha256": "1037591f08e17c9b680382e9f88b9048442d171ae410598804453128bea27edd",
+      "summary": "4 pass\n 0 fail\n 28 expect() calls\nRan 4 tests across 1 file. [15.67s]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/000.log",
+      "logSha256": "a8416541e36c40392f0a123cfc0a5ed8cf4d56382399277a6dd7a0147c202cad",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/000.xml",
+      "xmlSha256": "7fadb8cb544870352e61c3d49aeae3434baf4a7ecc7ae3c58ec0c6ec09e45869"
+    },
+    {
+      "lane": "cli-accept-old",
+      "path": "packages/cli/src/ui/commands/chat-mutation-failures.test.ts",
+      "sourceSha256": "87260d6139504830fff0ee0d7e6e2c2d7f8f3b407ba90abb4c0a1165ffcfc941",
+      "summary": "1 pass\n 0 fail\n 2 expect() calls\nRan 1 test across 1 file. [1490.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/001.log",
+      "logSha256": "75d734e5676635d5bbe9f5444b2298855c194fa413c1e1886461b988d6fff79c",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/001.xml",
+      "xmlSha256": "d2d613ff49b29e77b349466b8c8393912a67ddd6c9c72f49be71f552c2bbef04"
+    },
+    {
+      "lane": "cli-accept-old",
+      "path": "packages/cli/src/ui/commands/chat-mutation-media.test.ts",
+      "sourceSha256": "7882d989c5240261640fb6ebbb4a2a2aa0832fb20d0814ad32907d2e5a42a4a6",
+      "summary": "2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [1296.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/002.log",
+      "logSha256": "c1a4958b0630ddb988b679a80c872246cf38674ef4ad9c5418a5143835e4fe2d",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/002.xml",
+      "xmlSha256": "d9adfde165dbf8a45987a19eb6664c5fa1f0a30cfef0c8c0ff30c98a0951db4c"
+    },
+    {
+      "lane": "cli-accept-old",
+      "path": "packages/cli/src/ui/commands/chat-mutation-anchor.test.ts",
+      "sourceSha256": "544043c4e4fe47a24fbcd56b39bd3897a2c56fba362ca52bb72f23fc5cc9e2f2",
+      "summary": "2 pass\n 0 fail\n 2 expect() calls\nRan 2 tests across 1 file. [1205.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/003.log",
+      "logSha256": "2b74af43cb47caddea7a9b0e9a782110f08837f516b4242aaf729717189b48dd",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/003.xml",
+      "xmlSha256": "b057ff5105bed0becfcaaa273deb291f38bded804a6f0cecc609c9e362dfd9d9"
+    },
+    {
+      "lane": "cli-accept-old",
+      "path": "packages/cli/src/ui/commands/chat-mutation-cancel.test.ts",
+      "sourceSha256": "c986a2f9c89ef03929a232ca59fb150cc9af368a0ec72a3a6e2520f2b20afdf2",
+      "summary": "2 pass\n 0 fail\n 8 expect() calls\nRan 2 tests across 1 file. [1242.00ms]",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/004.log",
+      "logSha256": "d3fb64ad6bea7acfb583ac4b72726226ddf34eb372029a6a11bf2d088a787278",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-old/004.xml",
+      "xmlSha256": "b6a2d5439d605535eeb8d10ad18b593caf47adf6607360a4bbe52775edf0e3d9"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "build-types-cli",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/build-types-cli.log",
+      "logSha256": "a69b141ea33fe7711b5f8ba329bd421f4215c05989bfd0232e6b2dbd099e8213"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "types-cli",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/types-cli.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "lint",
+      "command": "node_modules/.bin/eslint --max-warnings 0 packages/cli/src/ui/commands/chat-mutation-test-helpers.ts packages/cli/src/ui/commands/chat-mutation-stream.test.ts packages/cli/src/ui/commands/chat-mutation-media.test.ts",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/lint.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "format",
+      "command": "node_modules/.bin/prettier --check packages/cli/src/ui/commands/chat-mutation-test-helpers.ts packages/cli/src/ui/commands/chat-mutation-stream.test.ts packages/cli/src/ui/commands/chat-mutation-media.test.ts",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/format.log",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "affected-graph",
+      "command": "bun scripts/check-affected-test-shards.ts",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/affected-graph.log",
+      "logSha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "lane": "cli-accept-gates",
+      "gate": "audit",
+      "command": "bun scripts/test-audit/scan.ts tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/audit",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/frontend-run-e/cli-accept-gates/audit.log",
+      "logSha256": "8fe930a97d6239ebf14ca0c9fd262204841d088129ea996c6227ae2ebd24ddc3"
+    }
+  ],
+  "scope": "First subset only: selected recorder, streamed durable-row verification after history commit/mirror barrier, original old rewind markers; 11 cases on each backend. No UI-wide or frontend protocol completion claim.",
+  "open": [
+    "CLI list/delete fixtures",
+    "Zed listing/title fixtures",
+    "Actual CLI save/restore/continue/fork handler integration",
+    "Actual Zed ACP session persistence/tool/load protocol",
+    "A2A HTTP task/native recording protocol",
+    "Eight decoded-row-free planning checks: phases 5/6 -> 7",
+    "Remaining W23 suffix/curated/borrowed/native randomized cases",
+    "W24-W26; old backend remains default"
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}

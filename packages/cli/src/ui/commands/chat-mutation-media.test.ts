@@ -1,15 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
 import type {
   IContent,
   AgentClientContract,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
-import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
+import {
+  recordedChatRows,
+  withChatMutationFixture,
+} from './chat-mutation-test-helpers.js';
 
 const image =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -45,21 +46,6 @@ async function digest(rows: AsyncIterable<IContent>): Promise<string> {
   const hash = createHash('sha256');
   for await (const row of rows) hash.update(JSON.stringify(row));
   return hash.digest('hex');
-}
-
-async function durableDigest(file: string): Promise<string> {
-  const fold = await foldDurableRows({
-    filePath: file,
-    maxBytes: (await stat(file)).size,
-  });
-  const hash = createHash('sha256');
-  try {
-    for (let index = 0; index < fold.length; index++)
-      hash.update(JSON.stringify(await fold.readRow(index)));
-    return hash.digest('hex');
-  } finally {
-    await fold.close();
-  }
 }
 
 async function mediaReference(
@@ -116,7 +102,7 @@ for (const name of ['clear', 'restore']) {
             if (file === null) throw new Error('Missing recording');
             expect({
               live: await digest(client.getChat().getHistory()),
-              durable: await durableDigest(file),
+              durable: await digest(recordedChatRows(recording, history)),
               tokens: history.getTotalTokens(),
               anchor: history.getCacheAnchorSeq(),
             }).toStrictEqual({

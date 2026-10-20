@@ -1,19 +1,33 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import { z } from 'zod';
+import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
+import {
+  recordedChatRows,
+  withChatMutationFixture,
+} from './chat-mutation-test-helpers.js';
+
+async function assertJsonlCut(path: string, removed: number): Promise<void> {
+  const schema = z.object({ payload: z.object({ itemsRemoved: z.number() }) });
+  const cuts = (await readFile(path, 'utf8'))
+    .split('\n')
+    .filter((line) => line.includes('"type":"rewind"'))
+    .map((line) => schema.parse(JSON.parse(line)).payload.itemsRemoved)
+    .filter((itemsRemoved) => itemsRemoved > 0);
+  expect(cuts).toStrictEqual([removed]);
+}
 
 for (const size of [512, 8192]) {
   for (const name of ['clear', 'restore']) {
     describe(`${name} live chat stream ${size}`, () => {
-      it('persists the human-turn cut before publishing the byte-identical disk prefix', async () => {
+      it('restores the human-turn prefix in live history, UI and the settled recording', async () => {
         await withChatMutationFixture(
           size,
-          async ({ context, client, recording, reader }) => {
+          async ({ context, history, client, recording, reader }) => {
             let displayed = 0;
             context.ui.addItem = () => ++displayed;
             const result = await chatCommand.subCommands
@@ -38,21 +52,24 @@ for (const size of [512, 8192]) {
             expect(reader.snapshot().peakRows).toBeLessThanOrEqual(440);
             const path = recording.getFilePath();
             if (path === null) throw new Error('Missing recording path');
-            const cuts = (await readFile(path, 'utf8'))
-              .split('\n')
-              .filter((line) => line.includes('"type":"rewind"'))
-              .map((line) => JSON.parse(line).payload.itemsRemoved as number)
-              .filter((removed) => removed > 0);
-            expect(cuts).toStrictEqual([size - expectedCount]);
-            const fold = await foldDurableRows({
-              filePath: path,
-              maxBytes: (await stat(path)).size,
-            });
-            try {
-              expect(fold.length).toBe(expectedCount);
-            } finally {
-              await fold.close();
+            if (isJsonlRecorder(recording))
+              await assertJsonlCut(path, size - expectedCount);
+            const durable = createHash('sha256');
+            const durableExpected = createHash('sha256');
+            let durableCount = 0;
+            for await (const row of recordedChatRows(recording, history)) {
+              durable.update(JSON.stringify(row.blocks));
+              durableExpected.update(
+                JSON.stringify(accountingRow(durableCount++).blocks),
+              );
             }
+            expect({
+              count: durableCount,
+              digest: durable.digest('hex'),
+            }).toStrictEqual({
+              count: expectedCount,
+              digest: durableExpected.digest('hex'),
+            });
           },
         );
       }, 180_000);
