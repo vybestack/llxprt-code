@@ -15,6 +15,7 @@
 import { type OAuthTokenWithExtras } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -39,20 +40,36 @@ export async function handleRefreshLockMiss(
 ): Promise<OAuthToken | null> {
   logger.debug(
     () =>
-      `[FLOW] Failed to acquire refresh lock for ${providerName}, checking disk...`,
+      `[FLOW] Failed to acquire refresh lock for ${providerName}, waiting for refreshed token...`,
   );
-  const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
-  signal?.throwIfAborted();
-  if (reloadedToken && reloadedToken.expiry > thirtySecondsFromNow) {
-    logger.debug(
-      () => `[FLOW] Token was refreshed by another process for ${providerName}`,
-    );
-    proactiveRenewalManager.scheduleProactiveRenewal(
-      providerName,
-      bucketToUse,
-      reloadedToken,
-    );
-    return reloadedToken;
+  for (let attempt = 0; attempt < 1400; attempt += 1) {
+    signal?.throwIfAborted();
+    const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
+    signal?.throwIfAborted();
+    if (
+      reloadedToken &&
+      reloadedToken.expiry >
+        Math.max(thirtySecondsFromNow, Math.floor(Date.now() / 1000) + 30)
+    ) {
+      logger.debug(
+        () =>
+          `[FLOW] Token was refreshed by another process for ${providerName}`,
+      );
+      proactiveRenewalManager.scheduleProactiveRenewal(
+        providerName,
+        bucketToUse,
+        reloadedToken,
+      );
+      return reloadedToken;
+    }
+    if (attempt < 1399) {
+      try {
+        await sleep(25, undefined, { signal });
+      } catch (error) {
+        signal?.throwIfAborted();
+        throw error;
+      }
+    }
   }
   return null;
 }
