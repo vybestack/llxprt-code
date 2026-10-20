@@ -23,12 +23,22 @@ import {
 const BEFORE_SHA256 =
   '61780e2313d471bf6acf26568a53306ddfa1b17d90245d4b6193c93dad1029fc';
 const OBSERVATION_BATCHES = ['observation-final-journal-l-b'];
+const CORE_FAULT_BATCHES = [
+  'fault-final-journal-m-a',
+  'fault-deferred-final-journal-m-b',
+  'fault-changed-final-journal-m-c',
+];
+const OBSERVATION_CONTRACT_BATCHES = [
+  ...OBSERVATION_BATCHES,
+  ...CORE_FAULT_BATCHES,
+];
 const REQUEST_BATCHES = [
   'request-middle-final-journal-k-b',
   'request-one-final-journal-k-b',
 ];
 const REQUEST_NATIVE_BATCHES = [
   ...REQUEST_BATCHES,
+  ...CORE_FAULT_BATCHES,
   'request-related-final-journal-k-b',
   'request-related-completion-journal-k-e',
   'request-media-final-journal-k-h',
@@ -160,6 +170,10 @@ function acceptedBatches(
     {
       reference: 'core-observation-run-l/verify-current.json',
       batches: OBSERVATION_BATCHES,
+    },
+    {
+      reference: 'core-fault-run-m/verify-current.json',
+      batches: CORE_FAULT_BATCHES,
     },
   ];
   return layers.flatMap((layer) =>
@@ -312,7 +326,7 @@ function classify(
     const observationMatches =
       row.accepted &&
       row.backend === 'journal' &&
-      OBSERVATION_BATCHES.includes(row.batch) &&
+      OBSERVATION_CONTRACT_BATCHES.includes(row.batch) &&
       observation?.sourceHash === row.sourceHash;
     const known = observationMatches
       ? observation
@@ -361,12 +375,12 @@ function classify(
         contract?.provenance ?? 'no-exact-case-contract',
     };
   });
-  const coverageContracts = OBSERVATION_BATCHES.includes(row.batch)
+  const coverageContracts = OBSERVATION_CONTRACT_BATCHES.includes(row.batch)
     ? observationContracts
     : requestContracts;
   const missingCoverage =
     row.accepted &&
-    [...REQUEST_BATCHES, ...OBSERVATION_BATCHES].includes(row.batch) &&
+    [...REQUEST_BATCHES, ...OBSERVATION_CONTRACT_BATCHES].includes(row.batch) &&
     row.cases.some((test) => {
       const contract = coverageContracts.get(caseKey(row.path, test));
       if (
@@ -467,6 +481,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   ]);
   const observationContracts = classificationContracts(w22, [
     'core-observation-run-l/classification.json',
+    'core-fault-run-m/classification.json',
   ]);
   const checkpoints = [
     join(run, 'accounting.json'),
