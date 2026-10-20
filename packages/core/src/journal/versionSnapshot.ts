@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
+import type { KimiOccurrence } from './kimiFactCodec.js';
 import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
 import { readMistralMapping, type MistralMapping } from './mistralMapping.js';
 import { nextCuratedEntry } from './curatedQueries.js';
@@ -80,6 +81,14 @@ export class VersionSnapshot {
 
   kimiDigitCorrection(): Promise<number> {
     return this.kimiFacts.digitCorrection();
+  }
+
+  kimiUnmappedCount(): Promise<number> {
+    return this.kimiFacts.unmappedCount();
+  }
+
+  kimiHolders(rawId: string): AsyncGenerator<KimiOccurrence> {
+    return this.kimiFacts.holders(rawId);
   }
 
   kimiEligibleCount(): Promise<number> {

@@ -163,6 +163,7 @@ describe('native Kimi emitted mapping corrections', () => {
     );
     const ids = ['x', 'call_x', 'hist_tool_x', 'toolu_x', 'call_'];
     const cases: ReadonlyArray<readonly IContent[]> = [
+      [{ speaker: 'tool', blocks: [{ ...response('x'), toolName: '' }] }],
       [
         {
           speaker: 'tool',

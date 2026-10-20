@@ -60,13 +60,11 @@ export class KimiFactQueries {
     );
     const hasAi = ai !== undefined && decodeCountValue(ai) > 0;
     const responses = counts.aiResponses + counts.otherResponses;
+    const mappedResponses = last === undefined ? 0 : counts.aiResponses;
     return {
       ...counts,
       last,
-      writtenUses:
-        counts.aiCalls +
-        counts.aiResponses +
-        (hasAi ? 0 : counts.otherResponses),
+      writtenUses: counts.aiCalls + (hasAi ? mappedResponses : responses),
       unmappedUses: last === undefined ? counts.aiCalls + responses : 0,
     };
   }
@@ -123,6 +121,32 @@ export class KimiFactQueries {
       if (fact === undefined)
         throw new JournalFormatError('Missing Kimi exception fact');
       yield fact;
+    }
+  }
+
+  async unmappedCount(): Promise<number> {
+    let total = 0;
+    for await (const fact of this.exceptions()) total += fact.unmappedUses;
+    return total;
+  }
+
+  async *holders(rawId: string): AsyncGenerator<KimiOccurrence> {
+    const fact = await this.idFact(rawId);
+    if (fact === undefined) return;
+    const identity = this.identity(rawId);
+    for (const [field, count] of [
+      [KIMI_FIELD.calls, fact.callCount],
+      [KIMI_FIELD.responses, fact.aiResponses + fact.otherResponses],
+    ]) {
+      for (let ordinal = 1; ordinal <= count; ordinal++) {
+        const value = await this.snapshot.facts.getEntry(
+          ID_NS.occurrence,
+          kimiKey(field, ordinal, identity),
+        );
+        if (value === undefined)
+          throw new JournalFormatError('Missing emitted Kimi holder');
+        yield decodeKimiOccurrence(value);
+      }
     }
   }
 
