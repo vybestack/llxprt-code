@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import type { SummaryOutput } from './summaryOutput.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
@@ -77,53 +78,63 @@ async function runDiskSummary(
   const origin = args[7]?.historyOrigin;
   const previous = await history.openDumpSnapshot();
   let curated: HistoryDensityRows | undefined;
-  const candidate = new HistoryDensityRows();
-  try {
+  const attempt = async (): Promise<DiskSummaryOutcome> => {
     curated = await curatedDensityRows(previous.rows());
     const context = { ...metadata, history: curated };
     const strategy =
       name === 'middle-out' ? new MiddleOutStrategy() : new OneShotStrategy();
-    let result: Awaited<ReturnType<MiddleOutStrategy['compressDisk']>>;
+    let result: SummaryOutput;
     try {
-      result = await retryWithBackoff(
-        () => strategy.compressDisk(context, candidate),
-        {
-          maxAttempts: 3,
-          initialDelayMs: 2000,
-          maxDelayMs: 10000,
-          shouldRetryOnError: shouldRetryCompressionError,
-        },
-      );
+      result = await retryWithBackoff(() => strategy.prepareDisk(context), {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
+        maxDelayMs: 10000,
+        shouldRetryOnError: shouldRetryCompressionError,
+      });
       if (name === 'middle-out' && result.kind === 'noop')
-        result = await new OneShotStrategy().compressDisk(context, candidate);
+        result = await new OneShotStrategy().prepareDisk(context);
     } catch (primaryError) {
       if (!isFallbackEligibleCompressionError(primaryError)) throw primaryError;
       metadata.logger.warn(
         'Primary disk compression failed, attempting fallback truncation',
         primaryError,
       );
-      return await fallbackDisk(
-        context,
-        history,
-        previous,
-        primaryError,
-        origin,
-      );
+      return fallbackDisk(context, history, previous, primaryError, origin);
     }
     if (result.kind === 'noop') return { outcome: 'noop' };
     const summary = await applyCompressionValuesWithAnchor(
       history,
       previous,
-      candidate,
+      result.candidate,
       0,
       metadata.runtimeState.model,
       result.top,
       { origin },
     );
     return { outcome: 'applied', summary };
-  } finally {
-    candidate.close();
-    curated?.close();
-    await previous.close();
+  };
+  let result:
+    | { readonly outcome: DiskSummaryOutcome }
+    | { readonly error: unknown };
+  try {
+    result = { outcome: await attempt() };
+  } catch (error) {
+    result = { error };
   }
+  const failures: unknown[] = [];
+  for (const close of [() => curated?.close(), () => previous.close()]) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0)
+    throw new AggregateError(
+      'error' in result ? [result.error, ...failures] : failures,
+      'Compression attempt cleanup failed',
+      { cause: 'error' in result ? result.error : undefined },
+    );
+  if ('error' in result) throw result.error;
+  return result.outcome;
 }

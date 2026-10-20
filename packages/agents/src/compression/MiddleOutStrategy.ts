@@ -5,6 +5,7 @@
  */
 
 import { bindCompressionProvider } from './utils.js';
+import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
  * @plan PLAN-20260211-HIGHDENSITY.P03
@@ -96,6 +97,21 @@ export class MiddleOutStrategy implements CompressionStrategy {
     | { readonly kind: 'applied'; readonly top: number }
     | { readonly kind: 'noop' }
   > {
+    const result = await this.prepareDisk(context);
+    if (result.kind === 'applied')
+      for (let index = 0; index < result.candidate.length; index++)
+        candidate.append(
+          result.candidate.readRow(index),
+          result.candidate.sourceOrdinalAt(index),
+        );
+    return result;
+  }
+
+  async prepareDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: HistoryDensityRows;
+    },
+  ): Promise<SummaryOutput> {
     const plan = planDiskMiddleOut(context.history, context);
     if (plan === undefined) return { kind: 'noop' };
     const providerResult = destructureProviderResult(
@@ -114,24 +130,17 @@ export class MiddleOutStrategy implements CompressionStrategy {
       ),
       providerResult,
     );
-    for (let index = 0; index < plan.top; index++)
-      candidate.append(
-        context.history.readRow(index),
-        context.history.sourceOrdinalAt(index),
-      );
-    for (const row of this.summaryRows(
-      finalSummary,
-      context.activeTodos,
-      capturedUsage,
-      plan.lastPromptContext,
-    ))
-      candidate.append(row);
-    for (let index = plan.bottom; index < context.history.length; index++)
-      candidate.append(
-        context.history.readRow(index),
-        context.history.sourceOrdinalAt(index),
-      );
-    return { kind: 'applied', top: plan.top };
+    return summaryOutput(
+      context.history,
+      plan.top,
+      plan.bottom,
+      this.summaryRows(
+        finalSummary,
+        context.activeTodos,
+        capturedUsage,
+        plan.lastPromptContext,
+      ),
+    );
   }
 
   private async maybeVerifySummary(

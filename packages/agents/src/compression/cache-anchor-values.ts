@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
-import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import {
+  streamCompressionOutputRows,
+  type CompressionOutputRows,
+} from './summaryOutput.js';
 import type {
   DetachedHistoryOptions,
   DetachedHistorySink,
@@ -18,7 +21,7 @@ type Span = Awaited<ReturnType<typeof replacedSpan>>;
 
 async function writeCompressionValues(
   sink: DetachedHistorySink,
-  candidate: HistoryDensityRows,
+  candidate: CompressionOutputRows,
   start: number,
   top: number,
   annotation: Span,
@@ -26,9 +29,11 @@ async function writeCompressionValues(
   signal?: AbortSignal,
 ): Promise<void> {
   let index = 0;
-  for (let position = start; position < candidate.length; position++) {
-    signal?.throwIfAborted();
-    const row = candidate.readRow(position);
+  for await (const {
+    row,
+    position,
+    sourceOrdinal,
+  } of streamCompressionOutputRows(candidate, start, signal)) {
     if (row.speaker === 'ai' && row.blocks.length === 0) continue;
     const metadata = { ...row.metadata };
     if (
@@ -48,7 +53,7 @@ async function writeCompressionValues(
     const [clean] = invalidateResponsesStatefulChain([{ ...row, metadata }]);
     validateHistoryEntry(clean, index++);
     selectSummary(clean);
-    await appendCandidateRow(sink, clean, candidate.sourceOrdinalAt(position));
+    await appendCandidateRow(sink, clean, sourceOrdinal);
   }
 }
 
@@ -58,7 +63,7 @@ export async function applyCompressionValuesWithAnchor(
     'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
   >,
   previous: HistoryDumpSource,
-  candidate: HistoryDensityRows,
+  candidate: CompressionOutputRows,
   start: number,
   model: string,
   top = 0,
