@@ -67,6 +67,31 @@ async function fixture(): Promise<{
 }
 
 describe('native recording media archive', () => {
+  it('keeps caller media annotations in the row without copying them into ownership state', async () => {
+    const { store, archive, recording } = await fixture();
+    try {
+      const reference = await store.admit({
+        bytes: new Uint8Array([3, 2, 1]),
+        mimeType: 'image/png',
+        semanticMetadata: { annotation: 'long annotation '.repeat(8192) },
+      });
+      const session = await recording.session();
+      await session.append([{ speaker: 'human', blocks: [reference] }]);
+      let count = 0;
+      for await (const row of session.rows()) {
+        count++;
+        expect(row.content.blocks).toStrictEqual([reference]);
+      }
+      expect(count).toBe(1);
+      expect(await archive.readVerified(reference)).toStrictEqual(
+        new Uint8Array([3, 2, 1]),
+      );
+    } finally {
+      await recording.dispose();
+      await store.close();
+      await archive.close();
+    }
+  });
   it('retains both objects through clear and checkpoints, releases its lease and hydrates a reopened recording', async () => {
     const { root, store, archive, recording } = await fixture();
     const bytes = new Uint8Array([2, 4, 6, 8]);
@@ -148,8 +173,8 @@ describe('native recording media archive', () => {
   });
 
   for (const failure of ['archive', 'journal'] as const) {
-    it(`reports ${failure} publication failure without releasing another recording's objects`, async () => {
-      const { store, archive, recording, rejectArchive, rejectJournal } =
+    it(`reports ${failure} publication failure while preserving previously committed objects`, async () => {
+      const { root, store, archive, recording, rejectArchive, rejectJournal } =
         await fixture();
       const old = await store.admit({
         bytes: new Uint8Array([1, 2, 3]),
@@ -164,7 +189,7 @@ describe('native recording media archive', () => {
       const session = await recording.session();
       try {
         await session.append([{ speaker: 'human', blocks: [old] }]);
-        const before = session.store.published?.commitSeq;
+        expect(session.store.published?.commitSeq).toBe(2);
         if (failure === 'archive') rejectArchive();
         else rejectJournal();
         await expect(
@@ -174,7 +199,10 @@ describe('native recording media archive', () => {
             ? 'archive publication refused'
             : 'journal durability refused',
         );
-        expect(session.store.published?.commitSeq).toBe(before);
+        expect(session.store.published).toMatchObject({
+          commitSeq: 2,
+          rows: 1,
+        });
         expect(await archive.hasReservations(next.contentId)).toBe(false);
         expect(await archive.hasReservations(old.contentId)).toBe(true);
         expect(await archive.readVerified(old)).toStrictEqual(
@@ -186,6 +214,16 @@ describe('native recording media archive', () => {
       } finally {
         await recording.dispose();
         expect(await archive.hasReservations(old.contentId)).toBe(false);
+        const recovered = await JournalSession.open(session.path);
+        await recovered.close();
+        await archive.reclaimUnreferenced(
+          await projectRecordedContentIds(root),
+          Date.now(),
+        );
+        expect(await archive.getStoredByteLength()).toBe(old.byteLength);
+        expect(await archive.readVerified(old)).toStrictEqual(
+          new Uint8Array([1, 2, 3]),
+        );
         await store.close();
         await archive.close();
       }

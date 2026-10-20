@@ -45,6 +45,30 @@ function decodeEntry(bytes: Uint8Array): MediaEntry {
   };
 }
 
+function ownershipReference(
+  reference: MediaReferenceBlock,
+): MediaReferenceBlock {
+  return {
+    type: 'media',
+    encoding: 'reference',
+    mimeType: reference.mimeType,
+    contentId: reference.contentId,
+    originalContentId: reference.originalContentId,
+    selectedContentId: reference.selectedContentId,
+    byteLength: reference.byteLength,
+    normalizedBase64Length: reference.normalizedBase64Length,
+    originalObject: reference.originalObject,
+    selectedObject: reference.selectedObject,
+    dimensions: reference.dimensions,
+    semanticMetadata: {},
+    transformation: {
+      policyId: 'recording-archive',
+      policyVersion: 1,
+      parameters: {},
+    },
+  };
+}
+
 function identity(reference: MediaReferenceBlock): string {
   return `${reference.originalContentId}/${reference.selectedContentId}`;
 }
@@ -178,7 +202,7 @@ class RecordingMediaCommit implements CommitEffect {
     if (committed !== undefined && decodeEntry(committed).lease === this.lease)
       return;
     const entry: MediaEntry = {
-      reference,
+      reference: ownershipReference(reference),
       lease: this.lease,
       previous: this.head,
     };

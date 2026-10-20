@@ -277,6 +277,33 @@ describe('native CLI command protocol', () => {
         await observer.close();
         await archive.close();
       }
+      const reopened = await createAgent({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: 'reopening-cli',
+        workingDir: root,
+        interactive: true,
+        folderTrust: true,
+        coreTools: [],
+      });
+      try {
+        await reopened.session.resume(stableId);
+        expect(await durable(await recording(reopened))).toStrictEqual(initial);
+        const freshStore = reopened.agentClient.mediaStore;
+        if (freshStore === undefined)
+          throw new Error('Missing reopened media owner');
+        const bytes = await freshStore.readVerified(media);
+        expect(Buffer.from(bytes).toString('base64')).toBe(image);
+        expect(bytes.byteLength).toBe(media.selectedObject.byteLength);
+        expect(
+          `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+        ).toBe(media.contentId);
+        expect(freshStore.rootDirectory).not.toBe(store.rootDirectory);
+        await turn(reopened, 'reopened image question');
+        expect((await durable(await recording(reopened))).count).toBe(4);
+      } finally {
+        await reopened.dispose();
+      }
     } finally {
       await agent.dispose();
       for (const key of [
