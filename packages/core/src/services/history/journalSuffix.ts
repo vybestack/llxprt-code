@@ -2,6 +2,8 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import { countDecodedRow } from './journalRowCounters.js';
 
 /** The first of the last `count` rows; a count that is not a positive number keeps the whole history. */
 function recentStart(length: number, count: number): number {
@@ -15,15 +17,21 @@ async function tokenSuffixStart(
   query: Extract<HistorySuffixQuery, { kind: 'tokens' }>,
   signal: AbortSignal | undefined,
   resumeBoundary: bigint | undefined,
+  counters: JournalReadCounters | undefined,
 ): Promise<number> {
   let start = snapshot.rows;
   let total = 0;
   while (start > 0) {
     signal?.throwIfAborted();
     const entry = await snapshot.entryAt(start - 1);
-    const tokens = query.countTokens(
-      decodeStoredRow(await snapshot.readRow(entry), resumeBoundary),
-    );
+    const row = decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
+    const release = countDecodedRow(row, counters);
+    let tokens: number;
+    try {
+      tokens = query.countTokens(row);
+    } finally {
+      release();
+    }
     if (!(total + tokens <= query.maxTokens)) break;
     total += tokens;
     start -= 1;
@@ -37,8 +45,9 @@ export async function suffixStart(
   query: HistorySuffixQuery | undefined,
   signal: AbortSignal | undefined,
   resumeBoundary?: bigint,
+  counters?: JournalReadCounters,
 ): Promise<number> {
   if (query === undefined) return 0;
   if (query.kind === 'recent') return recentStart(snapshot.rows, query.count);
-  return tokenSuffixStart(snapshot, query, signal, resumeBoundary);
+  return tokenSuffixStart(snapshot, query, signal, resumeBoundary, counters);
 }

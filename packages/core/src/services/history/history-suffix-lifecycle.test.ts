@@ -8,6 +8,7 @@ import { HistoryJournalStore } from './historyJournalStore.js';
 import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
+import { selectBackend } from './historyBackendSelect.js';
 
 type Query = 'recent' | 'tokens';
 type Exit = 'return' | 'break' | 'throw' | 'abort';
@@ -72,7 +73,12 @@ async function verifyExit(query: Query, exit: Exit): Promise<number> {
     const created = scratchDirectories().filter(
       (directory) => !before.includes(directory),
     );
-    expect(created.length).toBeGreaterThan(0);
+    if (selectBackend() === 'old') expect(created.length).toBeGreaterThan(0);
+    else {
+      expect(created).toHaveLength(0);
+      await service.clear();
+      expect(service.length()).toBe(0);
+    }
     try {
       const failure = await exitStream(iterator, exit, controller);
       const expected: Record<Exit, string | undefined> = {
@@ -124,6 +130,7 @@ describe('token suffix selection failures', () => {
     await withCoreSuffixFixture(4, async (service, ownership) => {
       const before = scratchDirectories();
       const stream = service.getWithinTokenLimit(100, (row) => {
+        expect(ownership.snapshot().liveRows).toBe(1);
         if (rowIndex(row) === 2) throw new Error('token count failed');
         return 1;
       });

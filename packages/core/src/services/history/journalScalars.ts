@@ -28,7 +28,13 @@ export async function* streamSnapshotRows(
 ): AsyncGenerator<IContent, void, unknown> {
   try {
     signal?.throwIfAborted();
-    const start = await suffixStart(snapshot, query, signal, boundary);
+    const start = await suffixStart(
+      snapshot,
+      query,
+      signal,
+      boundary,
+      counters,
+    );
     for await (const entry of snapshot.entries(start)) {
       signal?.throwIfAborted();
       const row = decodeStoredRow(await snapshot.readRow(entry), boundary);
