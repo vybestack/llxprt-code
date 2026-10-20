@@ -7,10 +7,57 @@ import { RowOwnership } from '../../recording/rowOwnership.js';
 import { withNativeBorrowedFixture } from './__tests__/support/native-borrowed-fixture.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { IContent } from './IContent.js';
+import { historyOriginId } from './historyOriginId.js';
+import { borrowedRow } from './borrowed-snapshot-test-helpers.js';
 
 const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 
 describe('native borrowed snapshot controls', () => {
+  it('pins source ordinals and owners across later publication and clear without decoding row facts', async () => {
+    await withNativeBorrowedFixture(512, 2048, async (history, owners) => {
+      const left = {};
+      const right = {};
+      await history.addBatch(
+        [{ speaker: 'human', blocks: [{ type: 'text', text: 'left' }] }],
+        undefined,
+        { origin: left },
+      );
+      await history.addBatch(
+        [{ speaker: 'ai', blocks: [{ type: 'text', text: 'right' }] }],
+        undefined,
+        { origin: right },
+      );
+      const acquired = owners.snapshot().acquisitions;
+      await history.readRows(async (view) => {
+        expect(view.length).toBe(514);
+        await history.addBatch(
+          [{ speaker: 'human', blocks: [{ type: 'text', text: 'later' }] }],
+          undefined,
+          { origin: right },
+        );
+        await history.clear();
+        expect(history.length()).toBe(0);
+        expect(view.length).toBe(514);
+        expect(await view.originAt(0)).toBeUndefined();
+        expect(await view.originAt(512)).toBe(historyOriginId(left));
+        expect(await view.originAt(513)).toBe(historyOriginId(right));
+        expect(await view.chronologySeqAt(511)).toBe(512);
+        expect(owners.snapshot().acquisitions).toBe(acquired);
+        let count = 0;
+        for await (const row of view.rows()) {
+          const expected: IContent['blocks'] =
+            count < 512
+              ? borrowedRow(count).blocks
+              : [{ type: 'text', text: count === 512 ? 'left' : 'right' }];
+          expect(row.blocks).toStrictEqual(expected);
+          count++;
+        }
+        expect(count).toBe(514);
+      });
+      expect(owners.snapshot().liveRows).toBe(0);
+    });
+  });
+
   it.each([512, 8192])(
     'keeps the scoped pinned version after public clear at %i rows',
     async (size) => {

@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { RowEntry } from '../../journal/rowEntry.js';
+import type { StoredRow } from '../../journal/rowReads.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { IContent } from './IContent.js';
@@ -46,6 +49,54 @@ describe('journal store scalars and last rows', () => {
     open.push(store);
     return store;
   }
+  it('answers scalars without row reads and each last-speaker lookup with one row read at 8192 rows', async () => {
+    const store = await created();
+    const speakers = ['human', 'ai', 'tool'] as const;
+    store.replaceAll(
+      Array.from({ length: 8192 }, (_, index) =>
+        row(speakers[index % 3], String(index), index + 1),
+      ),
+    );
+    await store.waitForDurable();
+    let decoded = 0;
+    const read = VersionSnapshot.prototype.readRow;
+    const rows = spyOn(VersionSnapshot.prototype, 'readRow').mockImplementation(
+      function (this: VersionSnapshot, entry: RowEntry): Promise<StoredRow> {
+        decoded++;
+        return read.call(this, entry);
+      },
+    );
+    const scan = spyOn(VersionSnapshot.prototype, 'entries').mockImplementation(
+      () => {
+        throw new Error('scalar whole-history scan');
+      },
+    );
+    try {
+      expect(store.statistics()).toStrictEqual({
+        totalMessages: 8192,
+        userMessages: 2731,
+        aiMessages: 2731,
+        toolCalls: 0,
+        toolResponses: 0,
+      });
+      expect(store.contextBoundary()).toStrictEqual({
+        firstSeq: 1,
+        lastSeq: 8192,
+        totalEntries: 8192,
+        approximate: false,
+      });
+      expect(decoded).toBe(0);
+      expect(textOf(await store.lastContent())).toBe('8191');
+      expect(textOf(await store.lastContent('human'))).toBe('8190');
+      expect(textOf(await store.lastContent('ai'))).toBe('8191');
+      expect(textOf(await store.lastContent('tool'))).toBe('8189');
+      expect(decoded).toBe(4);
+    } finally {
+      scan.mockRestore();
+      rows.mockRestore();
+    }
+  });
+
   it('finds the newest marked position through an unmarked tail and rewind', async () => {
     const store = await created();
     expect(await store.currentTurnMarker()).toBeNull();
