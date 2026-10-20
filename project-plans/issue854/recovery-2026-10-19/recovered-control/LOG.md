@@ -1,3 +1,13 @@
+## W23 ACP fault/live increment, 2026-10-20
+
+Verified `0874e592e`, committed first green cause-preservation subset `84c7f1b44`, then independent Agent/Config cleanup and live/concurrency proof `0c4930819`. Swallowed disposal errors and nested-finally overwrite each have native behavioral RED and rejecting restored-source control. A shared `.jsonl` lister mismatch was corrected to select the actual extension; no original test body/assertion/timeout changed.
+
+Final acceptance combines four unchanged journal native receipts from accept-a with the dependency-rebound accept-b set: 68 isolated files/390 passes/1218 assertions, zero failures/skips, including 22 native passes. Six scoped gates pass; graph validation is not shard execution. Both mutations restore with `cmp`, then four restored positives pass. All 7744 package hashes/44 frozen inputs match; all 41 original test files in the 49-file map remain unchanged. Two new audit duplicate notices concern separate lifecycle phases, not mirror or self-confirming assertions. Exact source/case/receipt hashes and 90 absent recorded PIDs are in `W23-ACP-FAULT-PROOF.json`; raw root `tmp/854-notes/p4/w23/acp-fault-run-l/`.
+
+The requested prior-owner preservation has a separate observed native RED: failed replacement replay finds the prior recorder inactive, because retirement precedes build/resume/replay. The proof embeds the reproducer and binds its log/JUnit. Original part06 requires retirement before replacement failure and no remaining session, while part10 requires failed reattach removal; those assertions remain intact. Directory-probe preservation is proved, but read/replay/swap/cleanup preservation after retirement and unexercised startup aggregation remain open. No ownership handoff, retry, backend-specific semantics or green substitution was invented.
+
+W23 remains partial. Original retention/marker/read-cost/provider rebind and eight zero-decode header failures on phases 5/6 through 7 remain. No W24/default flip, cleanup/obstruction move, `.llxprt` edit/staging, raw recovery bulk staging, weaker check, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
 ## W23 native monitoring and remaining-contract reconciliation, 2026-10-20T10:28:45Z
 
 Verified starting `issue854` HEAD `00cdb5ae98e75bfa5da528a107f854d860b11243`. Kept native driver 36257 running with no product edits or overlapping heavy gates. Two four-tick spaced polls are preserved in workspace-local `tmp/854-notes/p4/w23/monitor-reconcile-20261020-43130/`. At the verified snapshot child 51333 runs seeds 1800..1899.

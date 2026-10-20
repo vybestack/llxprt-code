@@ -1,3 +1,25 @@
+## ACP live/delivery/cleanup increment, 2026-10-20
+
+`W23-ACP-FAULT-PROOF.json` binds source commits `84c7f1b44` and `0c4930819`, exact JUnit case identities/hashes, final-source receipts and the remaining preservation RED. Raw authority is `tmp/854-notes/p4/w23/acp-fault-run-l/`. The historical 49-file input is preserved; all 41 original test bodies remain byte-identical to starting `0874e592e`.
+
+| Actual boundary | Executed source and classification | Result and limit |
+| --- | --- | --- |
+| First/partial disk replay delivery failure, clean subsequent load, durable prefix and later turn | `zed-native-load-fault.test.ts`, NATIVE | Two public ACP cases, 0/2 accepted text updates before external consumer rejection, no surviving failed owner/lock, unchanged reopened rows and later durable continuation. |
+| Consumer plus recorder-close error identity | Same file, NATIVE | Exact ACP replay cause, Agent cleanup cause and outer aggregate cause/order; independent lock release and later load. Swallowed-cleanup mutation rejects. |
+| Independent recorder/Agent and Config cleanup errors | `zed-native-cleanup-fault.test.ts`, NATIVE | Real disposal executes before each injected external failure. Both causes survive; later native load/turn/close works. Prior nested-finally source rejects; accepted bytes restore with `cmp`. |
+| Live same-ID disk replacement and separate-session routing | `zed-native-live-load.test.ts`, NATIVE | Prior recorder inactive after success, one active final recorder, unrelated recording unchanged, later turns go to the correct file. Does not prove prior survival after failed replacement. |
+| Concurrent loads and rejection followed by queued load | Same file, NATIVE | Real replay-consumer gate holds the first load; final owner/lock and durable prefix/continuation are checked. Original same-ID serialization remains allowed. Native exactly-once disposal instrumentation is not added; original part13 retains that SHARED assertion. |
+| Nonempty unrecorded live reattach; failed delivery removal | Same file, NATIVE live history, no durable recording claim | Real native history replays after genuine recording-start failure. No borrowed recorder or lock is installed. Failed replay removes the session under the original contract. |
+| Directory-probe failure before retirement | Same file, NATIVE | Original error identity, active prior recorder/lock and later durable write preserved. It does not cover reads after retirement. |
+| Tool/close/load/replay/continue protocol | Existing `zed-native-session-protocol.test.ts`, NATIVE | Existing four-row tool prefix and eight-row continued file, replay notifications and foreign-cwd refusal rerun on final sources. |
+| Original Config isolation, stale/flush/cancel, cleanup, load/error/replay and options | Exact Zed paths/cases in proof executions, SHARED | Run in isolated processes in both environments. Filename lister follows selected extension; original assertions/timeouts unchanged. Outer journal does not establish native durability. |
+| A2A mixed approval/cancel, task/HTTP and restore | `agent/task.approval-semantics.test.ts`, `agent/task.test.ts`, `http/app.test.ts`, `commands/restore.test.ts`, SHARED | Existing assertions rerun in both environments. Restore is workspace restoration, not a conversation/recorder feature. |
+| Stronger prior-owner preservation after failed replacement | Embedded `replacement-preservation.test.ts`, NATIVE RED | One observed assertion failure: expected active prior owner, got inactive. Retirement precedes replacement replay. Original part06 instead asserts prior disposal/no remaining session; no original assertion was weakened. Preservation and startup/swap cleanup aggregation beyond the exercised route remain open. |
+
+Effective matrix: 68 isolated file executions/390 passes/1218 assertions, zero accepted failures/skips; 22 native passes. Six scoped gates pass. Two deliberate source controls fail behaviorally, restore byte-identically and have four restored-positive passes. All 7744 package hashes, 44 immutable inputs and committed touched blobs match. Two new DUP_ASSERT notices compare conservation at separate lifecycle phases; no new high-risk audit finding. All 90 recorded PIDs are absent; no mutation remains.
+
+Retention/marker/read-cost/provider rebind remains pending; 33/35 historical retention entries is not current-source proof. Eight zero-decode planning/header RED assertions remain phases 5/6 through 7. W23 is partial, W24-W26/default/spools unchanged. Review skipped per Andrew 2026-10-09.
+
 ## CLI failure and reference-selection proof, 2026-10-20T11:28Z
 
 | Claim                                             | Executed evidence                                                                                | Boundary                                                                                                                                                                                                                 |

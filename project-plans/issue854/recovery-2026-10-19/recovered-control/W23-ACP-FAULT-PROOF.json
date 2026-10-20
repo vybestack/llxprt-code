@@ -1,0 +1,1791 @@
+{
+  "created": "2026-10-20T11:55:43.325Z",
+  "startingHead": "0874e592e583f84b319a03fcad71a25041ee3d42",
+  "firstGreenCommit": "84c7f1b44",
+  "sourceCommit": "0c493081979dd6443915930ec0ffd65dca236594",
+  "rawRoot": "tmp/854-notes/p4/w23/acp-fault-run-l",
+  "status": "Bounded ACP replay/cleanup and live/concurrency increment is green. Prior-owner preservation after replacement replay remains a separate observed RED. W23 partial.",
+  "totals": {
+    "acceptedFileExecutions": 68,
+    "passes": 390,
+    "assertions": 1218,
+    "failures": 0,
+    "skips": 0,
+    "nativeFileExecutions": 8,
+    "nativePasses": 22,
+    "qualityGates": 6,
+    "additionalRestoredPositivePasses": 4,
+    "deliberateSourceControlFailures": 2,
+    "openNativePreservationFailures": 1
+  },
+  "source": [
+    {
+      "path": "packages/zed-acp/src/zedIntegration.ts",
+      "sha256": "c7529d6b31d15afa75a40130bbcf7bc5ddedae6f417a6d2340ddf7982e5bd669"
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-agent.ts",
+      "sha256": "fb5ab74645c3c72fc14822f1ae563ec49a4686539e0c92fcfc6ff6b74d6b8c9e"
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-errors.ts",
+      "sha256": "10b25a78955dc20c661985a4345cd9be58cc3f9fac9f11484986e39cc16669c5"
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-load-fault.test.ts",
+      "sha256": "88f43f4c70b0731af511d6ad30562be0d311ec9455494590bf9b5e6ee523af04"
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-live-load.test.ts",
+      "sha256": "9a75097d807c4917e619d348ac1e5a506b8e18bf3da78b3109a4e2803f136998"
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-cleanup-fault.test.ts",
+      "sha256": "9859abf55f5368211c5f6acf2a16430b86ca2ce95e6e90fb2f732f5456f72a59"
+    },
+    {
+      "path": "packages/zed-acp/src/__tests__/support/native-acp-fault-fixture.ts",
+      "sha256": "3bb3f10b18547b64222c619e2804442774c5cd2c1ac30d1a7e5370891beb9365"
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.test-helpers.ts",
+      "sha256": "5df1eca93f03476f5654f20c5c6c15ed2797aaf3a0a057cbecb1fb732bb32520"
+    }
+  ],
+  "allPackageSource": {
+    "entries": 7744,
+    "mismatches": [],
+    "manifest": {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/sources.json",
+      "sha256": "d95caafd68060fef41e09891dc464d274144e724e4e79ac226ca40e2ab37aebd"
+    },
+    "committedTouchedSourcesMatch": true
+  },
+  "frozen": {
+    "files": 44,
+    "allUnchanged": true,
+    "inventory": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/inventory.json",
+      "sha256": "2b5dbe3d3572bddef7e23cc0f8c3dd98f7483cc2f6b008165bc5a3f0fb694b89"
+    }
+  },
+  "frontendMap": {
+    "original": {
+      "path": "tmp/854-notes/p4/w23/monitor-contractmap-20261020-56475/frontend-map-inputs.json",
+      "sha256": "0f5b4ab5d6a0a5fae9b2733f8b2d4408ab642e5a3b988f88a4e86d5e03fa5241"
+    },
+    "originalFiles": 49,
+    "current": {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/frontend-map-current.json",
+      "sha256": "c9fb8db82537899eec09d24fc00da871810323cb79bbba958fb91ccf3cb378d7"
+    },
+    "originalTestFiles": 41,
+    "allOriginalTestSourcesUnchanged": true,
+    "caseReceipts": {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accepted-case-receipts.json",
+      "sha256": "538e6268e684cd7b4c3a72daaf32c12d78e48c924599edab65c4d988deed0d42"
+    }
+  },
+  "cases": [
+    {
+      "path": "packages/zed-acp/src/zed-native-load-fault.test.ts",
+      "backend": "journal",
+      "cases": [
+        {
+          "file": "src/zed-native-load-fault.test.ts",
+          "classname": "native ACP load ownership",
+          "name": "releases a disk load rejected after 0 replay updates and later loads without duplicating history",
+          "line": 12,
+          "assertions": 13
+        },
+        {
+          "file": "src/zed-native-load-fault.test.ts",
+          "classname": "native ACP load ownership",
+          "name": "releases a disk load rejected after 2 replay updates and later loads without duplicating history",
+          "line": 12,
+          "assertions": 13
+        },
+        {
+          "file": "src/zed-native-load-fault.test.ts",
+          "classname": "native ACP load ownership",
+          "name": "keeps the replay consumer and recorder cleanup failures with exact causes while releasing the native lock",
+          "line": 62,
+          "assertions": 10
+        }
+      ]
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-live-load.test.ts",
+      "backend": "journal",
+      "cases": [
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP live replacement and serialization",
+          "name": "runs a queued same-ID load after an earlier replay rejection without leaking either owner",
+          "line": 12,
+          "assertions": 9
+        },
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP live replacement and serialization",
+          "name": "replaces a live same-ID owner from disk and later writes only to its recording",
+          "line": 62,
+          "assertions": 12
+        },
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP live replacement and serialization",
+          "name": "serializes concurrent same-ID loads through replay completion and retains one promptable owner",
+          "line": 111,
+          "assertions": 13
+        },
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP live replacement and serialization",
+          "name": "preserves a live recorder and later durable writes when the replacement directory read fails",
+          "line": 168,
+          "assertions": 6
+        },
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP no-recording reattach",
+          "name": "reattaches a nonempty live native history without borrowing a recorder",
+          "line": 227,
+          "assertions": 6
+        },
+        {
+          "file": "src/zed-native-live-load.test.ts",
+          "classname": "native ACP no-recording reattach",
+          "name": "releases a nonempty live native history after external reattach delivery failure",
+          "line": 253,
+          "assertions": 5
+        }
+      ]
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-cleanup-fault.test.ts",
+      "backend": "journal",
+      "cases": [
+        {
+          "file": "src/zed-native-cleanup-fault.test.ts",
+          "classname": "native ACP independent cleanup",
+          "name": "reports replay, native recorder and session Config disposal failures independently and leaves a clean later load",
+          "line": 12,
+          "assertions": 14
+        }
+      ]
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-session-protocol.test.ts",
+      "backend": "journal",
+      "cases": [
+        {
+          "file": "src/zed-native-session-protocol.test.ts",
+          "classname": "native ACP session protocol",
+          "name": "records a real tool turn, closes, loads over ACP, and continues without duplicating durable rows",
+          "line": 43,
+          "assertions": 13
+        }
+      ]
+    }
+  ],
+  "executions": [
+    {
+      "path": "packages/zed-acp/src/zed-native-load-fault.test.ts",
+      "backend": "journal",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 3,
+      "assertions": 36,
+      "pid": 20812,
+      "sourceSha256": "88f43f4c70b0731af511d6ad30562be0d311ec9455494590bf9b5e6ee523af04",
+      "caseSha256": "18ea59ee7a49af477bf9c15392626120b70ae6542d773c76c6e5e3c6127fb9e8",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/0.log",
+        "sha256": "3e662ae0a3d8c297456e27c01c7490ec6fc532eeb359a23d672afd2c8959dde2"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/0.xml",
+        "sha256": "8b7fa2d7d26a1052fb5fbea3dd4c11694ff17fcf27e100b05e892907f4b19304"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-live-load.test.ts",
+      "backend": "journal",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 6,
+      "assertions": 51,
+      "pid": 20890,
+      "sourceSha256": "9a75097d807c4917e619d348ac1e5a506b8e18bf3da78b3109a4e2803f136998",
+      "caseSha256": "7d047f9a8b66a084cd01da685303503f5ce2814528021f848f7e05cbb0d73f42",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/1.log",
+        "sha256": "c8cdd42a0f973accdf753a8fe0a2f22e4f65291bb7103c382ac7779d384eb661"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/1.xml",
+        "sha256": "687d9f42cfcf58240486dddc1f7ad3df95f7f8896d2cf9ecc62ac39957e0d85e"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-cleanup-fault.test.ts",
+      "backend": "journal",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 1,
+      "assertions": 14,
+      "pid": 21006,
+      "sourceSha256": "9859abf55f5368211c5f6acf2a16430b86ca2ce95e6e90fb2f732f5456f72a59",
+      "caseSha256": "eeb342b53b0686b2a8b55d8250bae3a6721aa559be0a553b02885f609b8ec785",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/2.log",
+        "sha256": "34a7b6c7d1914a15f85de54bc3bf9872c9b274080fa62fb6833b61ac1e501ff4"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/2.xml",
+        "sha256": "ba7c402554b73b498c4ee184f46651169667da0aaa3264f84c4ba60ed7a4693f"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-session-protocol.test.ts",
+      "backend": "journal",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 1,
+      "assertions": 13,
+      "pid": 21048,
+      "sourceSha256": "58ec75844ac666e30c40dc35a476b2f2e65e61bf616fc772fae202ddfea47dde",
+      "caseSha256": "5e16efc730243cdc85f54c0b6a8460d2f9c3c139b2bc75217e77b439b88a8fa4",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/3.log",
+        "sha256": "e34a020eaac515bb6a31a7889ac67d315d6391408ecfa023f5de75b545630022"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-a/3.xml",
+        "sha256": "c53c67ef1ce95e1a506f7037d3a184af532dc9a43d145a3559f28cf4f7c8e0a0"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 9,
+      "assertions": 21,
+      "pid": 22317,
+      "sourceSha256": "2e6c716863bd1922ee150cdffb6bc1d37d7ede25f4a016799ec8028349f1d7c0",
+      "caseSha256": "99dde495c7cf7f7fb9a325891e8f5eef8cfe92e7edf202225508fd8266ba0c3e",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/0.log",
+        "sha256": "2af00e3331e54dd672bccb7cf18fdff0bda8b56f2d5cc6f1fb3d1c64e5f77ebd"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/0.xml",
+        "sha256": "b9ee9c5779ebe514a88887799d4f69e12a84b7f4223f87a0e57a276dcd92adc5"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part02.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 8,
+      "pid": 22346,
+      "sourceSha256": "2165d1da730bf59b54c8973294057ed2c327f2ede14f1a12a6aa7eb0ab8c9b64",
+      "caseSha256": "35a306d339f0f8e169dea824b8098122436fdc1c18dd11c21b39b08ba4c82e87",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/1.log",
+        "sha256": "96b9078a3f4588aaf356daa54ce10865e9450152d9e8b2922ebea1c8bb97a360"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/1.xml",
+        "sha256": "3570f29c31b5fa556a5a41cad05f5e30ef08c1929f3f3f41a834407d74fd2a43"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part03.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 4,
+      "pid": 22362,
+      "sourceSha256": "d200776bf46cbdb1ba2597401e9814494abd1df8247fa1d07227036319ea7293",
+      "caseSha256": "3aa942d884516a5a85d4a71c3d11f26093a5abc36e879e21250daa381ccc2064",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/2.log",
+        "sha256": "8a5e4ea8609ad98f4c5eff9d2250fa7c733a12e698bfe457b3de1ebeb5276cf9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/2.xml",
+        "sha256": "73160c7d9a9e605d938916931a3b83c2229366ae319765dacbf8742adb0001af"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part04.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 4,
+      "pid": 22383,
+      "sourceSha256": "e3ac53783dc613f5f5f00aff18593637bac6b54bfdcea4fb3ee719ed4fac725f",
+      "caseSha256": "089ae216e840e0bcc7bd0861ae6f535a46943ab5a3a1d218a7970c45ce9da8fe",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/3.log",
+        "sha256": "c3c0dca27cd6b109b9491c5954bd13ad34ce1c108a8b46f7d12a8fc3c6ec368e"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/3.xml",
+        "sha256": "ff381a284c0c0e69fc36e914d63ce91b1908812dd3733f3a96cc1259f70cb3fb"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part05.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 12,
+      "pid": 22403,
+      "sourceSha256": "f30efc11625b8b8f1710e3b70e67d53fea9c11e8b938e0e1a0bcfdd631a7c028",
+      "caseSha256": "37a6a73e3c27ab5d8e74c105f54b73f98566a2f8686d3b18c599ae141b346f47",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/4.log",
+        "sha256": "7c8b2b29c432006c64a78cc5b4731479972d9b1f915df6b100d3bc1e5224e2c9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/4.xml",
+        "sha256": "c2a56db353cc01ca844f6c1b3ac618fafa99d0e8b6a9e4f9e1f6e5d22acd039e"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part06.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 9,
+      "pid": 22421,
+      "sourceSha256": "3fbeef3441e60a85e33bb03993f09bdcbfc50d71b0d7ea1ddf70fd4fe1fd3301",
+      "caseSha256": "cf0fc65f0c04e97508fb9fce9ca9de2e409d127dd350076c466bb01195cc9490",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/5.log",
+        "sha256": "8ce4b61a3dbbd7c013b84dd24441fb23392c19fc2819dff130618d376cfa23ca"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/5.xml",
+        "sha256": "b04c2467f49ebd357f63370bed1ed96aa31edc432007d33a77617113cacebc30"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part07.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 5,
+      "pid": 22443,
+      "sourceSha256": "4abc73660da7c9bf4b49449b89f671f4521d39e536b06275010f5c8095d15e48",
+      "caseSha256": "702ff2d625279d7d669b11c2b608463707b193545c03c9cf1f289cbac0413524",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/6.log",
+        "sha256": "be6765f284a8d0ec54a4a6c9664fff258bb823768bf53fb41d6100c5bf46cf5c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/6.xml",
+        "sha256": "5c7e3245948ca2808d77c928d3494abcd00ad0e08fefc3e63a803d737b30ce2e"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part08.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 11,
+      "pid": 22464,
+      "sourceSha256": "2d7c720168234a605638823cae5af841631865faedc006c98ce9bc83071b06ff",
+      "caseSha256": "58bdbd910f71c398559e330cbcc158c5f5297ea30a3bd84ff050067851fecbac",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/7.log",
+        "sha256": "7888319fbf6974adf441f653ad211de042058a90005c1e788b0e1f287143deef"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/7.xml",
+        "sha256": "55ba3aa01bae134009111e7c77a09e9e5ef34982427d9b50570a2358c51fd0a2"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part09.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 4,
+      "pid": 22483,
+      "sourceSha256": "77c0069b6d7c8d1bfb250416e027c8b94123d25cbea77b864a3fcf9f4dc956ea",
+      "caseSha256": "a5e6b8d621442e6fdc1cc959c7de93c7327d80bbf4d46ef6480354777a737d6a",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/8.log",
+        "sha256": "31c50752131da8f9ff9e896eb39133f55a7a5056671f01ad511f4375cf4acfb0"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/8.xml",
+        "sha256": "943bd0eb56cd437885332280a61e4065aa91852d8b38a317d3512863a450e6e0"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part10.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 6,
+      "pid": 22501,
+      "sourceSha256": "b5b349c637a713019e94634180c5b53f69c698aa7064df010432f8c667e2cafd",
+      "caseSha256": "6bbfd50842a124e13236a08b9d54f500870773549d1b15fb131d151060a4ed60",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/9.log",
+        "sha256": "42766d0f3473778c4b46ce79ddb4597bf7ec6a955761b03c4e7099794605ef07"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/9.xml",
+        "sha256": "c53e79332fd990c8da996ec56fbde41f914acf4091a064a52ea30fc2499ef176"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part11.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 5,
+      "pid": 22511,
+      "sourceSha256": "ecf896079f6909e0cf97fcf46db6662332d1a1e3218f53da665b1313f1c5dbdb",
+      "caseSha256": "2cdc89a55040dd513b23a34643ac464aa1d640f6a2d78ed2fd59c5b9a9db1fe5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/10.log",
+        "sha256": "ea65120fdcf0e57cc4eb7a96d0cb4781e28550f9de4dccadb2e502c0933195b7"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/10.xml",
+        "sha256": "c2aa8508e9c412a77064e179b6565d977f9fdd20185d682ab2a9d42d091c2e52"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part12.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 7,
+      "pid": 22525,
+      "sourceSha256": "54a427a6def2d8ba9dfe64c9992b9fdab442ee46171054f08f9474893c2c3712",
+      "caseSha256": "9574c02feb6c6ca57b29314cc1c92c336f45bb279409bf660d469f527ddd88e0",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/11.log",
+        "sha256": "b028cd0a4eb1eb79475d7c2497da36342fd1456a1804490d324b042dc986d6bd"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/11.xml",
+        "sha256": "a838165eedeaabbb52c517dd3610d8c242d3926296cf163872a338188d99810d"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part13.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 9,
+      "pid": 22538,
+      "sourceSha256": "9ed72533c81c48fe2bf843cfe67a36de8e267731edb8443097f1d8e9b338bc96",
+      "caseSha256": "fb4e1bb226236b0cd7bfc88fd56a3d7909e707d21d19040a3d57b559d6feca60",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/12.log",
+        "sha256": "0166ed90c9477368b37359ffccf67ce38ce898b292d87ef0db8b9d097de50849"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/12.xml",
+        "sha256": "0866d4e764c8a4070517b4ff0ce4f7260eba9a6f10a1a88e65533be6b852c5e4"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 48,
+      "pid": 22558,
+      "sourceSha256": "e97485d106d6ab3d110cd05c598e12a83abac5d7938d2e6e6a8d040336d1e5fe",
+      "caseSha256": "a82aba5782d2483e3b664f1aac61ab0d301a86a6a837c0bc1c2da5cb5e0f3d21",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/13.log",
+        "sha256": "56f78eabd70ee177167fa8f09aac51ee2645e1553967aaa59969b97595d28999"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/13.xml",
+        "sha256": "00548b720bc85d1abc084770aea5d298cd5f3e7cba8bc656912d0a001070ca1c"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.stale.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 7,
+      "assertions": 8,
+      "pid": 22584,
+      "sourceSha256": "931b6b22869c8371b53132f8596873bf85bf196133b5b84e9abd0331a9f16722",
+      "caseSha256": "64fe247c0e9d2c69f434a861e0a74f9e695561004b4585cc6af06fd21cdaad41",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/14.log",
+        "sha256": "fb516c662baf02d7711f770fb60afe28c1f20c312555dc170062b7a19d4cddc6"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/14.xml",
+        "sha256": "f6966a4e1e7bc944f689c5a85e1261ce3dbaf80afff2ae2f80ff7ac537d950c6"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.streamFlush.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 4,
+      "pid": 22594,
+      "sourceSha256": "3c1f0a7eaae287d24c589c3bd1010bb95bb9088cf2874e5f87dce830a7c83ffc",
+      "caseSha256": "3ca4a61553c0e676470d25d8ae47ef9e77da55d22f139faffd1d93812e37d9b6",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/15.log",
+        "sha256": "888d12b44b83e93788745ed2f4f2cfd9a4ff77ab6ec2ee8f268d811db084a91f"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/15.xml",
+        "sha256": "eeab85643c3f81249994f2a97cf9dcb926a4198ee935672ed5401f60c82e845c"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.prompt.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 21,
+      "assertions": 53,
+      "pid": 22614,
+      "sourceSha256": "d8eb906a6a8b1731c43d95f9213b75304ad5ed6a49bc49ba0485e53ddaee3963",
+      "caseSha256": "407ee53ef562e2030ae88f0d6f720cfae8231dae0e1b859be513856d7ad793b2",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/16.log",
+        "sha256": "438e6784be877f83347b6b427f6cc6dd4046c3effa2eac93e570e7d7cbbfe720"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/16.xml",
+        "sha256": "2209b9af7622d7827995e533f6ace8750d4cdb496805cb9afa3e93c786ceaec0"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-cleanup.behavior.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 10,
+      "pid": 22638,
+      "sourceSha256": "25adc3e75f28ddc05194c56f7da646777acb08ce49df6981871c3e238478bc93",
+      "caseSha256": "c9ceef1fb77150e7d8dcfa936fed238924a5ec7d79bb1e19a041eee1ab85f142",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/17.log",
+        "sha256": "3358355b31c02d5a3ad9546710c3ba31d102383f5e4275a572186a25bd5d12a8"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/17.xml",
+        "sha256": "0d6f326fb4678e1fb9d72c431aed340fe0426d7ab583211997fc75cd99260f89"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-config-options.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 21,
+      "pid": 22663,
+      "sourceSha256": "fe1404b57f3880b1a02eb50569b97bebc82dccc541d57bebdac59ee8722d617b",
+      "caseSha256": "c100b1832f5c581163c85786b19a793c6bfdd7573d77fd4ce0d125b8cb1f6c4f",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/18.log",
+        "sha256": "52b35ed109157d496d4e0affabfa1e9bd0c290bd4f6788409c1b2a1c2cb1cb82"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/18.xml",
+        "sha256": "ff49b211fb0dd210f36b748667d23fa0ddfe341513db47f90fa66061eed1d636"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-lifecycle.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 12,
+      "assertions": 31,
+      "pid": 22675,
+      "sourceSha256": "9ef3575b71167dee1ddfb7058b9a639af7956aaf3f233973c1f147582e50ccf0",
+      "caseSha256": "f47c7bed7827b55a99405971bbf3a6ebff9de8dc6ed1b0f690fa8e91501ca5d0",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/19.log",
+        "sha256": "c7a9f7bf81b99722cb8c08fd10638c65838b4e192d8587d1068fefd8aa63a55f"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/19.xml",
+        "sha256": "8b5545cbde1a0cdd4acaf7cbf44bc688a800af0a49ab067a1b1b62bf74b940e2"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-loader.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 12,
+      "pid": 22691,
+      "sourceSha256": "2e8db9bde73639b876ec6207919fd870129c91b07e46f034a056c7fc9fdda590",
+      "caseSha256": "b8a9cc7280bd75a7efc2cb125ad676e24ed54d77f6548e37bf4c528ea8ef9f90",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/20.log",
+        "sha256": "4b90a5b820bdefd25e8b2cb7a373732fe5ab5c18cd6726c883df8a7b31e70efa"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/20.xml",
+        "sha256": "c686208f595e2c42ca001acc96fba45d36be9dd9e9c24eab0442a171ae0e1ed4"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 22,
+      "assertions": 22,
+      "pid": 22706,
+      "sourceSha256": "4d435bd741973ee43e363e3a9554fd9641c12c6a1566378739790e19ec46b52d",
+      "caseSha256": "fdb3f49d3205627cccf864b3383820b43c6868699e42e9fddfd52eb5e8b2d812",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/21.log",
+        "sha256": "bb24a160b9f59fbcf8aec8ad3135197c736eba7215c87435836e81c4809a579d"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/21.xml",
+        "sha256": "9ee7e6d28a66a12b0c340597f4ee1ed6cc25863d9ccbbe8d31c3e62617c9962a"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.edge-cases.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 3,
+      "pid": 22723,
+      "sourceSha256": "601be8390ed7ffa9c3e8042babb14b2c96d5fd68a75a6138707029a69ce7fe60",
+      "caseSha256": "81a9e9617448a3a834ac1e75f66ccfbe01eb4cac657d4b2371ac33cee378f7ae",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/22.log",
+        "sha256": "15429833825a238cede3daa5292dfe14ac08157f6cfab44d8522378149c99f40"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/22.xml",
+        "sha256": "d533b50b3b6f4dd369c40cec3156410eab13678ba58e55052b163d8fa8ac039d"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.malformed.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 27,
+      "assertions": 29,
+      "pid": 22732,
+      "sourceSha256": "cbaacdb708063c6d528ffe6423268bc3eca312badae4ddf67c891dfb645e176d",
+      "caseSha256": "99bad22607ba2bb13fd2ebc70870b42c16bc3b4c9ab50410d920949a15366af5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/23.log",
+        "sha256": "094a4f896060a37554cbd9a93afd19e02fa171fdf2025e4e448a5079eb3d82a0"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/23.xml",
+        "sha256": "f7cc688a9457ff0577221253b5fee85cfa9e07754a528ebf235b795cc61b76da"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.toolFailure.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 3,
+      "pid": 22742,
+      "sourceSha256": "ffecd58f60ea3e30d26f4f1a9e3c464c7ad0edef47b9089fc59438a1c69fbbd6",
+      "caseSha256": "8cf0942553600da48a2c7c539c6a5426df83eecee20f586a587537a87727efb5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/24.log",
+        "sha256": "de5dc359f914831afd6ffe5cf09dbf6283861457b276b6d33726e81dd393699c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/24.xml",
+        "sha256": "6637b086ea7d55fade733b32fc3f01a71a4011c62c1e6533bd77686722e52e52"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/runZedIntegration.cleanup.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 4,
+      "assertions": 4,
+      "pid": 22754,
+      "sourceSha256": "d1f03e23ec9a18352c69586dc53208539f6b06cd236dce89251ee7591610ccc8",
+      "caseSha256": "df2922a69e4d3f6d9cd256829d428a408bb5ec1f2bf7703f62bd2704840c5cbc",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/25.log",
+        "sha256": "a4f15a794ddc751a59553397fb653a95a27e7f92fafc143d890790cdc0dbc99c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/25.xml",
+        "sha256": "9f0fea3a395cb23e88f68b330e9482afd8bd18adcf7263f76b0e285b50324a23"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/agent/task.approval-semantics.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 2,
+      "assertions": 9,
+      "pid": 22775,
+      "sourceSha256": "0356533f489c3792d37a7df60316563edefd93fb33cdc29decaeda60b32d927f",
+      "caseSha256": "741a347f0b54ebc5eb42266414ef93c13b6daf9fcbca83de88b6254d996363f9",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/26.log",
+        "sha256": "ab7bc582f412d7240cc868716c612524de3181d8c1f0833a04306114c0626fd7"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/26.xml",
+        "sha256": "614529e6ae60d3a5b1b34a7366729cd90883b574de8335582b6213c68d7eb6ef"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/agent/task.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 7,
+      "assertions": 20,
+      "pid": 22812,
+      "sourceSha256": "c680bd331e1ae30c138d51ba7973166efbe76fbfbf2dfa4c418ef2239edb8f06",
+      "caseSha256": "17f8ca3e3ab298ff383c0287ebd027c19b0720ce0810528d1ac03f497af57c11",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/27.log",
+        "sha256": "1f7804bc89cf6e5d08223173b39e2086bc38f2512b2a1b7cf802b8bd8fe54234"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/27.xml",
+        "sha256": "7067043e16d70b2c1592508d7f935e8c98437dc80d33cd5dc38170ccfa584adb"
+      }
+    },
+    {
+      "path": "packages/a2a-server//Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/a2a-server/src/http/app.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 5,
+      "assertions": 82,
+      "pid": 22866,
+      "caseSha256": "1a364a02fdba310536efadc7eff71fe8364a638168dd507f4d45a59fc806badb",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/28.log",
+        "sha256": "e4a6acc025ba6306ef3667660c16f878e1acc2d6ae057b94c3a87dc9fb4f30fc"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/28.xml",
+        "sha256": "85be0e52c39c29a61542dbf1004ce80b011b1c52f00372a087daa3427aab3b6d"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/commands/restore.test.ts",
+      "backend": "journal",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 18,
+      "assertions": 31,
+      "pid": 22908,
+      "sourceSha256": "78d70dfec530ece018f51dedd1729e4ce67d75ecb60817ac53ead1170b924be7",
+      "caseSha256": "64c5f4f79b40be4f4d1c6edf0d32fbc5299cd66ad062aa3605102712975c2820",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/29.log",
+        "sha256": "98155b1e1a690f0530f81bd52926d8b7639ec1d25b37735d8748d1d42893c690"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/29.xml",
+        "sha256": "939c0c2b5af3d821f4a5fb6140ca7d16c72763c5eb316f10565ecc4911031183"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-load-fault.test.ts",
+      "backend": "old",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 3,
+      "assertions": 36,
+      "pid": 22912,
+      "sourceSha256": "88f43f4c70b0731af511d6ad30562be0d311ec9455494590bf9b5e6ee523af04",
+      "caseSha256": "18ea59ee7a49af477bf9c15392626120b70ae6542d773c76c6e5e3c6127fb9e8",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/30.log",
+        "sha256": "8306bca0f88a0be0df9effde6406f6cb523b89917fff932a8f6520659adaff6c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/30.xml",
+        "sha256": "22274aeaf9ce5777f49bf93b8998ede7f121f6c0c278c385fa9b69aeaaa002d1"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-live-load.test.ts",
+      "backend": "old",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 6,
+      "assertions": 51,
+      "pid": 22986,
+      "sourceSha256": "9a75097d807c4917e619d348ac1e5a506b8e18bf3da78b3109a4e2803f136998",
+      "caseSha256": "7d047f9a8b66a084cd01da685303503f5ce2814528021f848f7e05cbb0d73f42",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/31.log",
+        "sha256": "66bb6855657677da19f1c2f017215a3772c49f14a75e76eda6114a3e4bb76a77"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/31.xml",
+        "sha256": "e6e6fbfd53cd6cc84da0a103f39b08e3ca9cee2119bb65fbdca6615fa04bf339"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-cleanup-fault.test.ts",
+      "backend": "old",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 1,
+      "assertions": 14,
+      "pid": 23079,
+      "sourceSha256": "9859abf55f5368211c5f6acf2a16430b86ca2ce95e6e90fb2f732f5456f72a59",
+      "caseSha256": "eeb342b53b0686b2a8b55d8250bae3a6721aa559be0a553b02885f609b8ec785",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/32.log",
+        "sha256": "30ef8b548ecf3520129b2e82480cf830a1760e1ffbcdb2ee3ab6de574d23974c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/32.xml",
+        "sha256": "aa17b9f22e175223881700537e8c05030cce6f87ce3e3415e6eaed832d65f1b4"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-native-session-protocol.test.ts",
+      "backend": "old",
+      "classification": "NATIVE: real Agent, explicit native history/recorders, independent disk reads; outer env is not backend evidence",
+      "passes": 1,
+      "assertions": 13,
+      "pid": 23114,
+      "sourceSha256": "58ec75844ac666e30c40dc35a476b2f2e65e61bf616fc772fae202ddfea47dde",
+      "caseSha256": "5e16efc730243cdc85f54c0b6a8460d2f9c3c139b2bc75217e77b439b88a8fa4",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/33.log",
+        "sha256": "dd12f6edce6498ea0a607b5d7e3bb074dd0b3549e8b54830899800f6d96681d9"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/33.xml",
+        "sha256": "b7781de73876f49a663e60f5d370cf28d6715fd3c50762b1ad7cbdb2742f8bae"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 9,
+      "assertions": 21,
+      "pid": 23160,
+      "sourceSha256": "2e6c716863bd1922ee150cdffb6bc1d37d7ede25f4a016799ec8028349f1d7c0",
+      "caseSha256": "99dde495c7cf7f7fb9a325891e8f5eef8cfe92e7edf202225508fd8266ba0c3e",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/34.log",
+        "sha256": "9be522b0263add0c3a7bb97c16f75ef6ec48f6065a09cca4fdab821f42afe48a"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/34.xml",
+        "sha256": "266e26c3ce09bcfd061f8cd417d145c703b15d0c3bc31d71361717465695aa46"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part02.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 8,
+      "pid": 23177,
+      "sourceSha256": "2165d1da730bf59b54c8973294057ed2c327f2ede14f1a12a6aa7eb0ab8c9b64",
+      "caseSha256": "35a306d339f0f8e169dea824b8098122436fdc1c18dd11c21b39b08ba4c82e87",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/35.log",
+        "sha256": "509cbba8a514dcd055b275a4fa876f656a261a8ca2af8b5f83ef32f72110fcfc"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/35.xml",
+        "sha256": "59f56c24f942fce4d85b42d9a2d6a8e33285659444a2861eea62f6f8a79a2cd2"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part03.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 4,
+      "pid": 23195,
+      "sourceSha256": "d200776bf46cbdb1ba2597401e9814494abd1df8247fa1d07227036319ea7293",
+      "caseSha256": "3aa942d884516a5a85d4a71c3d11f26093a5abc36e879e21250daa381ccc2064",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/36.log",
+        "sha256": "51d2d70520f493ec11d6a83cb6a4e2a5c12a15587d8eeea48a3a94b3d33812b3"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/36.xml",
+        "sha256": "51a9cde329a4daa7399094f5d8191373745144960f8feb36abd71530ff964eb8"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part04.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 4,
+      "pid": 23206,
+      "sourceSha256": "e3ac53783dc613f5f5f00aff18593637bac6b54bfdcea4fb3ee719ed4fac725f",
+      "caseSha256": "089ae216e840e0bcc7bd0861ae6f535a46943ab5a3a1d218a7970c45ce9da8fe",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/37.log",
+        "sha256": "7cdc24dd630daaecab42ef8022343ee90db9813d20c0e9be31a9f2972741a151"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/37.xml",
+        "sha256": "55fff9b38510c657581d8e6f39cea31d150dbf203712c8a32dcb9c6b51a0d86d"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part05.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 12,
+      "pid": 23234,
+      "sourceSha256": "f30efc11625b8b8f1710e3b70e67d53fea9c11e8b938e0e1a0bcfdd631a7c028",
+      "caseSha256": "37a6a73e3c27ab5d8e74c105f54b73f98566a2f8686d3b18c599ae141b346f47",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/38.log",
+        "sha256": "d6ad507beee396e466f1814800a227001d94dfbcd0fa4779724e139c85539055"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/38.xml",
+        "sha256": "dd6dc8a84d531abbd05d86b17152ab92bd1916ed42acb651a0fb80023605ab40"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part06.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 9,
+      "pid": 23252,
+      "sourceSha256": "3fbeef3441e60a85e33bb03993f09bdcbfc50d71b0d7ea1ddf70fd4fe1fd3301",
+      "caseSha256": "cf0fc65f0c04e97508fb9fce9ca9de2e409d127dd350076c466bb01195cc9490",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/39.log",
+        "sha256": "8e27fb97f78185f50ba20bc5f0d62a66d309a1c8f8b6bab6078493c40e57b10c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/39.xml",
+        "sha256": "35196b20f1acdf0ad28bde69f1cbfad71b41b0aa895fca832f1ca5c4b8f25985"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part07.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 5,
+      "pid": 23267,
+      "sourceSha256": "4abc73660da7c9bf4b49449b89f671f4521d39e536b06275010f5c8095d15e48",
+      "caseSha256": "702ff2d625279d7d669b11c2b608463707b193545c03c9cf1f289cbac0413524",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/40.log",
+        "sha256": "ab7600933ed66a1fa7013a97a8cfcb8e1b3cfec1db8ea24c2debbf59ee578ac2"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/40.xml",
+        "sha256": "4eb1d9da42e21dff119e08358e41c2f42a1ab572473abd540ef40c60aa3f3f7c"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part08.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 11,
+      "pid": 23291,
+      "sourceSha256": "2d7c720168234a605638823cae5af841631865faedc006c98ce9bc83071b06ff",
+      "caseSha256": "58bdbd910f71c398559e330cbcc158c5f5297ea30a3bd84ff050067851fecbac",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/41.log",
+        "sha256": "66b28743775e1b4b27e1abb750115b3ad0d322e57e083a8cfcd78c084f305bbe"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/41.xml",
+        "sha256": "00b7af202576889b9b3a3ae4da0e396d54764b5016aa8f814ef3f3d02b905d4a"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part09.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 4,
+      "pid": 23321,
+      "sourceSha256": "77c0069b6d7c8d1bfb250416e027c8b94123d25cbea77b864a3fcf9f4dc956ea",
+      "caseSha256": "a5e6b8d621442e6fdc1cc959c7de93c7327d80bbf4d46ef6480354777a737d6a",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/42.log",
+        "sha256": "4749e7a777449361475f8b2efd953dc4b1f47620dfa141c2e269c73179ff986e"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/42.xml",
+        "sha256": "b3d4b6bc25302d922e6f8451049b181f1a61bd01580929116126a39416ecb5ff"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part10.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 6,
+      "pid": 23343,
+      "sourceSha256": "b5b349c637a713019e94634180c5b53f69c698aa7064df010432f8c667e2cafd",
+      "caseSha256": "6bbfd50842a124e13236a08b9d54f500870773549d1b15fb131d151060a4ed60",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/43.log",
+        "sha256": "abfa7ba693b942a71d559ec95810da1f8622fbf330c6759c4539a2e1aef22c26"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/43.xml",
+        "sha256": "ecc820a6d30828cfb976d5fd12b2ee659ea3e1f4564a5ecb0ff98ee873b8697f"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part11.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 5,
+      "pid": 23358,
+      "sourceSha256": "ecf896079f6909e0cf97fcf46db6662332d1a1e3218f53da665b1313f1c5dbdb",
+      "caseSha256": "2cdc89a55040dd513b23a34643ac464aa1d640f6a2d78ed2fd59c5b9a9db1fe5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/44.log",
+        "sha256": "beaab9dddc0e29045b8e47a071a920b69008ef3fac430595d59af5512a08e91b"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/44.xml",
+        "sha256": "131a03ae8a6bafcdcd2c7720b5e0ffc57a64ef161c22bfec8d7b12480e55f9b0"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part12.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 7,
+      "pid": 23368,
+      "sourceSha256": "54a427a6def2d8ba9dfe64c9992b9fdab442ee46171054f08f9474893c2c3712",
+      "caseSha256": "9574c02feb6c6ca57b29314cc1c92c336f45bb279409bf660d469f527ddd88e0",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/45.log",
+        "sha256": "5814e156cc1ee2e79f535f1f2f015c84fdb61443e6a7550dc2f3ee7bae1f40b7"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/45.xml",
+        "sha256": "898bd18d4fa41752de3659b1ce2736c232de23b7cf5b72980c0eec3aad917838"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.loadSession.zz-part13.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 1,
+      "assertions": 9,
+      "pid": 23384,
+      "sourceSha256": "9ed72533c81c48fe2bf843cfe67a36de8e267731edb8443097f1d8e9b338bc96",
+      "caseSha256": "fb4e1bb226236b0cd7bfc88fd56a3d7909e707d21d19040a3d57b559d6feca60",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/46.log",
+        "sha256": "0e48b36023fdbdcee69c13ecd3c63a62cb0743f4d9c6ae3d5bec8ada29d94e8e"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/46.xml",
+        "sha256": "0d4e0c25371732fbefa4f83b08527225f25f8b6f0415a376a8b3bfd479353e33"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 48,
+      "pid": 23402,
+      "sourceSha256": "e97485d106d6ab3d110cd05c598e12a83abac5d7938d2e6e6a8d040336d1e5fe",
+      "caseSha256": "a82aba5782d2483e3b664f1aac61ab0d301a86a6a837c0bc1c2da5cb5e0f3d21",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/47.log",
+        "sha256": "70e1e2084fefef96ee0979decfc36420e43018ab0259047a4626caed940b9df7"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/47.xml",
+        "sha256": "3c209de1eb8ddad95bf254c65c8b716ccddb0cc569c9f690b06e8b9a3ee386f3"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.stale.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 7,
+      "assertions": 8,
+      "pid": 23440,
+      "sourceSha256": "931b6b22869c8371b53132f8596873bf85bf196133b5b84e9abd0331a9f16722",
+      "caseSha256": "64fe247c0e9d2c69f434a861e0a74f9e695561004b4585cc6af06fd21cdaad41",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/48.log",
+        "sha256": "7f52317e602ec001a02adf6bf4cc25e1de36f2f31e24f603e3cfac37e97d4aa2"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/48.xml",
+        "sha256": "53ac1f72a1630bd8516a748cdb8a8fe0b9dc1c832cdc3e090c1cfa7cfdd63717"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.streamFlush.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 4,
+      "pid": 23448,
+      "sourceSha256": "3c1f0a7eaae287d24c589c3bd1010bb95bb9088cf2874e5f87dce830a7c83ffc",
+      "caseSha256": "3ca4a61553c0e676470d25d8ae47ef9e77da55d22f139faffd1d93812e37d9b6",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/49.log",
+        "sha256": "280383f7be7a11e6a86bcd92552131dc31b73f8bc50d734e7020d132ea04a8c6"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/49.xml",
+        "sha256": "9462e2838ab6c3c97203711c34ec4c255127da33fb8a7de2c22cb1ec5bb9973a"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zedIntegration.prompt.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 21,
+      "assertions": 53,
+      "pid": 23457,
+      "sourceSha256": "d8eb906a6a8b1731c43d95f9213b75304ad5ed6a49bc49ba0485e53ddaee3963",
+      "caseSha256": "407ee53ef562e2030ae88f0d6f720cfae8231dae0e1b859be513856d7ad793b2",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/50.log",
+        "sha256": "0db5af2792f8a21a2f2d4fd644ea2a1364d47407569791ba8168c671507b8512"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/50.xml",
+        "sha256": "2597e01a5a412f5eec9b4f1c5f2d623f69776ded13f5dbd0e899e513e79c4f93"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-cleanup.behavior.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 2,
+      "assertions": 10,
+      "pid": 23481,
+      "sourceSha256": "25adc3e75f28ddc05194c56f7da646777acb08ce49df6981871c3e238478bc93",
+      "caseSha256": "c9ceef1fb77150e7d8dcfa936fed238924a5ec7d79bb1e19a041eee1ab85f142",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/51.log",
+        "sha256": "c9cc80ea095865d67ccf6c889833a9d522ed7c712ac3e17b54ed855bcd7f3283"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/51.xml",
+        "sha256": "d29b179167b0e228adfcf62a8e13887cb7d264ec4f7b8d8641321df8f12daf42"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-config-options.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 21,
+      "pid": 23503,
+      "sourceSha256": "fe1404b57f3880b1a02eb50569b97bebc82dccc541d57bebdac59ee8722d617b",
+      "caseSha256": "c100b1832f5c581163c85786b19a793c6bfdd7573d77fd4ce0d125b8cb1f6c4f",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/52.log",
+        "sha256": "2ef44d0ff9e20a9840a12e85f1a32f3a05c92defc509c487488befd68a681109"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/52.xml",
+        "sha256": "d1586ecb91c433c3ccbbfda0db12ad0ccd7b35ad8193576e1a850f927e8eb5e3"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-lifecycle.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 12,
+      "assertions": 31,
+      "pid": 23512,
+      "sourceSha256": "9ef3575b71167dee1ddfb7058b9a639af7956aaf3f233973c1f147582e50ccf0",
+      "caseSha256": "f47c7bed7827b55a99405971bbf3a6ebff9de8dc6ed1b0f690fa8e91501ca5d0",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/53.log",
+        "sha256": "6d5af9c1123882d525a3b7af379a890390d04455711d59d529d9d031c6ebaca5"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/53.xml",
+        "sha256": "a17bf5314d5884576407ec3603581a1170f5a550ea994daa909138746ce3ff87"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-loader.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 8,
+      "assertions": 12,
+      "pid": 23538,
+      "sourceSha256": "2e8db9bde73639b876ec6207919fd870129c91b07e46f034a056c7fc9fdda590",
+      "caseSha256": "b8a9cc7280bd75a7efc2cb125ad676e24ed54d77f6548e37bf4c528ea8ef9f90",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/54.log",
+        "sha256": "4a822385aaf52becf64fda7dc61967d97dd09c99d8e108657ae22b96b47e3946"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/54.xml",
+        "sha256": "8928c2201041bbba69fc9bb7270857add1598c4fca62b2f472bfb5c0d623ead6"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 22,
+      "assertions": 22,
+      "pid": 23558,
+      "sourceSha256": "4d435bd741973ee43e363e3a9554fd9641c12c6a1566378739790e19ec46b52d",
+      "caseSha256": "fdb3f49d3205627cccf864b3383820b43c6868699e42e9fddfd52eb5e8b2d812",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/55.log",
+        "sha256": "67bb6a85c06f3aafde12af04b0c674879c12a8219379f0b2af7022ed29630210"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/55.xml",
+        "sha256": "bf50c483cc90581af916461e675cc7af0030029cf463121479372d4d9c4bbb28"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.edge-cases.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 3,
+      "pid": 23567,
+      "sourceSha256": "601be8390ed7ffa9c3e8042babb14b2c96d5fd68a75a6138707029a69ce7fe60",
+      "caseSha256": "81a9e9617448a3a834ac1e75f66ccfbe01eb4cac657d4b2371ac33cee378f7ae",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/56.log",
+        "sha256": "64a4f0906bd25a70ba625c2cbf4b282526fbd477e554ea6c432dd033f5920441"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/56.xml",
+        "sha256": "71393640cb63361be3060dcaadcfddc83ace41a62f0c66dfec35b8814f0f7cb3"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.malformed.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 27,
+      "assertions": 29,
+      "pid": 23578,
+      "sourceSha256": "cbaacdb708063c6d528ffe6423268bc3eca312badae4ddf67c891dfb645e176d",
+      "caseSha256": "99bad22607ba2bb13fd2ebc70870b42c16bc3b4c9ab50410d920949a15366af5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/57.log",
+        "sha256": "2ca1fae38bbf9cefbd6cb91cc6a148f28a5878c611a7466ee5a7087ed0b3337c"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/57.xml",
+        "sha256": "9b3fa5b273e91901779af67528556108f433ab8a448a86bca16be54e35832608"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/zed-session-replay.toolFailure.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 3,
+      "assertions": 3,
+      "pid": 23595,
+      "sourceSha256": "ffecd58f60ea3e30d26f4f1a9e3c464c7ad0edef47b9089fc59438a1c69fbbd6",
+      "caseSha256": "8cf0942553600da48a2c7c539c6a5426df83eecee20f586a587537a87727efb5",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/58.log",
+        "sha256": "d2e47f0d585df857cea60d17fc3e0856af7ca12f25ddaf7999ba778d80dacc1b"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/58.xml",
+        "sha256": "ac192a49b0cd50cf71be7d0cfb52ac71c1a6ffddb86e852c4c7b5e756096b01e"
+      }
+    },
+    {
+      "path": "packages/zed-acp/src/runZedIntegration.cleanup.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original orchestration/config/events/cleanup/replay assertions; no native durability promotion",
+      "passes": 4,
+      "assertions": 4,
+      "pid": 23602,
+      "sourceSha256": "d1f03e23ec9a18352c69586dc53208539f6b06cd236dce89251ee7591610ccc8",
+      "caseSha256": "df2922a69e4d3f6d9cd256829d428a408bb5ec1f2bf7703f62bd2704840c5cbc",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/59.log",
+        "sha256": "b3ce66b61c1f533c9cc311f5425120fbeed5a68a226d86befffda792d99629d1"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/59.xml",
+        "sha256": "05b14067add4733e57d5869ff7a5a21cb1c906f2166d7430d0c5e92939151dea"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/agent/task.approval-semantics.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 2,
+      "assertions": 9,
+      "pid": 23617,
+      "sourceSha256": "0356533f489c3792d37a7df60316563edefd93fb33cdc29decaeda60b32d927f",
+      "caseSha256": "741a347f0b54ebc5eb42266414ef93c13b6daf9fcbca83de88b6254d996363f9",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/60.log",
+        "sha256": "37c9323cca63697a4cd5011e97f421081532d4c7af7810510bbf3a13518a226d"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/60.xml",
+        "sha256": "e866f93800d387cf313ea55d1c8df3cefa091fec8bc9fec852ca8afe676f8b00"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/agent/task.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 7,
+      "assertions": 20,
+      "pid": 23655,
+      "sourceSha256": "c680bd331e1ae30c138d51ba7973166efbe76fbfbf2dfa4c418ef2239edb8f06",
+      "caseSha256": "17f8ca3e3ab298ff383c0287ebd027c19b0720ce0810528d1ac03f497af57c11",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/61.log",
+        "sha256": "b944a8bdd035dd6c6f81c4557efed1555b33305cc4269b6a5ebd85a2f01bad96"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/61.xml",
+        "sha256": "2f2680606790d2f7e2dbe78337e971749798693da5503f3669288c531da8fd9d"
+      }
+    },
+    {
+      "path": "packages/a2a-server//Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/a2a-server/src/http/app.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 5,
+      "assertions": 82,
+      "pid": 23704,
+      "caseSha256": "1a364a02fdba310536efadc7eff71fe8364a638168dd507f4d45a59fc806badb",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/62.log",
+        "sha256": "c8fb6c73d6e782799d41d893c38ff34596cb289b8e926681863263e098558a17"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/62.xml",
+        "sha256": "d6ace9fd0e576b5a30eda98f02162cfd3e89947b3e61eb87c45ad99411368c17"
+      }
+    },
+    {
+      "path": "packages/a2a-server/src/commands/restore.test.ts",
+      "backend": "old",
+      "classification": "SHARED: original approval/task/HTTP/workspace restore; not native conversation restoration",
+      "passes": 18,
+      "assertions": 31,
+      "pid": 23745,
+      "sourceSha256": "78d70dfec530ece018f51dedd1729e4ce67d75ecb60817ac53ead1170b924be7",
+      "caseSha256": "64c5f4f79b40be4f4d1c6edf0d32fbc5299cd66ad062aa3605102712975c2820",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/63.log",
+        "sha256": "0d8264b9c188522988d2e310fcf30e7072e31f7f4bce4c7aaf6df4bab64cf122"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/63.xml",
+        "sha256": "4f2a3298a71ea69620961160d50e54d0dd57a79f510a90704f08f1804511aeeb"
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "declarations-zed",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "pid": 23754,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/64.log",
+        "sha256": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4"
+      }
+    },
+    {
+      "name": "strict-types-zed",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.json",
+      "pid": 23771,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/65.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "lint",
+      "command": "node_modules/.bin/eslint --max-warnings 0 packages/zed-acp/src/zedIntegration.ts packages/zed-acp/src/zed-session-agent.ts packages/zed-acp/src/zed-session-errors.ts packages/zed-acp/src/zed-native-load-fault.test.ts packages/zed-acp/src/zed-native-live-load.test.ts packages/zed-acp/src/zed-native-cleanup-fault.test.ts packages/zed-acp/src/__tests__/support/native-acp-fault-fixture.ts packages/zed-acp/src/zedIntegration.loadSession.test-helpers.ts",
+      "pid": 23862,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/66.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "format",
+      "command": "node_modules/.bin/prettier --check packages/zed-acp/src/zedIntegration.ts packages/zed-acp/src/zed-session-agent.ts packages/zed-acp/src/zed-session-errors.ts packages/zed-acp/src/zed-native-load-fault.test.ts packages/zed-acp/src/zed-native-live-load.test.ts packages/zed-acp/src/zed-native-cleanup-fault.test.ts packages/zed-acp/src/__tests__/support/native-acp-fault-fixture.ts packages/zed-acp/src/zedIntegration.loadSession.test-helpers.ts",
+      "pid": 23926,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/67.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      }
+    },
+    {
+      "name": "affected-graph",
+      "command": "bun scripts/check-affected-test-shards.ts",
+      "pid": 23934,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/68.log",
+        "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+      }
+    },
+    {
+      "name": "audit",
+      "command": "bun scripts/test-audit/scan.ts tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/audit",
+      "pid": 23972,
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/69.log",
+        "sha256": "109efc6385f10d4d17bade08802d501f5f179fc120c05554006f9b4163ea5fcb"
+      }
+    }
+  ],
+  "reuse": "Four journal native files in accept-a have unchanged final sources/dependencies; accept-b changes only the shared load test helper. All shared affected helper callers are run in accept-b. Earlier accept-a shared results are superseded, not double counted. Source-only graph validation is not shard execution.",
+  "audit": {
+    "receipt": {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/accept-b/audit/findings.tsv",
+      "sha256": "6aaa425ecf723d95469b33346e865f45e06b9c24581d4335cebf594ddaf4b5df"
+    },
+    "newHighRiskFindings": [],
+    "notices": [
+      "Two new DUP_ASSERT notices in zed-native-load-fault compare unchanged rows before and after later successful load, and released locks before and after later continuation/close. All equalities remain. One existing ACP protocol DUP_ASSERT is unchanged."
+    ]
+  },
+  "roots": [
+    "rollbackSession discarded session.dispose rejection, losing native recorder cleanup failure; wrapReplayFailure also discarded the external consumer error identity.",
+    "disposeZedSession nested finally let Config cleanup overwrite Agent disposal errors. Existing independent retireSessionWorkspace now retains both.",
+    "Shared recordedFilesLister encoded .jsonl under journal, routing replacement into reattach. Only filename fixture representation now follows selected backend; original assertions/timeouts unchanged."
+  ],
+  "controls": [
+    {
+      "name": "swallowed-replay-cleanup",
+      "file": "packages/zed-acp/src/zedIntegration.ts",
+      "test": "zed-native-load-fault.test.ts",
+      "code": 1,
+      "signal": null,
+      "acceptedHash": "c7529d6b31d15afa75a40130bbcf7bc5ddedae6f417a6d2340ddf7982e5bd669",
+      "restoredHash": "c7529d6b31d15afa75a40130bbcf7bc5ddedae6f417a6d2340ddf7982e5bd669",
+      "cmp": 0,
+      "driverPid": 24209
+    },
+    {
+      "name": "finally-overwrites-agent-cleanup",
+      "file": "packages/zed-acp/src/zed-session-agent.ts",
+      "test": "zed-native-cleanup-fault.test.ts",
+      "code": 1,
+      "signal": null,
+      "acceptedHash": "fb5ab74645c3c72fc14822f1ae563ec49a4686539e0c92fcfc6ff6b74d6b8c9e",
+      "restoredHash": "fb5ab74645c3c72fc14822f1ae563ec49a4686539e0c92fcfc6ff6b74d6b8c9e",
+      "cmp": 0,
+      "driverPid": 24209
+    }
+  ],
+  "controlArtifacts": [
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/controls/swallowed-replay-cleanup.log",
+      "sha256": "710811500d3f74754211601247ad68dfa10bb32b60e5b9964105dfdf4e692974"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/controls/swallowed-replay-cleanup.xml",
+      "sha256": "b4510b87b57a31589c1dfacbe2de2efb7f5c2dcbf742cf552f6351550008e2be"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/controls/finally-overwrites-agent-cleanup.log",
+      "sha256": "7746f719841522ef0a3655dba7a86bfd0d88d5f9dbf4563e290fff050efa891c"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/controls/finally-overwrites-agent-cleanup.xml",
+      "sha256": "c666f546a661f7818c05115bb09cd7fe8410d75de6d865242729a0a30d335622"
+    }
+  ],
+  "remaining": {
+    "priorPreservation": {
+      "reason": "performLoadSession disposes the live same-ID owner before building/resuming/replaying the replacement. A consumer failure then removes the candidate; prior is already disposed.",
+      "reproducer": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/replacement-preservation.test.ts",
+        "sha256": "06dc5be80cb897942978172fd7a393066aaa36f4cd5a4934c02dda4be459075e"
+      },
+      "source": "/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */\nimport { expect, it } from 'bun:test';\nimport { nativeAcpFixture, nativeRows, replayText } from '/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/zed-acp/src/__tests__/support/native-acp-fault-fixture.ts';\nit('preserves the prior live same-ID owner when replacement replay fails', async () => {\n  const fixture = await nativeAcpFixture();\n  try {\n    const id = await fixture.create();\n    await fixture.prompt(id);\n    const path = await fixture.path(id);\n    const before = await nativeRows(path);\n    const prior = fixture.recordings.find((recording) => recording.getSessionId() === id);\n    if (prior === undefined) throw new Error('Missing native prior owner');\n    fixture.consume(async (update) => { if (replayText(update)) throw new Error('External replacement consumer failed'); });\n    await expect(fixture.load(id)).rejects.toMatchObject({ code: -32603, data: { phase: 'replay' } });\n    expect(prior.isActive()).toBe(true);\n    expect(await fixture.locks()).toHaveLength(1);\n    fixture.consume(async () => {});\n    expect(await fixture.prompt(id)).toMatchObject({ stopReason: 'end_turn' });\n    await fixture.peer.client.closeSession({ sessionId: id });\n    expect((await nativeRows(path)).count).toBe(4);\n    expect(await nativeRows(path, 2)).toStrictEqual({ ...before });\n  } finally { await fixture.finish(); }\n}, 30000);\n",
+      "log": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-prior-preservation.log",
+        "sha256": "5a0caaaee0b4ffafb93ae625dbc9fffc9a66e2f6990c9873f7684f2cd43537c2"
+      },
+      "junit": {
+        "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-prior-preservation.xml",
+        "sha256": "77feaed897dc30ae7c553745fbd2b0b24199085a8b890225aeb40177e6f24935"
+      },
+      "observed": "Expected prior.isActive() true; received false after wrapped replay rejection.",
+      "originalContract": "zedIntegration.loadSession.zz-part06.test.ts:30-110 explicitly requires prior disposal before failed replacement and no session afterward; zz-part10.test.ts:32-85 similarly requires failed reattach removal. Those original bodies and new no-recording reattach counterpart remain unchanged. No backend-specific behavioral policy or borrowed-recorder handoff was invented.",
+      "notClosed": "Prior live owner/recording preservation across replacement read/replay/swap/cleanup failure is not proved or repaired; directory-probe preservation is proved separately."
+    },
+    "retention": "Original marker/read-cost/retained-growth positive/retaining/release and affected-provider rebind remains pending exactly as W23-REMAINING-REQUIREMENTS.md specifies. Historical 33/35 is not final-source promotion.",
+    "planning": "Eight unchanged zero-decoded-row header/planning RED assertions remain phases 5/6 through 7 dependencies.",
+    "wider": "W24-W26, phase-4 spools, later normalization/filter/summary/blob-lease/deletion and the old default are unchanged."
+  },
+  "authoring": "Initial peer missing-owner check expected a local Error message across JSON-RPC; corrected to direct public handler assertion. AggregateDisposeError is a custom Error with errors[], not AggregateError. Fresh-mirror disk reads were moved to real close/flush boundary without sleeps or retries. Lint authoring findings were corrected without rule changes.",
+  "supplementalArtifacts": [
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-prior-preservation.xml",
+      "sha256": "77feaed897dc30ae7c553745fbd2b0b24199085a8b890225aeb40177e6f24935"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/preflight-lint.log",
+      "sha256": "059ddd61f41a52c82d1e7e9253b95ccc8a9acd73233b797b27b57fcb7cfcfb81"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-lint-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-green.xml",
+      "sha256": "d620146f8d6d0619d4b538f72eeafc7467fd9fa5c33409c383c05e101745cefe"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/live-boundary.log",
+      "sha256": "ae2590781b223fde8151d3521209f28db95cea654ef161e2dd818ae40ff04176"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/restored-cleanup.xml",
+      "sha256": "e94abc58db3c10d364cdceeb9aa4737989d00b33e10613df39b6fd9e6c7b10b4"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/live-first.log",
+      "sha256": "b865c7a84ecedebd076ae76361dc973cf253b200d8b291a8485119a6bdfceec5"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/preflight-lint-fixed.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/restored-load.log",
+      "sha256": "687a48e6071cea594ba255beefb10278561e41aa03ad0510bc391de587d04729"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/subset-green.log",
+      "sha256": "83b5b75c1be76696101cb3e16fb0a37b90c0acc8b431564d001d22a79e8b0e16"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/preflight-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-accepted.xml",
+      "sha256": "844dbb79b12bec0ec003a3919a2bf439ff9f5f442ec1047e4f5eb597bceec837"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-cleanup.xml",
+      "sha256": "48f25f5dfabce8a1f311ee7f51e33d32261c323b5bc666fcf02221288d5442cb"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/green-independent-cleanup.log",
+      "sha256": "a3ca4646fb0c18b1e546e7b64aad121f75e3f61441116aa26540ffdf8440629d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-independent-cleanup.log",
+      "sha256": "d1ba67ac3eaa976f61261054b72ae8152d2efd6bb8bdb98a00fcb6f317138796"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/green-first.xml",
+      "sha256": "4e5bd90724f246181da67108410bcf948b2e600a09a1a025a583f0bb08f31671"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/subset-green.xml",
+      "sha256": "65fac04336c445130d0e094ce1b101123e0df56fb93660140f8cfa454922ba20"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/restored-load.xml",
+      "sha256": "da6a558bfcd20e7cd4264581568fa096676b045b963a629d12b17d5e1beafcd7"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-accepted.log",
+      "sha256": "44245f5c354ae0a3e5d2c0bcc57f3e71c0993ee77e9d334e7dfa846e9f16a315"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/controls-driver.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-lint.log",
+      "sha256": "9cf3822166d4eae1319ae541be02b38845509bb863981055b9d35fd0f598ae76"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-cleanup.log",
+      "sha256": "00e14adf18bae634dbb1dbc4b0a643373343a5c2edfe43eb6586cee5577be3b8"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-independent-cleanup.xml",
+      "sha256": "ccb9f1fa23c7932abafb8a81ea337c0fc7779941c8689f24304cb7b12be3d22d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/green-independent-cleanup.xml",
+      "sha256": "db209848bb11c2124dd9541cd5271db4b8e06849006c717214968a293da4359d"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-types-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/green-first.log",
+      "sha256": "d960c7485be5a04b056ed90874c91b3d2be0ea6ddf4aa792ca03ab92952c6123"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/driver-b.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/red-prior-preservation.log",
+      "sha256": "5a0caaaee0b4ffafb93ae625dbc9fffc9a66e2f6990c9873f7684f2cd43537c2"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/driver-a.log",
+      "sha256": "248a4b9b44c7ed62dfb49bd4fc3589b05f55bb523454395cc8b15c0a2f2fb755"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/live-boundary.xml",
+      "sha256": "7c1d9fe8d7c08aef8de64af896a83c5ccd35c9389ecad867e6a68ef91a5b6635"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/first-green.log",
+      "sha256": "996cb4e900b677f8e86d42f7472265d2a3686c441f6c1623f78f5f2f12b8e3b3"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/restored-cleanup.log",
+      "sha256": "9cbe5f9e06dc7df576c0c35570919978a26b8af82d6cb08c87a3be09c3d3fe63"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/acp-fault-run-l/live-first.xml",
+      "sha256": "a1626bf36a35da8c1a40463af3a3d1f720455614a70dc62337741b3af3e42569"
+    }
+  ],
+  "processes": {
+    "recordedPids": [
+      12097,
+      18437,
+      19291,
+      19999,
+      24419,
+      20812,
+      20801,
+      20890,
+      21006,
+      21048,
+      21083,
+      21100,
+      21113,
+      21122,
+      21142,
+      21152,
+      22317,
+      22311,
+      22346,
+      22362,
+      22383,
+      22403,
+      22421,
+      22443,
+      22464,
+      22483,
+      22501,
+      22511,
+      22525,
+      22538,
+      22558,
+      22584,
+      22594,
+      22614,
+      22638,
+      22663,
+      22675,
+      22691,
+      22706,
+      22723,
+      22732,
+      22742,
+      22754,
+      22775,
+      22812,
+      22866,
+      22908,
+      22912,
+      22986,
+      23079,
+      23114,
+      23160,
+      23177,
+      23195,
+      23206,
+      23234,
+      23252,
+      23267,
+      23291,
+      23321,
+      23343,
+      23358,
+      23368,
+      23384,
+      23402,
+      23440,
+      23448,
+      23457,
+      23481,
+      23503,
+      23512,
+      23538,
+      23558,
+      23567,
+      23578,
+      23595,
+      23602,
+      23617,
+      23655,
+      23704,
+      23745,
+      23754,
+      23771,
+      23862,
+      23926,
+      23934,
+      23972,
+      24211,
+      24209,
+      24281
+    ],
+    "liveRecordedPids": [],
+    "activeMutation": false
+  },
+  "review": "review skipped per Andrew 2026-10-09",
+  "constraints": "No cleanup/obstruction move, .llxprt edit/staging, raw recovery bulk staging, changed original test assertions/timeouts/bounds, weaker enforcement, default flip, OCR, push or merge."
+}
