@@ -43,6 +43,8 @@ import {
   withRowView,
   withVersionSnapshot,
   lastContentOf,
+  lastTurnMarkerOf,
+  streamSnapshotRows,
   statisticsOf,
   type ContextBoundary,
 } from './journalScalars.js';
@@ -55,8 +57,6 @@ import {
 } from './journalAdoption.js';
 import { JournalMirrors } from './journalMirrors.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
-import { suffixStart } from './journalSuffix.js';
-import { decodeStoredRow } from './journalRowCodec.js';
 import {
   committedBatchSource,
   type CommittedBatchRowSource,
@@ -83,7 +83,6 @@ import type {
 import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalSession } from './journalSession.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
-import { countDecodedRow } from './journalRowCounters.js';
 import {
   encodedRows,
   JournalPublication,
@@ -101,6 +100,7 @@ import { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { SessionPreviews } from './sessionPreviews.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import { applyOperation, type JournalWriteHost } from './journalOps.js';
+import type { CurrentTurnMarker } from './historyChronology.js';
 
 /** The repair the journal store has published: `rollback` takes it back out, `close` has nothing to release. */
 export interface JournalRepair {
@@ -606,26 +606,13 @@ export class JournalHistoryStore implements HistoryStorePort {
     this.assertUsable();
     await this.waitForDurable();
     const snapshot = await this.session.store.snapshot();
-    try {
-      signal?.throwIfAborted();
-      const start = await suffixStart(snapshot, query, signal, this.boundary);
-      for await (const entry of snapshot.entries(start)) {
-        signal?.throwIfAborted();
-        const row = decodeStoredRow(
-          await snapshot.readRow(entry),
-          this.boundary,
-        );
-        const release = countDecodedRow(row, this.options.counters);
-        try {
-          yield row;
-        } finally {
-          release();
-        }
-      }
-      signal?.throwIfAborted();
-    } finally {
-      snapshot.close();
-    }
+    yield* streamSnapshotRows(
+      snapshot,
+      this.boundary,
+      this.options.counters,
+      query,
+      signal,
+    );
   }
 
   /**
@@ -682,6 +669,12 @@ export class JournalHistoryStore implements HistoryStorePort {
   lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
     return this.withDurableSnapshot((snapshot) =>
       lastContentOf(snapshot, speaker, this.boundary),
+    );
+  }
+
+  currentTurnMarker(): Promise<CurrentTurnMarker | null> {
+    return this.withDurableSnapshot((snapshot) =>
+      lastTurnMarkerOf(snapshot, this.boundary, this.options.counters),
     );
   }
 

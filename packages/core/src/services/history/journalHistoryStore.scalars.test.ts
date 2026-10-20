@@ -46,6 +46,32 @@ describe('journal store scalars and last rows', () => {
     open.push(store);
     return store;
   }
+  it('finds the newest marked position through an unmarked tail and rewind', async () => {
+    const store = await created();
+    expect(await store.currentTurnMarker()).toBeNull();
+    store.apply({ kind: 'content', content: row('human', 'older', 900) });
+    store.apply({ kind: 'content', content: row('ai', 'newest', 7) });
+    store.apply({ kind: 'content', content: row('tool', 'unmarked') });
+    expect(await store.currentTurnMarker()).toStrictEqual({
+      turnId: null,
+      userTurn: 1,
+      step: 7,
+      seq: 7,
+    });
+    store.apply({ kind: 'rewind', itemsRemoved: 2 });
+    expect(await store.currentTurnMarker()).toStrictEqual({
+      turnId: null,
+      userTurn: 1,
+      step: 900,
+      seq: 900,
+    });
+  });
+
+  it('reports an unknown marker when all stored rows are unmarked', async () => {
+    const store = await created();
+    store.apply({ kind: 'content', content: row('human', 'unmarked') });
+    expect(await store.currentTurnMarker()).toBeNull();
+  });
 
   it('answers zeros and no last row for an empty history', async () => {
     const store = await created();

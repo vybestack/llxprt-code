@@ -10,6 +10,28 @@ import type {
   HistoryRowSummary,
   HistorySummaryTracker,
 } from './historySummaryTracker.js';
+import type { IContent } from './IContent.js';
+import {
+  findCurrentTurnMarker,
+  type CurrentTurnMarker,
+} from './historyChronology.js';
+
+export async function oldStoreCurrentTurnMarker(this: {
+  streamRows(): AsyncIterable<IContent>;
+}): Promise<CurrentTurnMarker | null> {
+  let latest: CurrentTurnMarker | null = null;
+  for await (const row of this.streamRows()) {
+    const marker = findCurrentTurnMarker([row]);
+    if (marker !== null) latest = marker;
+  }
+  return latest;
+}
+
+export function materializeOldStore(store: {
+  materializeSynchronously(): IContent[];
+}): Promise<IContent[]> {
+  return new Promise((resolve) => resolve(store.materializeSynchronously()));
+}
 
 /** What the old store's whole operations need of a store of its own kind. */
 interface OldStoreSnapshots {

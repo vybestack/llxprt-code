@@ -176,6 +176,8 @@ import {
   mergeOldStores,
   readOldStoreRows,
   summarizeOldStore,
+  oldStoreCurrentTurnMarker,
+  materializeOldStore,
 } from './historyOldStoreOps.js';
 
 // ---------------------------------------------------------------------------
@@ -411,9 +413,7 @@ export class HistoryJournalStore implements HistoryStorePort {
   }
 
   /** Every row, as {@link materializeSynchronously} samples them. */
-  materialize(): Promise<IContent[]> {
-    return new Promise((resolve) => resolve(this.materializeSynchronously()));
-  }
+  materialize = (): Promise<IContent[]> => materializeOldStore(this);
 
   /**
    * Transient materialization: fold the durable journal prefix, then the
@@ -582,6 +582,8 @@ export class HistoryJournalStore implements HistoryStorePort {
     return this.withRowSummary((summary) => summary.lastContent(speaker));
   }
 
+  currentTurnMarker = oldStoreCurrentTurnMarker;
+
   readRows<T>(
     execute: (view: HistoryRowView) => Promise<T>,
     signal?: AbortSignal,
@@ -594,9 +596,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     );
   }
 
-  getLength(): number {
-    return this.readLength().length;
-  }
+  getLength = (): number => this.readLength().length;
 
   private readLength(): ReturnType<typeof readHistoryLength> {
     if (this.disposed) throw new Error('History journal store is disposed');

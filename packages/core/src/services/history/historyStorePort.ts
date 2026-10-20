@@ -15,6 +15,7 @@
  */
 
 import type { IContent } from './IContent.js';
+import type { CurrentTurnMarker } from './historyChronology.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
@@ -291,6 +292,7 @@ export interface HistoryStorePort {
   ): AsyncIterable<IContent>;
   /** The newest row, optionally of one speaker. Nothing is retained between calls. */
   lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined>;
+  currentTurnMarker(): Promise<CurrentTurnMarker | null>;
   /**
    * Row facts for a mutation that runs inside the mutation queue. The view is
    * valid until the callback settles.

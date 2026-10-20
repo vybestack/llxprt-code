@@ -2,10 +2,7 @@
 
 import type { IContent, ToolCallBlock } from './IContent.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
-import {
-  findCurrentTurnMarker,
-  type CurrentTurnMarker,
-} from './historyChronology.js';
+import type { CurrentTurnMarker } from './historyChronology.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import {
   findUnmatchedToolCalls as findUnmatchedToolCallsHelper,
@@ -24,13 +21,8 @@ export abstract class HistoryServiceReads extends HistoryServiceCore {
     yield* this.journal.streamRows(undefined, signal);
   }
 
-  async getCurrentTurnMarker(): Promise<CurrentTurnMarker | null> {
-    let latest: CurrentTurnMarker | null = null;
-    for await (const row of this.streamRawHistory()) {
-      const marker = findCurrentTurnMarker([row]);
-      if (marker !== null) latest = marker;
-    }
-    return latest;
+  getCurrentTurnMarker(): Promise<CurrentTurnMarker | null> {
+    return this.journal.currentTurnMarker();
   }
 
   /** Cold chronological suffix stream, preserving slice(-count), including count=0. */

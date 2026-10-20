@@ -12,6 +12,38 @@ import type { JournalOwners } from './journalOwners.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { countDecodedRow } from './journalRowCounters.js';
+import {
+  findCurrentTurnMarker,
+  type CurrentTurnMarker,
+} from './historyChronology.js';
+import { suffixStart } from './journalSuffix.js';
+import type { HistorySuffixQuery } from './historyJournalRows.js';
+
+export async function* streamSnapshotRows(
+  snapshot: VersionSnapshot,
+  boundary: bigint | undefined,
+  counters: JournalReadCounters | undefined,
+  query?: HistorySuffixQuery,
+  signal?: AbortSignal,
+): AsyncGenerator<IContent, void, unknown> {
+  try {
+    signal?.throwIfAborted();
+    const start = await suffixStart(snapshot, query, signal, boundary);
+    for await (const entry of snapshot.entries(start)) {
+      signal?.throwIfAborted();
+      const row = decodeStoredRow(await snapshot.readRow(entry), boundary);
+      const release = countDecodedRow(row, counters);
+      try {
+        yield row;
+      } finally {
+        release();
+      }
+    }
+    signal?.throwIfAborted();
+  } finally {
+    snapshot.close();
+  }
+}
 
 /**
  * What `getContextRange()` takes from the stored rows: the chronology
@@ -101,6 +133,25 @@ export async function lastContentOf(
     );
   }
   return decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
+}
+
+export async function lastTurnMarkerOf(
+  snapshot: VersionSnapshot,
+  resumeBoundary?: bigint,
+  counters?: JournalReadCounters,
+): Promise<CurrentTurnMarker | null> {
+  for (let index = snapshot.rows - 1; index >= 0; index--) {
+    const entry = await snapshot.entryAt(index);
+    if (entry.chronologySeq === CHRONOLOGY_SEQ_NONE) continue;
+    const row = decodeStoredRow(await snapshot.readRow(entry), resumeBoundary);
+    const release = countDecodedRow(row, counters);
+    try {
+      return findCurrentTurnMarker([row]);
+    } finally {
+      release();
+    }
+  }
+  return null;
 }
 
 /** The facts of the rows of one pinned version; every read goes to the file. */

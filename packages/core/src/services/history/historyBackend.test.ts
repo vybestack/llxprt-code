@@ -55,6 +55,7 @@ const PORT_METHODS = [
   'withCheckpoint',
   'withRollbackCheckpoint',
   'statistics',
+  'currentTurnMarker',
   'contextRange',
   'openDumpSnapshot',
   'dispose',
