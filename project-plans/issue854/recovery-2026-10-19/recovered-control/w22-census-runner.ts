@@ -22,6 +22,24 @@ import {
 
 const BEFORE_SHA256 =
   '61780e2313d471bf6acf26568a53306ddfa1b17d90245d4b6193c93dad1029fc';
+const REQUEST_BATCHES = [
+  'request-middle-final-journal-k-b',
+  'request-one-final-journal-k-b',
+];
+const REQUEST_NATIVE_BATCHES = [
+  ...REQUEST_BATCHES,
+  'request-related-final-journal-k-b',
+  'request-related-completion-journal-k-e',
+  'request-media-final-journal-k-h',
+  'request-supplement-final-journal-k-f',
+];
+const nativeCounterpartSchema = z.object({
+  batch: z.string(),
+  path: z.string(),
+  sourceHash: z.string(),
+  classname: z.string(),
+  name: z.string(),
+});
 const checkpointSchema = z
   .object({
     rows: z.array(
@@ -35,6 +53,7 @@ const checkpointSchema = z
                 classname: z.string(),
                 name: z.string(),
                 classification: z.string(),
+                nativeCounterparts: z.array(nativeCounterpartSchema).optional(),
               })
               .passthrough(),
           ),
@@ -133,6 +152,10 @@ function acceptedBatches(
         'density-final-journal-j-a',
       ],
     },
+    {
+      reference: 'request-publication-run-k/verify-f-current.json',
+      batches: REQUEST_BATCHES,
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -212,7 +235,12 @@ function classificationContracts(
   ],
 ): Map<
   string,
-  { classification: string; provenance: string; sourceHash: string | undefined }
+  {
+    classification: string;
+    provenance: string;
+    sourceHash: string | undefined;
+    nativeCounterparts?: Array<z.infer<typeof nativeCounterpartSchema>>;
+  }
 > {
   const contracts = new Map<
     string,
@@ -220,6 +248,7 @@ function classificationContracts(
       classification: string;
       provenance: string;
       sourceHash: string | undefined;
+      nativeCounterparts?: Array<z.infer<typeof nativeCounterpartSchema>>;
     }
   >();
   for (const name of names) {
@@ -236,6 +265,7 @@ function classificationContracts(
             classification: test.classification,
             provenance: path,
             sourceHash: row.sourceHash,
+            nativeCounterparts: test.nativeCounterparts,
           });
       }
     }
@@ -248,7 +278,9 @@ function classify(
   contracts: ReturnType<typeof classificationContracts>,
   attemptContracts: ReturnType<typeof classificationContracts>,
   densityContracts: ReturnType<typeof classificationContracts>,
+  requestContracts: ReturnType<typeof classificationContracts>,
   w22: string,
+  evidence: readonly Attempt[],
 ): Attempt {
   const cases: CensusCase[] = row.cases.map((test) => {
     const attempt = attemptContracts.get(caseKey(row.path, test));
@@ -261,13 +293,24 @@ function classify(
         'density-final-journal-j-a',
       ].includes(row.batch) &&
       density?.sourceHash === row.sourceHash;
-    const known = densityMatches
-      ? density
-      : row.accepted &&
-          row.batch === 'attempt-final-journal-i-a' &&
-          attempt?.sourceHash === row.sourceHash
-        ? attempt
-        : contracts.get(caseKey(row.path, test));
+    const request = requestContracts.get(caseKey(row.path, test));
+    const requestMatches =
+      row.accepted &&
+      row.backend === 'journal' &&
+      [
+        'request-middle-final-journal-k-b',
+        'request-one-final-journal-k-b',
+      ].includes(row.batch) &&
+      request?.sourceHash === row.sourceHash;
+    const known = requestMatches
+      ? request
+      : densityMatches
+        ? density
+        : row.accepted &&
+            row.batch === 'attempt-final-journal-i-a' &&
+            attempt?.sourceHash === row.sourceHash
+          ? attempt
+          : contracts.get(caseKey(row.path, test));
     const instanceOverride =
       row.accepted &&
       /^instance-(?:run-final-journal-[ab]|nodefix-final-journal-a)$/.test(
@@ -304,6 +347,56 @@ function classify(
         contract?.provenance ?? 'no-exact-case-contract',
     };
   });
+  const missingCoverage =
+    row.accepted &&
+    REQUEST_BATCHES.includes(row.batch) &&
+    row.cases.some((test) => {
+      const contract = requestContracts.get(caseKey(row.path, test));
+      if (
+        contract?.sourceHash !== row.sourceHash ||
+        ![
+          'native-history',
+          'journal-selected-shared-public',
+          'explicit-old',
+        ].includes(contract.classification)
+      )
+        return true;
+      if (contract.classification !== 'explicit-old') return false;
+      const counterparts = contract.nativeCounterparts ?? [];
+      return (
+        counterparts.length === 0 ||
+        counterparts.some(
+          (counterpart) =>
+            (counterpart.path === row.path &&
+              counterpart.classname === test.classname &&
+              counterpart.name === test.name) ||
+            !REQUEST_NATIVE_BATCHES.includes(counterpart.batch) ||
+            !evidence.some(
+              (candidate) =>
+                candidate.batch === counterpart.batch &&
+                candidate.path === counterpart.path &&
+                candidate.sourceHash === counterpart.sourceHash &&
+                candidate.backend === 'journal' &&
+                candidate.state === 'green' &&
+                candidate.rawSummary !== null &&
+                candidate.cases.some(
+                  (native) =>
+                    native.classname === counterpart.classname &&
+                    native.name === counterpart.name &&
+                    native.status === 'passed',
+                ),
+            ),
+        )
+      );
+    });
+  if (missingCoverage && row.state === 'green')
+    return {
+      ...row,
+      cases,
+      state: 'unverified',
+      evidenceStatus: 'request-coverage-unverified',
+      issues: [...row.issues, 'missing-exact-request-native-coverage'],
+    };
   return { ...row, cases };
 }
 
@@ -352,6 +445,9 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const densityContracts = classificationContracts(w22, [
     'density-run-j/classification.json',
   ]);
+  const requestContracts = classificationContracts(w22, [
+    'request-publication-run-k/classification.json',
+  ]);
   const checkpoints = [
     join(run, 'accounting.json'),
     join(run, 'accounting-after-boundary.json'),
@@ -360,29 +456,27 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   ].filter(existsSync);
   const references = [...new Set([...resultFiles(w22), ...checkpoints])];
   const gathered = references.flatMap((reference) =>
-    resultRows(json(reference))
-      .filter((row) => inventorySet.has(row.path))
-      .map((input) => {
-        const normalized = normalize(input, run);
-        const boundary = order.get(normalized.batch);
-        const inPrimaryRun = dirname(dirname(normalized.input.junit)) === run;
-        const provenance: Provenance = {
-          batch: normalized.batch,
-          acceptedOrder: inPrimaryRun && boundary ? boundary.index : null,
-          acceptanceReference: boundary
-            ? join(
-                w22,
-                boundary.reference.startsWith('progress.ts') ||
-                  boundary.reference.endsWith('before-census')
-                  ? `continuation-run-c/${boundary.reference.startsWith('progress.ts') ? 'progress.ts.before-census' : 'progress-g.ts.before-census'}`
-                  : boundary.reference,
-              )
-            : null,
-          references: [reference],
-          backendProvenance: normalized.backendProvenance,
-        };
-        return { input: normalized.input, provenance };
-      }),
+    resultRows(json(reference)).map((input) => {
+      const normalized = normalize(input, run);
+      const boundary = order.get(normalized.batch);
+      const inPrimaryRun = dirname(dirname(normalized.input.junit)) === run;
+      const provenance: Provenance = {
+        batch: normalized.batch,
+        acceptedOrder: inPrimaryRun && boundary ? boundary.index : null,
+        acceptanceReference: boundary
+          ? join(
+              w22,
+              boundary.reference.startsWith('progress.ts') ||
+                boundary.reference.endsWith('before-census')
+                ? `continuation-run-c/${boundary.reference.startsWith('progress.ts') ? 'progress.ts.before-census' : 'progress-g.ts.before-census'}`
+                : boundary.reference,
+            )
+          : null,
+        references: [reference],
+        backendProvenance: normalized.backendProvenance,
+      };
+      return { input: normalized.input, provenance };
+    }),
   );
   const deduplicated = new Map<
     string,
@@ -411,15 +505,22 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
       },
     });
   }
-  const attempts = [...deduplicated.values()].map(({ input, provenance }) =>
-    classify(
-      inspectEvidence(input, provenance, text(input.junit), text(input.log)),
-      contracts,
-      attemptContracts,
-      densityContracts,
-      w22,
-    ),
+  const evidence = [...deduplicated.values()].map(({ input, provenance }) =>
+    inspectEvidence(input, provenance, text(input.junit), text(input.log)),
   );
+  const attempts = evidence
+    .filter((row) => inventorySet.has(row.path))
+    .map((row) =>
+      classify(
+        row,
+        contracts,
+        attemptContracts,
+        densityContracts,
+        requestContracts,
+        w22,
+        evidence,
+      ),
+    );
   const census = reconcile(inventory, attempts);
   const supervisorPath = join(run, 'sweep-supervisor.json');
   const supervisor = existsSync(supervisorPath) ? json(supervisorPath) : null;
