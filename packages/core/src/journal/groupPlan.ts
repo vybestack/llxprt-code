@@ -53,7 +53,7 @@ function startNewLineage(plan: GroupPlan): void {
   plan.range = undefined;
   plan.newRows = [];
   plan.segments = undefined;
-  plan.mistralMetaRoot = undefined;
+  plan.bookkeepingMetaRoot = undefined;
 }
 
 function applyAppend(plan: GroupPlan, rows: readonly RowDraft[]): void {
@@ -97,7 +97,7 @@ function hasPending(plan: GroupPlan): boolean {
 function rebuildFirst(plan: GroupPlan, keep: number): void {
   const source = plan.base;
   startNewLineage(plan);
-  plan.mistralMetaRoot = source.roots.metaRoot;
+  plan.bookkeepingMetaRoot = source.roots.metaRoot;
   plan.base = emptiedVersion(source);
   plan.range = keep > 0 ? { source, from: 0, to: keep } : undefined;
   plan.rebuilt = true;
@@ -227,6 +227,11 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'kimi':
+      startNewLineage(plan);
+      plan.kimi = true;
+      plan.rebuilt = true;
+      break;
     case 'mistral':
       assertMistralSlot(edit.slot);
       startNewLineage(plan);
@@ -287,6 +292,7 @@ function isLineageRewrite(
  */
 function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
+    case 'kimi':
     case 'mistral':
       return 'fill';
     case 'adopt':
@@ -347,9 +353,12 @@ export async function planGroup(
   edits: readonly VersionEdit[],
 ): Promise<GroupPlan> {
   mutationOf(edits);
-  if (edits.some((edit) => edit.kind === 'mistral') && edits.length !== 1)
+  if (
+    edits.some((edit) => edit.kind === 'mistral' || edit.kind === 'kimi') &&
+    edits.length !== 1
+  )
     throw new JournalFormatError(
-      'Mistral mapping activation is a separate fill group',
+      'Mapped-call bookkeeping activation is a separate fill group',
     );
   const plan = startPlan(ctx);
   for (const edit of edits) await applyEdit(ctx, plan, edit);

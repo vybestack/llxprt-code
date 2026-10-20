@@ -116,7 +116,8 @@ export interface GroupPlan {
   rebuilt: boolean;
   segments: Segment[] | undefined;
   mistralSlot?: number;
-  mistralMetaRoot?: number;
+  bookkeepingMetaRoot?: number;
+  kimi?: boolean;
 }
 
 export interface PlanContext {

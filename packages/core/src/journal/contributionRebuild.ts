@@ -26,11 +26,14 @@ export async function rebuildContributions(
         row,
         facts.ids.queries,
       );
-      await writeNormalizedRowOccurrences(row, updated, facts.ids, ctx, {
-        appender,
-        readGroup: ctx.readGroup,
-      });
-      yield updated;
+      const callBlocks = await writeNormalizedRowOccurrences(
+        row,
+        updated,
+        facts.ids,
+        ctx,
+        { appender, readGroup: ctx.readGroup },
+      );
+      yield facts.kimi ? { ...updated, callBlocks } : updated;
     }
   }
   return bulkBuildRowTree(appender, algebra, entries());

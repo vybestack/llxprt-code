@@ -2,6 +2,7 @@
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
+import { kimiEnabled, KIMI_ELIGIBLE_KEY } from './kimiOrdinals.js';
 import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -215,7 +216,7 @@ export async function buildRebuilt(
   const metaReader = mapReader(ctx, 'meta');
   const previousSlots = decodeMistralSlots(
     await metaReader.get(
-      plan.mistralMetaRoot ?? plan.base.roots.metaRoot,
+      plan.bookkeepingMetaRoot ?? plan.base.roots.metaRoot,
       MISTRAL_SLOTS_KEY,
     ),
   );
@@ -224,6 +225,14 @@ export async function buildRebuilt(
     (plan.mistralSlot === undefined ? 0 : 1 << plan.mistralSlot);
   if (mappingSlots !== 0 && ctx.idDeps.mistralCandidate === undefined)
     throw new JournalFormatError('Mistral mapping candidate is not registered');
+  const kimi =
+    plan.kimi === true ||
+    kimiEnabled(
+      await metaReader.get(
+        plan.bookkeepingMetaRoot ?? plan.base.roots.metaRoot,
+        KIMI_ELIGIBLE_KEY,
+      ),
+    );
   const facts = await startFacts(
     ctx.access,
     NO_FACT_ROOTS,
@@ -234,6 +243,7 @@ export async function buildRebuilt(
       readGroup: ctx.readGroup,
     },
     mappingSlots,
+    kimi,
   );
   const chainBase = await ctx.chainFor(plan.parent);
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);

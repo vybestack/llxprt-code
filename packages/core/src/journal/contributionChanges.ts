@@ -73,13 +73,16 @@ export async function updateContributions(
       const row = await sourceRow(ctx, entry, sources.get(entry.label));
       list[index] = await withUnitContributions(entry, row, facts);
       if (groupFacts !== undefined) {
-        await writeNormalizedRowOccurrences(
+        const callBlocks = await writeNormalizedRowOccurrences(
           row,
           list[index],
           groupFacts.facts.ids,
           ctx,
           { appender: groupFacts.appender, readGroup: ctx.readGroup },
         );
+        list[index] = groupFacts.facts.kimi
+          ? { ...list[index], callBlocks }
+          : list[index];
       }
     }
   }

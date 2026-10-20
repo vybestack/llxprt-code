@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { KimiOrdinalQueries } from './kimiOrdinals.js';
 import { readMistralMapping, type MistralMapping } from './mistralMapping.js';
 import { nextCuratedEntry } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
@@ -37,6 +38,7 @@ import type { SourceRow, VersionEdit } from './groupEdits.js';
  */
 export class VersionSnapshot {
   readonly facts: IdFactQueries;
+  private readonly kimi: KimiOrdinalQueries;
 
   constructor(
     private readonly read: PinnedRead,
@@ -44,6 +46,7 @@ export class VersionSnapshot {
     idCache: IdNodeCache,
     private readonly file: object = read,
   ) {
+    this.kimi = new KimiOrdinalQueries(read, idDeps.hasher);
     const root = read.version?.roots.idRoot ?? 0;
     const reader =
       read.version === undefined
@@ -58,6 +61,14 @@ export class VersionSnapshot {
       },
       idDeps,
     );
+  }
+
+  kimiEligibleCount(): Promise<number> {
+    return this.kimi.count();
+  }
+
+  kimiOrdinal(label: bigint, eligibleWithinRow: number): Promise<number> {
+    return this.kimi.ordinal(label, eligibleWithinRow);
   }
 
   async mistralMapping(

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { kimiEnabled, KIMI_ELIGIBLE_KEY } from './kimiOrdinals.js';
 import type { OccurrencePlanner, PlannedRow } from './groupEdits.js';
 import { IdFactBatch, type BatchSpill } from './idFactBatch.js';
 import type { IdFactDeps } from './idFactQueries.js';
@@ -37,6 +38,7 @@ export interface GroupFacts {
   readonly meta: KeyedMapBatch;
   readonly baseExceptionCount: number;
   readonly mistralSlots: number;
+  readonly kimi: boolean;
   readonly spill?: BatchSpill;
 }
 
@@ -127,6 +129,7 @@ export async function startFacts(
   metaReader: KeyedMapReader,
   spill?: BatchSpill,
   mappingSlots?: number,
+  kimiActive?: boolean,
 ): Promise<GroupFacts> {
   const { idRoot, metaRoot } = roots;
   const stored = await metaReader.get(metaRoot, KIMI_EXCEPTION_KEY);
@@ -135,7 +138,15 @@ export async function startFacts(
   const mistralSlots =
     mappingSlots ??
     decodeMistralSlots(await metaReader.get(metaRoot, MISTRAL_SLOTS_KEY));
+  const kimi =
+    kimiActive ??
+    kimiEnabled(await metaReader.get(metaRoot, KIMI_ELIGIBLE_KEY));
+  if (kimi && deps.idDeps.occurrenceSpace !== 'source-with-normalized')
+    throw new JournalFormatError(
+      'Kimi emitted facts need normalized row contributions',
+    );
   const meta = new KeyedMapBatch(metaReader, metaRoot);
+  if (kimi) meta.set(KIMI_ELIGIBLE_KEY, Uint8Array.of(1));
   if (mistralSlots !== 0)
     meta.set(MISTRAL_SLOTS_KEY, Uint8Array.of(mistralSlots));
   const idReader =
@@ -151,6 +162,7 @@ export async function startFacts(
     meta,
     baseExceptionCount,
     mistralSlots,
+    kimi,
     spill,
   };
 }

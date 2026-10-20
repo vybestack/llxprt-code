@@ -65,6 +65,7 @@ function distinctNonempty(
 class RowOccurrences {
   private readonly facts = new Map<string, IdFact>();
   readonly lists = new Map<string, RowList>();
+  eligibleCalls = 0;
 
   constructor(
     private readonly row: PlannedRow,
@@ -110,6 +111,13 @@ class RowOccurrences {
     unit: number,
     speaker: number,
   ): void {
+    if (kind === OCCURRENCE_KIND.call) {
+      for (const occurrence of occurrences) {
+        const named =
+          occurrence.kind === ROW_ID_KIND.response || occurrence.nameLen > 0;
+        if (occurrence.rawId !== '' && named) this.eligibleCalls++;
+      }
+    }
     if (kind === OCCURRENCE_KIND.call && speaker !== ROW_SPEAKER.ai) return;
     for (const occurrence of occurrences) {
       for (const family of [ID_NS.openai, ID_NS.anthropic]) {
@@ -191,12 +199,12 @@ export async function writeNormalizedRowOccurrences(
   ids: IdFactBatch,
   deps: FactDeps,
   spill: BatchSpill,
-): Promise<void> {
+): Promise<number> {
   if (
     deps.idDeps.occurrenceSpace !== 'source-with-normalized' ||
     (row.flags & ROW_FLAG.curated) === 0
   )
-    return;
+    return 0;
   const source = await deps.planOccurrences(row, ids.queries);
   const occurrences = new RowOccurrences(row, deps);
   await occurrences.initialize(source, ids);
@@ -211,4 +219,5 @@ export async function writeNormalizedRowOccurrences(
       spill,
     );
   }
+  return occurrences.eligibleCalls;
 }
