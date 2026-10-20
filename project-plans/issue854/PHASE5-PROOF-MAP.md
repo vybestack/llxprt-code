@@ -1,41 +1,46 @@
-# Phase 5 first-slice proof map
+# Phase 5 response proof map
 
-Implementation: `f2175804658f1e02a1b573e905df14be5b114bab`, from `f99a23fc9e58a6b04b3d876d67497dd5e0828387`. This is production source-fact wiring and a partial orphan-only stream, not phase 5 completion. Field-by-field limits and remaining W26/W23 dependencies are in [PHASE5-STATUS.md](PHASE5-STATUS.md). Machine-readable source, case, gate, control and process receipts are in [PHASE5-PROOF.json](PHASE5-PROOF.json).
+Starting HEAD: `46b13bc9bf105d9df0d6e48fffbf5c78a43248f1`. First response group: `270ad3e81`. Final implementation: `ad629b507a009f745e168081dd4e5947317b5e26`. This proves existing-call response units, not full phase 5 or provider routing. [PHASE5-STATUS.md](PHASE5-STATUS.md) states the implemented and missing fields. [PHASE5-RESPONSES-PROOF.json](PHASE5-RESPONSES-PROOF.json) records current source counterparts and receipts. The earlier source-fact/orphan proof remains in [PHASE5-PROOF.json](PHASE5-PROOF.json).
 
 ## Accepted boundary
 
-Twenty-one isolated serial Bun files pass **172 tests and 31,285 assertions**, with zero failures/skips. The final receipt for `journal-orphan-units.test.ts` supersedes its earlier input-conservation test receipt; all other accepted receipts are the final serial run. Logs/JUnit live under `tmp/854-notes/p5/facts-run-a/accept-final-*` and `accept-supplement-01.*`. The proof validates log hashes, JUnit failures/skips, current test hashes and all 24 committed implementation paths. The old normalizer's two source files remain byte-identical to the starting commit.
+Final logs/JUnit: `tmp/854-notes/p5/responses-run-b/accept-final-*`. All **29 serial isolated files pass 227 tests and 43,495 assertions, with zero failures/skips**. Each receipt binds the test's actual source SHA-256, child/driver PIDs, log hash and JUnit hash. Eight changed implementation/test paths also match both the worktree and their actual committed counterparts at the final implementation SHA.
 
-| Behavior | Accepted tests and classification |
+| Behavior | Direct evidence |
 | --- | --- |
-| Real native source facts | `journal-normalization-facts.test.ts`: empty tuples; split call/response coordinates on append, fill and a real density rebuild; C versus Ca; human-row result; highest-score duplicate; excluded-row rejection; normalized capability refusal; owner/content conservation. These use JournalSession production dependencies. |
-| Indexed orphan units | `journal-orphan-units.test.ts`: five literal differential cases, same-pin behavior after a later response append, R7 stripping/input conservation and explicit real-response refusal. The cross-speaker case creates its orphan at later Ca and attaches it to earlier C. |
-| Immutable units | `normalization-unit-oracle.test.ts`: all 5000 old reference cases equal frozen input/output/count/pending records. The indexed API matches 1436 admitted response-free/no-tail cases. The other 3564 cases are not indexed coverage. Twelve structural families vary data and placement; this is not 5000 independently randomized structures. |
-| No operation files/cache bound | `journal-orphan-resources.test.ts`: 4000 native IDs, 8000 emitted units consumed without collecting output; zero filesystem creation attempts; fixed 65,536-byte caches. The same observer detects a positive creation. Not generator heap-flatness. |
-| Native regressions | Original row codec/cyclic, session/row-read, repair, mutations, detached owner/media, journal commit/pins/pop and Mistral version-copy files pass. Existing old-normalizer curated stream/structure contracts also pass. |
-| Library normalized facts | Existing `idFactIndex`, `idFactMistral` and `idFactBatch.spill` tests pass with explicitly normalized dependencies. Their normalized mappings/collision/ordinal proof is not production normalized-unit coverage. |
+| Existing-call R2/R4/R5/R6 | `journal-response-units.test.ts`: twelve literal old-stream differentials. Includes stable best tie, better duplicate without moving duplicate media, first-response order rather than call order, non-AI target/result, first-new-target media, interleaving, split block indices, empty/raw-prefix IDs and mixed real/orphan slots. |
+| Pin held through consumer | Same file: first yield, opener close, later response commit, async consumption still equals the old pinned input. After consumption, fact reads reject the released pin. |
+| Every immutable seed accounted | `normalization-unit-oracle.test.ts`: old-reference checks for all 5000 records; prior orphan-only 1436 retained; new API matches 3788, explicitly rejects 497 reconstruction and 715 tail cases. Independent family classification rejects unexpected refusals. No fixture regeneration. |
+| Native rebuild/ownership | `journal-response-lifecycle.test.ts`: density replacement, rebuild, swapped owner IDs, replace and reopen compare actual new units with old output. Reopened owners are checked directly. |
+| Long duplicate chain | Same file: 100 and 1000 responses, best at the end, fewer than 100 positional reads to emit the call and selected result. Does not traverse the intervening response prefix to select the best block. |
+| Async JSON/media charge | Same file: full serialized output charge across consumer suspension, greater-than-512-KiB response/media unit, stored reference unchanged and cancellation releases to zero. One charged emitted unit at a time. This is explicit output ownership, not whole-generator heap or referenced-row decode accounting. |
+| No operation files/cache cap | `journal-orphan-resources.test.ts`: 2000 real call/result pairs, 2000 media blocks, no output collection, zero creation attempts and cache at most 65536 bytes. The original 4000-ID/8000-unit orphan test and positive creation observer remain. |
+| Native source facts | `journal-normalization-facts.test.ts` and row codec tests retain append/rebuild curation, empty tuples and split coordinates, human-row result and better duplicate evidence. |
+| Regressions | Native session/repair/mutations, detached owner/media, commit/pins/pop, six compaction/owner files and Mistral copy. Existing normalized-library id-fact tests remain library evidence only. |
 
-The frozen fixture contains 5000 lines and has SHA-256 `4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e`. Its exclusive-create generator refuses replacement. No existing wire corpus was regenerated.
+The immutable 5000-line fixture remains SHA-256 `4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e`. The proof checks it, both old normalizer files and all eight provider golden/manifest files byte-for-byte against starting HEAD. The provider manifest has 22 named histories exercised through two frozen source modes per route. No provider fixture was regenerated or newly routed through this stream.
 
 ## RED and rejecting controls
 
-`root-red-corrected.log` records the source-fact failures against unchanged production after correcting an initial test label assumption. The initial root logs are retained. Later capability/unit/pin RED receipts remain beside them. The original strict row-codec expectation omitted the newly preserved empty tuple; the final expectation now checks that tuple rather than weakening the array assertion. Launcher PATH, unsupported target-library `.at`, lint and audit authoring failures remain separate from behavioral controls.
+Initial response RED establishes actual refusal by the existing implementation and missing pin ownership. Later lifecycle RED observes a zero-byte charge where the call unit requires 115 bytes. The initial refusal-count authoring failure omitted the empty-ID tool-continuity family; those 71 cases are explicitly included in the 497 reconstruction obligations. It was not a changed frozen expectation or an accepted differential mismatch. Registration, compiler/lint and proof-launch failures are separate receipts.
 
-Final-source controls ran serially under driver **93996**, with children **93997, 94008, 94016 and 94067**. `control-final/controls.json` binds their exact mutations, test commands, exits and restored hashes; all four shell `cmp` checks returned zero.
+Final-source controls live in `responses-run-b/control-final/`. Each exits one at the intended assertion and restores its target byte-identically:
 
-| Mutation | Rejection |
+| Mutation | Rejecting assertion |
 | --- | --- |
-| Require Ca to be the current part | Cross-speaker unit hash/count fails instead of dropping the synthetic response unnoticed. |
-| Omit empty call tuple | Real ROW tuple shape assertion fails. |
-| Remove query-cache eviction | Cache charges 579844 bytes against the unchanged 65536-byte cap. |
-| Create a per-operation file | Creation observer reports one instead of zero. |
+| Replace strict best-score comparison with later-wins equality | `stable-best-tie` actual old/new unit differential. |
+| Attach responses only to AI calls | `human-call-tool-result` actual old/new differential. |
+| Reverse selected media references | Multi-part and interleaved media actual old/new differentials. |
+| Remove query-cache eviction | Real-response resource test exceeds the unchanged 65536-byte cap. |
+| Create a per-operation file | Real-response creation observer reports one instead of zero. |
+| Release the emitted-row charge before yield | Lifecycle observer reports zero instead of the live call-unit charge. |
 
-All four controls exit one at the intended behavior/resource assertion and restore byte-identically. No thresholds, timeouts, assertions, compiler/lint rules or scanner exemptions were weakened. The final acceptance follows restoration. Original output sources and immutable fixture also match after the controls.
+No thresholds, assertions, timeouts, compiler/lint rules or scanner exemptions changed. Final serial acceptance follows restoration.
 
-## Gates and limitations
+## Gates, processes and limits
 
-Six scoped gates pass: core declaration-only build, strict test-inclusive core noemit types, zero-warning touched ESLint, Prettier, affected-shard graph and AST audit. The declaration build uses the normal local executable PATH; no generated obstruction move was needed. Existing 293 untracked agent declarations remain unstaged. Audit reports zero touched findings after replacing a digest-based conservation comparison with a separate structured input snapshot. Graph validation is not affected-shard execution; no whole-repository test/build claim is made.
+Six scoped gates pass over the complete eight-path source set: declaration-only core build, strict noemit core types including tests, zero-warning ESLint, Prettier, affected-shard graph and AST audit. There are no touched audit findings. Graph validation does not establish execution of affected shards. No whole-repository build/test claim is made.
 
-`PHASE5-PROOF.json` verifies **79 recorded acceptance/control/gate PIDs absent**. These are the enumerated completed lanes, not a claim about unrelated machine processes. Final implementation source hashes equal both the worktree and the implementation commit. Raw receipts are not staged.
+The proof verifies **85 recorded acceptance/control/gate PIDs absent**, with no live recorded child or driver. This inventory excludes unrelated machine processes. No obstruction move was needed. The 293 pre-existing untracked agent declarations, raw recovery material and `.llxprt` remain unstaged.
 
-Still required: R1 reconstruction; empty-response continuity; full response/media R2/R4/R5/R6; normalized occurrence lists and contribution recomputation; tail/pending and unit random access/counts; full Stage A and stage-key claims; 10k/100k/1M generator heap-flatness with per-ID retention control; typed format settings/every-field keys; provider filters/spool deletion and zero-decode planning. Ordinary native `mappedRef` and derived entry contribution fields are not filled. W26, W23 and W25/default remain open. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt change/staging, raw recovery/declaration bulk staging, OCR, push or merge.
+Still missing: R1/reconstructed targets and empty-response continuity, tails/pending, range-only block reads, normalized occurrences/contributions and unit ranks/counts/readAt, Stage A claim checks, generator 10k/100k/1M heap-flatness and retaining trap, format/settings keys and converter fills. Existing row-sized relocated reads may reread one source row per selected block. W26, W23, provider spool deletion and W25/default remain open. Production uses the old normalizer. Review skipped per Andrew 2026-10-09. No cleanup, OCR, push or merge.
